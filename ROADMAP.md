@@ -17,22 +17,25 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 
 | # | Step | Status | Branch | Plan | Sign-off |
 |---|---|---|---|---|---|
-| 1 | Workspace scaffold, Rapier world, test ground, drivable Lodgy from a vehicle config, keyboard input, force-based cable experiment | todo | | | Automated tests |
-| 2 | Server, rooms at `/<noun>`, snapshots, interpolation: two tabs see the same vehicle | todo | | | Automated tests |
-| 3 | On-foot players with prediction, shoulder camera and crosshair, boarding and seats | todo | | | Automated tests |
-| 4 | Push, hands, props and clearing | todo | | | Automated tests |
-| 5 | Winch | todo | | | Automated tests |
-| 6 | Vehicle fuel and health, inventory, jerrycans and toolboxes, checkpoints and restart, win rule | todo | | | Automated tests |
-| 7 | Player health, damage, downed state, health kits, revival and respawn | todo | | | Automated tests |
-| 8 | Lobby: ready states, admin controls and tools, course and vehicle selection, kick, results, next course, session tokens | todo | | | Automated tests |
-| 9 | Service stops, coins, shops, final time and side objectives | todo | | | Automated tests |
-| 10 | HUD: mock-up pass, then compass, minimap, gauges, slots and prompts | todo | | | Owner, visual check |
-| 11 | Conditions: time of day and weather | todo | | | Owner, visual check |
-| 12 | Touch input, floating joystick, touch UI, landscape layout, web app manifest | todo | | | Owner, on a real iPhone |
-| 13 | Segment system with forks, course design pass, course 1 (to the airport) | todo | | | Owner, by playing it |
-| 14 | The RV: config, mesh, handling pass over course 1 | todo | | | Owner, by playing it |
-| 15 | Sound effects | todo | | | Owner |
-| 16 | Reconnect polish, Cloudflare Tunnel setup, always-on hosting decision | todo | | | Owner |
+| 1 | Workspace scaffold, Rapier passed into `shared`, test ground, both vehicle configs as boxes, drivable in one tab, keyboard input, text overlay, force-based cable experiment | todo | | | Automated tests |
+| 2 | Server (`room` layer and `node` adapter), validation, rate limit, liveness, home page, create and join by noun, snapshots, interpolation, Playwright test begins | todo | | | Automated tests |
+| 3 | Server-side players on foot: movement, moving bodies, shove-out, spawn slots, seats, kill-plane respawn; shoulder camera and crosshair; iPhone load check | todo | | | Automated tests |
+| 4 | Client prediction of walking and jumping | todo | | | Automated tests |
+| 5 | Push, hands, light debris, heavy obstacles, prop kill plane | todo | | | Automated tests |
+| 6 | Winch | todo | | | Automated tests |
+| 7 | Vehicle fuel, health and damage; inventory; jerrycans and toolboxes; hold actions | todo | | | Automated tests |
+| 8 | Checkpoints and restart, vehicle loss, win rule, timer | todo | | | Automated tests |
+| 9 | Player health, damage, downed state, health kits, revival and respawn | todo | | | Automated tests |
+| 10 | Service stops, coins, shops and shop menu, final time and side objectives | todo | | | Automated tests |
+| 11 | Lobby: ready states, configuration, kick, in-run menu, admin tools, results, next course and campaign total, held slots and rejoin | todo | | | Automated tests |
+| 12 | HUD: mock-up pass, then compass, minimap, gauges, slots, prompts and downed markers | todo | | | Owner, visual check |
+| 13 | Conditions: rain grip, time-of-day and weather visuals | todo | | | Owner, visual check |
+| 14 | Touch input, floating joystick, touch UI, landscape layout, web app manifest | todo | | | Owner, on a real iPhone |
+| 15 | Segment system: six segment builders and the course builder | todo | | | Automated tests |
+| 16 | Course design pass, then course 1 (to the airport); measure snapshot size | todo | | | Owner, by playing it |
+| 17 | The RV: mesh and handling pass over course 1 | todo | | | Owner, by playing it |
+| 18 | Sound effects | todo | | | Owner |
+| 19 | Reconnect polish, WebGL context-loss reload, Cloudflare Tunnel setup, always-on hosting decision | todo | | | Owner |
 
 ## Later specs
 
@@ -40,7 +43,7 @@ Not designed yet. Each gets its own spec when spec 1 is done.
 
 | Spec | Content |
 |---|---|
-| 2 | Mountain segment types; course 2 (Ourika valley); course 3 (Atlas); vehicle power-ups; shortcut gates |
+| 2 | Forks that rejoin; mountain segment types; course 2 (Ourika valley); course 3 (Atlas); vehicle power-ups; shortcut gates |
 | 3 | Longer courses (1 hour or more) |
 | 4 | Team versus |
 
@@ -54,7 +57,7 @@ None yet.
 
 ## Decisions log
 
-Decisions made after the spec was written. Change the spec too when a decision alters the design.
+Decisions made during the design and afterwards. Change the spec too when a decision alters the design.
 
 | Date | Decision | Why |
 |---|---|---|
@@ -72,3 +75,7 @@ Decisions made after the spec was written. Change the spec too when a decision a
 | 2026-11-11 | Scenario tests encode handling expectations as measurable assertions | Gives implementers a pass or fail target for what would otherwise be feel |
 | 2026-11-11 | The owner's real start coordinates are kept out of the repository | Privacy |
 | 2026-11-11 | Hosting is Cloudflare: Tunnel from the owner's machine first; Containers or Durable Objects decided at step 16. Room logic stays free of Node and `ws` | Owner chose Cloudflare; keeps both always-on options open |
+| 2026-11-11 | An independent review of the spec was run and its critical and important findings were fixed | Requirement that implementers never have to guess |
+| 2026-11-11 | Forks moved to spec 2 | Costliest course-builder feature, used once in course 1 |
+| 2026-11-11 | Using an item is its own button (`use`), separate from interact | With an item selected, interact could no longer board, pick up or use a pump |
+| 2026-11-11 | Build order grew to 19 steps: players split from prediction, segment system split from course 1, lobby moved after the features it configures | Review found steps too large or ahead of their dependencies |

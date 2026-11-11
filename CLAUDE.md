@@ -1,6 +1,6 @@
 # Lodgy Co-op
 
-3D browser co-op game for 2–6 players: one shared physics-driven car, Marrakech-themed course, desktop and iPhone. Authoritative Node server, room codes.
+3D browser co-op game for up to 6 players: one shared physics-driven vehicle (Lodgy or RV), a campaign of courses inspired by routes around Marrakech, desktop and iPhone. Authoritative Node server; rooms are joined by a noun in the URL.
 
 ## Start here
 
@@ -12,7 +12,7 @@ This file is self-contained on purpose: cloud sessions see only the repo, not th
 
 ## Workflow
 
-- One build step per branch, named `step-N-<slug>`. Merge to `main` when its tests pass.
+- One build step per branch, named `step-N-<slug>`. Merge to `main` when its tests pass and its review is clean. This holds for owner sign-off steps too: they merge, and their status is `needs sign-off`.
 - A step's plan is written when the step starts, not earlier.
 - Tick plan checkboxes as tasks land. Update `ROADMAP.md` in the commit that finishes a step.
 - Steps marked for owner sign-off in `ROADMAP.md` end at `needs sign-off`, never `done`, until the owner confirms.
@@ -34,7 +34,7 @@ Implementers do not guess and do not redesign.
 
 ## Stack
 
-npm workspaces, TypeScript. Packages: `shared` (simulation, Rapier), `server` (Node, `ws`), `client` (Vite, Three.js). Tests: Vitest; Playwright for the smoke test. Use npm only.
+npm workspaces, TypeScript. Packages: `shared` (simulation, Rapier), `server` (a `room` layer that imports nothing from Node or `ws`, plus a `node` adapter), `client` (Vite, Three.js). Tests: Vitest; Playwright for the smoke test. Use npm only.
 
 Commands are listed in `ROADMAP.md` under "How to run and test" once step 1 creates the workspace.
 
@@ -47,7 +47,7 @@ Conventional Commits with a required scope: `<type>(<scope>): <description>`.
 
 ## Verification
 
-- Tests are mandatory for any behavioural change in `shared`, `server`, and the client's `net`, `prediction` and `input` modules. Write the test first.
+- Tests are mandatory for any behavioural change in `shared`, `server`, and the client's `net`, `prediction` and `input` modules and its HUD maths (compass, minimap). Write the test first.
 - Run the full test command before every commit, and report failures with their output.
 - Before calling a step done: run the tests, get a code review from a reviewer subagent, and fix every critical and important finding.
 - Rendering and game feel cannot be verified by tests. Say so and leave them for owner sign-off.
