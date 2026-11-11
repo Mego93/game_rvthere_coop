@@ -252,7 +252,7 @@ Rendering, game feel and course tuning are checked by hand, including on a real 
 
 ## 5. Build order
 
-Each step ends in something runnable.
+Each step ends in something runnable. Progress is tracked in `ROADMAP.md`. Each step gets its own plan, written when the step starts, and its own branch. Steps 7, 8 and 9 need a manual sign-off from the owner because game feel and real-device behaviour cannot be tested automatically.
 
 1. Workspace scaffold, Rapier world, flat ground, drivable car in one browser tab with the sim running locally. The device-agnostic input layer starts here with the keyboard source.
 2. Server, rooms, snapshots and interpolation: two tabs see the same car.
