@@ -24,11 +24,13 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | 5 | Winch | todo | | | Automated tests |
 | 6 | Fuel, health, repair, refuel, checkpoints and restart, win rule, HUD | todo | | | Automated tests |
 | 7 | Lobby: ready states, admin controls, course and vehicle selection, kick, results, next course, session tokens | todo | | | Automated tests |
-| 8 | Touch input, touch UI, landscape layout, web app manifest | todo | | | Owner, on a real iPhone |
-| 9 | Segment system, course design pass, course 1 | todo | | | Owner, by playing it |
-| 10 | The RV: config, mesh, handling pass over course 1 | todo | | | Owner, by playing it |
-| 11 | Sound effects | todo | | | Owner |
-| 12 | Reconnect polish, single-container deployment | todo | | | Owner |
+| 8 | Service stops, time bonuses, final time and side objectives | todo | | | Automated tests |
+| 9 | Conditions: time of day and weather | todo | | | Owner, visual check |
+| 10 | Touch input, floating joystick, touch UI, landscape layout, web app manifest | todo | | | Owner, on a real iPhone |
+| 11 | Segment system, course design pass, course 1 | todo | | | Owner, by playing it |
+| 12 | The RV: config, mesh, handling pass over course 1 | todo | | | Owner, by playing it |
+| 13 | Sound effects | todo | | | Owner |
+| 14 | Reconnect polish, single-container deployment | todo | | | Owner |
 
 ## Later specs
 
@@ -36,7 +38,7 @@ Not designed yet. Each gets its own spec when spec 1 is done.
 
 | Spec | Content |
 |---|---|
-| 2 | More segment types; courses 2 and 3 (about 20–30 minutes each) |
+| 2 | More segment types; courses 2 and 3 (about 20–30 minutes each); vehicle power-ups; shortcut gates |
 | 3 | Long courses (1 hour or more) |
 | 4 | Team versus |
 
@@ -60,3 +62,5 @@ Decisions made after the spec was written. Change the spec too when a decision a
 | 2026-11-11 | Losing the vehicle restarts from the last checkpoint with a 60 s penalty; runs never hard-fail | A full restart is too punishing on long courses |
 | 2026-11-11 | Difficulty belongs to the course; the vehicle (Lodgy or RV) is a free choice | Owner's decision |
 | 2026-11-11 | Rooms are addressed by a unique noun in the URL, with a ready-up lobby and an admin | Owner's decision |
+| 2026-11-11 | Spec 1 gains fuel stations, garages, time bonuses, side objectives, time of day and weather; power-ups and shortcut gates go to spec 2 | Owner asked for all of them; the last two need longer courses to matter |
+| 2026-11-11 | Heavy-obstacle pusher count follows connected players; the admin can restart from the last checkpoint | Avoids soft-locks when players leave or the vehicle is stuck |

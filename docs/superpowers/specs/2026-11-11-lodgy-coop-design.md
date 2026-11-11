@@ -16,7 +16,7 @@ The project is split into several specs. Each ends in a playable game.
 | Spec | Content |
 |---|---|
 | **1 (this document)** | The whole engine, lobby, two vehicles, the segment system, and course 1 (about 10 minutes) |
-| 2 | More segment types; courses 2 and 3 (about 20–30 minutes each) |
+| 2 | More segment types; courses 2 and 3 (about 20–30 minutes each); vehicle power-ups (nitro, sand tyres, reinforced bumper); shortcut gates |
 | 3 | Long courses (1 hour or more) |
 | 4 | Team versus |
 
@@ -27,6 +27,8 @@ In scope for spec 1:
 - Lobby with ready states and admin controls
 - Two vehicles, Lodgy and RV, chosen freely
 - Checkpoint restart when the vehicle is lost
+- Fuel stations and garages, time bonuses, three side objectives per course
+- Time of day and weather, chosen in the lobby
 - Desktop (keyboard and mouse) and iPhone (touch) controls
 - Low-poly flat-shaded visuals built in code
 - Basic sound effects
@@ -35,6 +37,7 @@ Out of scope for spec 1:
 
 - Accounts, persistence, leaderboards, saved campaign progress
 - Procedural course generation
+- Vehicle power-ups and shortcut gates (spec 2)
 - Voice or text chat, music
 - Android-specific tuning, gamepad support
 - A scripted bot that proves a course is completable
@@ -46,8 +49,8 @@ The design must not block a second vehicle per room (spec 4).
 ### Campaign and goal
 
 - A campaign is an ordered list of courses. Each course has different obstacles and is longer and harder than the one before.
-- The goal of a course is to get the vehicle from the start into the finish volume. The score is elapsed time, including penalties.
-- Winning shows the results screen (time, vehicle, restarts). The admin then moves the room to the next course, which returns everyone to the lobby with that course selected.
+- The goal of a course is to get the vehicle from the start into the finish volume. The score is the final time: elapsed time, plus restart penalties, minus time bonuses, never below zero.
+- Winning shows the results screen: final time, vehicle, conditions, restarts, bonuses collected and stars earned. The admin then moves the room to the next course, which returns everyone to the lobby with that course selected.
 - After the last course, the results screen shows the campaign total.
 - Nothing is saved. The admin may select any course in the lobby.
 
@@ -57,7 +60,7 @@ A run never hard-fails. The vehicle is lost when its health reaches 0 or it fall
 
 - The vehicle returns to the last checkpoint's spawn pose. All players are placed beside it, unseated and empty-handed.
 - Fuel and health are restored to their values when that checkpoint was recorded, with a floor of 50% each.
-- Every prop, obstacle and pickup returns to the state recorded at that checkpoint: its position and whether it was consumed. The winch detaches and the hook returns to the bumper.
+- Every prop, obstacle, pickup and time bonus returns to the state recorded at that checkpoint: its position and whether it was consumed or collected. Bonuses collected after the checkpoint are lost. The winch detaches and the hook returns to the bumper.
 - 60 seconds are added to the elapsed time.
 
 A checkpoint sits at the start of every segment. It is recorded the first time the vehicle's centre enters that segment. The course start is the first checkpoint, recorded at run start.
@@ -121,6 +124,43 @@ Course geometry (alley width, ledge width, hairpin radius) is sized so the RV fi
 - A heavy obstacle needs several players pushing it at the same time: 1 when one player is connected, 2 for 2–3 connected players, 3 for 4–6. The count follows the players currently connected. With fewer pushers it does not move at all.
 - A prop below the kill plane returns to its spawn point.
 
+### Service stops
+
+A segment may contain service stops. Each has a marked parking zone and a point a player operates on foot.
+
+| Stop | Use | Effect |
+|---|---|---|
+| Fuel station | With the vehicle in the zone, a player holds interact at the pump for 3 s | Fuel to 100% |
+| Garage | With the vehicle in the zone, a player holds interact at the workbench for 3 s | Health to 100% |
+
+Stops can be used any number of times.
+
+### Time bonuses
+
+- A time bonus is a floating collectible placed off the easy path: on a ledge, behind an obstacle, across a gap.
+- A player on foot collects it by touching it. No interact is needed, and it can be collected while carrying something.
+- Each one takes 10 s off the final time. The number per course is fixed in the course data.
+- The HUD shows how many are collected out of the total.
+
+### Side objectives
+
+Each course awards up to three stars, shown on the results screen only:
+
+1. Finish with no checkpoint restart.
+2. Finish with a final time under the course's target time, set in the course data.
+3. Collect every time bonus.
+
+### Conditions
+
+The admin picks the time of day and the weather in the lobby. They apply to the whole run.
+
+| Setting | Values | Effect |
+|---|---|---|
+| Time of day | dawn, midday, sunset, night | Visual only: sun angle, sky and light colour. At night the vehicle's headlights are on and each player carries a small light. |
+| Weather | clear, rain, sandstorm | Rain multiplies tyre grip on every surface by a constant below 1 and shows rainfall. A sandstorm limits how far players can see with fog and has no physical effect. |
+
+Defaults are midday and clear.
+
 ### Winch
 
 - The hook rests on the front bumper. While a player carries it, the cable pays out freely up to 25 m.
@@ -148,7 +188,7 @@ Segment types in spec 1:
 | `hairpin` | Mountain switchback with a drop on one side | turn count, rockfall (heavy obstacles) on or off |
 | `climb` | Steep gravel slope | length, gradient, anchor count |
 
-Any segment may also place pickups (jerrycan, toolbox) and anchors.
+Any segment may also place pickups (jerrycan, toolbox), anchors, service stops and time bonuses.
 
 Surface types affect tyre grip and rolling resistance: road, sand, riverbed, gravel. A surface is a property of a ground collider; the wheel takes the surface of the collider under it. Surfaces do not affect players. Water in a ford is visual only, with no buoyancy or current.
 
@@ -160,7 +200,7 @@ Surface types affect tyre grip and rolling resistance: road, sand, riverbed, gra
 4. `hairpin` — Atlas switchbacks with a rockfall, and a toolbox at a mechanic's shack.
 5. `climb` — final climb needing winch and push together. The finish is the kasbah gate.
 
-Short `road` segments link them. Anchors are palm trunks, boulders and stone milestones, each visibly marked. Palette: ochre walls, red earth, green palms.
+Short `road` segments link them. Course 1 has one fuel station, one garage and a handful of time bonuses. Anchors are palm trunks, boulders and stone milestones, each visibly marked. Palette: ochre walls, red earth, green palms.
 
 Exact lengths, gradients and obstacle counts are set in a course design pass at the start of the course step, once the vehicles drive.
 
@@ -202,11 +242,11 @@ Every package follows these, so that code written separately agrees.
 The simulation is a pure module with no network or rendering code.
 
 ```ts
-const world = createWorld({ courseId, vehicleId });
+const world = createWorld({ courseId, vehicleId, weather });
 world.addPlayer(id); world.removePlayer(id);
 world.step(inputsByPlayer);   // advances one fixed tick
 world.snapshot();             // serialisable state
-world.status();               // 'running' | 'won', elapsed, restarts, checkpoint
+world.status();               // 'running' | 'won', elapsed, restarts, checkpoint, bonuses, stars
 ```
 
 One file per concern:
@@ -218,13 +258,15 @@ One file per concern:
 - `winch` — hook, anchor attach, cable as a length-limited rope joint, reel
 - `interact` — resolves what interact does for a player this tick
 - `props` — light debris, heavy obstacles, pickups
+- `stops` — fuel stations and garages
+- `bonuses` — time bonuses and their collection
 - `segments` — one builder per segment type; each returns heightfield, surface map, colliders, anchors, prop spawns, entry and exit
 - `courses` — course definitions as data (ordered segment list with parameters), and the builder that chains segments
 - `checkpoints` — records state at each checkpoint, performs the restart
-- `rules` — win condition, vehicle-lost detection, timer and penalties
+- `rules` — win condition, vehicle-lost detection, timer, penalties, final time and stars
 - `protocol` — message types and validators
 
-**Built course.** A `courseId` resolves to a `BuiltCourse`: ground colliders with their surfaces, wall and prop colliders, anchors, prop and pickup spawns, checkpoints with spawn poses, the finish volume and the kill plane. This type is the contract between course data and everything else. Until the segment system exists (step 9), the test ground is a hand-written `BuiltCourse`; the segment builder later produces the same type.
+**Built course.** A `courseId` resolves to a `BuiltCourse`: ground colliders with their surfaces, wall and prop colliders, anchors, prop and pickup spawns, service stops, time bonuses, checkpoints with spawn poses, the finish volume, the kill plane and the target time. This type is the contract between course data and everything else. Until the segment system exists (step 11), the test ground is a hand-written `BuiltCourse`; the segment builder later produces the same type.
 
 **Player physics.** A player is a kinematic character controller.
 
@@ -238,7 +280,7 @@ Interact priority, highest first, when several targets are in range:
 
 1. Exit seat (if seated)
 2. Attach hook to anchor (if carrying the hook)
-3. Repair or refuel (if carrying a toolbox or jerrycan, at the vehicle)
+3. Repair or refuel: with a toolbox or jerrycan at the vehicle, or at a garage workbench or fuel pump with the vehicle in its zone
 4. Release carried item (if carrying): light debris is thrown forward along the player's yaw; a jerrycan, toolbox or hook is dropped at the player's feet
 5. Take hook, pick up item
 6. Detach hook at anchor
@@ -262,9 +304,9 @@ Interact priority, highest first, when several targets are in range:
 
 The lobby is a waiting room.
 
-- Everyone sees the room link, the player list with ready states, and the selected course and vehicle.
+- Everyone sees the room link, the player list with ready states, and the selected course, vehicle, time of day and weather.
 - Each player has a Ready toggle. Ready states reset whenever the room returns to the lobby.
-- The admin selects the course and vehicle, can kick a player, and can start once every other player is ready. The admin needs no ready state and may start alone.
+- The admin selects the course, vehicle, time of day and weather, can kick a player, and can start once every other player is ready. The admin needs no ready state and may start alone.
 - A kicked player returns to the home page and may rejoin by the link.
 - A player who opens the link during `playing` joins the run directly, if the room has fewer than 6 players, and spawns next to the vehicle.
 - During `playing`, the admin can restart from the last checkpoint, restart the course, or return the room to the lobby.
@@ -281,7 +323,7 @@ Client to server:
 - `create { name, token }`
 - `join { room, name, token }`
 - `ready { ready }`
-- `configure { courseId, vehicleId }` (admin)
+- `configure { courseId, vehicleId, timeOfDay, weather }` (admin)
 - `kick { playerId }` (admin)
 - `start {}`, `restartCheckpoint {}`, `restartCourse {}`, `toLobby {}`, `next {}` (admin)
 - `input { seq, moveX, moveY, yaw, jump, interact, reel }`
@@ -298,10 +340,10 @@ The client sends one `input` per simulation tick, with `seq` increasing by 1. Fi
 
 Server to client:
 
-- `lobby { room, players, adminId, phase, courseId, vehicleId }`
-- `snapshot { tick, ackSeq, vehicle, players, props, cable, fuel, health, elapsed, checkpoint, restarts }`
-- `event { kind }` for one-off moments that drive sound and HUD: `impact`, `checkpoint`, `vehicleLost`, `pickup`, `repair`, `refuel`, `hookAttach`, `hookDetach`
-- `results { courseId, vehicleId, elapsed, restarts, campaignTotal? }`
+- `lobby { room, players, adminId, phase, courseId, vehicleId, timeOfDay, weather }`
+- `snapshot { tick, ackSeq, vehicle, players, props, cable, fuel, health, elapsed, checkpoint, restarts, bonuses }`
+- `event { kind }` for one-off moments that drive sound and HUD: `impact`, `checkpoint`, `vehicleLost`, `pickup`, `repair`, `refuel`, `hookAttach`, `hookDetach`, `bonus`
+- `results { courseId, vehicleId, timeOfDay, weather, elapsed, restarts, bonuses, finalTime, stars, campaignTotal? }`
 - `error { reason }` with reasons `unknown_room`, `room_full`, `name_taken`, `kicked`, `not_admin`, `bad_message`
 
 A snapshot is identical for every client except `ackSeq`, the last input sequence number the server consumed for that client. Each player entry carries the id of the body the player stands on or sits in, if any, and the player's position relative to it.
@@ -313,9 +355,9 @@ Binary encoding and sending only changed props are deferred until snapshot size 
 - `net` — socket, reconnect, snapshot buffer, interpolation 100 ms in the past for the vehicle, other players, props and cable
 - `prediction` — predicts the local player's walking and jumping only; see "Prediction" below
 - `input` — a device-agnostic layer producing the `input` message fields. Two sources: keyboard and mouse, and touch. The source is chosen by pointer capability at load.
-- `render` — Three.js scene built from the same course data the server uses; low-poly meshes built in code
+- `render` — Three.js scene built from the same course data the server uses; low-poly meshes built in code; lighting, sky, fog and rain from the room's conditions
 - `audio` — Web Audio playback of sound effects, driven by snapshots (engine pitch from throttle and speed, winch loop while reeling) and by `event` messages
-- `ui` — plain HTML and CSS overlay for home, lobby, HUD (fuel, health, timer, checkpoint progress, interact prompt), reconnect overlay and results. No UI framework.
+- `ui` — plain HTML and CSS overlay for home, lobby, HUD (fuel, health, timer, checkpoint progress, bonuses, interact prompt), reconnect overlay and results. No UI framework.
 
 ### Prediction
 
@@ -331,13 +373,13 @@ Binary encoding and sending only changed props are deferred until snapshot size 
 
 ### Sound
 
-Effects only: engine loop, impact, winch loop, hook attach, pickup, repair and refuel, checkpoint, vehicle lost, UI click, win. Files come from a CC0 pack (Kenney's audio packs are the first candidate) and are chosen when the sound step starts; their licence is recorded in the repo. Audio unlocks on the player's first tap or click, as iOS requires.
+Effects only: engine loop, impact, winch loop, hook attach, pickup, repair and refuel, time bonus, checkpoint, vehicle lost, rain loop, UI click, win. Files come from a CC0 pack (Kenney's audio packs are the first candidate) and are chosen when the sound step starts; their licence is recorded in the repo. Audio unlocks on the player's first tap or click, as iOS requires.
 
 ### Controls
 
 | Action | Desktop | iPhone |
 |---|---|---|
-| Move / steer | WASD | Left virtual joystick |
+| Move / steer | WASD | Floating joystick: it appears under the left thumb wherever it touches the left half of the screen |
 | Look | Mouse (pointer lock) | Drag on right half of screen |
 | Interact | E | Button |
 | Jump / brake | Space | Button (label changes when seated) |
@@ -348,6 +390,7 @@ The camera is third-person follow in both cases.
 
 ### iPhone specifics
 
+- The joystick and buttons are written by hand, with no library. Joystick and look-drag work at the same time (multi-touch).
 - Landscape only; portrait shows a "rotate your phone" prompt.
 - HUD and buttons respect safe-area insets.
 - A web app manifest and Apple meta tags allow "Add to Home Screen" for a fullscreen view, since iPhone Safari offers no fullscreen API to pages.
@@ -389,6 +432,10 @@ Runner: Vitest in all packages.
 - player physics: carried by a moving body; shoved out of a vehicle that moves into them; contact alone moves nothing
 - input: a repeated input does not re-trigger a press; hold actions cancel on release; the queue drops the oldest on overflow
 - repair and refuel: restore 50%, consume the item, require the full hold
+- service stops: work only with the vehicle in the zone; restore to 100%; require the full hold; reusable
+- time bonuses: collected by touch; each subtracts 10 s; restored by a checkpoint restart
+- final time and stars: penalties added, bonuses subtracted, floor at zero; each star's condition
+- weather: rain lowers grip on every surface; sandstorm and time of day change nothing in the simulation
 - segments: every type builds; entry and exit are consistent; a chained course has no gap or overlap at joins
 - checkpoints: entering a segment records state once; vehicle lost, or an admin restart, restores the vehicle pose, fuel and health with the 50% floor, restores every prop to its recorded state, detaches the winch and adds 60 s
 - rules: finish volume wins; players and props respawn from the kill plane
@@ -412,9 +459,9 @@ Rendering, sound, game feel and course tuning are checked by hand, including on 
 
 ## 5. Build order
 
-Each step ends in something runnable. Progress is tracked in `ROADMAP.md`. Each step gets its own plan, written when the step starts, and its own branch. Steps 8 to 12 need a manual sign-off from the owner because game feel, sound and real-device behaviour cannot be tested automatically.
+Each step ends in something runnable. Progress is tracked in `ROADMAP.md`. Each step gets its own plan, written when the step starts, and its own branch. Steps 9 to 14 need a manual sign-off from the owner because visuals, game feel, sound and real-device behaviour cannot be tested automatically.
 
-Steps 1 to 8 run on a flat test ground with a ramp, a sand patch, an anchor and a few props.
+Steps 1 to 10 run on a flat test ground with a ramp, a sand patch, an anchor, a few props, a fuel station, a garage and two time bonuses.
 
 1. Workspace scaffold, Rapier world, test ground, drivable Lodgy from a vehicle config, in one browser tab with the sim running locally. Keyboard input source. Includes a throwaway experiment proving that a rope joint can winch a raycast vehicle stably at the RV's mass.
 2. Server, rooms at `/<noun>`, snapshots and interpolation: two tabs see the same vehicle.
@@ -423,8 +470,10 @@ Steps 1 to 8 run on a flat test ground with a ramp, a sand patch, an anchor and 
 5. Winch.
 6. Fuel, health, repair, refuel, checkpoints and restart, win rule, HUD.
 7. Lobby: ready states, admin controls, course and vehicle selection, kick, results, next course, session tokens.
-8. Touch input source, touch UI, landscape and safe-area layout, web app manifest. Verified on an iPhone over LAN.
-9. Segment system, course design pass, and course 1.
-10. The RV: config, mesh and handling pass over course 1.
-11. Sound effects.
-12. Reconnect polish and single-container deployment.
+8. Service stops, time bonuses, final time and side objectives.
+9. Conditions: time of day and weather.
+10. Touch input source, floating joystick, touch UI, landscape and safe-area layout, web app manifest. Verified on an iPhone over LAN.
+11. Segment system, course design pass, and course 1.
+12. The RV: config, mesh and handling pass over course 1.
+13. Sound effects.
+14. Reconnect polish and single-container deployment.
