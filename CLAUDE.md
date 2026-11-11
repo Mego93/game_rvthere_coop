@@ -18,6 +18,15 @@ This file is self-contained on purpose: cloud sessions see only the repo, not th
 - Steps marked for owner sign-off in `ROADMAP.md` end at `needs sign-off`, never `done`, until the owner confirms.
 - If implementation forces a design change, update the spec and add a line to the decisions log in `ROADMAP.md`.
 
+## When something is not specified
+
+Implementers do not guess and do not redesign.
+
+- The spec's "Conventions" section (units, axes, yaw, tick, ids) applies to all code.
+- If the plan and the spec do not answer a question, or contradict each other, stop and report the question to the main session. Do not pick an answer silently.
+- Do not change a type, message or function signature that another module already uses unless the plan says to.
+- Tuning values: use the starting value the plan gives. Do not retune to make something feel better; feel is the owner's call.
+
 ## Models
 
 - Design and planning (specs, plans, roadmap decisions): the main session, on Fable.

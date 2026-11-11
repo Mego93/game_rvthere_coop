@@ -23,7 +23,7 @@ The project is split into several specs. Each ends in a playable game.
 In scope for spec 1:
 
 - Co-op campaign structure, with one course shipped
-- 2–6 players per room, joined by URL
+- Up to 6 players per room, joined by URL. The game is designed for 2–6; a solo run is allowed.
 - Lobby with ready states and admin controls
 - Two vehicles, Lodgy and RV, chosen freely
 - Checkpoint restart when the vehicle is lost
@@ -53,14 +53,14 @@ The design must not block a second vehicle per room (spec 4).
 
 ### Losing the vehicle: checkpoint restart
 
-A run never hard-fails. The vehicle is lost when its health reaches 0 or it falls below the kill plane. Then:
+A run never hard-fails. The vehicle is lost when its health reaches 0 or it falls below the kill plane. The admin can also trigger the same restart by hand, for a vehicle stuck beyond rescue. In each case:
 
-- The vehicle and all players return to the last checkpoint reached.
-- Fuel and health are restored to their values when that checkpoint was first reached, with a floor of 50% each.
-- Props and obstacles in segments after that checkpoint reset to their initial state. The winch detaches.
+- The vehicle returns to the last checkpoint's spawn pose. All players are placed beside it, unseated and empty-handed.
+- Fuel and health are restored to their values when that checkpoint was recorded, with a floor of 50% each.
+- Every prop, obstacle and pickup returns to the state recorded at that checkpoint: its position and whether it was consumed. The winch detaches and the hook returns to the bumper.
 - 60 seconds are added to the elapsed time.
 
-A checkpoint sits at the start of every segment. The course start is the first checkpoint.
+A checkpoint sits at the start of every segment. It is recorded the first time the vehicle's centre enters that segment. The course start is the first checkpoint, recorded at run start.
 
 An empty fuel tank is not a loss. It disables drive until someone refuels.
 
@@ -74,7 +74,11 @@ Roles are not assigned.
 - Interact at a door boards the nearest free seat on that side; interact at the driver door takes the driver seat if free.
 - Interact while seated exits beside that door.
 - With no driver, the vehicle coasts with the brake released.
-- A player below the kill plane respawns next to the vehicle after 3 s.
+- A passenger can look around and exit, nothing else.
+- A player below the kill plane respawns next to the vehicle after 3 s. Anything they carried returns to its spawn point (the hook to the bumper).
+- Players have no health and cannot be hurt. A vehicle or prop that moves into a player shoves them out of the way.
+- Players do not block or push objects by contact. The only force a player applies is the explicit push described below.
+- A character is a capsule body with a sphere head, in one of six fixed colours, with the player's name above it. There is no skeletal animation.
 
 ### Vehicles
 
@@ -104,8 +108,8 @@ Course geometry (alley width, ledge width, hairpin radius) is sized so the RV fi
 
 | Action | Behaviour |
 |---|---|
-| Push | A player walking into the vehicle applies a force along their movement direction. Forces add per player, capped at 4 pushers' worth. |
-| Winch | Take the hook from the front bumper, carry it to an anchor, interact to attach. Reel in or out from the driver seat or the winch box on the front bumper. One cable, maximum length 25 m. Interact at the anchor detaches. |
+| Push | A player walking into the vehicle or a light prop applies a force along their movement direction. On the vehicle, forces add per player, capped at 4 pushers' worth. |
+| Winch | Take the hook from the front bumper, carry it to an anchor, interact to attach. Reel in or out from the driver seat or the winch box on the front bumper. One cable, maximum length 25 m. See "Winch" below. |
 | Repair | Carry a toolbox to the vehicle and hold interact for 3 s to restore 50% health. The toolbox is consumed. |
 | Refuel | Carry a jerrycan to the vehicle and hold interact for 3 s to restore 50% fuel. The jerrycan is consumed. |
 | Clear | Pick up and throw light debris. Heavy obstacles cannot be carried; they move only when enough players push together or when winched. |
@@ -114,8 +118,20 @@ Course geometry (alley width, ledge width, hairpin radius) is sized so the RV fi
 - Boarding while carrying drops the item, except the hook, which returns to the bumper.
 - A hook carried beyond cable length is pulled from the player's hands and drops.
 - Pickups are fixed per course regardless of crew size.
-- Heavy obstacles need 2 pushers with a crew of 2–3 and 3 pushers with a crew of 4–6. Crew size is fixed at run start.
+- A heavy obstacle needs several players pushing it at the same time: 1 when one player is connected, 2 for 2–3 connected players, 3 for 4–6. The count follows the players currently connected. With fewer pushers it does not move at all.
 - A prop below the kill plane returns to its spawn point.
+
+### Winch
+
+- The hook rests on the front bumper. While a player carries it, the cable pays out freely up to 25 m.
+- The hook attaches to an anchor: a marked static anchor, or the anchor point that every heavy obstacle has.
+- Attaching sets the cable length to the current distance between hook and bumper.
+- The cable only limits the maximum distance between its ends. A slack cable has no effect.
+- Reeling in shortens the cable at a constant speed, pulling with at most a fixed winch force. Reeling out lengthens it, up to 25 m.
+- Attached to a static anchor, reeling in pulls the vehicle. Attached to a heavy obstacle, it drags the obstacle toward the vehicle if the vehicle is braked or heavier.
+- The driver can reel, and so can a player on foot within interact range of the winch box.
+- Interact at the attached anchor detaches the hook into that player's hands.
+- Reeling in while the hook lies on the ground retracts it to the bumper.
 
 ### Courses and segments
 
@@ -134,7 +150,7 @@ Segment types in spec 1:
 
 Any segment may also place pickups (jerrycan, toolbox) and anchors.
 
-Surface types affect tyre grip and rolling resistance: road, sand, riverbed, gravel.
+Surface types affect tyre grip and rolling resistance: road, sand, riverbed, gravel. A surface is a property of a ground collider; the wheel takes the surface of the collider under it. Surfaces do not affect players. Water in a ford is visual only, with no buoyancy or current.
 
 **Course 1, "Marrakech to the kasbah", about 10 minutes:**
 
@@ -167,12 +183,26 @@ npm workspaces, TypeScript throughout.
 | `server` | Rooms, WebSocket transport, runs the sim, broadcasts snapshots, serves the built client | `shared`, `ws` |
 | `client` | Rendering, input, audio, HUD, lobby, interpolation, prediction | `shared`, `three`, Vite |
 
+### Conventions
+
+Every package follows these, so that code written separately agrees.
+
+- Units: metres, seconds, kilograms, radians.
+- Axes: right-handed, +Y up. Forward is −Z and right is +X in a vehicle's or player's local frame.
+- Yaw: rotation about +Y. Yaw 0 faces −Z; positive yaw turns left.
+- The simulation tick is fixed at 1/60 s on the server and in client prediction. The client advances its simulation with a fixed-step accumulator, independent of frame rate.
+- Players, props, anchors and seats have string ids that are stable for a run.
+- Every tuning number comes from `constants` or a vehicle config. No tuning literals elsewhere.
+- The simulation uses no randomness.
+- TypeScript strict mode, ES modules.
+- UI text is in English.
+
 ### `shared`
 
 The simulation is a pure module with no network or rendering code.
 
 ```ts
-const world = createWorld({ courseId, vehicleId, crewSize });
+const world = createWorld({ courseId, vehicleId });
 world.addPlayer(id); world.removePlayer(id);
 world.step(inputsByPlayer);   // advances one fixed tick
 world.snapshot();             // serialisable state
@@ -194,12 +224,22 @@ One file per concern:
 - `rules` — win condition, vehicle-lost detection, timer and penalties
 - `protocol` — message types and validators
 
+**Built course.** A `courseId` resolves to a `BuiltCourse`: ground colliders with their surfaces, wall and prop colliders, anchors, prop and pickup spawns, checkpoints with spawn poses, the finish volume and the kill plane. This type is the contract between course data and everything else. Until the segment system exists (step 9), the test ground is a hand-written `BuiltCourse`; the segment builder later produces the same type.
+
+**Player physics.** A player is a kinematic character controller.
+
+- A player standing on a moving body is carried with it.
+- A player overlapped by a moving vehicle or prop is moved out along the shortest direction.
+- Dynamic bodies ignore players in the physics solver. Pushing is an explicit force applied by `player` to the vehicle, a light prop or a heavy obstacle the player walks into.
+
+**Interact resolution.** `interact` exposes a pure function from a player's state and the nearby world to the action interact would perform. The server uses it to act; the client uses it on interpolated state to show the prompt. A target is in range when it lies within the interact radius of the player; no aiming is needed. Among targets of the same priority, the nearest wins.
+
 Interact priority, highest first, when several targets are in range:
 
 1. Exit seat (if seated)
 2. Attach hook to anchor (if carrying the hook)
 3. Repair or refuel (if carrying a toolbox or jerrycan, at the vehicle)
-4. Release carried item (if carrying): light debris is thrown forward along the player's facing; a jerrycan, toolbox or hook is dropped at the player's feet
+4. Release carried item (if carrying): light debris is thrown forward along the player's yaw; a jerrycan, toolbox or hook is dropped at the player's feet
 5. Take hook, pick up item
 6. Detach hook at anchor
 7. Board vehicle
@@ -209,8 +249,11 @@ Interact priority, highest first, when several targets are in range:
 - **Rooms.** A room's identity is a unique noun, drawn at creation from a built-in word list and unused by any live room (for example `tagine`, `camel`). If the list is exhausted, a number is appended. The room lives at `/<noun>`.
 - **Phases.** `lobby → playing → results → lobby`.
 - **Admin.** The player who creates the room. If the admin leaves, the longest-connected player becomes admin.
-- **Players.** Up to 6. Display names are unique within a room; a taken name is refused. Each client holds a random session token in local storage; rejoining with the same token restores the same player.
+- **Players.** Up to 6. Display names are 1–16 characters and unique within a room; a taken name is refused.
+- **Session token.** Each client generates a random token with `crypto.getRandomValues` (not `randomUUID`, which browsers disable on plain `http` LAN addresses) and keeps it in session storage. Each tab is therefore a separate player, and a reload keeps its identity.
+- **Slots.** When a player disconnects, their character is removed at once but their slot (name, colour, admin status) is held for 30 s. Rejoining with the same token within that time restores the slot. After 30 s the slot is freed, and if it was the admin's, the admin role passes on.
 - **Simulation.** Each room in `playing` owns one world, stepped at a fixed 60 Hz. A snapshot is broadcast at 20 Hz.
+- **Inputs.** The server keeps a queue of at most 8 inputs per player, dropping the oldest on overflow, and consumes one per tick. With an empty queue it repeats the last input, which never counts as a new button press.
 - A room is deleted when it has had no connected players for 60 s.
 - No database.
 - One process serves the built client and the WebSocket on the same port (default 3000). Any path that is not a static file serves the client, which reads the noun from the URL.
@@ -220,12 +263,14 @@ Interact priority, highest first, when several targets are in range:
 The lobby is a waiting room.
 
 - Everyone sees the room link, the player list with ready states, and the selected course and vehicle.
-- Each player has a Ready toggle.
-- The admin selects the course and vehicle, can kick a player, and can start once every other player is ready. A kicked player returns to the home page and may rejoin by the link.
+- Each player has a Ready toggle. Ready states reset whenever the room returns to the lobby.
+- The admin selects the course and vehicle, can kick a player, and can start once every other player is ready. The admin needs no ready state and may start alone.
+- A kicked player returns to the home page and may rejoin by the link.
 - A player who opens the link during `playing` joins the run directly, if the room has fewer than 6 players, and spawns next to the vehicle.
-- During `playing`, the admin can restart the course or return the room to the lobby.
+- During `playing`, the admin can restart from the last checkpoint, restart the course, or return the room to the lobby.
+- On the results screen the admin chooses "Next course" (absent on the last course) or "Back to lobby".
 
-The home page (`/`) offers "Create room" and a field to enter a room's noun.
+The home page (`/`) offers "Create room" and a field to enter a room's noun. Opening `/<noun>` asks for a display name, pre-filled from the last one used, then joins. A noun with no live room shows an error with a link to the home page.
 
 ### Protocol
 
@@ -238,8 +283,18 @@ Client to server:
 - `ready { ready }`
 - `configure { courseId, vehicleId }` (admin)
 - `kick { playerId }` (admin)
-- `start {}`, `restart {}`, `toLobby {}`, `next {}` (admin)
-- `input { seq, moveX, moveY, yaw, jump, interact, throttle, steer, brake, reel }`
+- `start {}`, `restartCheckpoint {}`, `restartCourse {}`, `toLobby {}`, `next {}` (admin)
+- `input { seq, moveX, moveY, yaw, jump, interact, reel }`
+
+The client sends one `input` per simulation tick, with `seq` increasing by 1. Field meanings:
+
+| Field | On foot | As driver |
+|---|---|---|
+| `moveX`, `moveY` in [−1, 1] | Strafe and forward, relative to `yaw` | Steer and throttle; negative `moveY` reverses |
+| `yaw` | Camera yaw | Camera yaw (no effect on the vehicle) |
+| `jump`, boolean, held | Jumps on the press | Brakes while held |
+| `interact`, boolean, held | Instant actions fire on the press. Repair and refuel need it held for 3 s; releasing cancels. | Exits on the press |
+| `reel`: −1 out, 0, 1 in | Works within range of the winch box | Works always |
 
 Server to client:
 
@@ -249,16 +304,30 @@ Server to client:
 - `results { courseId, vehicleId, elapsed, restarts, campaignTotal? }`
 - `error { reason }` with reasons `unknown_room`, `room_full`, `name_taken`, `kicked`, `not_admin`, `bad_message`
 
-Binary encoding is deferred until snapshot size is measured as a problem.
+A snapshot is identical for every client except `ackSeq`, the last input sequence number the server consumed for that client. Each player entry carries the id of the body the player stands on or sits in, if any, and the player's position relative to it.
+
+Binary encoding and sending only changed props are deferred until snapshot size is measured as a problem. Long courses (spec 3) are expected to need the second.
 
 ### `client`
 
 - `net` — socket, reconnect, snapshot buffer, interpolation 100 ms in the past for the vehicle, other players, props and cable
-- `prediction` — the local on-foot character runs the `shared` player code each frame and reconciles against `ackSeq`. A seated player is attached to the interpolated vehicle.
+- `prediction` — predicts the local player's walking and jumping only; see "Prediction" below
 - `input` — a device-agnostic layer producing the `input` message fields. Two sources: keyboard and mouse, and touch. The source is chosen by pointer capability at load.
 - `render` — Three.js scene built from the same course data the server uses; low-poly meshes built in code
 - `audio` — Web Audio playback of sound effects, driven by snapshots (engine pitch from throttle and speed, winch loop while reeling) and by `event` messages
 - `ui` — plain HTML and CSS overlay for home, lobby, HUD (fuel, health, timer, checkpoint progress, interact prompt), reconnect overlay and results. No UI framework.
+
+### Prediction
+
+- Only the local player's walking and jumping are predicted. Picking up, carrying, seating, pushing and everything else come from the server.
+- The client holds a local Rapier world with the course's static colliders, plus kinematic stand-ins for the vehicle and props, positioned from the interpolated snapshot.
+- On each snapshot the client resets the local player to the server's state and replays the inputs after `ackSeq`. Small corrections are smoothed and large ones snap; both thresholds are constants.
+- While the snapshot reports the local player as seated or standing on the vehicle or a prop, prediction is off. The player is drawn from the snapshot, relative to that body. Input lag while riding on the roof is accepted.
+
+### Camera and rendering
+
+- On foot, the camera follows behind the player and moves closer when a wall is in the way. Seated, it orbits the vehicle.
+- If the WebGL context is lost, as iOS does to background tabs, the client reloads the page and rejoins with its session token.
 
 ### Sound
 
@@ -299,7 +368,8 @@ The client derives the WebSocket URL from the page origin (`ws` for `http`, `wss
 
 - **Bad input.** The server validates every message's shape and clamps numeric ranges. Malformed messages get `bad_message` and are dropped. Admin-only messages from another player get `not_admin`. A socket sending more than 120 messages per second is closed.
 - **Join failures.** Unknown room, full room and taken name each return a specific error that the client displays.
-- **Disconnects.** The client shows a reconnecting overlay and retries with backoff for 30 s, rejoining with its session token. The server removes a dropped player's character immediately; a carried item drops and a vacated driver seat frees. A rejoining player spawns next to the vehicle.
+- **Disconnects.** The client shows a reconnecting overlay and retries with backoff for 30 s, rejoining with its session token. The server removes a dropped player's character immediately; a carried item drops and a vacated driver seat frees. The slot is held for 30 s. A rejoining player spawns next to the vehicle.
+- **Stuck vehicle.** A vehicle that is wedged, or out of fuel with no jerrycan left, is not detected automatically. The admin uses "restart from checkpoint".
 - **Tick overrun.** The server runs at most 3 catch-up steps per loop iteration and discards the remaining backlog.
 - **Physics escapes.** Handled by the kill-plane rules: players respawn, props return to spawn, the vehicle triggers a checkpoint restart.
 - **Server restart.** Rooms are in memory; a restart ends all runs.
@@ -315,16 +385,18 @@ Runner: Vitest in all packages.
 - seats: one driver; boarding takes the nearest free seat; exit places the player beside the door
 - winch: attaches only within range of an anchor; cable length never exceeds 25 m; reeling in pulls the vehicle toward the anchor; over-length hook drops
 - interact: priority order holds when several targets are in range; one carried item at a time
-- push: force adds per player and respects the cap; heavy obstacles move only at the crew-size threshold
+- push: force adds per player and respects the cap; a heavy obstacle moves only at the pusher count for the connected players; a heavy obstacle can be winched
+- player physics: carried by a moving body; shoved out of a vehicle that moves into them; contact alone moves nothing
+- input: a repeated input does not re-trigger a press; hold actions cancel on release; the queue drops the oldest on overflow
 - repair and refuel: restore 50%, consume the item, require the full hold
 - segments: every type builds; entry and exit are consistent; a chained course has no gap or overlap at joins
-- checkpoints: reaching a segment records state; vehicle lost restores position, fuel and health with the 50% floor, resets later props, detaches the winch and adds 60 s
+- checkpoints: entering a segment records state once; vehicle lost, or an admin restart, restores the vehicle pose, fuel and health with the 50% floor, restores every prop to its recorded state, detaches the winch and adds 60 s
 - rules: finish volume wins; players and props respawn from the kill plane
 - determinism: the same input sequence produces the same snapshot
 
 `server`:
 
-- rooms: unique noun allocation, create, join, full, taken name, rejoin by token, admin handover, kick, empty-room cleanup
+- rooms: unique noun allocation, create, join, full, taken name, rejoin by token within 30 s, slot freed after 30 s, admin handover, kick, empty-room cleanup
 - lobby: ready states, start refused until all others are ready, admin-only messages refused from others, phase transitions including `next`
 - message validation and rate limit, using a fake socket
 
