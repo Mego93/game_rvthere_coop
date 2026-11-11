@@ -272,7 +272,7 @@ npm workspaces, TypeScript throughout.
 | Package | Responsibility | Depends on |
 |---|---|---|
 | `shared` | Simulation, vehicle and course data, message types, constants | `@dimforge/rapier3d-compat` |
-| `server` | Rooms, WebSocket transport, runs the sim, broadcasts snapshots, serves the built client | `shared`, `ws` |
+| `server` | Rooms, lobby, simulation loop and snapshots (`room` layer); WebSocket transport and static serving (`node` adapter) | `shared`, `ws` (adapter only) |
 | `client` | Rendering, input, audio, HUD, lobby, interpolation, prediction | `shared`, `three`, Vite |
 
 ### Conventions
@@ -476,11 +476,17 @@ Effects only: engine loop, impact, winch loop, hook attach, pickup, item use, co
 
 ### Running and hosting
 
-The same build runs three ways with no design difference:
+Hosting uses Cloudflare.
 
-- Local machine, same Wi-Fi: players open `http://<LAN-IP>:3000/<noun>`
-- Local machine plus a tunnel (Cloudflare Tunnel, ngrok), which also provides `https`
-- A single small container on a host such as Fly.io or Railway
+- **During development and for play sessions:** the server runs on the owner's machine. Players on the same Wi-Fi open `http://<LAN-IP>:3000/<noun>`. Players elsewhere use a Cloudflare Tunnel, which gives the local server a public `https` address while it runs.
+- **Always-on hosting** is decided at the last build step, between Cloudflare Containers (the same Node process in a container) and Workers with Durable Objects (one object per room). The choice is made then, against the platform's limits and pricing at that time.
+
+To keep both options open, `server` is split in two layers:
+
+- `room` — all room, lobby and simulation-loop logic. It talks to an abstract connection (send, close, on message) and takes its clock and timer as parameters. It imports nothing from Node or `ws`.
+- `node` — the adapter: HTTP static serving, `ws` sockets and the real timer, wired to `room`.
+
+A Durable Object adapter, if chosen, replaces only `node`.
 
 The client derives the WebSocket URL from the page origin (`ws` for `http`, `wss` for `https`).
 
@@ -525,7 +531,8 @@ Runner: Vitest in all packages. Tests are written before the code they cover.
 
 - rooms: unique noun allocation, create, join, full, taken name, rejoin by token within 30 s, slot freed after 30 s, admin handover, kick, empty-room cleanup
 - lobby: ready states, start refused until all others are ready, admin-only messages refused from others, phase transitions including `next`
-- message validation and rate limit, using a fake socket
+- message validation and rate limit
+- all of the above run against the `room` layer with a fake connection and a fake clock; no test of room logic opens a socket or waits on real time
 
 `client`:
 
@@ -576,4 +583,4 @@ Steps 1 to 12 run on a flat test ground with a ramp, reference slopes, a sand pa
 13. Segment system with forks, course design pass, and course 1.
 14. The RV: config, mesh and handling pass over course 1.
 15. Sound effects.
-16. Reconnect polish and single-container deployment.
+16. Reconnect polish, Cloudflare Tunnel setup with a documented one-command start, and the always-on hosting decision.

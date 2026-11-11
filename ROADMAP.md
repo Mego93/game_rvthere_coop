@@ -32,7 +32,7 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | 13 | Segment system with forks, course design pass, course 1 (to the airport) | todo | | | Owner, by playing it |
 | 14 | The RV: config, mesh, handling pass over course 1 | todo | | | Owner, by playing it |
 | 15 | Sound effects | todo | | | Owner |
-| 16 | Reconnect polish, single-container deployment | todo | | | Owner |
+| 16 | Reconnect polish, Cloudflare Tunnel setup, always-on hosting decision | todo | | | Owner |
 
 ## Later specs
 
@@ -71,3 +71,4 @@ Decisions made after the spec was written. Change the spec too when a decision a
 | 2026-11-11 | The winch cable is a capped spring-and-damper force, not a physics joint | A hard joint pulling a raycast vehicle is the likeliest source of instability |
 | 2026-11-11 | Scenario tests encode handling expectations as measurable assertions | Gives implementers a pass or fail target for what would otherwise be feel |
 | 2026-11-11 | The owner's real start coordinates are kept out of the repository | Privacy |
+| 2026-11-11 | Hosting is Cloudflare: Tunnel from the owner's machine first; Containers or Durable Objects decided at step 16. Room logic stays free of Node and `ws` | Owner chose Cloudflare; keeps both always-on options open |
