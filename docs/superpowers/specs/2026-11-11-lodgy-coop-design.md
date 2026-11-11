@@ -1,101 +1,159 @@
-# Lodgy Co-op — Design
+# Lodgy Co-op — Design (spec 1: engine and course 1)
 
 Date: 2026-11-11
-Status: approved in brainstorming, pending written review
+Status: revised after brainstorming, pending written review
 
 ## Summary
 
-A 3D browser game for 2–6 players, inspired by *RV There Yet?*. One crew shares one physics-driven car, a low-poly Dacia Lodgy lookalike, and must get it from Marrakech's medina to a kasbah in the Atlas foothills. One player drives; the others ride, then get out to push, winch, clear obstacles, repair and refuel. A run lasts 5–10 minutes and is scored by finish time.
+A 3D browser game for 2–6 players, inspired by *RV There Yet?*. One crew shares one physics-driven vehicle and must get it through a campaign of Marrakech-themed courses. One player drives; the others ride, then get out to push, winch, clear obstacles, repair and refuel. Courses run from about 10 minutes (course 1) to an hour or more (later courses). Difficulty comes from each course's obstacles.
 
-Players join by room code. A small Node server runs the physics authoritatively. Desktop browsers and iPhones (Safari) can play in the same room.
+Players join a room by URL. A small Node server runs the physics authoritatively. Desktop browsers and iPhones (Safari) play in the same room.
 
 ## Scope
 
-In scope for this version:
+The project is split into several specs. Each ends in a playable game.
 
-- Co-op mode, one car, one handmade course
-- 2–6 players per room, online via room code
+| Spec | Content |
+|---|---|
+| **1 (this document)** | The whole engine, lobby, two vehicles, the segment system, and course 1 (about 10 minutes) |
+| 2 | More segment types; courses 2 and 3 (about 20–30 minutes each) |
+| 3 | Long courses (1 hour or more) |
+| 4 | Team versus |
+
+In scope for spec 1:
+
+- Co-op campaign structure, with one course shipped
+- 2–6 players per room, joined by URL
+- Lobby with ready states and admin controls
+- Two vehicles, Lodgy and RV, chosen freely
+- Checkpoint restart when the vehicle is lost
 - Desktop (keyboard and mouse) and iPhone (touch) controls
 - Low-poly flat-shaded visuals built in code
+- Basic sound effects
 
-Out of scope:
+Out of scope for spec 1:
 
-- Team versus (planned as a later spec; the design must not block a second car per room)
-- Accounts, persistence, leaderboards
-- Multiple courses, procedural generation
-- Voice or text chat
-- Audio beyond a few basic effects
-- Android-specific tuning and gamepad support
-- A scripted bot that proves the course is completable
+- Accounts, persistence, leaderboards, saved campaign progress
+- Procedural course generation
+- Voice or text chat, music
+- Android-specific tuning, gamepad support
+- A scripted bot that proves a course is completable
+
+The design must not block a second vehicle per room (spec 4).
 
 ## 1. Game rules
 
-### Goal
+### Campaign and goal
 
-Get the car from the start to the finish volume. The score is elapsed time.
+- A campaign is an ordered list of courses. Each course has different obstacles and is longer and harder than the one before.
+- The goal of a course is to get the vehicle from the start into the finish volume. The score is elapsed time, including penalties.
+- Winning shows the results screen (time, vehicle, restarts). The admin then moves the room to the next course, which returns everyone to the lobby with that course selected.
+- After the last course, the results screen shows the campaign total.
+- Nothing is saved. The admin may select any course in the lobby.
 
-The run is lost if:
+### Losing the vehicle: checkpoint restart
 
-- car health reaches 0, or
-- the car falls below the course's kill plane.
+A run never hard-fails. The vehicle is lost when its health reaches 0 or it falls below the kill plane. Then:
 
-An empty fuel tank does not end the run. It disables drive until someone refuels.
+- The vehicle and all players return to the last checkpoint reached.
+- Fuel and health are restored to their values when that checkpoint was first reached, with a floor of 50% each.
+- Props and obstacles in segments after that checkpoint reset to their initial state. The winch detaches.
+- 60 seconds are added to the elapsed time.
 
-### Roles
+A checkpoint sits at the start of every segment. The course start is the first checkpoint.
 
-Every player is a character on foot. Roles are not assigned.
+An empty fuel tank is not a loss. It disables drive until someone refuels.
 
-- The car has 1 driver seat and 6 passenger seats.
+### Players
+
+Every player is a 3D character who moves freely on foot: walk, jump, climb on anything the physics allows, including the roof of the moving vehicle. Riding on the roof has no special handling; physics decides.
+
+Roles are not assigned.
+
+- A vehicle has 1 driver seat and at least 5 passenger seats.
 - Interact at a door boards the nearest free seat on that side; interact at the driver door takes the driver seat if free.
-- Interact while seated exits next to that door.
-- With no driver, the car coasts with the brake released.
+- Interact while seated exits beside that door.
+- With no driver, the vehicle coasts with the brake released.
+- A player below the kill plane respawns next to the vehicle after 3 s.
 
-### The car
+### Vehicles
 
-- Handles like an overloaded family MPV: soft suspension, pronounced body roll, low grip, weak on steep climbs.
+The admin picks the vehicle in the lobby. Vehicles differ in look and handling but carry no difficulty label.
+
+| | Lodgy | RV |
+|---|---|---|
+| Size | Compact MPV | Longer, wider, taller camper |
+| Mass | Baseline | About 2.5 times heavier |
+| Tipping | Rolls but recovers | High centre of gravity |
+| Climbing | Weak on steep slopes | Needs the winch on any real slope |
+| Fuel burn | Baseline | About 1.5 times |
+| Pushing | Crew can shove it free | Barely moves; righting it needs the winch |
+| Turning circle | Tight | Wide |
+
+Common to both:
+
 - Fuel drains in proportion to throttle. At 0 fuel, throttle has no effect.
-- Health drops on impacts above a speed threshold and continuously while the car is upside down.
-- A flipped car is righted by pushing or winching.
-- The model is a recognisable shape without the Dacia name or badge.
+- Health drops on impacts above a speed threshold and continuously while upside down.
+- A flipped vehicle is righted by pushing or winching.
+- Same winch, same health pool.
+- Models are recognisable shapes without any manufacturer's name or badge.
+
+Course geometry (alley width, ledge width, hairpin radius) is sized so the RV fits.
 
 ### Crew actions
 
 | Action | Behaviour |
 |---|---|
-| Push | A player walking into the car applies a force along their movement direction. Forces add per player, capped at 4 pushers' worth. |
-| Winch | Take the hook from the car's front bumper, carry it to an anchor, interact to attach. Reel in or out from the driver seat or from the winch box on the front bumper. One cable, maximum length 25 m. Interact at the anchor detaches. |
-| Repair | Carry a toolbox to the car and hold interact for 3 s to restore 50% health. The toolbox is consumed. |
-| Refuel | Carry a jerrycan to the car and hold interact for 3 s to restore 50% fuel. The jerrycan is consumed. |
+| Push | A player walking into the vehicle applies a force along their movement direction. Forces add per player, capped at 4 pushers' worth. |
+| Winch | Take the hook from the front bumper, carry it to an anchor, interact to attach. Reel in or out from the driver seat or the winch box on the front bumper. One cable, maximum length 25 m. Interact at the anchor detaches. |
+| Repair | Carry a toolbox to the vehicle and hold interact for 3 s to restore 50% health. The toolbox is consumed. |
+| Refuel | Carry a jerrycan to the vehicle and hold interact for 3 s to restore 50% fuel. The jerrycan is consumed. |
 | Clear | Pick up and throw light debris. Heavy obstacles cannot be carried; they move only when enough players push together or when winched. |
 
-A player carries one item at a time: hook, jerrycan, toolbox or light debris. Boarding the car while carrying drops the item, except the hook, which returns to the bumper.
-
-If the hook is carried beyond cable length, it is pulled from the player's hands and drops.
-
-### Scaling with crew size
-
-- Pickups (jerrycans, toolboxes) are fixed regardless of crew size.
-- Heavy obstacles need 2 pushers with a crew of 2–3, and 3 pushers with a crew of 4–6. Crew size is fixed at run start.
-
-### Respawn
-
-- A player below the kill plane respawns next to the car after 3 s.
+- A player carries one item at a time: hook, jerrycan, toolbox or light debris.
+- Boarding while carrying drops the item, except the hook, which returns to the bumper.
+- A hook carried beyond cable length is pulled from the player's hands and drops.
+- Pickups are fixed per course regardless of crew size.
+- Heavy obstacles need 2 pushers with a crew of 2–3 and 3 pushers with a crew of 4–6. Crew size is fixed at run start.
 - A prop below the kill plane returns to its spawn point.
-- The car does not respawn.
 
-### Course: Marrakech to the Atlas
+### Courses and segments
 
-Five beats in sequence, each with a checkpoint volume used only for the HUD progress indicator.
+A course is an ordered list of segments. A segment is a reusable piece of route with configurable obstacles. Segments join end to end; each declares an entry and an exit (position, heading, elevation), and the course builder places each segment's entry on the previous segment's exit.
 
-1. **Medina exit.** Narrow alley off the square, cluttered with crates, carts and parked scooters. Teaches driving and clearing.
-2. **Palmeraie track.** Soft sand between palm trees, where the car bogs down. First winch use; palms are anchors.
-3. **Oued crossing.** Shallow rocky riverbed, slow and fuel-hungry. A jerrycan stall stands on the far bank.
-4. **Atlas switchbacks.** Narrow mountain road with a drop on one side. A rockfall (heavy obstacles) blocks one hairpin. A toolbox sits at a roadside mechanic's shack.
-5. **Final climb.** Steep gravel requiring winch and push together. The finish is the kasbah gate.
+Segment types in spec 1:
 
-Anchors are palm trunks, boulders and stone milestones, each visibly marked. Palette: ochre walls, red earth, green palms.
+| Type | Content | Parameters |
+|---|---|---|
+| `road` | Plain road, optionally curved or sloped | length, curve, slope, light debris count |
+| `alley` | Narrow walled street cluttered with crates, carts, parked scooters | length, clutter density |
+| `sand` | Soft sand between palm trees; the vehicle bogs down | length, palm (anchor) count |
+| `ford` | Shallow rocky riverbed, slow and fuel-hungry | width, rock count |
+| `hairpin` | Mountain switchback with a drop on one side | turn count, rockfall (heavy obstacles) on or off |
+| `climb` | Steep gravel slope | length, gradient, anchor count |
+
+Any segment may also place pickups (jerrycan, toolbox) and anchors.
 
 Surface types affect tyre grip and rolling resistance: road, sand, riverbed, gravel.
+
+**Course 1, "Marrakech to the kasbah", about 10 minutes:**
+
+1. `alley` — medina exit. Teaches driving and clearing.
+2. `sand` — palmeraie track. First winch use.
+3. `ford` — oued crossing, with a jerrycan stall on the far bank.
+4. `hairpin` — Atlas switchbacks with a rockfall, and a toolbox at a mechanic's shack.
+5. `climb` — final climb needing winch and push together. The finish is the kasbah gate.
+
+Short `road` segments link them. Anchors are palm trunks, boulders and stone milestones, each visibly marked. Palette: ochre walls, red earth, green palms.
+
+Exact lengths, gradients and obstacle counts are set in a course design pass at the start of the course step, once the vehicles drive.
+
+### Collision
+
+Collision stays simple throughout:
+
+- Terrain is a heightfield per segment. Walls, props, obstacles and vehicles use boxes; players use capsules. No mesh colliders.
+- The winch cable is a straight line from bumper to anchor. It does not collide with terrain, props or players. It is drawn as a sagging rope.
 
 ## 2. Architecture
 
@@ -105,50 +163,69 @@ npm workspaces, TypeScript throughout.
 
 | Package | Responsibility | Depends on |
 |---|---|---|
-| `shared` | Simulation, course data, message types, constants | `@dimforge/rapier3d-compat` |
+| `shared` | Simulation, vehicle and course data, message types, constants | `@dimforge/rapier3d-compat` |
 | `server` | Rooms, WebSocket transport, runs the sim, broadcasts snapshots, serves the built client | `shared`, `ws` |
-| `client` | Rendering, input, HUD, lobby, interpolation, prediction | `shared`, `three`, Vite |
+| `client` | Rendering, input, audio, HUD, lobby, interpolation, prediction | `shared`, `three`, Vite |
 
 ### `shared`
 
 The simulation is a pure module with no network or rendering code.
 
 ```ts
-const world = createWorld(course, { crewSize });
+const world = createWorld({ courseId, vehicleId, crewSize });
 world.addPlayer(id); world.removePlayer(id);
 world.step(inputsByPlayer);   // advances one fixed tick
 world.snapshot();             // serialisable state
-world.status();               // 'running' | 'won' | 'lost', plus elapsed time
+world.status();               // 'running' | 'won', elapsed, restarts, checkpoint
 ```
 
 One file per concern:
 
-- `vehicle` — Rapier raycast vehicle, surface grip, fuel, health, seats
+- `constants` — every tuning number (speeds, masses, forces, ranges, thresholds). Starting values are set in each step's plan and tuned by play.
+- `vehicles` — one config per vehicle: dimensions, mass, centre of gravity, engine force, grip, fuel burn, seat and door positions, winch mount
+- `vehicle` — Rapier raycast vehicle driven by a config; surface grip, fuel, health, seats. No per-vehicle branches.
 - `player` — capsule character controller, carry state, respawn
 - `winch` — hook, anchor attach, cable as a length-limited rope joint, reel
 - `interact` — resolves what interact does for a player this tick
 - `props` — light debris, heavy obstacles, pickups
-- `course` — static data: terrain heightmap, surface map, colliders, anchors, spawn points, checkpoint and finish volumes, kill plane
-- `rules` — win and lose conditions, timer
+- `segments` — one builder per segment type; each returns heightfield, surface map, colliders, anchors, prop spawns, entry and exit
+- `courses` — course definitions as data (ordered segment list with parameters), and the builder that chains segments
+- `checkpoints` — records state at each checkpoint, performs the restart
+- `rules` — win condition, vehicle-lost detection, timer and penalties
 - `protocol` — message types and validators
 
 Interact priority, highest first, when several targets are in range:
 
 1. Exit seat (if seated)
 2. Attach hook to anchor (if carrying the hook)
-3. Repair or refuel (if carrying a toolbox or jerrycan, at the car)
+3. Repair or refuel (if carrying a toolbox or jerrycan, at the vehicle)
 4. Release carried item (if carrying): light debris is thrown forward along the player's facing; a jerrycan, toolbox or hook is dropped at the player's feet
 5. Take hook, pick up item
 6. Detach hook at anchor
-7. Board car
+7. Board vehicle
 
 ### `server`
 
-- A room has a 4-letter code, up to 6 players and a phase: `lobby → playing → finished`. The player who creates the room is host and starts the run. If the host leaves, the longest-connected player becomes host.
-- Each room owns one world, stepped at a fixed 60 Hz. A snapshot is broadcast at 20 Hz.
-- A room is deleted when it has no connected players.
-- No database. Identity is a display name plus the room code.
-- One process serves the built client and the WebSocket on the same port (default 3000).
+- **Rooms.** A room's identity is a unique noun, drawn at creation from a built-in word list and unused by any live room (for example `tagine`, `camel`). If the list is exhausted, a number is appended. The room lives at `/<noun>`.
+- **Phases.** `lobby → playing → results → lobby`.
+- **Admin.** The player who creates the room. If the admin leaves, the longest-connected player becomes admin.
+- **Players.** Up to 6. Display names are unique within a room; a taken name is refused. Each client holds a random session token in local storage; rejoining with the same token restores the same player.
+- **Simulation.** Each room in `playing` owns one world, stepped at a fixed 60 Hz. A snapshot is broadcast at 20 Hz.
+- A room is deleted when it has had no connected players for 60 s.
+- No database.
+- One process serves the built client and the WebSocket on the same port (default 3000). Any path that is not a static file serves the client, which reads the noun from the URL.
+
+### Lobby
+
+The lobby is a waiting room.
+
+- Everyone sees the room link, the player list with ready states, and the selected course and vehicle.
+- Each player has a Ready toggle.
+- The admin selects the course and vehicle, can kick a player, and can start once every other player is ready. A kicked player returns to the home page and may rejoin by the link.
+- A player who opens the link during `playing` joins the run directly, if the room has fewer than 6 players, and spawns next to the vehicle.
+- During `playing`, the admin can restart the course or return the room to the lobby.
+
+The home page (`/`) offers "Create room" and a field to enter a room's noun.
 
 ### Protocol
 
@@ -156,27 +233,36 @@ JSON over WebSocket.
 
 Client to server:
 
-- `create { name }`
-- `join { code, name }`
-- `start {}`
+- `create { name, token }`
+- `join { room, name, token }`
+- `ready { ready }`
+- `configure { courseId, vehicleId }` (admin)
+- `kick { playerId }` (admin)
+- `start {}`, `restart {}`, `toLobby {}`, `next {}` (admin)
 - `input { seq, moveX, moveY, yaw, jump, interact, throttle, steer, brake, reel }`
 
 Server to client:
 
-- `lobby { code, players, hostId, phase }`
-- `snapshot { tick, ackSeq, car, players, props, cable, fuel, health, elapsed, checkpoint }`
-- `end { result, elapsed }`
-- `error { reason }` with reasons `unknown_room`, `room_full`, `run_finished`, `bad_message`
+- `lobby { room, players, adminId, phase, courseId, vehicleId }`
+- `snapshot { tick, ackSeq, vehicle, players, props, cable, fuel, health, elapsed, checkpoint, restarts }`
+- `event { kind }` for one-off moments that drive sound and HUD: `impact`, `checkpoint`, `vehicleLost`, `pickup`, `repair`, `refuel`, `hookAttach`, `hookDetach`
+- `results { courseId, vehicleId, elapsed, restarts, campaignTotal? }`
+- `error { reason }` with reasons `unknown_room`, `room_full`, `name_taken`, `kicked`, `not_admin`, `bad_message`
 
 Binary encoding is deferred until snapshot size is measured as a problem.
 
 ### `client`
 
-- `net` — socket, reconnect, snapshot buffer, interpolation 100 ms in the past for the car, other players, props and cable
-- `prediction` — the local on-foot character runs the `shared` player code each frame and reconciles against `ackSeq`. A seated player is attached to the interpolated car.
+- `net` — socket, reconnect, snapshot buffer, interpolation 100 ms in the past for the vehicle, other players, props and cable
+- `prediction` — the local on-foot character runs the `shared` player code each frame and reconciles against `ackSeq`. A seated player is attached to the interpolated vehicle.
 - `input` — a device-agnostic layer producing the `input` message fields. Two sources: keyboard and mouse, and touch. The source is chosen by pointer capability at load.
 - `render` — Three.js scene built from the same course data the server uses; low-poly meshes built in code
-- `ui` — plain HTML and CSS overlay for lobby, HUD (fuel, health, timer, checkpoint, interact prompt), reconnect overlay and end screen. No UI framework.
+- `audio` — Web Audio playback of sound effects, driven by snapshots (engine pitch from throttle and speed, winch loop while reeling) and by `event` messages
+- `ui` — plain HTML and CSS overlay for home, lobby, HUD (fuel, health, timer, checkpoint progress, interact prompt), reconnect overlay and results. No UI framework.
+
+### Sound
+
+Effects only: engine loop, impact, winch loop, hook attach, pickup, repair and refuel, checkpoint, vehicle lost, UI click, win. Files come from a CC0 pack (Kenney's audio packs are the first candidate) and are chosen when the sound step starts; their licence is recorded in the repo. Audio unlocks on the player's first tap or click, as iOS requires.
 
 ### Controls
 
@@ -203,7 +289,7 @@ The camera is third-person follow in both cases.
 
 The same build runs three ways with no design difference:
 
-- Local machine, same Wi-Fi: players open `http://<LAN-IP>:3000`
+- Local machine, same Wi-Fi: players open `http://<LAN-IP>:3000/<noun>`
 - Local machine plus a tunnel (Cloudflare Tunnel, ngrok), which also provides `https`
 - A single small container on a host such as Fly.io or Railway
 
@@ -211,12 +297,11 @@ The client derives the WebSocket URL from the page origin (`ws` for `http`, `wss
 
 ## 3. Error handling
 
-- **Bad input.** The server validates every message's shape and clamps numeric ranges. Malformed messages get `bad_message` and are dropped. A socket sending more than 120 messages per second is closed.
-- **Join failures.** Unknown code, full room and finished run each return a specific error that the lobby displays.
-- **Disconnects.** The client shows a reconnecting overlay and retries with backoff for 30 s, rejoining the same room under the same name. The server removes a dropped player's character immediately; a carried item drops, and a vacated driver seat frees. A rejoining player spawns next to the car.
-- **Mid-run joins.** A new player may join a room in `playing` phase if it has fewer than 6 players. Obstacle thresholds keep the crew size fixed at run start.
+- **Bad input.** The server validates every message's shape and clamps numeric ranges. Malformed messages get `bad_message` and are dropped. Admin-only messages from another player get `not_admin`. A socket sending more than 120 messages per second is closed.
+- **Join failures.** Unknown room, full room and taken name each return a specific error that the client displays.
+- **Disconnects.** The client shows a reconnecting overlay and retries with backoff for 30 s, rejoining with its session token. The server removes a dropped player's character immediately; a carried item drops and a vacated driver seat frees. A rejoining player spawns next to the vehicle.
 - **Tick overrun.** The server runs at most 3 catch-up steps per loop iteration and discards the remaining backlog.
-- **Physics escapes.** Handled by the kill-plane rules above.
+- **Physics escapes.** Handled by the kill-plane rules: players respawn, props return to spawn, the vehicle triggers a checkpoint restart.
 - **Server restart.** Rooms are in memory; a restart ends all runs.
 - **iOS backgrounding.** Safari suspends the socket when the page is hidden. On return, the client follows the normal reconnect path.
 
@@ -226,18 +311,21 @@ Runner: Vitest in all packages.
 
 `shared` (headless, against the real Rapier world):
 
-- vehicle: throttle moves the car; fuel drains with throttle; empty tank disables drive; impact above the threshold reduces health; upside-down drains health; grip differs by surface
+- vehicle: throttle moves it; fuel drains with throttle; empty tank disables drive; impact above the threshold reduces health; upside-down drains health; grip differs by surface; both vehicle configs load and drive
 - seats: one driver; boarding takes the nearest free seat; exit places the player beside the door
-- winch: attaches only within range of an anchor; cable length never exceeds 25 m; reeling in pulls the car toward the anchor; over-length hook drops
+- winch: attaches only within range of an anchor; cable length never exceeds 25 m; reeling in pulls the vehicle toward the anchor; over-length hook drops
 - interact: priority order holds when several targets are in range; one carried item at a time
 - push: force adds per player and respects the cap; heavy obstacles move only at the crew-size threshold
 - repair and refuel: restore 50%, consume the item, require the full hold
-- rules: finish volume wins; zero health loses; car below kill plane loses; players and props respawn
+- segments: every type builds; entry and exit are consistent; a chained course has no gap or overlap at joins
+- checkpoints: reaching a segment records state; vehicle lost restores position, fuel and health with the 50% floor, resets later props, detaches the winch and adds 60 s
+- rules: finish volume wins; players and props respawn from the kill plane
 - determinism: the same input sequence produces the same snapshot
 
 `server`:
 
-- room lifecycle: create, join, full, rejoin, host handover, empty cleanup
+- rooms: unique noun allocation, create, join, full, taken name, rejoin by token, admin handover, kick, empty-room cleanup
+- lobby: ready states, start refused until all others are ready, admin-only messages refused from others, phase transitions including `next`
 - message validation and rate limit, using a fake socket
 
 `client`:
@@ -246,20 +334,25 @@ Runner: Vitest in all packages.
 - prediction reconciliation
 - input layer: keyboard and touch sources produce the same `input` fields
 
-End to end: one Playwright smoke test opens two pages, creates and joins a room, starts a run and asserts both receive snapshots. A second run of it uses an iPhone viewport with touch emulation to check the touch UI appears.
+End to end: one Playwright smoke test opens two pages, creates a room, joins by its URL, readies up, starts a run and asserts both receive snapshots. A second run uses an iPhone viewport with touch emulation to check the touch UI appears.
 
-Rendering, game feel and course tuning are checked by hand, including on a real iPhone.
+Rendering, sound, game feel and course tuning are checked by hand, including on a real iPhone.
 
 ## 5. Build order
 
-Each step ends in something runnable. Progress is tracked in `ROADMAP.md`. Each step gets its own plan, written when the step starts, and its own branch. Steps 7, 8 and 9 need a manual sign-off from the owner because game feel and real-device behaviour cannot be tested automatically.
+Each step ends in something runnable. Progress is tracked in `ROADMAP.md`. Each step gets its own plan, written when the step starts, and its own branch. Steps 8 to 12 need a manual sign-off from the owner because game feel, sound and real-device behaviour cannot be tested automatically.
 
-1. Workspace scaffold, Rapier world, flat ground, drivable car in one browser tab with the sim running locally. The device-agnostic input layer starts here with the keyboard source.
-2. Server, rooms, snapshots and interpolation: two tabs see the same car.
+Steps 1 to 8 run on a flat test ground with a ramp, a sand patch, an anchor and a few props.
+
+1. Workspace scaffold, Rapier world, test ground, drivable Lodgy from a vehicle config, in one browser tab with the sim running locally. Keyboard input source. Includes a throwaway experiment proving that a rope joint can winch a raycast vehicle stably at the RV's mass.
+2. Server, rooms at `/<noun>`, snapshots and interpolation: two tabs see the same vehicle.
 3. On-foot players with prediction, boarding and seats.
 4. Push, carry, props and clearing.
 5. Winch.
-6. Fuel, health, repair, refuel, win and lose rules, HUD.
-7. Touch input source, touch UI, landscape and safe-area layout, web app manifest. Verified on an iPhone over LAN.
-8. The Marrakech course: terrain, surfaces, five beats, meshes and palette.
-9. Lobby polish, reconnect, single-container deployment.
+6. Fuel, health, repair, refuel, checkpoints and restart, win rule, HUD.
+7. Lobby: ready states, admin controls, course and vehicle selection, kick, results, next course, session tokens.
+8. Touch input source, touch UI, landscape and safe-area layout, web app manifest. Verified on an iPhone over LAN.
+9. Segment system, course design pass, and course 1.
+10. The RV: config, mesh and handling pass over course 1.
+11. Sound effects.
+12. Reconnect polish and single-container deployment.
