@@ -137,7 +137,7 @@ Interact priority, highest first, when several targets are in range:
 1. Exit seat (if seated)
 2. Attach hook to anchor (if carrying the hook)
 3. Repair or refuel (if carrying a toolbox or jerrycan, at the car)
-4. Drop carried item (if carrying)
+4. Release carried item (if carrying): light debris is thrown forward along the player's facing; a jerrycan, toolbox or hook is dropped at the player's feet
 5. Take hook, pick up item
 6. Detach hook at anchor
 7. Board car
