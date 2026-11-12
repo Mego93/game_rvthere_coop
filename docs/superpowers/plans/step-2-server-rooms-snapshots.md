@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-11-lodgy-coop-design.md`, build step 2, and the nine step-2 rows of "Carried into later steps" in `ROADMAP.md`.
 
-**Status of this plan's code:** every file below was drafted and run in a scratch workspace before the plan was written (clean install, 186 tests passing in 19 files, typecheck clean, production build succeeding, 12 Playwright tests passing, `npm run dev` and `npm start` both exercised). Copy the code exactly. If something fails that the plan says should pass, stop and report; do not improvise a fix.
+**Status of this plan's code:** every file below was drafted and run in a scratch workspace before the plan was written (clean install, 191 tests passing in 20 files, typecheck clean, production build succeeding, 12 Playwright tests passing, `npm run dev` and `npm start` both exercised). Copy the code exactly. If something fails that the plan says should pass, stop and report; do not improvise a fix.
 
 ## Global Constraints
 
@@ -1626,6 +1626,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ### Task 5: The room layer
 
+Steps 7 to 10 were added after this task's review; they also modify `packages/shared/src/constants.ts` and `packages/shared/src/protocol.ts` and add `packages/server/src/room/roomFailure.test.ts`.
+
 **Files:**
 - Create: `packages/server/src/room/types.ts`, `packages/server/src/room/testing.ts`, `packages/server/src/room/room.ts`, `packages/server/src/room/server.ts`
 - Test: `packages/server/src/room/server.test.ts`
@@ -2595,6 +2597,396 @@ git commit -m "feat(server): add the room layer
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
+- [ ] **Step 7: Write the failing tests for the room limit and for failures**
+
+The review of this task found two gaps, and steps 7 to 10 close them. Steps 1 to 6 above are kept as they were first built.
+
+- Nothing bounded the number of rooms, and each room is a physics world. `create` is now refused with the new reason `server_full` once the server holds `MAX_ROOMS` (50) rooms.
+- An error thrown inside the tick stopped every room. Now a connection whose `send` or `close` throws is reported through the new optional `RoomDeps.onError` and dropped at the next tick, and a room whose `update` throws is reported, closed and deleted, with its players disconnected. Other rooms are not affected.
+
+Apply this change. It adds four tests: three in `packages/server/src/room/server.test.ts` and one in the new file `packages/server/src/room/roomFailure.test.ts`. The main session provides the same change as a patch file for `git apply`.
+
+```diff
+diff --git a/packages/server/src/room/roomFailure.test.ts b/packages/server/src/room/roomFailure.test.ts
+new file mode 100644
+index 0000000..6f73bc7
+--- /dev/null
++++ b/packages/server/src/room/roomFailure.test.ts
+@@ -0,0 +1,56 @@
++import RAPIER from '@dimforge/rapier3d-compat';
++import { SNAPSHOT_EVERY_TICKS, TICK_RATE } from '@lodgy/shared';
++import { beforeAll, expect, test, vi } from 'vitest';
++import { createRoomServer } from './server';
++import { connectFakeClient, createFakeDeps } from './testing';
++
++// The nouns of the rooms whose simulation is made to fail.
++const failing = vi.hoisted(() => new Set<string>());
++
++// No message a client can send makes a room's update throw, so the failure is injected here.
++vi.mock('./room', async (importOriginal) => {
++  const original = await importOriginal<typeof import('./room')>();
++  const createRoom: typeof original.createRoom = (...args) => {
++    const room = original.createRoom(...args);
++    return {
++      ...room,
++      update(now) {
++        if (failing.has(room.noun)) throw new Error('simulation failed');
++        room.update(now);
++      },
++    };
++  };
++  return { ...original, createRoom };
++});
++
++beforeAll(async () => {
++  await RAPIER.init();
++});
++
++test('a room whose update throws is closed and reported, and the other rooms carry on', () => {
++  const fake = createFakeDeps(RAPIER);
++  const errors: unknown[] = [];
++  const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) });
++  const amal = connectFakeClient(server);
++  amal.send({ type: 'create', name: 'Amal', token: 'token-1-abcdefghij' });
++  const badr = connectFakeClient(server);
++  badr.send({ type: 'create', name: 'Badr', token: 'token-2-abcdefghij' });
++  fake.advance(1);
++  expect(server.roomCount()).toBe(2);
++
++  // Amal's room was created first, so it is updated before Badr's on every tick.
++  failing.add(amal.last('welcome').room);
++  const before = badr.ofType('snapshot').length;
++  fake.advance(1);
++
++  expect(errors).toHaveLength(1);
++  expect(server.roomCount()).toBe(1);
++  expect(amal.closedByServer).toBe(true);
++  expect(badr.closedByServer).toBe(false);
++  expect(badr.ofType('snapshot').length - before).toBe(TICK_RATE / SNAPSHOT_EVERY_TICKS);
++
++  // The failed room is gone: its name can no longer be joined.
++  const late = connectFakeClient(server);
++  late.send({ type: 'join', room: amal.last('welcome').room, name: 'Chadi', token: 'token-3-abcdefghij' });
++  expect(late.ofType('error').map((message) => message.reason)).toEqual(['unknown_room']);
++});
+diff --git a/packages/server/src/room/server.test.ts b/packages/server/src/room/server.test.ts
+index 6ef05b1..1407d3b 100644
+--- a/packages/server/src/room/server.test.ts
++++ b/packages/server/src/room/server.test.ts
+@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
+ import {
+   EMPTY_ROOM_TIMEOUT,
+   MAX_PLAYERS,
++  MAX_ROOMS,
+   NEUTRAL_INPUT,
+   PING_INTERVAL,
+   PLAYER_COLOURS,
+@@ -34,7 +35,9 @@ const input = (seq: number, fields: Partial<PlayerInput> = {}): ClientMessage =>
+ 
+ function setup(options?: RoomServerOptions) {
+   const fake = createFakeDeps(RAPIER);
+-  const server = createRoomServer(fake.deps, options);
++  // Everything the server reports through onError, oldest first.
++  const errors: unknown[] = [];
++  const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) }, options);
+   const connect = () => connectFakeClient(server);
+   // Connects a client and creates a room with it.
+   const host = (name = 'Amal') => {
+@@ -48,7 +51,7 @@ function setup(options?: RoomServerOptions) {
+     client.send({ type: 'join', room, name, token: token(n) });
+     return client;
+   };
+-  return { ...fake, server, connect, host, guest };
++  return { ...fake, server, errors, connect, host, guest };
+ }
+ 
+ const reasons = (client: FakeClient) => client.ofType('error').map((message) => message.reason);
+@@ -408,6 +411,84 @@ test('a connection that stays over the rate limit is closed and removed', () =>
+   expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
+ });
+ 
++test('create is refused once the server holds the most rooms it allows, until one is deleted', () => {
++  const { connect, advance, server } = setup();
++  const hosts = Array.from({ length: MAX_ROOMS }, (_, n) => {
++    const client = connect();
++    client.send({ type: 'create', name: 'Amal', token: token(n) });
++    return client;
++  });
++  expect(server.roomCount()).toBe(MAX_ROOMS);
++
++  const late = connect();
++  late.send({ type: 'create', name: 'Badr', token: token(MAX_ROOMS) });
++  expect(reasons(late)).toEqual(['server_full']);
++  expect(server.roomCount()).toBe(MAX_ROOMS);
++
++  // Joining an existing room is still possible.
++  const joiner = connect();
++  joiner.send({ type: 'join', room: hosts[0]!.last('welcome').room, name: 'Chadi', token: token(MAX_ROOMS + 1) });
++  expect(reasons(joiner)).toEqual([]);
++
++  // Once the rooms have emptied and timed out, a room can be created again.
++  joiner.close();
++  for (const client of hosts) client.close();
++  advance(EMPTY_ROOM_TIMEOUT);
++  expect(server.roomCount()).toBe(0);
++  const next = connect();
++  next.send({ type: 'create', name: 'Badr', token: token(MAX_ROOMS) });
++  expect(reasons(next)).toEqual([]);
++  expect(server.roomCount()).toBe(1);
++});
++
++test('a connection whose send throws is reported and dropped, and the others carry on', () => {
++  const { host, advance, server, errors } = setup();
++  const { client: amal, room } = host();
++  let broken = false;
++  let closed = false;
++  const handle = server.connect({
++    send() {
++      if (broken) throw new Error('socket failed');
++    },
++    close() {
++      closed = true;
++    },
++  });
++  handle.message(JSON.stringify({ type: 'join', room, name: 'Badr', token: token(2) }));
++  expect(amal.last('lobby').players).toHaveLength(2);
++
++  broken = true;
++  const before = amal.ofType('snapshot').length;
++  advance(1);
++  expect(errors).toHaveLength(1);
++  expect(closed).toBe(true);
++  expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
++  // The tick was never interrupted: Amal missed no snapshot.
++  expect(amal.ofType('snapshot').length - before).toBe(TICK_RATE / SNAPSHOT_EVERY_TICKS);
++  expect(amal.closedByServer).toBe(false);
++});
++
++test('a connection whose close throws is still removed from its room', () => {
++  const { host, advance, server, errors } = setup();
++  const { client: amal, room } = host();
++  const handle = server.connect({
++    send() {},
++    close() {
++      throw new Error('close failed');
++    },
++  });
++  handle.message(JSON.stringify({ type: 'join', room, name: 'Badr', token: token(2) }));
++  expect(amal.last('lobby').players).toHaveLength(2);
++
++  // Badr goes silent; Amal keeps answering.
++  for (let elapsed = 0; elapsed < SILENCE_TIMEOUT + 1; elapsed += 1) {
++    advance(1);
++    amal.send({ type: 'pong' });
++  }
++  expect(errors).toHaveLength(1);
++  expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
++});
++
+ test('stop frees every room', () => {
+   const { host, server } = setup();
+   host();
+```
+
+- [ ] **Step 8: Run the tests to verify they fail**
+
+Run: `npx vitest run packages/server`
+Expected: FAIL, 4 failed and 63 passed, in 2 failed files. The four failures are the new tests: `Error: simulation failed`, `expected +0 to be undefined`, `Error: socket failed` and `Error: close failed`.
+
+- [ ] **Step 9: Write the room limit and the failure handling**
+
+Apply this change to `packages/shared/src/constants.ts`, `packages/shared/src/protocol.ts`, `packages/server/src/room/types.ts` and `packages/server/src/room/server.ts`. The main session provides it as a second patch file.
+
+```diff
+diff --git a/packages/server/src/room/server.ts b/packages/server/src/room/server.ts
+index 23d2a6b..1b0c2a2 100644
+--- a/packages/server/src/room/server.ts
++++ b/packages/server/src/room/server.ts
+@@ -1,6 +1,7 @@
+ import {
+   EMPTY_ROOM_TIMEOUT,
+   MAX_PLAYERS,
++  MAX_ROOMS,
+   PING_INTERVAL,
+   SILENCE_TIMEOUT,
+   TICK_DT,
+@@ -21,6 +22,8 @@ interface Session {
+   limiter: RateLimiter;
+   lastHeard: number;
+   lastPing: number;
++  // Set when the connection threw; the next tick drops the session.
++  failed: boolean;
+   room: Room | null;
+   player: RoomPlayer | null;
+ }
+@@ -52,7 +55,14 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
+     room.announce();
+   };
+ 
++  // Takes a session out of its room and closes its connection.
++  const drop = (session: Session) => {
++    forget(session);
++    session.connection.close();
++  };
++
+   const create = (session: Session, message: Extract<ClientMessage, { type: 'create' }>) => {
++    if (rooms.size >= MAX_ROOMS) return refuse(session, 'server_full');
+     const noun = pickNoun(deps.random, (candidate) => rooms.has(candidate));
+     const room = createRoom(deps.rapier, { noun, courseId, vehicleId }, deps.clock());
+     rooms.set(noun, room);
+@@ -88,11 +98,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
+     const now = deps.clock();
+     session.lastHeard = now;
+     const verdict = session.limiter.hit(now);
+-    if (verdict === 'close') {
+-      session.connection.close();
+-      forget(session);
+-      return;
+-    }
++    if (verdict === 'close') return drop(session);
+     if (verdict === 'drop') return;
+ 
+     const message = parseClientMessage(raw);
+@@ -116,19 +122,40 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
+     }
+   };
+ 
++  // Closes a failed room: its players are disconnected and its world is freed.
++  const discard = (noun: string, room: Room) => {
++    rooms.delete(noun);
++    for (const session of [...sessions]) {
++      if (session.room !== room) continue;
++      sessions.delete(session);
++      session.connection.close();
++    }
++    try {
++      room.dispose();
++    } catch (error) {
++      deps.onError?.(error);
++    }
++  };
++
+   const tick = () => {
+     const now = deps.clock();
+     for (const session of [...sessions]) {
+-      if (now - session.lastHeard >= SILENCE_TIMEOUT) {
+-        session.connection.close();
+-        forget(session);
++      if (session.failed || now - session.lastHeard >= SILENCE_TIMEOUT) {
++        drop(session);
+       } else if (now - session.lastPing >= PING_INTERVAL) {
+         session.lastPing = now;
+         send(session.connection, { type: 'ping' });
+       }
+     }
+     for (const [noun, room] of rooms) {
+-      room.update(now);
++      try {
++        room.update(now);
++      } catch (error) {
++        // A room whose simulation fails is closed, so that it cannot stop the other rooms.
++        deps.onError?.(error);
++        discard(noun, room);
++        continue;
++      }
+       const emptySince = room.emptySince();
+       if (emptySince !== null && now - emptySince >= EMPTY_ROOM_TIMEOUT) {
+         room.dispose();
+@@ -143,10 +170,29 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
+     connect(connection): ConnectionHandle {
+       const now = deps.clock();
+       const session: Session = {
+-        connection,
++        // Sends happen in the middle of a tick or of another player's join, so a throw is recorded and handled at the next tick.
++        connection: {
++          send(data) {
++            if (session.failed) return;
++            try {
++              connection.send(data);
++            } catch (error) {
++              session.failed = true;
++              deps.onError?.(error);
++            }
++          },
++          close() {
++            try {
++              connection.close();
++            } catch (error) {
++              deps.onError?.(error);
++            }
++          },
++        },
+         limiter: createRateLimiter(),
+         lastHeard: now,
+         lastPing: now,
++        failed: false,
+         room: null,
+         player: null,
+       };
+diff --git a/packages/server/src/room/types.ts b/packages/server/src/room/types.ts
+index 1c17f10..608da80 100644
+--- a/packages/server/src/room/types.ts
++++ b/packages/server/src/room/types.ts
+@@ -1,6 +1,7 @@
+ import type { Rapier } from '@lodgy/shared';
+ 
+ // One client's connection, as the room layer sees it. The adapter implements it over a real socket.
++// If send or close throws, the room server reports it and drops the connection.
+ export interface Connection {
+   send(data: string): void;
+   close(): void;
+@@ -25,6 +26,8 @@ export interface RoomDeps {
+   // A number in [0, 1).
+   random: () => number;
+   timer: Timer;
++  // Told about a connection or a room that failed; the server carries on without it.
++  onError?: (error: unknown) => void;
+ }
+ 
+ export interface RoomServerOptions {
+diff --git a/packages/shared/src/constants.ts b/packages/shared/src/constants.ts
+index adf696e..4d66034 100644
+--- a/packages/shared/src/constants.ts
++++ b/packages/shared/src/constants.ts
+@@ -32,6 +32,8 @@ export const RATE_LIMIT_PER_SECOND = 120;
+ export const RATE_LIMIT_CLOSE_AFTER = 3;
+ // Seconds a room survives with nobody connected.
+ export const EMPTY_ROOM_TIMEOUT = 60;
++// Rooms the server holds at once; each one is a physics world.
++export const MAX_ROOMS = 50;
+ 
+ export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel';
+ 
+diff --git a/packages/shared/src/protocol.ts b/packages/shared/src/protocol.ts
+index 73608af..460aacd 100644
+--- a/packages/shared/src/protocol.ts
++++ b/packages/shared/src/protocol.ts
+@@ -48,7 +48,7 @@ export type ClientMessage =
+ 
+ export type Phase = 'lobby' | 'playing' | 'results';
+ 
+-export type ErrorReason = 'unknown_room' | 'room_full' | 'name_taken' | 'bad_message';
++export type ErrorReason = 'unknown_room' | 'room_full' | 'name_taken' | 'bad_message' | 'server_full';
+ 
+ export interface LobbyPlayer {
+   playerId: string;
+```
+
+Run: `npm test`
+Expected: 16 files, 164 tests passing.
+
+Run: `npm run typecheck`
+Expected: exits 0.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add packages/shared/src/constants.ts packages/shared/src/protocol.ts packages/server/src/room
+git commit -m "fix(server): cap the number of rooms and contain failures
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
 ---
 
 ### Task 6: The node adapter and the run scripts
@@ -3006,6 +3398,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
       rapier: RAPIER,
       clock: () => performance.now() / 1000,
       random: Math.random,
+      onError: (error) => console.error(error),
       timer: {
         every(seconds, fn) {
           const id = setInterval(fn, seconds * 1000);
@@ -3090,7 +3483,7 @@ if (process.env.LODGY_DEV) {
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `npm test`
-Expected: 16 files, 167 tests passing. The integration test takes about a second, because it drives a real server in real time.
+Expected: 17 files, 172 tests passing. The integration test takes about a second, because it drives a real server in real time.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -3489,7 +3882,7 @@ export function openSocket(url: string, handlers: SocketHandlers): GameSocket {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npm test`
-Expected: 19 files, 184 tests passing.
+Expected: 20 files, 189 tests passing.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -3645,6 +4038,7 @@ const ERROR_TEXT: Record<ErrorReason, string> = {
   room_full: 'That room is full.',
   name_taken: 'Someone in that room already has that name.',
   bad_message: 'The server did not understand the request.',
+  server_full: 'The server has no space for another room. Try again later.',
 };
 
 export const errorText = (reason: ErrorReason): string => ERROR_TEXT[reason];
@@ -4062,7 +4456,7 @@ Replace `packages/client/index.html` with:
 - [ ] **Step 5: Run the checks**
 
 Run: `npm test`
-Expected: 19 files, 186 tests passing.
+Expected: 20 files, 191 tests passing.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -4301,7 +4695,7 @@ If a test fails, read `test-results/<test name>/error-context.md`, which holds t
 - [ ] **Step 5: Run the other checks**
 
 Run: `npm test`
-Expected: 19 files, 186 tests passing. The Playwright test is not part of it.
+Expected: 20 files, 191 tests passing. The Playwright test is not part of it.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -4336,7 +4730,7 @@ Every text to replace below occurs exactly once. If one does not, stop and repor
 - [ ] **Step 1: Run every check one last time**
 
 Run: `npm test && npm run typecheck && npm run build && npm run e2e`
-Expected: 186 tests passing, typecheck exits 0, build ends with `✓ built in …`, `12 passed`.
+Expected: 191 tests passing, typecheck exits 0, build ends with `✓ built in …`, `12 passed`.
 
 - [ ] **Step 2: Update `ROADMAP.md`**
 
@@ -4389,6 +4783,7 @@ In the "Carried into later steps" table, delete the nine rows whose first column
 | 4 | The page no longer bundles Rapier; prediction brings it back, and the bundle size with it |
 | 11 | `lobby` gains `timeOfDay` and `weather`; held slots replace the immediate removal of a disconnected player; the admin's choice replaces `VEHICLE` |
 | 19 | The page does not reconnect by itself after the socket closes; it returns to the name form |
+| 19 | The server caps rooms (50) but not connections: add a cap on connections in total and per address when the server is exposed through the tunnel (behind it, the address is in the `CF-Connecting-IP` header) |
 ```
 
 Append these rows to the decisions log:
@@ -4401,6 +4796,9 @@ Append these rows to the decisions log:
 | 2026-11-12 | A room with nobody connected is paused | Saves the cost of simulating an empty room and avoids a burst of catch-up ticks on return |
 | 2026-11-12 | `VEHICLE=rv` selects the RV for every room until the lobby exists | Keeps the RV drivable for handling work before step 11 |
 | 2026-11-12 | The smoke test's phone project runs in Chromium with an iPhone viewport and touch | One browser download instead of two; real iPhone behaviour is the owner's check at step 14 |
+| 2026-11-12 | The server holds at most 50 rooms and refuses `create` beyond that with `server_full` | Found in review: each room is a physics world, and nothing bounded how many one visitor could create |
+| 2026-11-12 | A connection that throws is dropped and a room whose simulation throws is closed; both are reported and the other rooms carry on | Found in review: one error inside the tick stopped every room |
+| 2026-11-12 | A test checks the room layer's imports | Found in review: the room tsconfig cannot stop an import of `ws`, which brings Node's types in with it |
 ```
 
 - [ ] **Step 3: Update the spec**
@@ -4515,6 +4913,44 @@ with
 
 ```
 The client derives the WebSocket URL from the page origin (`ws` for `http`, `wss` for `https`). The server runs from its TypeScript source with `tsx`; there is no server build step.
+```
+
+Replace
+
+```
+- A room is deleted when it has had no connected players for 60 s.
+```
+
+with
+
+```
+- A room is deleted when it has had no connected players for 60 s.
+- **Room limit.** The server holds at most 50 rooms. A `create` beyond that is refused with `server_full`.
+- **Failures.** A connection whose socket throws is dropped. A room whose simulation throws is closed and its players are disconnected. Both are logged, and the other rooms carry on.
+```
+
+Replace
+
+```
+| `create { name, token }` | Not yet in a room | `bad_message` |
+```
+
+with
+
+```
+| `create { name, token }` | Not yet in a room | `bad_message`, `server_full` |
+```
+
+Replace
+
+```
+`bad_phase`, `bad_message`, `cannot_buy`
+```
+
+with
+
+```
+`bad_phase`, `bad_message`, `server_full`, `cannot_buy`
 ```
 
 - [ ] **Step 4: Tick this plan's checkboxes**
