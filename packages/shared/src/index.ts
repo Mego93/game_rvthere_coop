@@ -7,3 +7,4 @@ export * from './rapier';
 export * from './statics';
 export * from './vehicle';
 export * from './vehicles';
+export * from './world';
