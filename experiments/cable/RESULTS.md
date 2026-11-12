@@ -11,6 +11,7 @@ Is a force-based cable (spring and damper, capped tension, no physics joint) sta
 - Each vehicle starts at rest 8 m up the 25° slope. The cable runs from its winch mount to a fixed point 38 m up.
 - Reel-in speed 1 m/s, no throttle. The run lasts 40 s.
 - Tension cap: 0.6 × vehicle weight. Stiffness and damping scale with vehicle mass.
+- Tension = stiffness × stretch + damping × the speed at which the two cable ends move apart, clamped between 0 and the cap. The damper uses the speed of the ends, not the rate of change of stretch, so the reel's own take-up is not damped.
 - The cable does not shorten on a tick where tension is at the cap.
 - Each case is run again with the brake held for the first 5 s, then released.
 
@@ -50,7 +51,7 @@ Columns: seconds to climb 22 m of slope; highest speed (m/s); highest spin (rad/
 
 1. The force-based cable is stable at both vehicle masses. Speed never exceeds the reel speed by more than about 0.1 m/s, spin stays under 0.1 rad/s, and releasing a stalled cable does not fling the vehicle.
 2. Because stiffness, damping and the cap all scale with mass, the Lodgy and the RV behave almost identically.
-3. Stiffness has an upper limit. At 400 N/m per kg the tension reaches the cap after about 15 mm of stretch, which is less than the 17 mm the reel takes in per tick. The "do not shorten at the cap" rule then blocks the reel on every other tick and the vehicle climbs at half speed. The stretch at which the cap is reached must stay well above one tick of reel travel.
+3. Stiffness has an upper limit. At 400 N/m per kg the tension reaches the cap after about 15 mm of stretch, which is less than the 17 mm the reel takes in per tick. The "do not shorten at the cap" rule then blocks the reel on about every other tick and the vehicle climbs at half speed. This mechanism is inferred from the top speed of about 0.5 m/s in those rows; the experiment does not count capped ticks. The stretch at which the cap is reached must stay well above one tick of reel travel.
 
 ## Chosen starting values
 
@@ -65,4 +66,8 @@ Rule: among rows where both vehicles reach the top, with top speed and post-rele
 | `WINCH_MIN_LENGTH` | 1.5 |
 | `WINCH_MAX_LENGTH` | 25 |
 
-At these values the cap is reached at about 39 mm of stretch, more than twice one tick of reel travel.
+At these values the spring alone reaches the cap at about 39 mm of stretch, more than twice one tick of reel travel.
+
+That is not the working stretch. While reeling steadily up the 25° slope the cable is stretched about 0.19 m (the `maxStretch` column), because the damper opposes the 1 m/s approach and the spring makes up for it: stretch = (load + damping × approach speed) / stiffness.
+
+Build step 6 must use the same tension formula as `cable.experiment.ts`, or re-run this sweep. The values above are validated for that formula only.
