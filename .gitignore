@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+.playwright-mcp/
+
+# Secrets: never commit
+.env
+.env.*
+*.pem
+*.key
+*.p12
+token.json
+service-account*.json
+cookies.txt
+*-cookies*.txt

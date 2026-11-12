@@ -1,0 +1,23 @@
+{
+  "name": "lodgy-coop",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json",
+    "dev": "npm run dev -w @lodgy/client",
+    "build": "npm run build -w @lodgy/client",
+    "experiment:cable": "vitest run --config experiments/vitest.config.ts --reporter=verbose"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}
