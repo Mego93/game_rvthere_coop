@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-11-lodgy-coop-design.md`, build step 2, and the nine step-2 rows of "Carried into later steps" in `ROADMAP.md`.
 
-**Status of this plan's code:** every file below was drafted and run in a scratch workspace before the plan was written (clean install, 174 tests passing in 18 files, typecheck clean, production build succeeding, 12 Playwright tests passing, `npm run dev` and `npm start` both exercised). Copy the code exactly. If something fails that the plan says should pass, stop and report; do not improvise a fix.
+**Status of this plan's code:** every file below was drafted and run in a scratch workspace before the plan was written (clean install, 186 tests passing in 19 files, typecheck clean, production build succeeding, 12 Playwright tests passing, `npm run dev` and `npm start` both exercised). Copy the code exactly. If something fails that the plan says should pass, stop and report; do not improvise a fix.
 
 ## Global Constraints
 
@@ -1149,6 +1149,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Create: `packages/server/package.json`, `packages/server/tsconfig.json`
 - Create: `packages/server/src/room/nouns.ts`, `packages/server/src/room/rateLimit.ts`, `packages/server/src/room/inputQueue.ts`
 - Test: `packages/server/src/room/nouns.test.ts`, `packages/server/src/room/rateLimit.test.ts`, `packages/server/src/room/inputQueue.test.ts`
+- Test: `packages/server/src/node/roomImports.test.ts` (added after the task's review, steps 8 to 10)
 - Modify: `package.json`, `package-lock.json`
 
 **Interfaces:**
@@ -1541,6 +1542,82 @@ Expected: exits 0.
 ```bash
 git add package.json package-lock.json packages/server
 git commit -m "feat(server): add the server package with nouns, rate limiter and input queue
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
+- [ ] **Step 8: Write the import guard test**
+
+The review of this task found that `packages/server/tsconfig.json` does not fully enforce the room layer's import rule: `import … from 'ws'` type-checks, and it brings Node's types in with it, after which `node:` imports and `setTimeout` compile in every room file. This test closes the hole. It lives in `src/node` because it reads files with Node; no tsconfig type-checks it until Task 6 adds `tsconfig.node.json`, and Vitest runs it from now on. It makes one test per room file, so the test count grows as later tasks add room files.
+
+Create `packages/server/src/node/roomImports.test.ts`:
+
+```ts
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { expect, test } from 'vitest';
+
+// The room tsconfig alone cannot enforce this: importing "ws" type-checks and brings Node's types in with it.
+const roomDir = fileURLToPath(new URL('../room', import.meta.url));
+const roomFiles = readdirSync(roomDir, { recursive: true, encoding: 'utf8' })
+  .filter((file) => file.endsWith('.ts'))
+  .sort();
+
+const ALLOWED_EVERYWHERE = /^(\.{1,2}\/[\w./-]+|@lodgy\/shared)$/;
+const ALLOWED_IN_TESTS = /^(vitest|@dimforge\/rapier3d-compat)$/;
+const SPECIFIER = /\b(?:from|import|require)\s*\(?\s*['"]([^'"]+)['"]/g;
+
+function specifiers(source: string): string[] {
+  return [...source.matchAll(SPECIFIER)].map((match) => match[1]!);
+}
+
+test('the room layer has files to check', () => {
+  expect(roomFiles).toContain('nouns.ts');
+});
+
+test.each(roomFiles)('room/%s imports only room files and @lodgy/shared', (file) => {
+  const source = readFileSync(path.join(roomDir, file), 'utf8');
+  const isTest = file.endsWith('.test.ts');
+  const forbidden = specifiers(source).filter(
+    (specifier) => !ALLOWED_EVERYWHERE.test(specifier) && !(isTest && ALLOWED_IN_TESTS.test(specifier)),
+  );
+  expect(forbidden).toEqual([]);
+  // A relative import must not climb out of the room layer into the Node adapter.
+  const outside = specifiers(source).filter(
+    (specifier) => specifier.startsWith('.') && !path.resolve(roomDir, path.dirname(file), specifier).startsWith(roomDir + path.sep),
+  );
+  expect(outside).toEqual([]);
+  // A triple-slash reference would bring Node or DOM types in without an import.
+  expect(source).not.toMatch(/\/\/\/\s*<reference/);
+});
+```
+
+- [ ] **Step 9: Watch the guard fail, then pass**
+
+Create a temporary file `packages/server/src/room/zzProbe.ts`:
+
+```ts
+import { WebSocket } from 'ws';
+export const x = WebSocket;
+```
+
+Run: `npx vitest run packages/server/src/node/roomImports.test.ts`
+Expected: FAIL, 1 failed and 7 passed; the failure is `room/zzProbe.ts imports only room files and @lodgy/shared` with `expected [ 'ws' ] to deeply equal []`.
+
+Delete `packages/server/src/room/zzProbe.ts`.
+
+Run: `npm test`
+Expected: 14 files, 121 tests passing.
+
+Run: `npm run typecheck`
+Expected: exits 0.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add packages/server/src/node/roomImports.test.ts
+git commit -m "test(server): guard the room layer's imports
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
@@ -2504,7 +2581,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `npm test`
-Expected: 14 files, 147 tests passing.
+Expected: 15 files, 159 tests passing.
 
 Run: `npm run typecheck`
 Expected: exits 0. This also proves the room layer uses no Node or DOM global, because `packages/server/tsconfig.json` provides neither.
@@ -3013,7 +3090,7 @@ if (process.env.LODGY_DEV) {
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `npm test`
-Expected: 15 files, 155 tests passing. The integration test takes about a second, because it drives a real server in real time.
+Expected: 16 files, 167 tests passing. The integration test takes about a second, because it drives a real server in real time.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -3412,7 +3489,7 @@ export function openSocket(url: string, handlers: SocketHandlers): GameSocket {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npm test`
-Expected: 18 files, 172 tests passing.
+Expected: 19 files, 184 tests passing.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -3985,7 +4062,7 @@ Replace `packages/client/index.html` with:
 - [ ] **Step 5: Run the checks**
 
 Run: `npm test`
-Expected: 18 files, 174 tests passing.
+Expected: 19 files, 186 tests passing.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -4224,7 +4301,7 @@ If a test fails, read `test-results/<test name>/error-context.md`, which holds t
 - [ ] **Step 5: Run the other checks**
 
 Run: `npm test`
-Expected: 18 files, 174 tests passing. The Playwright test is not part of it.
+Expected: 19 files, 186 tests passing. The Playwright test is not part of it.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -4259,7 +4336,7 @@ Every text to replace below occurs exactly once. If one does not, stop and repor
 - [ ] **Step 1: Run every check one last time**
 
 Run: `npm test && npm run typecheck && npm run build && npm run e2e`
-Expected: 174 tests passing, typecheck exits 0, build ends with `✓ built in …`, `12 passed`.
+Expected: 186 tests passing, typecheck exits 0, build ends with `✓ built in …`, `12 passed`.
 
 - [ ] **Step 2: Update `ROADMAP.md`**
 
