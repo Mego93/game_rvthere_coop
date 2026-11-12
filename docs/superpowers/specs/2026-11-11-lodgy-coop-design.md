@@ -195,6 +195,7 @@ The cable is force-based. There is no physics joint.
 - The hook attaches to an anchor: a marked static anchor, or the anchor point that every heavy obstacle has.
 - Attaching sets the cable length to the current distance between hook and bumper.
 - A slack cable has no effect. A taut cable pulls its two ends together with a spring-and-damper force, capped at the maximum winch force. Under a load above the cap the cable stretches; it never breaks.
+- The maximum winch force is a fixed fraction of the vehicle's weight, and the cable's stiffness and damping scale with the vehicle's mass, so both vehicles winch up the same slopes at the same speed.
 - Reeling in shortens the cable at a constant speed, down to a minimum length. The cable does not shorten while its tension is at the cap. Reeling out lengthens it, up to 25 m.
 - Attached to a static anchor, reeling in pulls the vehicle. Attached to a heavy obstacle, it drags the obstacle toward the vehicle if the vehicle is braked or heavier.
 - The winch alone stalls on a steep enough slope; throttle and pushing add to it.

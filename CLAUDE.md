@@ -43,7 +43,7 @@ Commands are listed in `ROADMAP.md` under "How to run and test" once step 1 crea
 Conventional Commits with a required scope: `<type>(<scope>): <description>`.
 
 - Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `style`, `perf`, `ci`
-- Scopes: `shared`, `server`, `client`, `e2e`, `spec`, `plan`, `roadmap`, `repo`, `deps`
+- Scopes: `shared`, `server`, `client`, `e2e`, `experiments`, `spec`, `plan`, `roadmap`, `repo`, `deps`
 
 ## Verification
 
