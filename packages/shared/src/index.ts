@@ -5,3 +5,5 @@ export * from './math';
 export * from './protocol';
 export * from './rapier';
 export * from './statics';
+export * from './vehicle';
+export * from './vehicles';
