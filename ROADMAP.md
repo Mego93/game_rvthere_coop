@@ -7,7 +7,7 @@ Single source of truth for where the project stands. Update it in the same commi
 
 ## Current state
 
-**Current step:** none started. Next action: write the plan for step 1.
+**Current step:** step 1 is planned. Next action: implement the step 1 plan with subagents.
 
 **Runnable today:** nothing; the repo holds documents only.
 
@@ -17,7 +17,7 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 
 | # | Step | Status | Branch | Plan | Sign-off |
 |---|---|---|---|---|---|
-| 1 | Workspace scaffold, Rapier passed into `shared`, test ground, both vehicle configs as boxes, drivable in one tab, keyboard input, text overlay, force-based cable experiment | todo | | | Automated tests |
+| 1 | Workspace scaffold, Rapier passed into `shared`, test ground, both vehicle configs as boxes, drivable in one tab, keyboard input, text overlay, force-based cable experiment | planned | | [plan](docs/superpowers/plans/step-1-scaffold-and-drivable-vehicle.md) | Automated tests |
 | 2 | Server (`room` layer and `node` adapter), validation, rate limit, liveness, home page, create and join by noun, snapshots, interpolation, Playwright test begins | todo | | | Automated tests |
 | 3 | Server-side players on foot: movement, moving bodies, shove-out, spawn slots, seats, kill-plane respawn; shoulder camera and crosshair; iPhone load check | todo | | | Automated tests |
 | 4 | Client prediction of walking and jumping | todo | | | Automated tests |
