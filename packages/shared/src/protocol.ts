@@ -48,7 +48,7 @@ export type ClientMessage =
 
 export type Phase = 'lobby' | 'playing' | 'results';
 
-export type ErrorReason = 'unknown_room' | 'room_full' | 'name_taken' | 'bad_message';
+export type ErrorReason = 'unknown_room' | 'room_full' | 'name_taken' | 'bad_message' | 'server_full';
 
 export interface LobbyPlayer {
   playerId: string;

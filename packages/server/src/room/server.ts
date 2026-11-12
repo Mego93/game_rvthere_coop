@@ -1,6 +1,7 @@
 import {
   EMPTY_ROOM_TIMEOUT,
   MAX_PLAYERS,
+  MAX_ROOMS,
   PING_INTERVAL,
   SILENCE_TIMEOUT,
   TICK_DT,
@@ -21,6 +22,8 @@ interface Session {
   limiter: RateLimiter;
   lastHeard: number;
   lastPing: number;
+  // Set when the connection threw; the next tick drops the session.
+  failed: boolean;
   room: Room | null;
   player: RoomPlayer | null;
 }
@@ -52,7 +55,14 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     room.announce();
   };
 
+  // Takes a session out of its room and closes its connection.
+  const drop = (session: Session) => {
+    forget(session);
+    session.connection.close();
+  };
+
   const create = (session: Session, message: Extract<ClientMessage, { type: 'create' }>) => {
+    if (rooms.size >= MAX_ROOMS) return refuse(session, 'server_full');
     const noun = pickNoun(deps.random, (candidate) => rooms.has(candidate));
     const room = createRoom(deps.rapier, { noun, courseId, vehicleId }, deps.clock());
     rooms.set(noun, room);
@@ -88,11 +98,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     const now = deps.clock();
     session.lastHeard = now;
     const verdict = session.limiter.hit(now);
-    if (verdict === 'close') {
-      session.connection.close();
-      forget(session);
-      return;
-    }
+    if (verdict === 'close') return drop(session);
     if (verdict === 'drop') return;
 
     const message = parseClientMessage(raw);
@@ -116,19 +122,40 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     }
   };
 
+  // Closes a failed room: its players are disconnected and its world is freed.
+  const discard = (noun: string, room: Room) => {
+    rooms.delete(noun);
+    for (const session of [...sessions]) {
+      if (session.room !== room) continue;
+      sessions.delete(session);
+      session.connection.close();
+    }
+    try {
+      room.dispose();
+    } catch (error) {
+      deps.onError?.(error);
+    }
+  };
+
   const tick = () => {
     const now = deps.clock();
     for (const session of [...sessions]) {
-      if (now - session.lastHeard >= SILENCE_TIMEOUT) {
-        session.connection.close();
-        forget(session);
+      if (session.failed || now - session.lastHeard >= SILENCE_TIMEOUT) {
+        drop(session);
       } else if (now - session.lastPing >= PING_INTERVAL) {
         session.lastPing = now;
         send(session.connection, { type: 'ping' });
       }
     }
     for (const [noun, room] of rooms) {
-      room.update(now);
+      try {
+        room.update(now);
+      } catch (error) {
+        // A room whose simulation fails is closed, so that it cannot stop the other rooms.
+        deps.onError?.(error);
+        discard(noun, room);
+        continue;
+      }
       const emptySince = room.emptySince();
       if (emptySince !== null && now - emptySince >= EMPTY_ROOM_TIMEOUT) {
         room.dispose();
@@ -143,10 +170,29 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     connect(connection): ConnectionHandle {
       const now = deps.clock();
       const session: Session = {
-        connection,
+        // Sends happen in the middle of a tick or of another player's join, so a throw is recorded and handled at the next tick.
+        connection: {
+          send(data) {
+            if (session.failed) return;
+            try {
+              connection.send(data);
+            } catch (error) {
+              session.failed = true;
+              deps.onError?.(error);
+            }
+          },
+          close() {
+            try {
+              connection.close();
+            } catch (error) {
+              deps.onError?.(error);
+            }
+          },
+        },
         limiter: createRateLimiter(),
         lastHeard: now,
         lastPing: now,
+        failed: false,
         room: null,
         player: null,
       };

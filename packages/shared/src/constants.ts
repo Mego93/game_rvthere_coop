@@ -32,6 +32,8 @@ export const RATE_LIMIT_PER_SECOND = 120;
 export const RATE_LIMIT_CLOSE_AFTER = 3;
 // Seconds a room survives with nobody connected.
 export const EMPTY_ROOM_TIMEOUT = 60;
+// Rooms the server holds at once; each one is a physics world.
+export const MAX_ROOMS = 50;
 
 export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel';
 

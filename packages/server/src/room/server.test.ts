@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import {
   EMPTY_ROOM_TIMEOUT,
   MAX_PLAYERS,
+  MAX_ROOMS,
   NEUTRAL_INPUT,
   PING_INTERVAL,
   PLAYER_COLOURS,
@@ -34,7 +35,9 @@ const input = (seq: number, fields: Partial<PlayerInput> = {}): ClientMessage =>
 
 function setup(options?: RoomServerOptions) {
   const fake = createFakeDeps(RAPIER);
-  const server = createRoomServer(fake.deps, options);
+  // Everything the server reports through onError, oldest first.
+  const errors: unknown[] = [];
+  const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) }, options);
   const connect = () => connectFakeClient(server);
   // Connects a client and creates a room with it.
   const host = (name = 'Amal') => {
@@ -48,7 +51,7 @@ function setup(options?: RoomServerOptions) {
     client.send({ type: 'join', room, name, token: token(n) });
     return client;
   };
-  return { ...fake, server, connect, host, guest };
+  return { ...fake, server, errors, connect, host, guest };
 }
 
 const reasons = (client: FakeClient) => client.ofType('error').map((message) => message.reason);
@@ -405,6 +408,84 @@ test('a connection that stays over the rate limit is closed and removed', () => 
     advance(0.1);
   }
   expect(badr.closedByServer).toBe(true);
+  expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
+});
+
+test('create is refused once the server holds the most rooms it allows, until one is deleted', () => {
+  const { connect, advance, server } = setup();
+  const hosts = Array.from({ length: MAX_ROOMS }, (_, n) => {
+    const client = connect();
+    client.send({ type: 'create', name: 'Amal', token: token(n) });
+    return client;
+  });
+  expect(server.roomCount()).toBe(MAX_ROOMS);
+
+  const late = connect();
+  late.send({ type: 'create', name: 'Badr', token: token(MAX_ROOMS) });
+  expect(reasons(late)).toEqual(['server_full']);
+  expect(server.roomCount()).toBe(MAX_ROOMS);
+
+  // Joining an existing room is still possible.
+  const joiner = connect();
+  joiner.send({ type: 'join', room: hosts[0]!.last('welcome').room, name: 'Chadi', token: token(MAX_ROOMS + 1) });
+  expect(reasons(joiner)).toEqual([]);
+
+  // Once the rooms have emptied and timed out, a room can be created again.
+  joiner.close();
+  for (const client of hosts) client.close();
+  advance(EMPTY_ROOM_TIMEOUT);
+  expect(server.roomCount()).toBe(0);
+  const next = connect();
+  next.send({ type: 'create', name: 'Badr', token: token(MAX_ROOMS) });
+  expect(reasons(next)).toEqual([]);
+  expect(server.roomCount()).toBe(1);
+});
+
+test('a connection whose send throws is reported and dropped, and the others carry on', () => {
+  const { host, advance, server, errors } = setup();
+  const { client: amal, room } = host();
+  let broken = false;
+  let closed = false;
+  const handle = server.connect({
+    send() {
+      if (broken) throw new Error('socket failed');
+    },
+    close() {
+      closed = true;
+    },
+  });
+  handle.message(JSON.stringify({ type: 'join', room, name: 'Badr', token: token(2) }));
+  expect(amal.last('lobby').players).toHaveLength(2);
+
+  broken = true;
+  const before = amal.ofType('snapshot').length;
+  advance(1);
+  expect(errors).toHaveLength(1);
+  expect(closed).toBe(true);
+  expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
+  // The tick was never interrupted: Amal missed no snapshot.
+  expect(amal.ofType('snapshot').length - before).toBe(TICK_RATE / SNAPSHOT_EVERY_TICKS);
+  expect(amal.closedByServer).toBe(false);
+});
+
+test('a connection whose close throws is still removed from its room', () => {
+  const { host, advance, server, errors } = setup();
+  const { client: amal, room } = host();
+  const handle = server.connect({
+    send() {},
+    close() {
+      throw new Error('close failed');
+    },
+  });
+  handle.message(JSON.stringify({ type: 'join', room, name: 'Badr', token: token(2) }));
+  expect(amal.last('lobby').players).toHaveLength(2);
+
+  // Badr goes silent; Amal keeps answering.
+  for (let elapsed = 0; elapsed < SILENCE_TIMEOUT + 1; elapsed += 1) {
+    advance(1);
+    amal.send({ type: 'pong' });
+  }
+  expect(errors).toHaveLength(1);
   expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
 });
 

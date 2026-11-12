@@ -1,6 +1,7 @@
 import type { Rapier } from '@lodgy/shared';
 
 // One client's connection, as the room layer sees it. The adapter implements it over a real socket.
+// If send or close throws, the room server reports it and drops the connection.
 export interface Connection {
   send(data: string): void;
   close(): void;
@@ -25,6 +26,8 @@ export interface RoomDeps {
   // A number in [0, 1).
   random: () => number;
   timer: Timer;
+  // Told about a connection or a room that failed; the server carries on without it.
+  onError?: (error: unknown) => void;
 }
 
 export interface RoomServerOptions {
