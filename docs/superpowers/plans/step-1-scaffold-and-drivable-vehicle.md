@@ -96,13 +96,13 @@ These are decisions, not omissions. Do not "fix" them.
 - Consumes: nothing.
 - Produces: the commands `npm test`, `npm run typecheck`; the type `Rapier` (the initialised `@dimforge/rapier3d-compat` module), `RapierWorld`, `RigidBody`, exported from `@lodgy/shared`.
 
-- [ ] **Step 1: Create the branch**
+- [x] **Step 1: Create the branch**
 
 ```bash
 git checkout -b step-1-scaffold-and-drivable-vehicle
 ```
 
-- [ ] **Step 2: Create the root files**
+- [x] **Step 2: Create the root files**
 
 `package.json`:
 
@@ -201,7 +201,7 @@ cookies.txt
 *-cookies*.txt
 ```
 
-- [ ] **Step 3: Create the shared package manifest**
+- [x] **Step 3: Create the shared package manifest**
 
 `packages/shared/package.json`:
 
@@ -222,12 +222,12 @@ cookies.txt
 
 `exports` points at the TypeScript source on purpose: Vite and Vitest compile it directly, so there is no build step for `shared`.
 
-- [ ] **Step 4: Install**
+- [x] **Step 4: Install**
 
 Run: `npm install`
 Expected: completes without errors and creates `package-lock.json`.
 
-- [ ] **Step 5: Write the failing test**
+- [x] **Step 5: Write the failing test**
 
 `packages/shared/src/rapier.test.ts`:
 
@@ -245,12 +245,12 @@ test('Rapier initialises and an empty world steps', async () => {
 });
 ```
 
-- [ ] **Step 6: Run the test to verify it fails**
+- [x] **Step 6: Run the test to verify it fails**
 
 Run: `npm test`
 Expected: FAIL, because `./rapier` cannot be resolved.
 
-- [ ] **Step 7: Write the implementation**
+- [x] **Step 7: Write the implementation**
 
 `packages/shared/src/rapier.ts`:
 
@@ -269,7 +269,7 @@ export type RigidBody = RAPIER.RigidBody;
 export * from './rapier';
 ```
 
-- [ ] **Step 8: Run the checks**
+- [x] **Step 8: Run the checks**
 
 Run: `npm test`
 Expected: 1 test file, 1 test, passing.
@@ -277,7 +277,7 @@ Expected: 1 test file, 1 test, passing.
 Run: `npm run typecheck`
 Expected: exits 0 with no output after the script banner.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add package.json package-lock.json tsconfig.base.json tsconfig.json vitest.config.ts .gitignore packages/shared
@@ -301,7 +301,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Produces, from `constants.ts`: `TICK_RATE`, `TICK_DT`, `GRAVITY` (positive, 9.81), `MAX_CATCHUP_STEPS`, type `Surface`, `SURFACES`, `REFERENCE_SLOPES_DEG`, type `ReferenceSlope`.
 - Produces, from `protocol.ts`: `PlayerInput`, `InputFields` (`PlayerInput` without `seq`), `NEUTRAL_INPUT`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/shared/src/math.test.ts`:
 
@@ -340,12 +340,12 @@ test('quatMul applies the right-hand rotation first', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run packages/shared/src/math.test.ts`
 Expected: FAIL, because `./math` cannot be resolved.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/shared/src/math.ts`:
 
@@ -479,7 +479,7 @@ export * from './protocol';
 export * from './rapier';
 ```
 
-- [ ] **Step 4: Run the checks**
+- [x] **Step 4: Run the checks**
 
 Run: `npm test`
 Expected: 2 test files, 6 tests, passing.
@@ -487,7 +487,7 @@ Expected: 2 test files, 6 tests, passing.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/shared/src
@@ -514,7 +514,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 A checkpoint's `spawn` is a pose on the ground. Whoever spawns a vehicle there raises it by the vehicle's ride height.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/shared/src/courses/testGround.test.ts`:
 
@@ -578,12 +578,12 @@ test.each(Object.keys(REFERENCE_SLOPES_DEG) as ReferenceSlope[])('the %s slope r
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run packages/shared/src/courses/testGround.test.ts`
 Expected: FAIL, because `../statics` cannot be resolved.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/shared/src/course.ts`:
 
@@ -766,7 +766,7 @@ export * from './rapier';
 export * from './statics';
 ```
 
-- [ ] **Step 4: Run the checks**
+- [x] **Step 4: Run the checks**
 
 Run: `npm test`
 Expected: 3 test files, 13 tests, passing.
@@ -774,7 +774,7 @@ Expected: 3 test files, 13 tests, passing.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/shared/src
@@ -806,7 +806,7 @@ Three facts about Rapier's vehicle controller that the code depends on. They wer
 
 `vehicle.step(controls)` must be called once per tick **before** the physics world's `step()`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/shared/src/vehicle.test.ts`:
 
@@ -984,12 +984,12 @@ test.each(['lodgy', 'rv'] as const)('the %s creeps less than 0.1 m/s on the stee
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run packages/shared/src/vehicle.test.ts packages/shared/src/scenarios.test.ts`
 Expected: both files FAIL, because `./testRig` cannot be resolved.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/shared/src/vehicles.ts`:
 
@@ -1289,7 +1289,7 @@ export * from './vehicle';
 export * from './vehicles';
 ```
 
-- [ ] **Step 4: Run the checks**
+- [x] **Step 4: Run the checks**
 
 Run: `npm test`
 Expected: 5 test files, 38 tests, passing.
@@ -1299,7 +1299,7 @@ Expected: exits 0.
 
 If a scenario test fails, do not change its numbers or the vehicle configs. Stop and report the failing test and its output.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/shared/src
@@ -1328,7 +1328,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 The vehicle spawns at the course's first checkpoint. The first input in the map drives it: `moveY` is throttle, `moveX` is steer, `jump` is brake.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/shared/src/world.test.ts`:
 
@@ -1408,12 +1408,12 @@ test('the same inputs produce the same snapshot', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run packages/shared/src/world.test.ts`
 Expected: FAIL, because `./world` cannot be resolved.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/shared/src/world.ts`:
 
@@ -1507,7 +1507,7 @@ export * from './vehicles';
 export * from './world';
 ```
 
-- [ ] **Step 4: Run the checks**
+- [x] **Step 4: Run the checks**
 
 Run: `npm test`
 Expected: 6 test files, 44 tests, passing.
@@ -1515,7 +1515,7 @@ Expected: 6 test files, 44 tests, passing.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/shared/src
@@ -1541,7 +1541,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 Key bindings: W/S forward and back, A/D left and right, Space jump or brake, E interact, F use, Q reel in, R reel out, 1/2/3 select a slot, G drop. `yaw` and `pitch` stay 0 until mouse look arrives in step 3.
 
-- [ ] **Step 1: Create the package manifest and Vite config**
+- [x] **Step 1: Create the package manifest and Vite config**
 
 `packages/client/package.json`:
 
@@ -1579,12 +1579,12 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 2: Install**
+- [x] **Step 2: Install**
 
 Run: `npm install`
 Expected: completes without errors; `package-lock.json` changes.
 
-- [ ] **Step 3: Write the failing tests**
+- [x] **Step 3: Write the failing tests**
 
 `packages/client/src/loop.test.ts`:
 
@@ -1706,12 +1706,12 @@ test('dispose stops listening', () => {
 
 These run in Node, which provides `EventTarget` and `Event`. The tests attach `code` to a plain `Event`, so the implementation must read `code` from the event and nothing else.
 
-- [ ] **Step 4: Run the tests to verify they fail**
+- [x] **Step 4: Run the tests to verify they fail**
 
 Run: `npx vitest run packages/client`
 Expected: both files FAIL, because `./loop` and `./keyboard` cannot be resolved.
 
-- [ ] **Step 5: Write the implementation**
+- [x] **Step 5: Write the implementation**
 
 `packages/client/src/loop.ts`:
 
@@ -1806,7 +1806,7 @@ export function createKeyboardSource(target: EventTarget): InputSource {
 }
 ```
 
-- [ ] **Step 6: Run the checks**
+- [x] **Step 6: Run the checks**
 
 Run: `npm test`
 Expected: 8 test files, 55 tests, passing.
@@ -1814,7 +1814,7 @@ Expected: 8 test files, 55 tests, passing.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add package-lock.json packages/client
@@ -1841,7 +1841,7 @@ The page reads `?vehicle=rv` from the address to pick the RV; the default is the
 
 Rendering has no automated test. The overlay text does, and the page is checked in a browser in Step 6.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/client/src/ui/overlay.test.ts`:
 
@@ -1871,12 +1871,12 @@ test('shows air for a wheel with no ground under it', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run packages/client/src/ui/overlay.test.ts`
 Expected: FAIL, because `./overlay` cannot be resolved.
 
-- [ ] **Step 3: Write the overlay**
+- [x] **Step 3: Write the overlay**
 
 `packages/client/src/ui/overlay.ts`:
 
@@ -1905,7 +1905,7 @@ export function overlayText(world: World, fps: number): string {
 Run: `npx vitest run packages/client/src/ui/overlay.test.ts`
 Expected: 2 tests passing.
 
-- [ ] **Step 4: Write the rendering code and the page**
+- [x] **Step 4: Write the rendering code and the page**
 
 `packages/client/src/render/scene.ts`:
 
@@ -2139,7 +2139,7 @@ main().catch((error: unknown) => {
 });
 ```
 
-- [ ] **Step 5: Run the automated checks**
+- [x] **Step 5: Run the automated checks**
 
 Run: `npm test`
 Expected: 9 test files, 57 tests, passing.
@@ -2150,7 +2150,7 @@ Expected: exits 0.
 Run: `npm run build`
 Expected: ends with `✓ built in …`. A warning that a chunk is larger than 500 kB is expected: Rapier's WebAssembly is inlined in the bundle.
 
-- [ ] **Step 6: Check the page in a browser**
+- [x] **Step 6: Check the page in a browser**
 
 Run `npm run dev` in the background and note the address it prints (normally `http://localhost:5173/`).
 
@@ -2185,7 +2185,7 @@ If no browser tool is available, say so in your report and leave this step untic
 
 Stop the dev server afterwards.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/client
@@ -2218,7 +2218,7 @@ The cable model, which step 6 will reuse:
 - The tension cap is `0.6 × vehicle weight`.
 - The cable does not shorten on a tick where the tension is at the cap.
 
-- [ ] **Step 1: Create the experiment**
+- [x] **Step 1: Create the experiment**
 
 `experiments/vitest.config.ts`:
 
@@ -2354,7 +2354,7 @@ test('sweep cable stiffness and damping for both vehicles', () => {
 });
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `npm run experiment:cable`
 Expected: a table of 24 rows, then `1 passed`. It is deterministic. These six rows must match to the printed precision:
@@ -2373,7 +2373,7 @@ The rows with `k/kg` of 400 show `never` under `toTop(s)`. That is the experimen
 
 If the six rows differ, stop and report the full table. Do not pick other values.
 
-- [ ] **Step 3: Record the results**
+- [x] **Step 3: Record the results**
 
 Create `experiments/cable/RESULTS.md` with this content, replacing the marked line with the full 24-row table copied from your run:
 
@@ -2424,7 +2424,7 @@ Rule: among rows where both vehicles reach the top, with top speed and post-rele
 At these values the cap is reached at about 39 mm of stretch, more than twice one tick of reel travel.
 ````
 
-- [ ] **Step 4: Add the winch constants**
+- [x] **Step 4: Add the winch constants**
 
 Append to `packages/shared/src/constants.ts`:
 
@@ -2440,7 +2440,7 @@ export const WINCH_MIN_LENGTH = 1.5;
 export const WINCH_MAX_LENGTH = 25;
 ```
 
-- [ ] **Step 5: Update the spec and the commit scopes**
+- [x] **Step 5: Update the spec and the commit scopes**
 
 In `docs/superpowers/specs/2026-11-11-lodgy-coop-design.md`, in the "Winch" section, replace this bullet:
 
@@ -2467,7 +2467,7 @@ with:
 - Scopes: `shared`, `server`, `client`, `e2e`, `experiments`, `spec`, `plan`, `roadmap`, `repo`, `deps`
 ```
 
-- [ ] **Step 6: Run the checks**
+- [x] **Step 6: Run the checks**
 
 Run: `npm test`
 Expected: 9 test files, 57 tests, passing. The experiment is not part of `npm test`.
@@ -2475,7 +2475,7 @@ Expected: 9 test files, 57 tests, passing. The experiment is not part of `npm te
 Run: `npm run typecheck`
 Expected: exits 0. This also typechecks the experiment.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add experiments packages/shared/src/constants.ts docs/superpowers/specs/2026-11-11-lodgy-coop-design.md CLAUDE.md
@@ -2497,12 +2497,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: the finished work of Tasks 1 to 8.
 - Produces: nothing in code.
 
-- [ ] **Step 1: Run every check one last time**
+- [x] **Step 1: Run every check one last time**
 
 Run: `npm test && npm run typecheck && npm run build`
 Expected: 57 tests passing, typecheck exits 0, build ends with `✓ built in …`.
 
-- [ ] **Step 2: Update `ROADMAP.md`**
+- [x] **Step 2: Update `ROADMAP.md`**
 
 Replace the "Current state" section's two paragraphs with:
 
@@ -2548,7 +2548,7 @@ Append these rows to the decisions log:
 | 2026-11-12 | All four wheels are driven on both vehicles | Keeps slope behaviour dependent on engine force alone |
 ```
 
-- [ ] **Step 3: Update the spec's build-order sentence**
+- [x] **Step 3: Update the spec's build-order sentence**
 
 In `docs/superpowers/specs/2026-11-11-lodgy-coop-design.md`, replace:
 
@@ -2562,11 +2562,11 @@ with:
 Steps 1 to 15 run on a flat test ground with a ramp, reference slopes, a sand patch, an anchor, a heavy obstacle, a few props, a fuel station with a shop, a garage, a few coins, two checkpoints and a finish. Each of these is added to the test ground by the step that first simulates it.
 ```
 
-- [ ] **Step 4: Tick this plan's checkboxes**
+- [x] **Step 4: Tick this plan's checkboxes**
 
 In `docs/superpowers/plans/step-1-scaffold-and-drivable-vehicle.md`, change `- [ ]` to `- [x]` for every step that was completed. Leave Task 7 Step 6 unticked if the browser check was not performed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ROADMAP.md docs/superpowers

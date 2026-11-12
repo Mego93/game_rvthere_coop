@@ -674,7 +674,7 @@ Visuals, sound, game feel, the course's fun and real-iPhone behaviour are checke
 
 Each step ends in something runnable. Progress is tracked in `ROADMAP.md`. Each step gets its own plan, written when the step starts, and its own branch.
 
-Steps 1 to 15 run on a flat test ground with a ramp, reference slopes, a sand patch, an anchor, a heavy obstacle, a few props, a fuel station with a shop, a garage, a few coins, two checkpoints and a finish.
+Steps 1 to 15 run on a flat test ground with a ramp, reference slopes, a sand patch, an anchor, a heavy obstacle, a few props, a fuel station with a shop, a garage, a few coins, two checkpoints and a finish. Each of these is added to the test ground by the step that first simulates it.
 
 Until the lobby exists (step 11), creating a room starts a run on the test ground at once, with the Lodgy, and anyone opening the link joins it.
 

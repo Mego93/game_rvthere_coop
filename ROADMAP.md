@@ -7,9 +7,9 @@ Single source of truth for where the project stands. Update it in the same commi
 
 ## Current state
 
-**Current step:** step 1 is planned. Next action: implement the step 1 plan with subagents.
+**Current step:** step 1 is built on branch `step-1-scaffold-and-drivable-vehicle`. Next action: review and merge it, then write the plan for step 2.
 
-**Runnable today:** nothing; the repo holds documents only.
+**Runnable today:** `npm run dev` opens a page where the Lodgy (or the RV, with `?vehicle=rv`) drives around the test ground. The simulation runs in the page; there is no server yet.
 
 ## Steps (spec 1: engine and course 1)
 
@@ -17,7 +17,7 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 
 | # | Step | Status | Branch | Plan | Sign-off |
 |---|---|---|---|---|---|
-| 1 | Workspace scaffold, Rapier passed into `shared`, test ground, both vehicle configs as boxes, drivable in one tab, keyboard input, text overlay, force-based cable experiment | planned | | [plan](docs/superpowers/plans/step-1-scaffold-and-drivable-vehicle.md) | Automated tests |
+| 1 | Workspace scaffold, Rapier passed into `shared`, test ground, both vehicle configs as boxes, drivable in one tab, keyboard input, text overlay, force-based cable experiment | done | step-1-scaffold-and-drivable-vehicle | [plan](docs/superpowers/plans/step-1-scaffold-and-drivable-vehicle.md) | Automated tests |
 | 2 | Server (`room` layer and `node` adapter), validation, rate limit, liveness, home page, create and join by noun, snapshots, interpolation, Playwright test begins | todo | | | Automated tests |
 | 3 | Server-side players on foot: movement, moving bodies, shove-out, spawn slots, seats, kill-plane respawn; shoulder camera and crosshair; iPhone load check | todo | | | Automated tests |
 | 4 | Client prediction of walking and jumping | todo | | | Automated tests |
@@ -49,11 +49,24 @@ Not designed yet. Each gets its own spec when spec 1 is done.
 
 ## How to run and test
 
-Filled in by step 1, once the workspace exists.
+Requires Node 22 or later.
+
+| Command | What it does |
+|---|---|
+| `npm install` | Installs every package in the workspace |
+| `npm test` | Runs all unit and scenario tests once |
+| `npm run test:watch` | Runs tests on every change |
+| `npm run typecheck` | Typechecks every package, config and experiment |
+| `npm run dev` | Starts the client at `http://localhost:5173/`, also reachable from other devices on the same Wi-Fi |
+| `npm run build` | Builds the client into `packages/client/dist` |
+| `npm run experiment:cable` | Re-runs the winch cable experiment and prints its table |
+
+In the page: WASD to drive, Space to brake. Add `?vehicle=rv` to the address for the RV.
 
 ## Known issues
 
-None yet.
+- A braked vehicle creeps at under 0.1 m/s on the steep (25°) reference slope. The wheel model causes it; a scenario test bounds it.
+- The production bundle is about 4.9 MB because Rapier's WebAssembly is inlined. Acceptable for now.
 
 ## Decisions log
 
@@ -79,3 +92,7 @@ Decisions made during the design and afterwards. Change the spec too when a deci
 | 2026-11-11 | Forks moved to spec 2 | Costliest course-builder feature, used once in course 1 |
 | 2026-11-11 | Using an item is its own button (`use`), separate from interact | With an item selected, interact could no longer board, pick up or use a pump |
 | 2026-11-11 | Build order grew to 19 steps: players split from prediction, segment system split from course 1, lobby moved after the features it configures | Review found steps too large or ahead of their dependencies |
+| 2026-11-12 | The winch force cap is a fraction of the vehicle's weight, and cable stiffness scales with mass | Experiment in `experiments/cable/RESULTS.md`; a fixed cap would let the winch lift the Lodgy outright |
+| 2026-11-12 | Winch stiffness has an upper limit set by the reel speed | Same experiment: too stiff a cable hits the cap every other tick and halves the reel speed |
+| 2026-11-12 | The test ground gains its props, obstacles, stops and coins in the steps that first simulate them | Avoids placing data nothing reads yet |
+| 2026-11-12 | All four wheels are driven on both vehicles | Keeps slope behaviour dependent on engine force alone |
