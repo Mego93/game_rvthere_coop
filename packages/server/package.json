@@ -1,0 +1,19 @@
+{
+  "name": "@lodgy/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/node/main.ts",
+    "start": "tsx src/node/main.ts"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "0.21.0",
+    "@lodgy/shared": "*",
+    "ws": "8.22.2"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "@types/ws": "8.18.2"
+  }
+}
