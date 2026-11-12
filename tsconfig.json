@@ -1,9 +1,16 @@
 {
   "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
   "include": [
-    "packages/*/src/**/*.ts",
-    "packages/*/vite.config.ts",
     "experiments/**/*.ts",
-    "vitest.config.ts"
+    "e2e/**/*.ts",
+    "vitest.config.ts",
+    "playwright.config.ts"
   ]
 }

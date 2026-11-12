@@ -11,7 +11,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/client && tsc -p tsconfig.json",
     "dev": "npm run dev -w @lodgy/client",
     "build": "npm run build -w @lodgy/client",
     "experiment:cable": "vitest run --config experiments/vitest.config.ts --reporter=verbose"
