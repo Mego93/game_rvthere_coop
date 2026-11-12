@@ -248,7 +248,7 @@ test('Rapier initialises and an empty world steps', async () => {
 - [x] **Step 6: Run the test to verify it fails**
 
 Run: `npm test`
-Expected: FAIL, because `./rapier` cannot be resolved.
+Expected: the test itself passes, because the type-only import of `./rapier` is erased at runtime. The failing signal is `npm run typecheck`, which reports `TS2307: Cannot find module './rapier'`.
 
 - [x] **Step 7: Write the implementation**
 
