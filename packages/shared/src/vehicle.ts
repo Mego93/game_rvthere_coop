@@ -1,4 +1,12 @@
-import { GRAVITY, SURFACES, TICK_DT, type Surface } from './constants';
+import {
+  CHASSIS_FRICTION,
+  GRAVITY,
+  MAX_SUSPENSION_FORCE_PER_WEIGHT,
+  SURFACES,
+  TICK_DT,
+  VEHICLE_STOPPED_SPEED,
+  type Surface,
+} from './constants';
 import { AXIS_Y, IDENTITY, add, clamp, dot, rotate, scale, vec3, type Pose, type Quat, type Vec3 } from './math';
 import type { Rapier, RapierWorld, RigidBody } from './rapier';
 import type { VehicleConfig } from './vehicles';
@@ -34,8 +42,6 @@ export interface Vehicle {
 const WHEEL_COUNT = 4;
 const FRONT_WHEELS = 2;
 const FORWARD = vec3(0, 0, -1);
-// Below this speed the vehicle counts as stopped when deciding whether resistance holds it.
-const STOPPED_SPEED = 0.1;
 
 export function createVehicle(
   rapier: Rapier,
@@ -59,7 +65,7 @@ export function createVehicle(
       .setCanSleep(false)
       .setAdditionalMassProperties(config.mass, { x: 0, y: config.comY, z: 0 }, inertia, IDENTITY),
   );
-  world.createCollider(rapier.ColliderDesc.cuboid(h.x, h.y, h.z).setDensity(0).setFriction(0.5), body);
+  world.createCollider(rapier.ColliderDesc.cuboid(h.x, h.y, h.z).setDensity(0).setFriction(CHASSIS_FRICTION), body);
 
   const controller = world.createVehicleController(body);
   controller.indexUpAxis = 1;
@@ -85,7 +91,7 @@ export function createVehicle(
     controller.setWheelSuspensionCompression(i, config.suspensionCompression);
     controller.setWheelSuspensionRelaxation(i, config.suspensionRelaxation);
     controller.setWheelMaxSuspensionTravel(i, config.suspensionTravel);
-    controller.setWheelMaxSuspensionForce(i, config.mass * GRAVITY * 4);
+    controller.setWheelMaxSuspensionForce(i, config.mass * GRAVITY * MAX_SUSPENSION_FORCE_PER_WEIGHT);
     controller.setWheelSideFrictionStiffness(i, config.sideGrip);
   }
 
@@ -111,13 +117,12 @@ export function createVehicle(
       const speed = forwardSpeed();
       const fade = throttle >= 0 ? 1 - speed / config.maxSpeed : 1 + speed / config.reverseSpeed;
       const drive = throttle * config.engineForce * clamp(fade, 0, 1);
-      const moving = Math.abs(speed) > STOPPED_SPEED;
+      const moving = Math.abs(speed) > VEHICLE_STOPPED_SPEED;
       const surfaces = wheelSurfaces();
       for (let i = 0; i < WHEEL_COUNT; i++) {
         const surface = SURFACES[surfaces[i] ?? 'road'];
         const resistance = surface.rolling * config.mass * GRAVITY + (controls.brake ? config.brakeForce : 0);
-        // The controller ignores the brake on a wheel that has engine force, so while driving
-        // the resistance is subtracted from the drive force instead.
+        // The controller ignores the brake on a driven wheel, so while driving, resistance is subtracted from the drive force.
         const held = drive === 0 || controls.brake || (!moving && Math.abs(drive) <= resistance);
         const net = drive - (moving ? Math.sign(speed) : Math.sign(drive)) * resistance;
         controller.setWheelFrictionSlip(i, config.grip * surface.grip);
