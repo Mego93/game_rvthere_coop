@@ -1,4 +1,4 @@
-import { vec3, type Vec3 } from './math';
+import { deepFreeze, vec3, type Vec3 } from './math';
 
 export type VehicleId = 'lodgy' | 'rv';
 
@@ -32,7 +32,7 @@ export interface VehicleConfig {
   winchMount: Vec3;
 }
 
-export const VEHICLES: Record<VehicleId, VehicleConfig> = {
+export const VEHICLES: Record<VehicleId, VehicleConfig> = deepFreeze({
   lodgy: {
     id: 'lodgy',
     halfExtents: vec3(0.88, 0.55, 2.25),
@@ -81,10 +81,10 @@ export const VEHICLES: Record<VehicleId, VehicleConfig> = {
     maxSteer: 0.45,
     winchMount: vec3(0, -0.9, -3.4),
   },
-};
+});
 
 export function getVehicleConfig(id: string): VehicleConfig {
-  const config = (VEHICLES as Record<string, VehicleConfig | undefined>)[id];
+  const config = Object.hasOwn(VEHICLES, id) ? VEHICLES[id as VehicleId] : undefined;
   if (!config) throw new Error(`Unknown vehicle: ${id}`);
   return config;
 }

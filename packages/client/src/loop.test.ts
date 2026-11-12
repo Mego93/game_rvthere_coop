@@ -1,4 +1,4 @@
-import { MAX_CATCHUP_STEPS, TICK_DT } from '@lodgy/shared';
+import { CLIENT_MAX_CATCHUP_STEPS, TICK_DT } from '@lodgy/shared';
 import { expect, test } from 'vitest';
 import { createFixedStepper } from './loop';
 
@@ -27,7 +27,15 @@ test('runs several ticks for a long frame and keeps the remainder', () => {
 
 test('caps catch-up and discards the backlog', () => {
   const { stepper, ticks } = counter();
-  expect(stepper.advance(TICK_DT * 100)).toBe(MAX_CATCHUP_STEPS);
+  expect(stepper.advance(TICK_DT * 100)).toBe(CLIENT_MAX_CATCHUP_STEPS);
   expect(stepper.advance(TICK_DT * 0.5)).toBe(0);
-  expect(ticks()).toBe(MAX_CATCHUP_STEPS);
+  expect(ticks()).toBe(CLIENT_MAX_CATCHUP_STEPS);
+});
+
+test('ignores a frame time that is not a positive number', () => {
+  const { stepper, ticks } = counter();
+  expect(stepper.advance(Number.NaN)).toBe(0);
+  expect(stepper.advance(-5)).toBe(0);
+  expect(stepper.advance(TICK_DT * 1.5)).toBe(1);
+  expect(ticks()).toBe(1);
 });

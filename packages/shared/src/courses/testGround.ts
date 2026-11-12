@@ -1,6 +1,6 @@
 import { REFERENCE_SLOPES_DEG, type ReferenceSlope, type Surface } from '../constants';
 import type { BuiltCourse, GroundBox } from '../course';
-import { AXIS_X, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, vec3, type Pose, type Vec3 } from '../math';
+import { AXIS_X, IDENTITY, add, deepFreeze, degToRad, quatFromAxisAngle, rotate, vec3, type Pose, type Vec3 } from '../math';
 
 const RAMP_THICKNESS = 0.5;
 
@@ -28,7 +28,7 @@ const slopes: GroundBox[] = (Object.keys(SLOPE_X) as ReferenceSlope[]).map((slop
 
 export const SAND_PATCH_CENTER = vec3(20, 0, -30);
 
-export const testGround: BuiltCourse = {
+export const testGround: BuiltCourse = deepFreeze({
   id: 'test',
   ground: [
     { center: vec3(0, -0.5, -200), halfExtents: vec3(150, 0.5, 250), rot: IDENTITY, surface: 'road' },
@@ -63,4 +63,4 @@ export const testGround: BuiltCourse = {
   finish: { center: vec3(0, 2, -100), halfExtents: vec3(10, 2, 2), rot: IDENTITY },
   killPlaneY: -20,
   targetTime: 120,
-};
+});

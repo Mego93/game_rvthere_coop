@@ -71,3 +71,37 @@ test('the same inputs produce the same snapshot', () => {
   };
   expect(play()).toBe(play());
 });
+
+test('rejects ids that are only inherited object keys', () => {
+  expect(() => createWorld(RAPIER, { courseId: 'constructor', vehicleId: 'lodgy' })).toThrow(
+    'Unknown course: constructor',
+  );
+  expect(() => createWorld(RAPIER, { courseId: 'test', vehicleId: 'toString' })).toThrow('Unknown vehicle: toString');
+});
+
+test('an input that is not a finite number is treated as no input and does no lasting harm', () => {
+  const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+  run(world, 60, new Map());
+  run(world, 5, new Map([['a', input({ moveY: Number.NaN, moveX: Number.POSITIVE_INFINITY })]]));
+  expect(world.snapshot().vehicle.throttle).toBe(0);
+  expect(world.snapshot().vehicle.steer).toBe(0);
+  run(world, 120, new Map([['a', input({ moveY: 1 })]]));
+  expect(world.snapshot().vehicle.pos.z).toBeLessThan(-2);
+});
+
+test('shared course and vehicle data cannot be modified', () => {
+  const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+  expect(() => {
+    (world.vehicleConfig as { mass: number }).mass = 1;
+  }).toThrow(TypeError);
+  expect(() => {
+    world.course.checkpoints[0]!.spawn.pos.x = 5;
+  }).toThrow(TypeError);
+});
+
+test('dispose frees the physics world', () => {
+  const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+  run(world, 10, new Map());
+  world.dispose();
+  expect(() => world.step(new Map())).toThrow();
+});

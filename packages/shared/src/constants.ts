@@ -1,7 +1,37 @@
 export const TICK_RATE = 60;
 export const TICK_DT = 1 / TICK_RATE;
 export const GRAVITY = 9.81;
-export const MAX_CATCHUP_STEPS = 5;
+// Most simulation steps run in one frame (client) or one loop iteration (server); the rest of the backlog is dropped.
+export const CLIENT_MAX_CATCHUP_STEPS = 5;
+export const SERVER_MAX_CATCHUP_STEPS = 3;
+// The server broadcasts a snapshot every this many ticks: 20 per second.
+export const SNAPSHOT_EVERY_TICKS = 3;
+// The client draws the world this many seconds in the past, between two snapshots.
+export const INTERPOLATION_DELAY = 0.1;
+// How many snapshots the client keeps: two seconds' worth.
+export const SNAPSHOT_BUFFER_SIZE = 40;
+// Fraction by which each late snapshot pulls the client's estimate of the server clock back.
+export const CLOCK_OFFSET_SMOOTHING = 0.05;
+
+export const MAX_PLAYERS = 6;
+export const NAME_MAX_LENGTH = 16;
+export const PLAYER_COLOURS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#a05cdc', '#f28cb1'] as const;
+
+// Per-player input queue on the server.
+export const INPUT_QUEUE_MAX = 8;
+// Above this many queued inputs the server consumes two per tick to catch up.
+export const INPUT_QUEUE_FAST_ABOVE = 3;
+// After this many ticks with no new input the server substitutes a neutral input.
+export const NEUTRAL_AFTER_TICKS = 15;
+
+// Seconds between pings, and seconds of silence after which a connection counts as gone.
+export const PING_INTERVAL = 2;
+export const SILENCE_TIMEOUT = 6;
+// Messages per second allowed from one connection, and seconds over the limit before it is closed.
+export const RATE_LIMIT_PER_SECOND = 120;
+export const RATE_LIMIT_CLOSE_AFTER = 3;
+// Seconds a room survives with nobody connected.
+export const EMPTY_ROOM_TIMEOUT = 60;
 
 export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel';
 
