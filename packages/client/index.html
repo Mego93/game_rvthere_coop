@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Lodgy Co-op</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #cfe6f5;
+      }
+      #game {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      #overlay {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        margin: 0;
+        padding: 8px 10px;
+        font: 12px/1.4 ui-monospace, Menlo, monospace;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.55);
+        border-radius: 4px;
+        pointer-events: none;
+        white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <pre id="overlay"></pre>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
