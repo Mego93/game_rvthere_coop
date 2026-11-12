@@ -7,7 +7,7 @@ Single source of truth for where the project stands. Update it in the same commi
 
 ## Current state
 
-**Current step:** step 1 is done. Next action: write the plan for step 2.
+**Current step:** step 2 is planned. Next action: implement the step 2 plan with subagents.
 
 **Runnable today:** `npm run dev` opens a page where the Lodgy (or the RV, with `?vehicle=rv`) drives around the test ground. The simulation runs in the page; there is no server yet.
 
@@ -18,7 +18,7 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | # | Step | Status | Branch | Plan | Sign-off |
 |---|---|---|---|---|---|
 | 1 | Workspace scaffold, Rapier passed into `shared`, test ground, both vehicle configs as boxes, drivable in one tab, keyboard input, text overlay, force-based cable experiment | done | step-1-scaffold-and-drivable-vehicle | [plan](docs/superpowers/plans/step-1-scaffold-and-drivable-vehicle.md) | Automated tests |
-| 2 | Server (`room` layer and `node` adapter), validation, rate limit, liveness, home page, create and join by noun, snapshots, interpolation, Playwright test begins | todo | | | Automated tests |
+| 2 | Server (`room` layer and `node` adapter), validation, rate limit, liveness, home page, create and join by noun, snapshots, interpolation, Playwright test begins | planned | | [plan](docs/superpowers/plans/step-2-server-rooms-snapshots.md) | Automated tests |
 | 3 | Server-side players on foot: movement, moving bodies, shove-out, spawn slots, seats, kill-plane respawn; shoulder camera and crosshair; iPhone load check | todo | | | Automated tests |
 | 4 | Client prediction of walking and jumping | todo | | | Automated tests |
 | 5 | Push, hands, light debris, heavy obstacles, prop kill plane | todo | | | Automated tests |
