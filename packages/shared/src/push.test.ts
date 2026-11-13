@@ -3,6 +3,8 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { PLAYER_WALK_SPEED, PUSH_FORCE, PUSH_FORCE_TIPPED, PUSH_HEIGHT, PUSH_MAX_ACCEL } from './constants';
 import { AXIS_Y, IDENTITY, quatFromAxisAngle, vec3, type Vec3 } from './math';
 import { NEUTRAL_INPUT, type InputFields } from './protocol';
+import { testGround } from './courses/testGround';
+import { withProps } from './testRig';
 import { contactPoint, pushForce, requiredPushers } from './push';
 import { createWorld, type World } from './world';
 
@@ -237,16 +239,24 @@ describe('pushing props', () => {
     world.dispose();
   });
 
-  test('a crate taken away by the kill plane is not pushed by a stale intent', () => {
-    const world = makeWorld('lodgy', ['p0']);
-    const start = propOf(world, 'crate-1').pos;
-    world.teleportPlayer('p0', vec3(start.x, 0.1, start.z + 0.3 + 0.5));
-    run(world, 20, { p0: FORWARD });
-    world.debugBody('crate-1')!.setTranslation(vec3(start.x, world.course.killPlaneY - 5, start.z), true);
-    world.teleportPlayer('p0', vec3(30, 0.1, 30));
-    run(world, 2, {});
-    const crate = propOf(world, 'crate-1');
-    expect(horizontal(crate.pos, start)).toBeLessThan(0.01);
+  test('a crate reset by the kill plane is not pushed by the intent found before the reset', () => {
+    // The crate spawns high and far away; it is put beside the player under the plane, so it is reset in the tick it is pushed.
+    const spawn = vec3(30, 5, 30);
+    const course = withProps({ ...testGround, killPlaneY: 0.35, props: [] }, [
+      { id: 'crate-1', kind: 'crate', pose: { pos: spawn, rot: IDENTITY } },
+    ]);
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' }, course);
+    world.addPlayer('p0');
+    world.teleportPlayer('p0', vec3(10, 0.1, 8.7));
+    const input = new Map([['p0', FORWARD]]);
+    // Each tick the crate is put back beside the player, where it rests under the plane and is reset after the player pushes it.
+    for (let i = 0; i < 10; i++) {
+      world.debugBody('crate-1')!.setTranslation(vec3(10, 0.3, 8), true);
+      world.step(input);
+    }
+    expect(propOf(world, 'crate-1').pos.y).toBeGreaterThan(4);
+    world.step(input);
+    expect(horizontal(propOf(world, 'crate-1').pos, spawn)).toBeLessThan(1e-6);
     world.dispose();
   });
 });
