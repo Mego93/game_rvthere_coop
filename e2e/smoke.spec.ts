@@ -256,3 +256,8 @@ test('the timer runs: the clock rises and the checkpoint shows the first of two'
   const first = await seconds();
   await expect.poll(seconds).toBeGreaterThan(first);
 });
+
+test('the coins line shows an empty wallet and no coins collected out of four', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await expect(page.locator('#overlay')).toContainText(/^coins    0   0\/4$/m);
+});

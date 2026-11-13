@@ -1,6 +1,7 @@
 import {
   AXIS_Y,
   IDENTITY,
+  getCourse,
   getVehicleConfig,
   quatFromAxisAngle,
   vec3,
@@ -9,12 +10,13 @@ import {
   type Placed,
   type PlayerSnapshot,
   type PropSnapshot,
+  type ServiceStop,
   type Vec3,
   type VehicleState,
 } from '@lodgy/shared';
 import { describe, expect, test } from 'vitest';
 import type { RunStatus } from '../net/snapshotBuffer';
-import { interactHint, overlayText } from './overlay';
+import { interactAction, interactHint, overlayText } from './overlay';
 
 const lobby: LobbyMessage = {
   type: 'lobby',
@@ -40,7 +42,7 @@ const vehicle: VehicleState = {
 };
 
 const stowed: CableSnapshot = { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 0, 0), length: 0, reel: 0 };
-const noAim = { aim: { yaw: 0, pitch: 0 }, propPoses: [] as PropSnapshot[], cable: stowed as CableSnapshot | null, anchors: [] as Placed[], status: null as RunStatus | null };
+const noAim = { aim: { yaw: 0, pitch: 0 }, propPoses: [] as PropSnapshot[], cable: stowed as CableSnapshot | null, anchors: [] as Placed[], status: null as RunStatus | null, stops: [] as readonly ServiceStop[], targetTime: 120 };
 
 const player = (playerId: string, x: number, z: number, seat: string | null = null): PlayerSnapshot => ({
   playerId,
@@ -289,6 +291,56 @@ test('floors the clock to tenths and pads the seconds', () => {
 test('shows FINISHED on its own line only once won', () => {
   expect(withStatus(run()).split('\n')).not.toContain('FINISHED');
   expect(withStatus(run({ won: true })).split('\n')).toContain('FINISHED');
+});
+
+test('S16: shows the coins line right after the time line', () => {
+  const text = withStatus(run({ wallet: 2, coinsCollected: 3 })).split('\n');
+  expect(text[text.findIndex((line) => line.startsWith('time '))! + 1]).toBe('coins    2   3/4');
+  expect(withStatus(run())).toContain('coins    0   0/4');
+  expect(withStatus(null)).not.toContain('coins');
+});
+
+const withFinal = (status: RunStatus, targetTime = 200) =>
+  overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [], localId: 'p1', predicted: null, server: null, ...noAim, status, targetTime });
+
+test('S16: shows the final time and the stars after FINISHED, only once won', () => {
+  expect(withFinal(run({ elapsed: 100, restarts: 1, wallet: 4, coinsCollected: 4 }))).not.toContain('final');
+  const won = withFinal(run({ elapsed: 100, restarts: 1, wallet: 4, coinsCollected: 4, won: true })).split('\n');
+  expect(won[won.indexOf('FINISHED') + 1]).toBe('final    2:20.0   stars -**');
+  expect(withFinal(run({ elapsed: 100, won: true, coinsCollected: 3 }))).toContain('final    1:40.0   stars **-');
+  expect(withFinal(run({ elapsed: 300, won: true }), 200)).toContain('stars *--');
+});
+
+const course = getCourse('test');
+const fuelStop = course.stops.find((stop) => stop.id === 'stop-fuel')!;
+const garageStop = course.stops.find((stop) => stop.id === 'stop-garage')!;
+const beside = (at: ServiceStop, dz = 1) => player('p1', at.operatePoint.x, at.operatePoint.z + dz);
+const parked = (at: ServiceStop, changes: Partial<VehicleState>): VehicleState => ({ ...vehicle, pos: vec3(at.zone.center.x, 1, at.zone.center.z), ...changes });
+
+test('S16: the operate hints read refuel at a pump and repair at a workbench, and nothing when the stop is not usable', () => {
+  const stops = course.stops;
+  const hint = (at: ServiceStop, v: VehicleState) => interactHint(rv, v, beside(at), [beside(at)], 0, 0, [], stowed, [], stops);
+  expect(hint(fuelStop, parked(fuelStop, { fuel: 0.5 }))).toBe('Hold E to refuel');
+  expect(hint(garageStop, parked(garageStop, { health: 0.5 }))).toBe('Hold E to repair');
+  expect(hint(fuelStop, parked(fuelStop, { fuel: 1 }))).toBeNull();
+  expect(hint(garageStop, parked(garageStop, { health: 1 }))).toBeNull();
+  expect(hint(fuelStop, { ...parked(fuelStop, { fuel: 0.5 }), pos: vec3(0, 1, -20) })).toBeNull();
+});
+
+test('S16: the overlay shows the operate hint through the stops it is given', () => {
+  const at = beside(fuelStop);
+  const text = overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle: parked(fuelStop, { fuel: 0.5 }), players: [at], localId: 'p1', predicted: null, server: null, ...noAim, stops: course.stops });
+  expect(text).toContain('hint     Hold E to refuel');
+});
+
+test('M2: aiming level at the post resolves to operate, and level at the counter to shop', () => {
+  const op = fuelStop.operatePoint;
+  const yawToward = (from: Vec3, to: Vec3) => Math.atan2(-(to.x - from.x), -(to.z - from.z));
+  const v = parked(fuelStop, { fuel: 0.5 });
+  const near = player('p1', op.x + 0.55, op.z + 0.15);
+  expect(interactAction(rv, v, near, [near], yawToward(near.pos, op), 0, [], stowed, [], course.stops)).toEqual({ kind: 'operate', stopId: 'stop-fuel' });
+  const side = player('p1', op.x - 1, op.z);
+  expect(interactAction(rv, v, side, [side], yawToward(side.pos, fuelStop.shopCounter!), 0, [], stowed, [], course.stops)).toEqual({ kind: 'shop', stopId: 'stop-fuel' });
 });
 
 test('shows no time line before the first snapshot', () => {

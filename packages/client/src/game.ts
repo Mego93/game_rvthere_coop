@@ -9,11 +9,15 @@ import {
   predictedFrom,
   vec3,
   type ClientMessage,
+  type InteractAction,
+  type ItemKind,
   type LobbyMessage,
   type PlayerSnapshot,
   type PropSnapshot,
   type Rapier,
   type SnapshotMessage,
+  type Vec3,
+  type VehicleState,
 } from '@lodgy/shared';
 import * as THREE from 'three';
 import type { GameInput } from './input/source';
@@ -24,12 +28,14 @@ import { predictionActive } from './prediction/gate';
 import { createReconciler } from './prediction/reconciler';
 import { updateFollowCamera } from './render/followCamera';
 import { createPlayerMesh, disposePlayerMesh, placePlayerMesh } from './render/playerMesh';
+import { createCoinMeshes } from './render/coinMesh';
 import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMesh';
 import { createScene } from './render/scene';
 import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
-import { overlayText } from './ui/overlay';
+import { interactAction, overlayText } from './ui/overlay';
+import { CLOSED, createShopMenu, menuInput, shopMenuState, type ShopMenuState } from './ui/shopMenu';
 import type { TouchUi } from './ui/touchUi';
 import { touchView } from './ui/touchView';
 
@@ -39,6 +45,8 @@ const MAX_FRAME_SECONDS = 0.25;
 export interface Game {
   setLobby(lobby: LobbyMessage): void;
   pushSnapshot(snapshot: SnapshotMessage): void;
+  // Shows "Cannot buy" in the shop menu if it is open.
+  showShopError(): void;
   // Stops drawing and listening for input.
   stop(): void;
 }
@@ -74,6 +82,7 @@ export function createGame(
   const winchMesh = createWinchMesh();
   winchMesh.visible = false;
   scene.add(winchMesh);
+  const coinMeshes = createCoinMeshes(scene, course.coins);
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
   camera.position.set(0, 6, 14);
 
@@ -94,11 +103,63 @@ export function createGame(
   // The local player's entry in the newest snapshot, not interpolated.
   let latestLocal: PlayerSnapshot | null = null;
   let seq = 0;
+  // What the last frame drew, for resolving an interact press the way the hint does.
+  let lastVehicle: VehicleState | null = null;
+  let lastPlayers: PlayerSnapshot[] = [];
+  let lastProps: PropSnapshot[] = [];
+  let lastDrawn: Vec3 | null = null;
+  let menuState: ShopMenuState = CLOSED;
+  let wasInteract = false;
+
+  const refreshMenu = (feet: Vec3 | null, press: InteractAction | null, dismiss: boolean) => {
+    const was = menuState.open;
+    menuState = shopMenuState(menuState, {
+      feet,
+      seated: latestLocal === null || latestLocal.seat !== null,
+      downed: latestLocal === null || latestLocal.downed !== null,
+      stops: course.stops,
+      press,
+      dismiss,
+    });
+    if (menuState.open !== was) {
+      shopMenu.setOpen(menuState.open);
+      if (menuState.open && document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+    }
+    if (menuState.open) shopMenu.setWallet(buffer.latestStatus()?.wallet ?? 0);
+  };
+  const shopMenu = createShopMenu(document, {
+    onBuy: (item: ItemKind) => send({ type: 'buy', item }),
+    onClose: () => refreshMenu(latestLocal?.pos ?? null, null, true),
+  });
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.code === 'Escape' && menuState.open) refreshMenu(latestLocal?.pos ?? null, null, true);
+  };
+  window.addEventListener('keydown', onKeyDown);
+
   const stepper = createFixedStepper(() => {
     seq += 1;
     const sampled = input.sample();
-    send({ type: 'input', ...sampled, seq });
-    reconciler.record(seq, sampled);
+    const pressed = sampled.interact && !wasInteract;
+    wasInteract = sampled.interact;
+    const fields = menuInput(menuState.open, sampled);
+    send({ type: 'input', ...fields, seq });
+    reconciler.record(seq, fields);
+    if (pressed && !menuState.open && latestLocal && lastVehicle) {
+      const feet = lastDrawn ?? latestLocal.pos;
+      const action = interactAction(
+        vehicleConfig,
+        lastVehicle,
+        { ...latestLocal, pos: feet },
+        lastPlayers,
+        sampled.yaw,
+        sampled.pitch,
+        lastProps,
+        buffer.latestCable(),
+        course.anchors,
+        course.stops,
+      );
+      refreshMenu(feet, action, false);
+    }
   });
 
   // Seated players are hidden, not removed; meshes are remade when a player's name or colour changes, and dropped when they leave.
@@ -180,6 +241,11 @@ export function createGame(
         ? interpolated.map((player) => (player.playerId === playerId ? drawn : player))
         : [...interpolated, drawn];
     }
+    lastVehicle = vehicle;
+    lastPlayers = players;
+    lastProps = sampled?.props ?? [];
+    lastDrawn = drawnPosition;
+    coinMeshes.update(new Set(buffer.latestCoinsLeft()), now / 1000);
     if (vehicle) {
       vehicleMesh.visible = true;
       placeVehicleMesh(vehicleMesh, vehicle);
@@ -222,6 +288,8 @@ export function createGame(
       cable: latestCable,
       anchors: course.anchors,
       status: buffer.latestStatus(),
+      stops: course.stops,
+      targetTime: course.targetTime,
       touch: view.touchUi !== null,
     });
     if (view.touchUi) {
@@ -243,12 +311,17 @@ export function createGame(
       predictor.setProps(buffer.latestProps().filter((prop) => !held.has(prop.id)));
       const entry = snapshot.players.find((player) => player.playerId === playerId);
       latestLocal = entry ?? null;
+      refreshMenu(latestLocal?.pos ?? null, null, false);
       if (entry && predictionActive(entry)) reconciler.correct(predictedFrom(entry), snapshot.ackSeq);
       else reconciler.suspend();
     },
+    showShopError: () => shopMenu.showError(),
     stop() {
       cancelAnimationFrame(frameRequest);
       window.removeEventListener('resize', resize);
+      window.removeEventListener('keydown', onKeyDown);
+      shopMenu.dispose();
+      coinMeshes.dispose();
       input.dispose();
       predictor.dispose();
       if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();

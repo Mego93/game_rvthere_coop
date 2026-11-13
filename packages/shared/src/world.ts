@@ -1,14 +1,13 @@
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DROP_HEIGHT, GRAVITY, SHOP_COUNTER_HALF, SHOP_PRICES, SHOP_RANGE, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
+import { DROP_HEIGHT, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
 import { holdTargetValid, pressTarget, stepHold, stepOperateHold, type UseContext } from './holds';
-import { AXIS_Y, IDENTITY, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
+import { AXIS_Y, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
-import { counterCentre, interactCandidates, resolveInteract, splitCandidates } from './interact';
-import { distanceToBox } from './seats';
+import { inShopRange, interactCandidates, resolveInteract, splitCandidates } from './interact';
 import type { ItemKind } from './constants';
 import { aimRay, createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
 import { elapsedAfter, finalTime, reachedFinish, vehicleLost } from './rules';
@@ -525,6 +524,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       }
     }
     items.restore(record.items);
+    // A purchase queued before the restart is rolled back with the wallet, so it emits nothing.
+    for (let i = events.length - 1; i >= 0; i--) if (events[i]!.kind === 'buy') events.splice(i, 1);
     coinsLeft = [...record.coinsLeft];
     wallet = record.wallet;
     coinsCollected = record.coinsCollected;
@@ -676,11 +677,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     buy(playerId, item) {
       const player = players.get(playerId);
       if (!player || player.seat !== null || player.downed !== null || player.respawnIn !== null || won) return 'cannot_buy';
-      const stop = course.stops.find(
-        (candidate) =>
-          candidate.shopCounter !== null &&
-          distanceToBox(player.pos, SHOP_COUNTER_HALF, counterCentre(candidate.shopCounter), IDENTITY) <= SHOP_RANGE,
-      );
+      const stop = course.stops.find((candidate) => inShopRange(player.pos, candidate));
       const free = player.inventory.indexOf(null);
       if (!stop?.shopCounter || wallet < SHOP_PRICES[item] || free < 0) return 'cannot_buy';
       wallet -= SHOP_PRICES[item];

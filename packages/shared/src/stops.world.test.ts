@@ -643,6 +643,23 @@ describe('S11: shop', () => {
     refused(world, 'p1');
   });
 
+  test('a player waiting to respawn below the kill plane is refused', () => {
+    // The plane is raised just over the ground so the player is in range and waiting to respawn at once.
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' }, { ...testGround, killPlaneY: 0.5 });
+    worlds.push(world);
+    world.addPlayer('p1');
+    const at = stopOf(world, 'stop-fuel').shopCounter!;
+    world.teleportPlayer('p1', vec3(at.x, 0.02, at.z - 1));
+    world.step(new Map());
+    for (const coinId of ['coin-1', 'coin-2', 'coin-3']) touch(world, 'p1', coinId);
+    world.teleportPlayer('p1', vec3(at.x, 0.02, at.z - 1));
+    world.step(new Map());
+    expect(world.snapshot().wallet).toBe(3);
+    expect(distanceToBox(player(world, 'p1').pos, SHOP_COUNTER_HALF, counterCentre(at), IDENTITY)).toBeLessThanOrEqual(SHOP_RANGE);
+    expect(player(world, 'p1').downed).toBeNull();
+    refused(world, 'p1');
+  });
+
   test('a garage has no counter', () => {
     const world = make('p1');
     earn(world, 'p1', 3);
@@ -789,5 +806,20 @@ describe('S10: more operate cases', () => {
     // The tank is full, so p2 gets no new hold and no event while holding on.
     expect(kinds(both(HOLD_TICKS), 'use')).toHaveLength(0);
     expect(player(world, 'p2').hold).toBeNull();
+  });
+});
+
+describe('a purchase rolled back by a restart', () => {
+  test('a buy queued before a restart in the same step emits no event and leaves the checkpoint wallet', () => {
+    const world = make('p1');
+    earn(world, 'p1', 3);
+    atCounter(world, 'p1');
+    expect(world.buy('p1', 'jerrycan')).toBe('ok');
+    world.restartCheckpoint();
+    const events = world.step(new Map());
+    expect(kinds(events, 'vehicleLost')).toHaveLength(1);
+    expect(kinds(events, 'buy')).toHaveLength(0);
+    expect(world.snapshot().wallet).toBe(0);
+    expect(kinds(world.step(new Map()), 'buy')).toHaveLength(0);
   });
 });

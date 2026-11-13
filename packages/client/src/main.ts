@@ -84,6 +84,11 @@ function onMessage(message: ServerMessage) {
       game?.pushSnapshot(message);
       return;
     case 'error':
+      // A refused purchase belongs to the shop menu; it never ends the game or reaches the home page.
+      if (message.reason === 'cannot_buy') {
+        game?.showShopError();
+        return;
+      }
       home.setBusy(false);
       home.setError(errorText(message.reason));
       return;

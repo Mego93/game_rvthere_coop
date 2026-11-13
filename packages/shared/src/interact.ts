@@ -61,6 +61,10 @@ export interface StopContext {
 // The counter box stands on its point.
 export const counterCentre = (counter: Vec3): Vec3 => add(counter, vec3(0, SHOP_COUNTER_HALF.y, 0));
 
+// Rule V7 and M4: the one range test for the shop, for the world, the candidates and the client.
+export const inShopRange = (feet: Vec3, stop: { shopCounter: Vec3 | null }): boolean =>
+  stop.shopCounter !== null && distanceToBox(feet, SHOP_COUNTER_HALF, counterCentre(stop.shopCounter), IDENTITY) <= SHOP_RANGE;
+
 const ZERO_HALF = vec3(0, 0, 0);
 
 const seatPos = (config: VehicleConfig, seatId: string): Vec3 => config.seats.find((seat) => seat.id === seatId)?.pos ?? vec3(0, 0, 0);
@@ -101,11 +105,8 @@ export function interactCandidates(ctx: {
     if (stop.usable && length(sub(stop.operatePoint, ctx.feet)) <= STOP_OPERATE_RANGE) {
       found.push({ action: { kind: 'operate', stopId: stop.id }, angle: angleTo(add(stop.operatePoint, vec3(0, STOP_POST_HEIGHT / 2, 0))) });
     }
-    if (stop.kind === 'fuel' && stop.shopCounter !== null) {
-      const centre = counterCentre(stop.shopCounter);
-      if (distanceToBox(ctx.feet, SHOP_COUNTER_HALF, centre, IDENTITY) <= SHOP_RANGE) {
-        found.push({ action: { kind: 'shop', stopId: stop.id }, angle: angleTo(centre) });
-      }
+    if (stop.kind === 'fuel' && stop.shopCounter !== null && inShopRange(ctx.feet, stop)) {
+      found.push({ action: { kind: 'shop', stopId: stop.id }, angle: angleTo(counterCentre(stop.shopCounter)) });
     }
   }
 

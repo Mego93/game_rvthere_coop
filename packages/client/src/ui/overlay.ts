@@ -1,17 +1,22 @@
 import {
   dot,
+  finalTime,
   interactCandidates,
   ITEM_KINDS,
   resolveInteract,
   rotate,
   splitCandidates,
+  stars,
+  stopUsable,
   useTarget,
   vec3,
   type CableSnapshot,
+  type InteractAction,
   type LobbyMessage,
   type Placed,
   type PlayerSnapshot,
   type PropSnapshot,
+  type ServiceStop,
   type VehicleConfig,
   type Vec3,
   type VehicleState,
@@ -52,14 +57,18 @@ export interface OverlayData {
   anchors: readonly Placed[];
   // The run's clock and counters, or null before the first snapshot.
   status: RunStatus | null;
+  // The course's service stops.
+  stops: readonly ServiceStop[];
+  // The course's target time, for the stars.
+  targetTime: number;
   // True on a touch device, which changes the control line.
   touch?: boolean;
 }
 
 const STOWED: CableSnapshot = { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 0, 0), length: 0, reel: 0 };
 
-// What pressing interact would do for the local player, or null if nothing.
-export function interactHint(
+// What pressing interact would do for the local player, or null if nothing; the client opens the shop menu on the same resolution.
+export function interactAction(
   config: VehicleConfig,
   vehicle: VehicleState,
   local: PlayerSnapshot,
@@ -69,7 +78,8 @@ export function interactHint(
   props: readonly PropSnapshot[],
   cable: CableSnapshot | null,
   anchors: readonly Placed[],
-): string | null {
+  stops: readonly ServiceStop[] = [],
+): InteractAction | null {
   const takenSeats = new Set<string>();
   const heldProps = new Set<string>();
   for (const player of players) {
@@ -92,9 +102,31 @@ export function interactHint(
     heldProps,
     cable: cable ?? STOWED,
     anchors,
-    stops: [],
+    stops: stops.map((stop) => ({
+      id: stop.id,
+      kind: stop.kind,
+      operatePoint: stop.operatePoint,
+      shopCounter: stop.shopCounter,
+      usable: stopUsable(stop, vehicle.pos, vehicle.fuel, vehicle.health),
+    })),
   });
-  const action = resolveInteract({ seat: local.seat, hands: local.hands, holdsHook: local.hands === 'hook', ...splitCandidates(found) });
+  return resolveInteract({ seat: local.seat, hands: local.hands, holdsHook: local.hands === 'hook', ...splitCandidates(found) });
+}
+
+// What pressing interact would do for the local player, as words, or null if nothing.
+export function interactHint(
+  config: VehicleConfig,
+  vehicle: VehicleState,
+  local: PlayerSnapshot,
+  players: PlayerSnapshot[],
+  yaw: number,
+  pitch: number,
+  props: readonly PropSnapshot[],
+  cable: CableSnapshot | null,
+  anchors: readonly Placed[],
+  stops: readonly ServiceStop[] = [],
+): string | null {
+  const action = interactAction(config, vehicle, local, players, yaw, pitch, props, cable, anchors, stops);
   if (action?.kind === 'exitSeat') return 'E to leave the seat';
   if (action?.kind === 'throw') return 'E to throw';
   if (action?.kind === 'board') return 'E to board';
@@ -108,11 +140,13 @@ export function interactHint(
   if (action?.kind === 'takeHook') return 'E to take the hook';
   if (action?.kind === 'detachHook') return 'E to unhook';
   if (action?.kind === 'releaseHook') return 'E to release the hook';
+  if (action?.kind === 'operate') return stops.find((stop) => stop.id === action.stopId)?.kind === 'fuel' ? 'Hold E to refuel' : 'Hold E to repair';
+  if (action?.kind === 'shop') return 'E to shop';
   return null;
 }
 
 // The debug text shown until the real HUD exists.
-export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses, cable, anchors, status, touch }: OverlayData): string {
+export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses, cable, anchors, status, stops, targetTime, touch }: OverlayData): string {
   const names = lobby.players.map((player) => {
     const snapshot = players.find((candidate) => candidate.playerId === player.playerId);
     return snapshot ? `${player.name} (${snapshot.seat ?? 'on foot'})` : player.name;
@@ -124,7 +158,13 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
   ];
   if (status) {
     lines.push(`time     ${clock(status.elapsed)}   cp ${status.checkpoint + 1}/${status.checkpointCount}   restarts ${status.restarts}   respawns ${status.respawns}`);
-    if (status.won) lines.push('FINISHED');
+    lines.push(`coins    ${status.wallet}   ${status.coinsCollected}/${status.coinsTotal}`);
+    if (status.won) {
+      lines.push('FINISHED');
+      const final = finalTime({ elapsed: status.elapsed, restarts: status.restarts, respawns: status.respawns, wallet: status.wallet });
+      const earned = stars({ restarts: status.restarts, finalTime: final, targetTime, coinsCollected: status.coinsCollected, coinsTotal: status.coinsTotal, assisted: false });
+      lines.push(`final    ${clock(final)}   stars ${earned.map((star) => (star ? '*' : '-')).join('')}`);
+    }
   }
   if (vehicle) {
     const speed = dot(vehicle.linvel, rotate(vehicle.rot, FORWARD));
@@ -140,7 +180,7 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
       if (server) lines.push(`server   ${fixed(server.x)} ${fixed(server.y)} ${fixed(server.z)}`);
     }
     const local = players.find((player) => player.playerId === localId);
-    const hint = local ? interactHint(config, vehicle, local, players, aim.yaw, aim.pitch, propPoses, cable, anchors) : null;
+    const hint = local ? interactHint(config, vehicle, local, players, aim.yaw, aim.pitch, propPoses, cable, anchors, stops) : null;
     if (hint) lines.push(`hint     ${hint}`);
     if (local) {
       lines.push(`slots    ${local.inventory.map((kind, index) => (index === local.slot ? `[${kind ?? '-'}]` : (kind ?? '-'))).join(' ')}`);
