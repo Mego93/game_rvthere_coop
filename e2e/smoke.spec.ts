@@ -10,7 +10,7 @@ const tick = (page: Page) => overlayNumber(page, /tick\s+(\d+)/);
 const vehicleZ = (page: Page) => overlayNumber(page, /pos\s+\S+\s+\S+\s+(\S+)/);
 // The throttle the server applied to the vehicle, from -1 to 1. It shows whose keys the server obeys without depending on speed.
 const throttle = (page: Page) => overlayNumber(page, /throttle\s+(\S+)/);
-// The whole list of players as the overlay shows it, for example "Amal (drives), Badr".
+// The whole list of players as the overlay shows it, for example "Amal (driver), Badr (on foot)".
 async function players(page: Page): Promise<string> {
   const text = (await page.locator('#overlay').textContent()) ?? '';
   return /^players\s+(.*)$/m.exec(text)?.[1] ?? '';
@@ -51,7 +51,14 @@ async function createRoom(page: Page, name: string): Promise<string> {
   return new URL(page.url()).pathname.slice(1);
 }
 
-test('two players share a room and see the same vehicle, driven by the first', async ({ browser }) => {
+// Pressing a button once, held long enough for a tick to see it.
+async function tap(page: Page, key: string) {
+  await page.keyboard.down(key);
+  await page.waitForTimeout(100);
+  await page.keyboard.up(key);
+}
+
+test('two players share a room, board the vehicle, and only the driver drives', async ({ browser }) => {
   const amal = await newPlayerPage(browser);
   const badr = await newPlayerPage(browser);
   const room = await createRoom(amal, 'Amal');
@@ -64,28 +71,41 @@ test('two players share a room and see the same vehicle, driven by the first', a
   await expect(badr.locator('#home')).toBeHidden();
 
   for (const page of [amal, badr]) {
-    await expect(page.locator('#overlay')).toContainText('players  Amal (drives), Badr');
+    // Nobody is seated at the start: both stand beside the vehicle.
+    await expect(page.locator('#overlay')).toContainText('players  Amal (on foot), Badr (on foot)');
     // Snapshots are arriving: the tick shown keeps rising.
     const before = await tick(page);
     await expect.poll(() => tick(page)).toBeGreaterThan(before);
   }
 
-  // Badr's throttle does nothing: only the first player drives. Two seconds of throttle would move the vehicle several metres.
+  // Amal stands beside the driver's door and boards as the driver.
+  await expect(amal.locator('#overlay')).toContainText('hint     E to board');
+  await tap(amal, 'KeyE');
+  for (const page of [amal, badr]) await expect(page.locator('#overlay')).toContainText('players  Amal (driver), Badr (on foot)');
+  await expect(amal.locator('#overlay')).toContainText('hint     E to leave the seat');
+
+  // Badr's keys do nothing to the vehicle while he is on foot: the throttle stays at zero.
   await badr.keyboard.down('KeyW');
-  await badr.waitForTimeout(2000);
-  for (const page of [amal, badr]) {
-    expect(await throttle(page)).toBe(0);
-    expect(await vehicleZ(page)).toBeGreaterThan(-0.5);
-  }
+  await badr.waitForTimeout(300);
   await badr.keyboard.up('KeyW');
+  for (const page of [amal, badr]) expect(await throttle(page)).toBe(0);
+
+  // Badr is still beside the vehicle and takes a passenger seat, because the driver's is taken.
+  await expect(badr.locator('#overlay')).toContainText('hint     E to board');
+  await tap(badr, 'KeyE');
+  for (const page of [amal, badr]) await expect(page.locator('#overlay')).toContainText('players  Amal (driver), Badr (seat1)');
 
   // Amal drives forward, and both pages see the throttle applied and the vehicle move.
   await amal.keyboard.down('KeyW');
-  await expect.poll(() => throttle(badr)).toBeGreaterThan(0.9);
+  for (const page of [amal, badr]) await expect.poll(() => throttle(page)).toBe(1);
   await expect.poll(() => vehicleZ(amal), { timeout: 10_000 }).toBeLessThan(-3);
   await expect.poll(() => vehicleZ(badr), { timeout: 10_000 }).toBeLessThan(-3);
-  await amal.keyboard.up('KeyW');
-  await expect.poll(() => throttle(badr)).toBe(0);
+
+  // The passenger's reverse key leaves the driver's throttle as it was.
+  await badr.keyboard.down('KeyS');
+  await badr.waitForTimeout(500);
+  for (const page of [amal, badr]) expect(await throttle(page)).toBe(1);
+  await badr.keyboard.up('KeyS');
 
   // The game canvas has been given its drawing size.
   for (const page of [amal, badr]) {
@@ -94,13 +114,11 @@ test('two players share a room and see the same vehicle, driven by the first', a
     expect(size[1]).toBeGreaterThan(0);
   }
 
-  // When Amal leaves, Badr drives. The vehicle is still rolling, so the applied throttle is the proof that Badr's keys reach the server.
-  await amal.close();
-  await expect.poll(() => players(badr)).toBe('Badr (drives)');
-  expect(await throttle(badr)).toBe(0);
-  await badr.keyboard.down('KeyW');
-  await expect.poll(() => throttle(badr)).toBeGreaterThan(0.9);
-  await badr.keyboard.up('KeyW');
+  // Amal leaves the seat with W still held: nobody drives, so the throttle falls to zero.
+  await tap(amal, 'KeyE');
+  for (const page of [amal, badr]) await expect(page.locator('#overlay')).toContainText('players  Amal (on foot), Badr (seat1)');
+  for (const page of [amal, badr]) await expect.poll(() => throttle(page)).toBe(0);
+  await amal.keyboard.up('KeyW');
 });
 
 test('a room can be joined from the home page by typing its name', async ({ browser }) => {
@@ -114,7 +132,7 @@ test('a room can be joined from the home page by typing its name', async ({ brow
   await badr.locator('#home-join').click();
   await expect(badr.locator('#home')).toBeHidden();
   await expect(badr).toHaveURL(new RegExp(`/${room}$`));
-  await expect(badr.locator('#overlay')).toContainText('players  Amal (drives), Badr');
+  await expect(badr.locator('#overlay')).toContainText('players  Amal (on foot), Badr (on foot)');
 });
 
 test('a link to a room that does not exist says so and offers the home page', async ({ page }) => {
@@ -150,7 +168,7 @@ test('the name is remembered, and a reload keeps the player in the room', async 
   await page.locator('#home-primary').click();
   await expect(page.locator('#home')).toBeHidden();
   // The tab is back in the room as one player, not two, and its old name was not refused.
-  await expect.poll(() => players(page)).toBe('Amal (drives)');
+  await expect.poll(() => players(page)).toBe('Amal (on foot)');
 });
 
 test('an empty name is refused on the page, before anything is sent', async ({ page }) => {
