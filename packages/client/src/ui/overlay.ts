@@ -18,7 +18,7 @@ import {
 } from '@lodgy/shared';
 
 const FORWARD = vec3(0, 0, -1);
-const percent = (fraction: number) => `${Math.round(fraction * 100)}%`;
+const percent = (fraction: number) => `${Math.floor(fraction * 100 + 1e-9)}%`;
 const fixed = (value: number, digits = 1) => value.toFixed(digits).padStart(7);
 
 export interface OverlayData {
@@ -131,7 +131,8 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
       const selected = local.inventory[local.slot];
       const half = config.halfExtents;
       if (local.seat === null && useTarget(selected ?? null, local.pos, { pos: vehicle.pos, rot: vehicle.rot, half, fuel: vehicle.fuel, health: vehicle.health })) {
-        lines.push(`hint     Hold F to ${selected === 'jerrycan' ? 'refuel' : 'repair'}`);
+        if (selected === 'jerrycan') lines.push('hint     Hold F to refuel');
+        else if (selected === 'toolbox') lines.push('hint     Hold F to repair');
       }
     }
   } else {

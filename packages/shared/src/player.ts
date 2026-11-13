@@ -295,6 +295,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     state.vy = 0;
     state.walk = { x: 0, z: 0 };
     state.carry = { x: 0, z: 0 };
+    state.hold = null;
   };
 
   const seatConfig = (seatId: string): SeatConfig | undefined => vehicle.config.seats.find((seat) => seat.id === seatId);

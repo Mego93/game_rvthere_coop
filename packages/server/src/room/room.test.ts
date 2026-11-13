@@ -161,6 +161,37 @@ test('picking an item up makes the next snapshot full for every client, and the 
   s.room.dispose();
 });
 
+test('dropping an item makes the next snapshot full for every client, and the dropped item is listed', () => {
+  const first = setup(withPickups([]));
+  const probe = first.join(1);
+  first.run(SNAPSHOT_EVERY_TICKS * 2);
+  const feet = probe.received[probe.received.length - 1]!.players[0]!.pos;
+  first.room.dispose();
+
+  const can = { id: 'can-1', kind: 'jerrycan', pose: { pos: vec3(feet.x, 0, feet.z), rot: IDENTITY } };
+  const { room, join, run } = setup(withPickups([can]));
+  const one = join(1);
+  const two = join(2);
+  run(SNAPSHOT_EVERY_TICKS * 2);
+  one.player.queue.push({ ...NEUTRAL_INPUT, seq: 1, interact: true });
+  run(SNAPSHOT_EVERY_TICKS * 2);
+  expect(one.received[one.received.length - 1]!.players.find((p) => p.inventory[0] === 'jerrycan')).toBeDefined();
+  // Quiet again: partial snapshots.
+  run(SNAPSHOT_EVERY_TICKS * 2);
+  expect(one.received[one.received.length - 1]!.full).toBe(false);
+
+  one.received.length = 0;
+  two.received.length = 0;
+  one.player.queue.push({ ...NEUTRAL_INPUT, seq: 2, drop: true });
+  run(SNAPSHOT_EVERY_TICKS);
+  for (const client of [one, two]) {
+    const message = client.received[0]!;
+    expect(message.full).toBe(true);
+    expect(message.props.map((prop) => prop.id)).toContain('item-1');
+  }
+  room.dispose();
+});
+
 test('a course pickup reset by the kill plane is sent at its reset pose', () => {
   const { room, join, run } = setup(withPickups([offGround]));
   const { received } = join(1);

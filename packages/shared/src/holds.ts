@@ -21,8 +21,11 @@ export interface HoldVehicle {
 
 // Rule I8.
 export function useTarget(item: ItemKind | null, feet: Vec3, vehicle: HoldVehicle): 'vehicle' | null {
-  if (item === null || !(item in ITEM_KINDS)) return null;
-  const needed = item === 'jerrycan' ? vehicle.fuel < 1 : vehicle.health < 1;
+  if (item === null || !Object.hasOwn(ITEM_KINDS, item)) return null;
+  let needed: boolean;
+  if (item === 'jerrycan') needed = vehicle.fuel < 1;
+  else if (item === 'toolbox') needed = vehicle.health < 1;
+  else return null;
   if (!needed) return null;
   return distanceToBox(feet, vehicle.half, vehicle.pos, vehicle.rot) <= USE_RANGE ? 'vehicle' : null;
 }

@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { HOLD_DURATION, ITEM_REFUEL, PLAYER_CONTROLLER_OFFSET, TICK_DT, USE_RANGE } from './constants';
+import { HOLD_DURATION, ITEM_REFUEL, PLAYER_CONTROLLER_OFFSET, TICK_DT, TICK_RATE, USE_RANGE, type ItemKind } from './constants';
 import type { BuiltCourse, Placed } from './course';
 import { testGround } from './courses/testGround';
 import { stepHold, useTarget, type Hold } from './holds';
@@ -11,8 +11,6 @@ import { createWorld, type World } from './world';
 beforeAll(async () => {
   await RAPIER.init();
 });
-import type { ItemKind } from './constants';
-
 const half = vec3(1, 0.5, 2);
 const car = (fuel: number, health: number) => ({ pos: vec3(0, 0.5, 0), rot: IDENTITY, half, fuel, health });
 const TICKS = Math.round(HOLD_DURATION / TICK_DT);
@@ -28,6 +26,11 @@ describe('useTarget', () => {
   });
   test('no item, no target', () => {
     expect(useTarget(null, vec3(2, 0, 0), car(0.1, 0.1))).toBeNull();
+  });
+  test('a name that is not an item kind, including inherited object keys, has no target', () => {
+    for (const name of ['toString', 'constructor', '__proto__', 'crate']) {
+      expect(useTarget(name as ItemKind, vec3(2, 0, 0), car(0.1, 0.1))).toBeNull();
+    }
   });
   test('range is feet to the nearest point of the box', () => {
     expect(useTarget('jerrycan', vec3(1 + USE_RANGE - 0.01, 0, 0), car(0.5, 1))).toBe('vehicle');
@@ -156,7 +159,7 @@ describe('item use in the world', () => {
   test('2: releasing use at 2 s does nothing', () => {
     const { world } = armed();
     world.debugVehicle().addFuel(-0.7);
-    holdFor(world, 2 * 30);
+    holdFor(world, 2 * TICK_RATE);
     expect(playerOf(world, 'p').hold).not.toBeNull();
     world.step(new Map());
     expect(playerOf(world, 'p').hold).toBeNull();
@@ -168,10 +171,10 @@ describe('item use in the world', () => {
   test('3: walking out of range resets the hold', () => {
     const { world, beside } = armed();
     world.debugVehicle().addFuel(-0.7);
-    holdFor(world, 30);
+    holdFor(world, TICK_RATE);
     expect(playerOf(world, 'p').hold).not.toBeNull();
     // Yaw 0, so moveX moves along +X.
-    holdFor(world, 90, { moveX: Math.sign(beside.x) });
+    holdFor(world, 3 * TICK_RATE, { moveX: Math.sign(beside.x) });
     expect(playerOf(world, 'p').hold).toBeNull();
     expect(world.snapshot().vehicle.fuel).toBeCloseTo(0.3, 6);
     expect(playerOf(world, 'p').inventory[0]).toBe('jerrycan');
@@ -201,7 +204,7 @@ describe('item use in the world', () => {
     const { world } = armed();
     world.debugVehicle().addFuel(-0.7);
     world.debugVehicle().repair(-0.6);
-    holdFor(world, 30, { slot: 0 });
+    holdFor(world, TICK_RATE, { slot: 0 });
     expect(playerOf(world, 'p').hold).not.toBeNull();
     holdFor(world, 1, { slot: 1 });
     expect(playerOf(world, 'p').hold).toBeNull();
@@ -211,12 +214,16 @@ describe('item use in the world', () => {
   test('7: boarding mid-hold resets it, and a seated player holding use starts nothing', () => {
     const { world } = armed();
     world.debugVehicle().addFuel(-0.7);
-    holdFor(world, 30);
+    holdFor(world, TICK_RATE);
     expect(playerOf(world, 'p').hold).not.toBeNull();
     holdFor(world, 1, { interact: true });
     expect(playerOf(world, 'p').seat).not.toBeNull();
     expect(playerOf(world, 'p').hold).toBeNull();
-    holdFor(world, 5);
+    // Release use for a tick, then press it again while seated.
+    world.step(new Map([['p', input({})]]));
+    holdFor(world, 1);
+    expect(playerOf(world, 'p').hold).toBeNull();
+    holdFor(world, TICK_RATE);
     expect(playerOf(world, 'p').hold).toBeNull();
     world.dispose();
   });
@@ -224,8 +231,32 @@ describe('item use in the world', () => {
   test('7b: a teleport mid-hold resets it', () => {
     const { world, beside } = armed();
     world.debugVehicle().addFuel(-0.7);
-    holdFor(world, 30);
+    holdFor(world, TICK_RATE);
     world.teleportPlayer('p', beside);
+    expect(playerOf(world, 'p').hold).toBeNull();
+    world.dispose();
+  });
+
+  test('7c: dropping the held item mid-hold resets it and the item is not used', () => {
+    const { world } = armed();
+    world.debugVehicle().addFuel(-0.7);
+    holdFor(world, TICK_RATE);
+    expect(playerOf(world, 'p').hold).not.toBeNull();
+    holdFor(world, 1, { drop: true });
+    expect(playerOf(world, 'p').hold).toBeNull();
+    expect(playerOf(world, 'p').inventory[0]).toBeNull();
+    expect(world.snapshot().vehicle.fuel).toBeCloseTo(0.3, 6);
+    world.dispose();
+  });
+
+  test('7d: respawning from the kill plane mid-hold resets it', () => {
+    const { world, beside } = armed();
+    world.debugVehicle().addFuel(-0.7);
+    holdFor(world, TICK_RATE);
+    expect(playerOf(world, 'p').hold).not.toBeNull();
+    world.teleportPlayer('p', vec3(beside.x, COURSE.killPlaneY - 5, beside.z));
+    for (let i = 0; i < 4 * TICK_RATE && playerOf(world, 'p').pos.y < 0; i++) world.step(new Map());
+    expect(playerOf(world, 'p').pos.y).toBeGreaterThan(COURSE.killPlaneY);
     expect(playerOf(world, 'p').hold).toBeNull();
     world.dispose();
   });
@@ -234,11 +265,11 @@ describe('item use in the world', () => {
     const { world } = armed();
     world.debugVehicle().addFuel(-0.7);
     world.debugVehicle().repair(-0.6);
-    holdFor(world, TICKS + 30, { slot: 1 });
+    holdFor(world, TICKS + TICK_RATE, { slot: 1 });
     expect(playerOf(world, 'p').inventory[1]).toBeNull();
     expect(world.snapshot().vehicle.health).toBeCloseTo(0.9, 6);
     // Slot 0 holds a jerrycan and the tank needs fuel, but use has been held since before the switch.
-    holdFor(world, 30, { slot: 0 });
+    holdFor(world, TICK_RATE, { slot: 0 });
     expect(playerOf(world, 'p').hold).toBeNull();
     world.step(new Map([['p', input({ slot: 0 })]]));
     holdFor(world, 1);
@@ -251,13 +282,13 @@ describe('item use in the world', () => {
     world.debugVehicle().addFuel(-0.7);
     expect(playerOf(world, 'p').hold).toBeNull();
     const seen: number[] = [];
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < TICK_RATE; i++) {
       holdFor(world, 1);
       seen.push(playerOf(world, 'p').hold!.progress);
     }
     expect(playerOf(world, 'p').hold).toMatchObject({ action: 'useItem', targetId: 'vehicle' });
     for (let i = 1; i < seen.length; i++) expect(seen[i]!).toBeGreaterThan(seen[i - 1]!);
-    expect(seen[29]!).toBeCloseTo(30 * TICK_DT / HOLD_DURATION, 6);
+    expect(seen[TICK_RATE - 1]!).toBeCloseTo(TICK_RATE * TICK_DT / HOLD_DURATION, 6);
     world.dispose();
   });
 });

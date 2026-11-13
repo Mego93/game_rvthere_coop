@@ -232,6 +232,7 @@ const lines = (players: PlayerSnapshot[], v: VehicleState = vehicle) => call(pla
 test('shows fuel and health as percentages', () => {
   expect(lines([nearDoor])).toContain('fuel     100%   health 100%');
   expect(lines([nearDoor], { ...vehicle, fuel: 0.254, health: 0.5 })).toContain('fuel     25%   health 50%');
+  expect(lines([nearDoor], { ...vehicle, fuel: 0.999, health: 0.996 })).toContain('fuel     99%   health 99%');
 });
 
 test('shows the slots with the selected one in brackets and empty ones as a dash', () => {
@@ -246,6 +247,7 @@ test('shows the hold progress only while holding', () => {
   expect(call([nearDoor]).includes('hold ')).toBe(false);
   const hold = { action: 'useItem', targetId: 'vehicle', progress: 0.4 };
   expect(lines([holding({ inventory: ['jerrycan', null, null], hold })])).toContain('hold     40%');
+  expect(lines([holding({ inventory: ['jerrycan', null, null], hold: { ...hold, progress: 0.999 } })])).toContain('hold     99%');
 });
 
 test('hints to refuel or repair when the selected item suits the vehicle and it is in range', () => {
@@ -263,4 +265,5 @@ test('hints to refuel or repair when the selected item suits the vehicle and it 
   expect(lines([{ ...jerrycan, slot: 1 }], low).some((line) => line.includes('Hold F'))).toBe(false);
   expect(lines([holding({ inventory: ['jerrycan', null, null], pos: far.pos })], low).some((line) => line.includes('Hold F'))).toBe(false);
   expect(lines([holding({ inventory: ['jerrycan', null, null], seat: 'driver' })], low).some((line) => line.includes('Hold F'))).toBe(false);
+  expect(lines([holding({ inventory: ['toString' as never, null, null] })], low).some((line) => line.includes('Hold F'))).toBe(false);
 });

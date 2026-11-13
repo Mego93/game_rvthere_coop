@@ -835,11 +835,13 @@ describe('standing on props', () => {
     players.teleport('p1', vec3(10, 0.02, 5.5));
     run(10);
     const body = glide(rig, props, 'crate-1', vec3(0, 0, -4));
+    player.hold = { action: 'useItem', targetId: 'vehicle', slot: 0, item: 'jerrycan', progress: 0.5 };
     let relocated = false;
     for (let i = 0; i < 90; i++) {
       body.setLinvel({ x: 0, y: 0, z: -4 }, true);
       tick({});
       expect(Number.isFinite(player.pos.x + player.pos.y + player.pos.z)).toBe(true);
+      if (relocated) expect(player.hold).toBeNull();
       const gap = Math.hypot(Math.max(Math.abs(player.pos.x - 10) - 3, 0), Math.max(5.5 - 0.45 - 6 - player.pos.z, player.pos.z - (5.5 - 0.45), 0));
       expect(gap).toBeGreaterThanOrEqual(PLAYER_RADIUS - 0.06);
       if (Math.abs(player.pos.x - rig.vehicle.body.translation().x) < 3) relocated = true;
