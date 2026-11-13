@@ -270,6 +270,46 @@ test('a player who joins mid-run gets a full snapshot first', () => {
   expect(snapshots[1]!.full).toBe(false);
 });
 
+test('a joining player appears in the snapshot at a spawn slot, and two players take different slots', () => {
+  const { host, guest, advance } = setup();
+  const { client: amal, room } = host();
+  advance(0.2);
+  const [first] = amal.last('snapshot').players;
+  expect(amal.last('snapshot').players).toHaveLength(1);
+  expect(first!.playerId).toBe('p1');
+  expect(first!.pos.x).toBeCloseTo(-2.08, 1);
+  expect(first!.pos.z).toBeCloseTo(-0.7, 1);
+  expect(Math.abs(first!.pos.y)).toBeLessThan(0.05);
+
+  guest(room, 2);
+  advance(0.2);
+  const { players } = amal.last('snapshot');
+  expect(players.map((player) => player.playerId)).toEqual(['p1', 'p2']);
+  expect(players[1]!.pos.x).toBeCloseTo(2.08, 1);
+  expect(players[1]!.pos.z).toBeCloseTo(-0.7, 1);
+});
+
+test('a player who leaves disappears from the snapshot players', () => {
+  const { host, guest, advance } = setup();
+  const { client: amal, room } = host();
+  const badr = guest(room, 2);
+  advance(0.2);
+  badr.close();
+  advance(0.2);
+  expect(amal.last('snapshot').players.map((player) => player.playerId)).toEqual(['p1']);
+});
+
+test('a player who joins mid-run gets a full snapshot that includes the players', () => {
+  const { host, guest, advance } = setup();
+  const { room } = host();
+  advance(1);
+  const badr = guest(room, 2);
+  advance(0.2);
+  const first = badr.ofType('snapshot')[0]!;
+  expect(first.full).toBe(true);
+  expect(first.players.map((player) => player.playerId)).toEqual(['p1', 'p2']);
+});
+
 test('the first player drives; the others do not', () => {
   const { host, guest, advance } = setup();
   const { client: amal, room } = host();

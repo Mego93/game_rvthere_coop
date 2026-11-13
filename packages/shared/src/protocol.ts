@@ -71,6 +71,15 @@ export interface LobbyMessage {
   vehicleId: string;
 }
 
+export interface PlayerSnapshot {
+  playerId: string;
+  // The feet.
+  pos: Vec3;
+  yaw: number;
+  seat: string | null;
+  ground: { bodyId: string; localPos: Vec3 } | null;
+}
+
 export interface SnapshotMessage extends WorldSnapshot {
   type: 'snapshot';
   // The last input sequence number the server consumed for the receiving client; 0 before any.

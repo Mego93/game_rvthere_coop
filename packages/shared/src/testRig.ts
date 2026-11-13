@@ -1,7 +1,8 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { GRAVITY, TICK_DT, TICK_RATE } from './constants';
+import type { Box, BuiltCourse, GroundBox } from './course';
 import { getCourse } from './courses/index';
-import type { Pose } from './math';
+import { deepFreeze, type Pose } from './math';
 import type { Rapier } from './rapier';
 import { buildStatics } from './statics';
 import { createVehicle, type Vehicle, type VehicleControls } from './vehicle';
@@ -15,10 +16,10 @@ export interface Rig {
 }
 
 // A vehicle on the test ground, for tests and experiments that need no full game world.
-export function createRig(rapier: Rapier, vehicleId: VehicleId, spawn: Pose): Rig {
+export function createRig(rapier: Rapier, vehicleId: VehicleId, spawn: Pose, course: BuiltCourse = getCourse('test')): Rig {
   const world = new rapier.World({ x: 0, y: -GRAVITY, z: 0 });
   world.timestep = TICK_DT;
-  const statics = buildStatics(rapier, world, getCourse('test'));
+  const statics = buildStatics(rapier, world, course);
   const vehicle = createVehicle(rapier, world, getVehicleConfig(vehicleId), spawn, statics.surfaceOf);
   return {
     world,
@@ -30,4 +31,13 @@ export function createRig(rapier: Rapier, vehicleId: VehicleId, spawn: Pose): Ri
       }
     },
   };
+}
+
+// A new, frozen course with the boxes added.
+export function withBoxes(course: BuiltCourse, extra: { ground?: GroundBox[]; walls?: Box[] }): BuiltCourse {
+  return deepFreeze({
+    ...course,
+    ground: [...course.ground, ...(extra.ground ?? [])],
+    walls: [...course.walls, ...(extra.walls ?? [])],
+  });
 }

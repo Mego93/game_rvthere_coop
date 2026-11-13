@@ -120,6 +120,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       };
       nextPlayerNumber += 1;
       players.push(player);
+      world.addPlayer(player.playerId);
       adminId ??= player.playerId;
       emptySince = null;
       return player;
@@ -136,6 +137,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       const index = players.indexOf(player);
       if (index === -1) return;
       players.splice(index, 1);
+      world.removePlayer(player.playerId);
       // The role passes to the longest-connected player, or to the next to join if nobody is left.
       if (adminId === player.playerId) adminId = players[0]?.playerId ?? null;
       if (players.length === 0) emptySince = now;

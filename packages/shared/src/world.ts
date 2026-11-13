@@ -1,8 +1,9 @@
-import { GRAVITY, TICK_DT, type Surface } from './constants';
+import { GRAVITY, PLAYER_KILL_RESPAWN_DELAY, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import type { Vec3 } from './math';
-import type { InputFields } from './protocol';
+import { createPlayers, type StepInputs } from './player';
+import { NEUTRAL_INPUT, type InputFields, type PlayerSnapshot } from './protocol';
 import type { Rapier } from './rapier';
 import { buildStatics } from './statics';
 import { createVehicle, type VehicleState } from './vehicle';
@@ -23,6 +24,8 @@ export interface WorldEvent {
 export interface WorldSnapshot {
   tick: number;
   vehicle: VehicleState;
+  // In join order.
+  players: PlayerSnapshot[];
 }
 
 export interface WorldDebug {
@@ -36,6 +39,10 @@ export interface World {
   // Advances one fixed tick and returns that tick's events.
   step(inputs: ReadonlyMap<string, InputFields>): WorldEvent[];
   snapshot(): WorldSnapshot;
+  // Placed at the first valid spawn slot.
+  addPlayer(id: string): void;
+  removePlayer(id: string): void;
+  teleportPlayer(id: string, pos: Vec3): void;
   debug(): WorldDebug;
   // Frees the physics world. The world must not be used afterwards.
   dispose(): void;
@@ -44,8 +51,9 @@ export interface World {
 // One non-finite number would stay in the physics state for good, so it is treated as no input.
 const finite = (value: number | undefined): number => (value !== undefined && Number.isFinite(value) ? value : 0);
 
-export function createWorld(rapier: Rapier, options: WorldOptions): World {
-  const course = getCourse(options.courseId);
+// A course passed in is used instead of the id's course; tests add walls and ledges this way.
+export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?: BuiltCourse): World {
+  const course = builtCourse ?? getCourse(options.courseId);
   const vehicleConfig = getVehicleConfig(options.vehicleId);
   const start = course.checkpoints[0];
   if (!start) throw new Error(`Course ${course.id} has no checkpoint`);
@@ -54,7 +62,54 @@ export function createWorld(rapier: Rapier, options: WorldOptions): World {
   physics.timestep = TICK_DT;
   const statics = buildStatics(rapier, physics, course);
   const vehicle = createVehicle(rapier, physics, vehicleConfig, start.spawn, statics.surfaceOf);
+  // Queries see nothing until the broad phase has run once, and spawn rays are cast before the first tick.
+  physics.timestep = 0;
+  physics.step();
+  physics.timestep = TICK_DT;
+
+  const players = createPlayers(rapier, physics, vehicle, course);
+  const previous = new Map<string, InputFields>();
   let tick = 0;
+
+  const stepInputsFor = (inputs: ReadonlyMap<string, InputFields>): Map<string, StepInputs> => {
+    const result = new Map<string, StepInputs>();
+    for (const { id } of players.all()) {
+      const raw = inputs.get(id) ?? NEUTRAL_INPUT;
+      const before = previous.get(id) ?? NEUTRAL_INPUT;
+      const fields: InputFields = {
+        ...raw,
+        moveX: finite(raw.moveX),
+        moveY: finite(raw.moveY),
+        yaw: finite(raw.yaw),
+        pitch: finite(raw.pitch),
+      };
+      result.set(id, {
+        fields,
+        pressed: {
+          jump: raw.jump === true && before.jump !== true,
+          interact: raw.interact === true && before.interact !== true,
+          drop: raw.drop === true && before.drop !== true,
+        },
+      });
+      previous.set(id, raw);
+    }
+    return result;
+  };
+
+  const killPlane = (events: WorldEvent[]) => {
+    for (const player of players.all()) {
+      if (player.seat !== null) continue;
+      if (player.respawnIn === null) {
+        if (player.pos.y < course.killPlaneY) player.respawnIn = PLAYER_KILL_RESPAWN_DELAY;
+        continue;
+      }
+      player.respawnIn -= TICK_DT;
+      if (player.respawnIn > 1e-9) continue;
+      const pos = players.findSpawn(player.id);
+      players.setSeat(player.id, null, pos);
+      events.push({ kind: 'respawn', tick, playerId: player.id, pos });
+    }
+  };
 
   return {
     course,
@@ -67,12 +122,32 @@ export function createWorld(rapier: Rapier, options: WorldOptions): World {
         steer: finite(driver?.moveX),
         brake: driver?.jump ?? false,
       });
+      const onFoot = stepInputsFor(inputs);
       physics.step();
       tick += 1;
-      return [];
+      players.stepOnFoot(onFoot);
+      const events: WorldEvent[] = [];
+      killPlane(events);
+      return events;
     },
-    snapshot: () => ({ tick, vehicle: vehicle.state() }),
+    snapshot: () => ({
+      tick,
+      vehicle: vehicle.state(),
+      players: players.all().map((player) => ({
+        playerId: player.id,
+        pos: { ...player.pos },
+        yaw: player.yaw,
+        seat: player.seat,
+        ground: player.ground ? { bodyId: player.ground.bodyId, localPos: { ...player.ground.localPos } } : null,
+      })),
+    }),
+    addPlayer: (id) => void players.add(id),
+    removePlayer: (id) => players.remove(id),
+    teleportPlayer: (id, pos) => players.teleport(id, pos),
     debug: () => ({ forwardSpeed: vehicle.forwardSpeed(), wheelSurfaces: vehicle.wheelSurfaces() }),
-    dispose: () => physics.free(),
+    dispose() {
+      players.dispose();
+      physics.free();
+    },
   };
 }

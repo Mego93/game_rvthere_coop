@@ -21,6 +21,7 @@ const snapshot = (tick: number): WorldSnapshot => ({
     throttle: tick,
     steer: 0,
   },
+  players: [],
 });
 
 // Snapshots every 3 ticks, each arriving exactly when the server's clock reads its tick time plus `latency`.
