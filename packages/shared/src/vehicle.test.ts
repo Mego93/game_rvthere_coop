@@ -10,6 +10,7 @@ beforeAll(async () => {
   await RAPIER.init();
 });
 
+const SAND_PATCH_HALF_Z = 15;
 const ORIGIN: Pose = { pos: vec3(0, 0, 0), rot: IDENTITY };
 const ON_SAND: Pose = { pos: vec3(SAND_PATCH_CENTER.x, 0, SAND_PATCH_CENTER.z + 10), rot: IDENTITY };
 
@@ -95,7 +96,7 @@ describe.each(['lodgy', 'rv'] as const)('%s', (id) => {
     expect(settled(id, ON_SAND).vehicle.wheelSurfaces()).toEqual(['sand', 'sand', 'sand', 'sand']);
   });
 
-  test('sand slows it to less than half the distance covered on road', () => {
+  test.runIf(id === 'lodgy')('sand slows it to less than half the distance covered on road', () => {
     const road = settled(id);
     road.run(3, { throttle: 1 });
     const onRoad = -road.vehicle.state().pos.z;
@@ -105,6 +106,26 @@ describe.each(['lodgy', 'rv'] as const)('%s', (id) => {
     const onSand = ON_SAND.pos.z - sand.vehicle.state().pos.z;
 
     expect(onSand).toBeLessThan(onRoad / 2);
+  });
+
+  test.runIf(id === 'rv')('from rest on sand at full throttle it stays bogged within 0.5 m for 10 s', () => {
+    const rig = settled(id, ON_SAND);
+    rig.run(10, { throttle: 1 });
+    const { pos } = rig.vehicle.state();
+    expect(Math.hypot(pos.x - ON_SAND.pos.x, pos.z - ON_SAND.pos.z)).toBeLessThan(0.5);
+  });
+
+  test.runIf(id === 'rv')('entering the sand at 12 m/s it crosses the far edge within 10 s', () => {
+    const edgeFar = SAND_PATCH_CENTER.z + SAND_PATCH_HALF_Z;
+    const edgeNear = SAND_PATCH_CENTER.z - SAND_PATCH_HALF_Z;
+    const rig = settled(id, { pos: vec3(SAND_PATCH_CENTER.x, 0, edgeFar + 5), rot: IDENTITY });
+    rig.vehicle.body.setLinvel({ x: 0, y: 0, z: -12 }, true);
+    let crossed = false;
+    for (let i = 0; i < 10 && !crossed; i++) {
+      rig.run(1, { throttle: 1 });
+      crossed = rig.vehicle.state().pos.z < edgeNear;
+    }
+    expect(crossed).toBe(true);
   });
 
   test('state reports clamped throttle and steer', () => {
