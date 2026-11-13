@@ -7,7 +7,7 @@ Single source of truth for where the project stands. Update it in the same commi
 
 ## Current state
 
-**Current step:** step 4 is done (branch `claude/busy-brown-wkdjue`, plan in `docs/superpowers/plans/step-4-client-prediction.md`); step 5 is next. The owner still has to check the rendering, the feel (including prediction on a real connection) and the iPhone load (see "Working notes").
+**Current step:** step 4 is done and merged to `main` (whole-branch review clean, its minor findings fixed); step 5 is next. The owner still has to check the rendering, the feel (including prediction on a real connection) and the iPhone load (see "Working notes").
 
 **Runnable today:** `npm run dev` starts the game server and the page. Create a room on the home page and share its address; everyone who opens it appears as a character beside the same vehicle on the test ground. Players walk (WASD) and jump (Space), board with E at the nearest free seat (the driver's seat if standing at its door), drive from the driver seat, and leave with E. After clicking the canvas, the mouse looks around from a shoulder camera with a crosshair; while seated the camera follows the vehicle. The local player's walking and jumping are predicted on the page and corrected on each snapshot; the debug overlay shows the predicted position (`you`) and the server's (`server`) while prediction is active.
 
@@ -181,7 +181,7 @@ Decisions made during the design and afterwards. Change the spec too when a deci
 | 2026-11-13 | The server's walking code and the predictor's share one function, `stepWalk` (E2) | One implementation cannot drift; a test proves the two agree |
 | 2026-11-13 | The predictor's vehicle stand-in is a dynamic box at gravity scale 0, not kinematic or fixed (E3) | The walking controller's autostep excludes only dynamic bodies, so a kinematic box could be stepped onto; a fixed one is not found after a zero step |
 | 2026-11-13 | Prediction is on while the latest snapshot reports the local player unseated with `ground` null; turning it on resets to the snapshot (E4) | Seats, shove-out and standing on the vehicle stay the server's |
-| 2026-11-13 | Known and accepted: the server and client can be one tick apart when the server merges or repeats inputs, and the predictor has no shove-out; corrections absorb it (E5) | Rare, small and smoothed |
+| 2026-11-13 | Known and accepted: the server and client can be one tick apart when the server merges or repeats inputs, and the predictor has no shove-out; a jump held through an input stall long enough for the neutral substitute is a new press on the server but not on the client; corrections absorb it (E5) | Rare, small and smoothed |
 | 2026-11-13 | The predictor's API is `createPredictor(rapier, course, vehicle)`, `setVehicle(pos, rot)`, `stepPlayer(state, input, previousJump)` (E6) | The stand-in needs the vehicle's size and a pose, and the jump press needs the previous input |
 | 2026-11-13 | The predictor's `setVehicle` needs two zero-length steps | Rapier 0.21: the first zero step after moving a body removes its collider from the old place but does not insert it at the new one |
 | 2026-11-13 | Inputs are always recorded, also while prediction is suspended; prediction resumes by replaying everything after `ackSeq` | The first correction after a seat or a ride must not lose the inputs sent meanwhile |
