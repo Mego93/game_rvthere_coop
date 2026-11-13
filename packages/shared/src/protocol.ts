@@ -89,6 +89,8 @@ export interface PlayerSnapshot {
   grounded: boolean;
   inventory: [ItemKind | null, ItemKind | null, ItemKind | null];
   slot: 0 | 1 | 2;
+  // The item use in progress; progress is 0..1.
+  hold: { action: string; targetId: string; progress: number } | null;
 }
 
 export interface SnapshotMessage extends WorldSnapshot {

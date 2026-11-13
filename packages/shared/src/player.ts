@@ -17,6 +17,7 @@ import {
   type ItemKind,
 } from './constants';
 import type { BuiltCourse } from './course';
+import type { Hold } from './holds';
 import { GROUP_GROUND, GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, sub, vec3, yawOf, type Pose, type Quat, type Vec3 } from './math';
 import { exitPoints } from './seats';
@@ -55,6 +56,7 @@ export interface PlayerState {
   respawnIn: number | null;
   inventory: [ItemKind | null, ItemKind | null, ItemKind | null];
   slot: 0 | 1 | 2;
+  hold: Hold | null;
 }
 
 export interface StepInputs {
@@ -73,7 +75,7 @@ export interface Players {
   stepOnFoot(inputs: ReadonlyMap<string, StepInputs>): void;
   // Seating puts the player at the seat (`pos` is ignored); leaving puts them at `pos`, grounded, at rest.
   setSeat(id: string, seatId: string | null, pos?: Vec3): void;
-  // Clears velocity, seat, ground and respawnIn; grounded false.
+  // Clears velocity, seat, ground, hold and respawnIn; grounded false.
   teleport(id: string, pos: Vec3): void;
   // The pushes found by the last stepOnFoot, cleared by the call (rule F4).
   takePushIntents(): PushIntent[];
@@ -424,6 +426,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         respawnIn: null,
         inventory: [null, null, null],
         slot: 0,
+        hold: null,
       };
       const collider = physics.createCollider(
         rapier.ColliderDesc.capsule(CAPSULE_HALF_SEGMENT, PLAYER_RADIUS)
@@ -476,6 +479,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     setSeat(id, seatId, pos) {
       const state = entries.get(id)?.state;
       if (!state) return;
+      state.hold = null;
       if (seatId === null) {
         state.seat = null;
         restAt(state, pos ?? state.pos);
@@ -492,6 +496,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     teleport(id, pos) {
       const state = entries.get(id)?.state;
       if (!state) return;
+      state.hold = null;
       restAt(state, pos);
       state.seat = null;
       state.grounded = false;

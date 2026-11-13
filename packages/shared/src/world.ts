@@ -1,6 +1,7 @@
-import { DROP_HEIGHT, GRAVITY, HOOK_RANGE, PLAYER_KILL_RESPAWN_DELAY, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, TICK_DT, type Surface } from './constants';
+import { DROP_HEIGHT, GRAVITY, HOOK_RANGE, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
+import { stepHold, useTarget } from './holds';
 import { add, length, rotate, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
 import { interactCandidates, resolveInteract, splitCandidates } from './interact';
@@ -10,7 +11,7 @@ import { createProps, type PropSnapshot } from './props';
 import { NEUTRAL_INPUT, type InputFields, type PlayerSnapshot } from './protocol';
 import type { Rapier, RigidBody } from './rapier';
 import { buildStatics } from './statics';
-import { createVehicle, type VehicleState } from './vehicle';
+import { createVehicle, type Vehicle, type VehicleState } from './vehicle';
 import { getVehicleConfig, type VehicleConfig } from './vehicles';
 import { createWinch, type CableSnapshot, type Winch } from './winch';
 
@@ -58,6 +59,8 @@ export interface World {
   debugBody(id: 'vehicle' | string): RigidBody | undefined;
   // Tests only: the winch.
   debugWinch(): Winch;
+  // Tests only: the vehicle, to set its fuel and health.
+  debugVehicle(): Vehicle;
   // Frees the physics world. The world must not be used afterwards.
   dispose(): void;
 }
@@ -86,10 +89,12 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const players = createPlayers(rapier, physics, vehicle, props, course);
   const winch = createWinch(rapier, physics, vehicle, props, course);
   const previous = new Map<string, InputFields>();
+  const usePressed = new Set<string>();
   let tick = 0;
 
   const stepInputsFor = (inputs: ReadonlyMap<string, InputFields>): Map<string, StepInputs> => {
     const result = new Map<string, StepInputs>();
+    usePressed.clear();
     for (const { id } of players.all()) {
       const raw = inputs.get(id) ?? NEUTRAL_INPUT;
       const before = previous.get(id) ?? NEUTRAL_INPUT;
@@ -108,6 +113,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
           drop: raw.drop === true && before.drop !== true,
         },
       });
+      if (raw.use === true && before.use !== true) usePressed.add(id);
       previous.set(id, raw);
     }
     return result;
@@ -195,6 +201,31 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }
   };
 
+  // Rules I8 and I9, after interact and drop so a pickup, drop or boarding this tick already counts.
+  const stepHolds = (onFoot: ReadonlyMap<string, StepInputs>) => {
+    const body = vehicle.body;
+    const target = { pos: body.translation(), rot: body.rotation(), half: vehicleConfig.halfExtents, fuel: vehicle.fuel(), health: vehicle.health() };
+    for (const player of players.all()) {
+      const seated = player.seat !== null;
+      const aim = useTarget(player.inventory[player.slot], player.pos, target);
+      const { hold, completed } = stepHold(
+        player.hold,
+        { usePressed: usePressed.has(player.id), useHeld: onFoot.get(player.id)?.fields.use === true, slot: player.slot },
+        player.inventory,
+        seated ? null : aim,
+        seated,
+      );
+      player.hold = hold;
+      if (completed === null) continue;
+      player.inventory[completed.slot] = null;
+      if (completed.item === 'jerrycan') vehicle.addFuel(ITEM_REFUEL);
+      else vehicle.repair(ITEM_REPAIR);
+      // A second holder this tick sees the new fuel and health.
+      target.fuel = vehicle.fuel();
+      target.health = vehicle.health();
+    }
+  };
+
   let resetLastTick = new Set<string>();
   let cableTension = 0;
 
@@ -264,6 +295,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       for (const player of players.all()) player.slot = slotOf(onFoot.get(player.id)?.fields.slot ?? 0) ?? player.slot;
       resolveInteracts(onFoot);
       for (const player of players.all()) if (player.seat === null && onFoot.get(player.id)?.pressed.drop) dropSelected(player);
+      stepHolds(onFoot);
       const taut = winch.tautObstacle();
       applyPushes(taut);
       const cable = winch.applyForces(reelInput(onFoot));
@@ -304,6 +336,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         grounded: player.grounded,
         inventory: [...player.inventory],
         slot: player.slot,
+        hold: player.hold ? { action: player.hold.action, targetId: player.hold.targetId, progress: player.hold.progress } : null,
       })),
       props: [...props.snapshot(), ...items.snapshot()],
       cable: winch.state(),
@@ -329,6 +362,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     debug: () => ({ forwardSpeed: vehicle.forwardSpeed(), wheelSurfaces: vehicle.wheelSurfaces(), cableTension }),
     debugBody: (id) => (id === 'vehicle' ? vehicle.body : props.get(id)?.body ?? items.get(id)?.body),
     debugWinch: () => winch,
+    debugVehicle: () => vehicle,
     dispose() {
       players.dispose();
       props.dispose();

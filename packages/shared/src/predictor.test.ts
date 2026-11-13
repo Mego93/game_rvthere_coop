@@ -324,6 +324,7 @@ describe('createPredictor', () => {
       grounded: true,
       inventory: [null, null, null],
       slot: 0,
+      hold: null,
     };
     const copy = predictedFrom(snapshot);
     expect(copy).toEqual({ pos: { x: 1, y: 2, z: 3 }, walk: { x: 1, z: 2 }, carry: { x: 3, z: 4 }, vy: 5, grounded: true });
