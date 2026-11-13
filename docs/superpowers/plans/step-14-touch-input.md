@@ -256,3 +256,147 @@ Each task: tests first, then a Sonnet review. Run `npm test`, `npm run typecheck
 - The in-run menu button belongs to step 11 (the menu does not exist yet). Add a carried row to step 11: "the touch menu button".
 - iOS Safari fires `touchcancel` when a system gesture takes over. `cancelAll` must release every held button too, or a button can stick.
 - `pointer: coarse` is false on some touch laptops; they get keyboard and mouse, which is intended.
+
+## Amendments after the plan review (binding; where they differ from the text above, they win)
+
+Facts checked in the code:
+- `static.ts` already serves `.webmanifest` as `application/manifest+json; charset=utf-8`.
+- The home form is already at 16 px.
+- No render shadows exist.
+- No test checks the overlay's control line.
+- Vitest runs with `environment: 'node'`, so there is no DOM; tests use `EventTarget` with fake events, as `keyboard.test.ts` does.
+- Playwright 1.65 has only `touchscreen.tap()`.
+- `pointer: coarse` is true in Chromium with the iPhone 14 landscape device (750×340).
+- Step 9 commits straight onto `claude/tender-carson-9525v1`.
+
+L1 (T1, game input).
+- `source.ts` gains `export interface GameInput extends InputSource { aim(): { yaw: number; pitch: number } }`.
+- `createInputSource` (`combined.ts`) returns `GameInput`, with `aim()` reading the mouse. Its parameters are unchanged, so `combined.test.ts` passes unchanged.
+- `createTouchSource` returns `GameInput & { joystick(): { origin: {x,y}; point: {x,y} } | null }`.
+- `GameView` gains `input: () => GameInput` and `touchUi: TouchUi | null`.
+- `main.ts` picks the factory once at load (by `matchMedia`) and passes it to every `createGame`. `createGame` calls `view.input()` once at start and disposes that instance in `stop()`.
+- Every per-frame `mouse.yaw()`/`mouse.pitch()` in `game.ts` becomes `input.aim()`: the drawn yaw, `cameraPlacement` and the overlay's `aim`.
+- The touch source drains `takeLook()` into its look in both `aim()` and `sample()`, so the camera turns at frame rate.
+- The pointer-lock exit in `stop()` stays.
+
+L2 (the boundary between the source and the UI). `input/touch.ts` exports:
+```
+type TouchButtonName = 'interact' | 'use' | 'jump' | 'reelIn' | 'reelOut';
+interface TouchControls {
+  onButton(handler: (name: TouchButtonName, down: boolean) => void): void;
+  onSlot(handler: (slot: 0 | 1 | 2, down: boolean) => void): void;
+  onCancel(handler: () => void): void;
+}
+createTouchSource(opts: { surface: EventTarget; win: EventTarget; doc: EventTarget & { visibilityState: string }; width(): number; controls: TouchControls }): GameInput & { joystick(): { origin; point } | null }
+```
+- **Touch events.** The source creates its own tracker (`createTouchTracker(opts.width)`). It listens for `touchstart`, `touchmove`, `touchend` and `touchcancel` on `surface`, with `{ passive: false }`, using each event's `changedTouches` (`identifier`, `clientX`, `clientY`). It does not require `event.isTrusted`.
+- **Cancelling.** Any of these cancels everything: `blur` on `win`; `visibilitychange` to hidden on `doc`; `touchcancel`; `controls.onCancel`. Cancelling means `tracker.cancelAll()`, releasing every button, dropping a pending tap and clearing any pending long press.
+- **Long press.** It uses `setTimeout(LONG_PRESS * 1000)`.
+- **Who implements what.** `touchUi` implements `TouchControls`. U5 builds the source with a fake `TouchControls` and plain `EventTarget`s; there is no fake tracker. U5 uses `vi.useFakeTimers()`.
+- **Tracker width.** T3's `width` is `() => window.innerWidth`.
+
+L3 (browser tests).
+- C5 lives in a new file `e2e/touch.spec.ts`.
+- **Desktop-only smoke tests.** The smoke cases driven by the keyboard (boarding, walking, the seated case, and any other case that uses `keyboard` or `tap(page, 'Key…')`) get ` @keyboard` appended to their titles. The phone projects get `grepInvert: /@keyboard/`. Do this only after step 9's edits to `smoke.spec.ts` are in the branch.
+- **Projects.** Add a tracked project to `playwright.config.ts`: `{ name: 'phone-chromium', use: { ...devices['iPhone 14 landscape'], browserName: 'chromium' } }`. `e2e.local.config.ts` (untracked) adds `launchOptions.executablePath: '/opt/pw-browsers/chromium'` to the desktop and phone-chromium projects and leaves out the WebKit `phone` project. The WebKit project stays for machines that have WebKit. There is no CI, so the plan's "CI" wording is void.
+- **Skipping.** In `touch.spec.ts`, the touch cases skip when the `hasTouch` fixture is false. A desktop case asserts that `#touch-ui` is absent or hidden.
+- **Dragging.** Drags use `locator('#game').dispatchEvent('touchstart'|'touchmove'|'touchend', { touches, changedTouches, targetTouches })` with `{ identifier: 1, clientX, clientY }` objects:
+  - start at (150, 250);
+  - move to (150, 170), which is 80 px;
+  - hold for 1 s;
+  - then send `touchend`;
+  - poll until the `you` position has moved more than 2 m.
+- **Slot tap.** It uses `locator('#touch-slot-1').tap()`, then polls for `aria-pressed="true"`.
+- **Joystick.** `#touch-joystick` is hidden at the start, visible during the drag, and hidden after it.
+- "Existing tests that change" gains `e2e/smoke.spec.ts` (titles only) and `playwright.config.ts`.
+
+L4 (T9, reel).
+- `canReel(player: { seat: string | null; pos: Vec3; downed: number | null }, mount: Vec3): boolean` goes in `shared/src/winch.ts`.
+- It is true when `seat === 'driver'`, or when `seat === null && downed === null` and the distance from `mount` to `pos + (0, PUSH_HEIGHT, 0)` is ≤ `HOOK_RANGE`.
+- `reelInput` keeps its order: the driver's reel wins, otherwise the first player in join order who passes `canReel` and presses reel.
+- U8 goes in `winch.test.ts` and includes a downed player in range.
+- On the client, `mount = add(vehicle.pos, rotate(vehicle.rot, config.winchMount))`.
+- `reelVisible = canReel(local, mount) && (cable.state === 'attached' || cable.state === 'ground')`. Both buttons show together. U7 adds: a held hook gives no reel buttons.
+
+L5 (order of work).
+- Task 1 may start now: `input/*`, the input lines of `game.ts`, and `main.ts`.
+- Tasks 2 and 3 start only after step 9 is merged to `main` and merged into `step-14-touch-input`.
+- Step 14 merges after step 9.
+- `useTarget`'s context is step 9's J6 form. Extract it as `buildUseContext(local: PlayerSnapshot, players: PlayerSnapshot[], vehicle: VehicleState, config: VehicleConfig, aim: { yaw: number; pitch: number })` in a new `client/src/ui/useContext.ts`. `overlay.ts` and `touchView.ts` both import it, and the overlay's hint tests must pass unchanged.
+
+L6 (T13). `OverlayData` gains the optional field `touch?: boolean`. When it is absent or false, the existing control line stays word for word. `overlay.test.ts` gains two new tests:
+- by default the text ends with `WASD move   Space jump (brake when driving)   E board or leave   click to look`;
+- with `touch: true` it ends with `joystick move   drag right half to look   buttons act`.
+
+The hint lines keep the keyboard wording until the HUD step.
+
+L7 (T6, ids and layering).
+- **Ids and labels.**
+
+  | Element | Id | Label |
+  |---|---|---|
+  | Root | `#touch-ui` | |
+  | Interact button | `#touch-interact` | "Act" |
+  | Use button | `#touch-use` | "Use" |
+  | Jump button | `#touch-jump` | "Jump", or "Brake" when seated |
+  | Reel-in button | `#touch-reel-in` | "Reel in" |
+  | Reel-out button | `#touch-reel-out` | "Reel out" |
+  | Slots | `#touch-slot-0` to `#touch-slot-2` | |
+  | Joystick | `#touch-joystick` | |
+  | Rotate prompt | `#rotate-prompt` | |
+
+  The selected slot has `aria-pressed="true"` and the class `selected`. The other slots have `aria-pressed="false"`.
+- **The joystick** is a ring of radius `JOYSTICK_RADIUS` centred on the origin, plus a knob at the touch point clamped to the ring. `TouchUi` gains `setJoystick(state: { origin; point } | null)`, which `game.ts` calls each frame with `input.joystick()`. The joystick is hidden while the state is null.
+- **Layering.** `#touch-ui` is `position: fixed; inset: 0; pointer-events: none`, with a z-index above `#overlay` and the canvas. Only the buttons and slots have `pointer-events: auto` and `touch-action: none`.
+- **Touch ownership.** Each button and slot follows the `identifier` of the touch that started on it, and goes up when that touch ends or is cancelled. Other touches on the same element are ignored.
+- **Lifetime.** `createTouchUi(root: HTMLElement): TouchUi & TouchControls & { dispose(): void }`. `main.ts` creates it on the first run on a touch device. `#touch-ui` is shown while a game runs and hidden on `onClose`.
+
+L8 (T7).
+- A slot press selects that slot at once, on `touchstart`.
+- If the same touch is still down after `LONG_PRESS`, `drop` latches true. The next `sample()` reports it and clears it, so one press gives at most one sample with `drop`.
+- Releasing early cancels the timer.
+- The server applies `slot` before `drop` in the same tick.
+
+L9 (U5 additions).
+- With a button held and a slot press pending, a `blur`, a `touchcancel` or `controls.onCancel` gives every button false at the next sample, and no `drop` after `LONG_PRESS`.
+- A tap made before the cancel is dropped too.
+
+L10 (U9). U9 becomes:
+- (a) `server.test.ts` gains `expect(contentType('x.webmanifest')).toBe('application/manifest+json; charset=utf-8')`;
+- (b) in `touch.spec.ts`, on the desktop project, `page.request.get('/manifest.webmanifest')` returns 200 with that type, and its JSON `start_url` is "/". `/icon-192.png` returns 200 with `image/png`.
+
+Drop "add the type if missing" from T12.
+
+L11 (touchView).
+- Signature: `touchView(data: Pick<OverlayData, 'config' | 'vehicle' | 'players' | 'localId' | 'aim' | 'cable'>): TouchView`.
+- With no local player or a null vehicle, it returns `{ seated: false, useVisible: false, reelVisible: false, slots: [null, null, null], selected: 0 }`.
+- `seated` is `local.seat !== null`.
+- `slots` and `selected` come from the local snapshot.
+- While the local player is downed, `useVisible` and `reelVisible` are false. U7 covers this.
+
+L12 (constants and CSS).
+- Delete the `TOUCH_MAX_PIXEL_RATIO` row. `main.ts` keeps its cap of 2.
+- T10's shadow sentence becomes: "`renderer.shadowMap` is never enabled and no mesh has `castShadow`; nothing changes".
+- The T10 CSS is unconditional. `user-select: none` and `-webkit-touch-callout: none` go on `#game` and `#touch-ui` only, never on `#home`. `gesturestart` is prevented on `document`.
+
+L13 (icons). `scripts/icons.mjs` uses only `node:zlib`: `deflateSync` for IDAT and `crc32` for the chunks.
+- It writes RGBA PNGs to `packages/client/public/icon-192.png` and `icon-512.png`.
+- Each icon is a `#2f6f9f` square with a white "L" made of two rectangles:
+  - the stem spans x 30–45 % and y 20–80 %;
+  - the foot spans x 30–70 % and y 65–80 %.
+- It is run by hand (`node scripts/icons.mjs`), and the PNGs are committed. There is no npm script and no dependency.
+- `<link rel="icon" href="data:,">` becomes the 192 PNG, which is also the `apple-touch-icon`.
+
+L14 (tests).
+- U2 adds:
+  - a move or end with an unknown or ignored id changes nothing;
+  - a second right touch while a look touch is active is ignored.
+- U6 becomes: for the combined source and the touch source, the sorted `Object.keys` and each value's `typeof` are equal, and `parseClientMessage({ type: 'input', seq: 1, ...sample })` is not null.
+
+L15 (scope and documents).
+- The scope line above also covers `shared/world.ts`, `shared/winch.ts` and `server.test.ts`.
+- Task 4 changes:
+  - Carried row 14 moves into the owner's checklist unchanged and is not marked done.
+  - Add a carried row to step 11: the touch menu button.
+  - Add a carried row to step 12: the touch hint wording, and the overlay's size on a 340 px tall screen (it covers the slot tiles).
+- The owner's checklist notes that iOS treats `display: fullscreen` as standalone and ignores `orientation`, so the rotate prompt matters.
