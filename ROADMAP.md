@@ -7,9 +7,9 @@ Single source of truth for where the project stands. Update it in the same commi
 
 ## Current state
 
-**Current step:** step 5 is done (branch `claude/tender-carson-9525v1`, plan in `docs/superpowers/plans/step-5-push-hands-props.md`); step 6 (winch) is next. The owner still has to check rendering and feel for steps 3 to 5 and the iPhone load (see "Working notes"). Commits since step 3 are not pushed: pushing waits for the owner.
+**Current step:** step 5 is done (branch `claude/tender-carson-9525v1`, plan in `docs/superpowers/plans/step-5-push-hands-props.md`); step 6 (winch) is done on the same branch; step 7 (fuel, health, inventory) is next. The owner still has to check rendering and feel for steps 3 to 5 and the iPhone load (see "Working notes"). Commits since step 3 are not pushed: pushing waits for the owner.
 
-**Runnable today:** `npm run dev` starts the game server and the page. Create a room on the home page and share its address; everyone who opens it appears as a character beside the same vehicle on the test ground. Players walk (WASD) and jump (Space), board with E at the nearest free seat (the driver's seat if standing at its door), drive from the driver seat, and leave with E. After clicking the canvas, the mouse looks around from a shoulder camera with a crosshair; while seated the camera follows the vehicle. The local player's walking and jumping are predicted on the page and corrected on each snapshot; the debug overlay shows the predicted position (`you`) and the server's (`server`) while prediction is active. Behind the start stand three crates and a heavy barrier: walking into the vehicle or a prop pushes it, E beside a crate picks it up and E again throws it along the aim, players can stand on props, and the barrier slides only while enough players push it (1 with one player, 2 with 2–3, 3 with 4–6). Four players can roll a Lodgy lying on its side back onto its wheels.
+**Runnable today:** `npm run dev` starts the game server and the page. Create a room on the home page and share its address; everyone who opens it appears as a character beside the same vehicle on the test ground. Players walk (WASD) and jump (Space), board with E at the nearest free seat (the driver's seat if standing at its door), drive from the driver seat, and leave with E. After clicking the canvas, the mouse looks around from a shoulder camera with a crosshair; while seated the camera follows the vehicle. The local player's walking and jumping are predicted on the page and corrected on each snapshot; the debug overlay shows the predicted position (`you`) and the server's (`server`) while prediction is active. Behind the start stand three crates and a heavy barrier: walking into the vehicle or a prop pushes it, E beside a crate picks it up and E again throws it along the aim, players can stand on props, and the barrier slides only while enough players push it (1 with one player, 2 with 2–3, 3 with 4–6). Four players can roll a Lodgy lying on its side back onto its wheels. The hook rests on the front bumper: E there (aiming at the bumper) takes it, E at an anchor (the orange posts) attaches it, E with no anchor near drops it; Q reels in and R reels out, from the driver seat or standing at the bumper. The barrier has an anchor on its top.
 
 ## Steps (spec 1: engine and course 1)
 
@@ -22,7 +22,7 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | 3 | Server-side players on foot: movement, moving bodies, shove-out, spawn slots, seats, kill-plane respawn; shoulder camera and crosshair; iPhone load check | done | claude/busy-brown-wkdjue | [plan](docs/superpowers/plans/step-3-players-on-foot.md) | Automated tests |
 | 4 | Client prediction of walking and jumping | done | claude/busy-brown-wkdjue, merged on claude/tender-carson-9525v1 | [plan](docs/superpowers/plans/step-4-client-prediction.md) | Automated tests |
 | 5 | Push, hands, light debris, heavy obstacles, prop kill plane | done | claude/tender-carson-9525v1 | [plan](docs/superpowers/plans/step-5-push-hands-props.md) | Automated tests |
-| 6 | Winch | todo | | | Automated tests |
+| 6 | Winch | done | claude/tender-carson-9525v1 | [plan](docs/superpowers/plans/step-6-winch.md) | Automated tests |
 | 7 | Vehicle fuel, health and damage; inventory; jerrycans and toolboxes; hold actions | todo | | | Automated tests |
 | 8 | Checkpoints and restart, vehicle loss, win rule, timer | todo | | | Automated tests |
 | 9 | Player health, damage, downed state, health kits, revival and respawn | todo | | | Automated tests |
@@ -81,6 +81,7 @@ What step 2 cost and what changed because of it. Estimates are rough, plus or mi
 - **Step 3 is unverified by hand:** rendering and game feel (walking, jumping, the shoulder camera, how the characters look, the crosshair) and the iPhone load were not checked; they are for the owner. Automated tests pass. The smoke test ran in Chromium only in the session that wrote it (Playwright's browser download was blocked there, so the system Chrome was used); the WebKit phone project was not run.
 - **Step 4 is unverified by hand:** prediction feel (smoothing, snap) is for the owner to judge on a real connection, since localhost has no latency. Automated tests pass, and the smoke test's desktop project ran in the system Chrome (Playwright's browser download was blocked); the WebKit phone project was not run.
 - **Step 5 is unverified by hand:** how pushing feels (strength, the stronger push on a tipped vehicle), throwing distance, the barrier's slide, crates tumbling when pushed (accepted: the push acts at their top edge), climbing onto the roof from a crate or the barrier, and the prop meshes (colours chosen without design). Automated tests pass and the smoke test's desktop project passed in the preinstalled Chromium; WebKit was not run.
+- **Step 6 is unverified by hand:** how winching feels, the rope and hook's look, reaching the bumper and anchors with the aim, and dragging the barrier. Automated tests and the desktop smoke test pass.
 - **Session of 2026-11-13 (cloud):** `git push` is refused by this environment's permission rules, which matches the rule that pushing waits for the owner; every commit since step 3 is local to the branch and to a local `main`.
 - **Six-player cost (measured):** about 0.28 ms per tick; a snapshot is about 1.1 KB (about 150 bytes per player), roughly 134 KB/s per room to six clients at 20 Hz. Step 4's four new snapshot fields add roughly 90 bytes per player to that; measure again at step 16.
 
@@ -88,7 +89,7 @@ What step 2 cost and what changed because of it. Estimates are rough, plus or mi
 
 - A braked vehicle creeps at under 0.1 m/s on the steep (25°) reference slope. The wheel model causes it; a scenario test bounds it.
 - The production bundle is about 4.9 MB (1.8 MB gzip) since step 4 brought Rapier back into the page.
-- An upturned vehicle, an RV on its side, or an RV stuck on sand cannot be recovered yet: create a new room. The winch arrives at step 6 and checkpoint restart at step 8. A Lodgy on its side is righted by four pushers.
+- An upturned vehicle or an RV on its side cannot be recovered yet: create a new room. Checkpoint restart arrives at step 8 (W8, owner to confirm). A Lodgy on its side is righted by four pushers; an RV stuck on sand is winched out.
 - Reloading the page, or losing the connection, returns the player to the name form. Joining again usually makes a new player, because the server removes a disconnected player at once; if the server has not yet seen the old connection close, the same tab takes its old place back. Held slots arrive at step 11 and automatic reconnection at step 19.
 - The RV cannot pull away from rest on sand, by the owner's decision (it is how a heavy road-going motorhome behaves): sand's rolling resistance (0.25 × its weight, about 9200 N) exceeds its engine force (7500 N), so it stays put in either direction until it is pushed or winched out. Arriving with speed it crosses: by arithmetic it loses about 0.45 m/s² and a 30 m patch costs it under 2 m/s from 15 m/s, not yet confirmed by a test. The Lodgy crawls through. For the RV the tests are "from rest on sand it stays within 0.5 m for 10 s" and "entering the sand patch at 12 m/s it crosses"; the winch (step 6) gets it out.
 - After the server discards a backlog of inputs, the view holds the newest snapshot until the clock offset converges (5% per snapshot).
@@ -106,8 +107,6 @@ Findings from reviews that belong to a later step. Each step's plan must cover i
 
 | Step | Item |
 |---|---|
-| 6 | The winch frees the RV from sand (F6): test it from rest on the test ground's sand patch |
-| 6 | Use the tension formula of `experiments/cable/cable.experiment.ts` exactly, or re-run the sweep. Test near the stall angle as well as at 25°, add a test tying stiffness to reel speed, and test the 25 m maximum length and the test ground's anchor |
 | 7 | A vehicle at rest reports a vertical speed of about −0.06 m/s; impact thresholds and "at rest" checks must allow for it |
 | 8 | Test the test ground's ramp, finish and trigger boxes when checkpoints first use them |
 | 16 | Every sand segment must give the RV a run-up: it cannot start from rest on sand, and a stop on sand (a service stop, a checkpoint restart) would trap it. The spec's rule that the RV completes every segment includes this |
@@ -204,3 +203,15 @@ Decisions made during the design and afterwards. Change the spec too when a deci
 | 2026-11-13 | A player who loses their ground body keeps its velocity at that point as carry, even when the controller still reports grounded | Walking off a moving crate's edge reported grounded with no contact for one tick and lost the velocity |
 | 2026-11-13 | Seating a player who holds a prop releases it at the hold pose; interact never boards while holding, because throwing comes first | The spec's "boarding drops debris" can only happen through a seat change |
 | 2026-11-13 | Interact uses the tick's own input yaw and pitch for aim | The stored yaw is updated later in the tick |
+| 2026-11-13 | The cable's tension is the experiment's formula unchanged; an obstacle gets the opposite impulse at its anchor point (W1) | The experiment validated the values for that formula only |
+| 2026-11-13 | The hook is a point, not a body; dropped, it lies on the ground found by a downward ray, or is stowed if there is none (W2) | No physics needed for a hook nobody holds |
+| 2026-11-13 | A heavy prop's anchor point is set per kind (the barrier's is its top face); a static anchor's attach point is 0.5 m above its pose (W3, V12) | Both kinds of anchor attach the same way |
+| 2026-11-13 | Hook, anchor and winch-box ranges are measured from the chest (feet + 1 m), 2 m (W4) | One reach for every winch interaction |
+| 2026-11-13 | The reel comes from the driver if non-zero, else the first player in join order at the winch box; it shortens only below the cap (W5) | The spec's "driver wins", made deterministic |
+| 2026-11-13 | Reeling in stows a ground hook at once; reeling does nothing while stowed or held (W6) | The spec's "reeling in retracts it" |
+| 2026-11-13 | A heavy obstacle's lock is decided once per tick, before any impulse: unlocked with enough pushers or a taut cable (W7, V2) | A locked body loses an impulse, so the unlock must come first |
+| 2026-11-13 | A cable at the front bumper cannot right a rolled vehicle; an RV on its side or any upturned vehicle needs a checkpoint restart (W8, owner to confirm) | Measured: no roll of the RV with anchors 12 m to either side, low or high; the Lodgy rolls only from the floor side |
+| 2026-11-13 | A held hook beyond 25 m from the mount is pulled from the hands; a ground hook beyond 25 m is stowed (W9) | The spec's two length rules, checked after characters move |
+| 2026-11-13 | Test-ground anchors: one on the steep slope 39 m up, one 10 m beyond the sand patch (W10) | The climb and sand scenarios need anchors in reach |
+| 2026-11-13 | The board candidate's aim angle is measured to the chosen seat, not to the vehicle's box (W11) | Aiming at the bumper otherwise boarded instead of taking the hook |
+| 2026-11-13 | The world owns the hook in a player's hands: it stows or drops the hook before seating, respawn and removal (V6) | The winch is created after the players and must stay consistent with their hands |

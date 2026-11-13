@@ -156,14 +156,14 @@ The admin picks the vehicle in the lobby. Vehicles differ in look and handling b
 | Climbing | Weak on steep slopes | Needs the winch on any real slope |
 | Soft sand | Slows to a crawl | Cannot pull away from rest on sand; crosses it only with a run-up. The winch frees it |
 | Fuel burn | Baseline | About 1.5 times |
-| Pushing | Crew can shove it free | Barely moves; righting it needs the winch |
+| Pushing | Crew can shove it free | Barely moves; an RV on its side cannot be righted and needs a checkpoint restart |
 | Turning circle | Tight | Wide |
 
 Common to both:
 
 - Fuel drains in proportion to throttle. At 0 fuel, throttle has no effect.
 - Health drops on impacts above a speed threshold, scaled by the speed above it, and continuously while upside down.
-- A flipped vehicle is righted by pushing or winching.
+- A Lodgy on its side is righted by pushing. An upturned vehicle, or an RV on its side, is recovered by a checkpoint restart: a cable at the front bumper cannot roll a vehicle.
 - Same winch, same health pool.
 - Models are recognisable shapes without any manufacturer's name or badge.
 
@@ -184,7 +184,7 @@ Course geometry is sized so the RV fits, and every segment is completable by the
 ### Push
 
 - The push is a horizontal force along the player's move input, applied at the contact point: the point of the object's box nearest to the player's push point, a fixed height above the feet. It applies only while the input points into the surface. A player's force is a constant, capped at the object's mass times a maximum acceleration, so light debris is not launched.
-- On the vehicle, forces add per player, capped at 4 pushers' worth (the first 4 in join order among those pushing it that tick). Because the force acts at the contact point, pushing can roll a flipped vehicle upright. While the vehicle is tipped more than 45° from upright, each player's push uses a larger constant, so four players can roll a Lodgy lying on its side back onto its wheels; an upturned or tipped RV needs the winch.
+- On the vehicle, forces add per player, capped at 4 pushers' worth (the first 4 in join order among those pushing it that tick). Because the force acts at the contact point, pushing can roll a flipped vehicle upright. While the vehicle is tipped more than 45° from upright, each player's push uses a larger constant, so four players can roll a Lodgy lying on its side back onto its wheels; an upturned vehicle or a tipped RV needs a checkpoint restart.
 - A player standing on an object applies no push to it.
 - A heavy obstacle is locked in place. It unlocks only while enough players push it at once, or while the cable attached to it is taut. The count is 1 when one player is connected, 2 for 2–3 connected players, 3 for 4–6, and follows the players currently connected. The vehicle cannot shove a locked obstacle. A heavy obstacle never rotates: unlocked, it slides.
 
@@ -665,7 +665,8 @@ These stand in for judgements of feel. Each is a headless simulation run with a 
 - The Lodgy climbs the reference gentle slope unaided and fails the reference steep slope unaided.
 - Each vehicle climbs the reference steep slope with the winch within a time limit.
 - The RV fails the reference medium slope unaided.
-- A flipped Lodgy is righted by the stated number of pushers within a time limit; a flipped RV is righted by the winch.
+- A Lodgy on its side is righted by the stated number of pushers within a time limit, and not by one.
+- The winch alone climbs a 33° slope and stalls on a 36° one, for both vehicles, without exceeding the speed and spin limits.
 - Winching never produces a vehicle speed or spin above a sanity limit, including when a stalled cable is suddenly freed.
 - A vehicle at rest on flat ground stays at rest for 10 s.
 - A player standing on the roof of a vehicle driving at speed stays on it, and lands back on it after a jump.
