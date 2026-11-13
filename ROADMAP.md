@@ -68,13 +68,24 @@ Set `PORT` to change the server's port when using `npm start`; `npm run dev` exp
 
 In the page: WASD to drive, Space to brake. Only the first player in the room drives until seats exist (step 3).
 
+## Working notes (for every session)
+
+What step 2 cost and what changed because of it. Estimates are rough, plus or minus 50%.
+
+- **Step 2:** about 5 hours of active execution plus planning, and the usage limit was hit twice (about three 5-hour windows). Roughly 45 subagent runs and 2.6 million tokens, nearly all on Sonnet. Seven of ten tasks needed a fix round, and every one traced back to a gap in the plan. The largest cost was the main session (Fable) writing and verifying all the code before the subagents copied it.
+- **From step 3:** plans fix interfaces, constants, numbered rules and numbered test cases, and contain no finished code; a plan is reviewed once by Opus before implementation. See `CLAUDE.md`, "Plans" and "Models".
+- **Time per task:** a clean task takes about 5 minutes (implementation 1 to 1.5, review 1.5 to 2.5). A fix round adds 15 to 25 minutes, mostly designing and checking the fix.
+- **Remaining steps, active hours each:** steps 3, 5, 7, 11, 15 about 7 to 9; steps 4, 6, 8, 9, 10, 12, 14, 16, 19 about 4 to 6; steps 13, 17, 18 about 2 to 3. In total about 80 to 110 hours, or 25 to 35 five-hour windows, not counting the owner's own time on the sign-off steps (12, 13, 14, 16, 17, 18).
+- **Where to look for savings:** let Sonnet write the code (done from step 3), review the plan before implementing (done from step 3), and run the dispatch-and-verify loop on a cheaper model while Fable keeps planning and designing fixes.
+- **Waiting on the owner:** the real-iPhone checks (the page loading over the same Wi-Fi at the end of step 3; touch controls at step 14).
+
 ## Known issues
 
 - A braked vehicle creeps at under 0.1 m/s on the steep (25°) reference slope. The wheel model causes it; a scenario test bounds it.
 - The production bundle is about 0.5 MB. It returns to about 5 MB at step 4, when client prediction brings Rapier back into the page.
 - A vehicle that has rolled over or is stuck cannot be recovered yet: create a new room. Pushing arrives at step 5, the winch at step 6 and checkpoint restart at step 8.
 - Reloading the page, or losing the connection, returns the player to the name form. Joining again usually makes a new player, because the server removes a disconnected player at once; if the server has not yet seen the old connection close, the same tab takes its old place back. Held slots arrive at step 11 and automatic reconnection at step 19.
-- With the starting values the RV cannot move off from rest on sand: sand's rolling resistance (0.25 × its weight, about 9200 N) exceeds its engine force (7500 N). The Lodgy crawls. The test "sand slows it" passes for the RV at zero distance. The owner decides whether the RV should bog down completely; the test gets an explicit bound either way once decided.
+- The RV cannot pull away from rest on sand, by the owner's decision (it is how a heavy road-going motorhome behaves): sand's rolling resistance (0.25 × its weight, about 9200 N) exceeds its engine force (7500 N), so it stays put in either direction until it is pushed or winched out. Arriving with speed it crosses: by arithmetic it loses about 0.45 m/s² and a 30 m patch costs it under 2 m/s from 15 m/s, not yet confirmed by a test. The Lodgy crawls through. The test "sand slows it" passes for the RV at zero distance and is replaced in the rows below.
 
 ## Carried into later steps
 
@@ -89,9 +100,11 @@ Findings from reviews that belong to a later step. Each step's plan must cover i
 | 3 | Protocol tests to add as the protocol grows: non-finite and boundary values for every input field, length limits from both sides, extra and `__proto__` fields dropped by `parseClientMessage`, and every vehicle and lobby field in `parseServerMessage`. Check a player's `colour` against `#rrggbb` where it first reaches a style or a material. The input queue stores and returns input objects by reference. Turn on Playwright's trace on failure |
 | 4 | The page no longer bundles Rapier; prediction brings it back, and the bundle size with it |
 | 4 | Snapshot buffer: `sample` returns stored objects by reference at both ends; tests are missing for the clock offset's jump to an earlier snapshot, duplicates, a long gap and a rewind; after the server discards a backlog the view holds the newest snapshot until the offset converges (5% per snapshot). The first frame's time step can be slightly negative. Test `ackSeq` through the neutral substitute |
+| 5 | The RV is bogged on sand from rest by design: replace the test "sand slows it" for the RV with "from rest on sand it stays within 0.5 m for 10 s" and "entering the sand patch at 12 m/s it crosses", and use pushing and the winch to get it out |
 | 6 | Use the tension formula of `experiments/cable/cable.experiment.ts` exactly, or re-run the sweep. Test near the stall angle as well as at 25°, add a test tying stiffness to reel speed, and test the 25 m maximum length and the test ground's anchor |
 | 7 | A vehicle at rest reports a vertical speed of about −0.06 m/s; impact thresholds and "at rest" checks must allow for it |
 | 8 | Test the test ground's ramp, finish and trigger boxes when checkpoints first use them |
+| 16 | Every sand segment must give the RV a run-up: it cannot start from rest on sand, and a stop on sand (a service stop, a checkpoint restart) would trap it. The spec's rule that the RV completes every segment includes this |
 | 11 | `lobby` gains `timeOfDay` and `weather`; held slots replace the immediate removal of a disconnected player; the admin's choice replaces `VEHICLE` |
 | 11 | Names are only trimmed and length-checked: control and invisible characters and look-alike letters pass, and a newline in a name forges lines in the debug overlay on other players' pages. A throw in the page's `lobby` handler leaves the page blank |
 | 14 | The home form on a real iPhone: no zoom when a field is focused, and the form scrolls with the keyboard open in landscape (its shadow is clipped when it overflows). Checked so far in Chromium and WebKit only |

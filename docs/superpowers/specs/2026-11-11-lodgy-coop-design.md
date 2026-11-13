@@ -154,6 +154,7 @@ The admin picks the vehicle in the lobby. Vehicles differ in look and handling b
 | Mass | Baseline | About 2.5 times heavier |
 | Tipping | Rolls but recovers | High centre of gravity |
 | Climbing | Weak on steep slopes | Needs the winch on any real slope |
+| Soft sand | Slows to a crawl | Cannot pull away from rest on sand; crosses it only with a run-up. Pushing or the winch frees it |
 | Fuel burn | Baseline | About 1.5 times |
 | Pushing | Crew can shove it free | Barely moves; righting it needs the winch |
 | Turning circle | Tight | Wide |
