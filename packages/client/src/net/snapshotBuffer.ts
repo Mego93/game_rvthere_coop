@@ -66,6 +66,8 @@ function copyPlayer(p: PlayerSnapshot): PlayerSnapshot {
     inventory: [p.inventory[0], p.inventory[1], p.inventory[2]],
     slot: p.slot,
     hold: p.hold && { action: p.hold.action, targetId: p.hold.targetId, progress: p.hold.progress },
+    health: p.health,
+    downed: p.downed,
   };
 }
 

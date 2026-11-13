@@ -144,6 +144,8 @@ const onFoot = {
   inventory: [null, 'jerrycan', null],
   slot: 1,
   hold: null,
+  health: 100,
+  downed: null,
 };
 const seated = { ...onFoot, playerId: 'p2', seat: 'driver' };
 const onVehicle = { ...onFoot, playerId: 'p3', ground: { bodyId: 'vehicle', localPos: { x: 0, y: 1, z: 0 } } };

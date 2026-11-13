@@ -56,6 +56,8 @@ const player = (playerId: string, x: number, z: number, seat: string | null = nu
   inventory: [null, null, null],
   slot: 0,
   hold: null,
+  health: 100,
+  downed: null,
 });
 // The RV's driver door is at x = 1.25 - 1.15, z = -30.04 - 2.2.
 const nearDoor = player('p1', -1.1, -32.24);

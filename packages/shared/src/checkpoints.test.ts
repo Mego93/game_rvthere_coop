@@ -119,7 +119,7 @@ describe('recordState', () => {
       heldIds: new Set(['a']),
       courseProps: placed,
       items: [{ id: 'item-1', kind: 'jerrycan', pos: vec3(1, 1, 1), rot: IDENTITY }],
-      players: [{ id: 'p1', inventory: ['toolbox', null, null] }],
+      players: [{ id: 'p1', inventory: ['toolbox', null, null], health: 70 }],
     });
     expect(record.props.get('a')!.centre.x).toBe(1);
     expect(record.props.get('a')!.centre.y).toBeGreaterThan(0);
@@ -127,6 +127,7 @@ describe('recordState', () => {
     expect(record.props.get('b')!.centre).toEqual(vec3(8, 5, 5));
     expect(record.items).toEqual([{ id: 'item-1', kind: 'jerrycan', centre: vec3(1, 1, 1), rot: IDENTITY }]);
     expect(record.players.get('p1')!.inventory).toEqual(['toolbox', null, null]);
+    expect(record.players.get('p1')!.health).toBe(70);
     expect(record.fuel).toBe(0.4);
   });
 });

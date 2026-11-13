@@ -159,6 +159,8 @@ const player = (playerId: string, x: number, yaw: number): PlayerSnapshot => ({
   inventory: [null, null, null],
   slot: 0,
   hold: null,
+  health: 100,
+  downed: null,
 });
 
 // Two snapshots (ticks 6 and 12) that arrive on time; sampled at `tick` the view is that tick minus the delay.
@@ -326,6 +328,14 @@ test('a full snapshot replaces the props: one missing from it is gone', () => {
   buffer.push(snapshot(6, [], [prop('b', 3)], true), 6 * TICK_DT);
   expect(buffer.latestProps().map((p) => p.id)).toEqual(['b']);
   expect(buffer.sample(100)!.props.map((p) => p.id)).toEqual(['b']);
+});
+
+test('copies the health and the downed timer of a player', () => {
+  const hurt: PlayerSnapshot = { ...player('a', 0, 0), health: 37, downed: 12.5 };
+  const buffer = pair([player('a', 0, 0)], [hurt]);
+  const view = buffer.sample((9 + DELAY_TICKS) * TICK_DT)!;
+  expect(view.players[0]!.health).toBe(37);
+  expect(view.players[0]!.downed).toBe(12.5);
 });
 
 test('before any snapshot there are no props', () => {

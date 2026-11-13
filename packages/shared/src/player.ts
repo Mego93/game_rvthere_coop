@@ -1,10 +1,15 @@
 import {
+  DOWNED_TIMEOUT,
+  FALL_DAMAGE,
+  FALL_DAMAGE_SPEED,
   PLAYER_CONTROLLER_OFFSET,
   PLAYER_EYE_HEIGHT,
   PLAYER_HEIGHT,
+  PLAYER_MAX_HEALTH,
   PLAYER_MAX_SLOPE_DEG,
   PLAYER_OVERLAP_LIFT,
   PLAYER_RADIUS,
+  PLAYER_REVIVE_HEALTH,
   PLAYER_STEP_HEIGHT,
   PLAYER_WALK_SPEED,
   HOLD_OFFSET,
@@ -14,10 +19,12 @@ import {
   SHOVE_STEP,
   THROW_HEAD_CLEARANCE,
   THROW_SPEED,
+  TICK_DT,
   type ItemKind,
 } from './constants';
 import type { BuiltCourse } from './course';
 import type { Hold } from './holds';
+import { damageAbove } from './health';
 import { GROUP_GROUND, GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, sub, vec3, yawOf, type Pose, type Quat, type Vec3 } from './math';
 import { exitPoints } from './seats';
@@ -57,6 +64,18 @@ export interface PlayerState {
   inventory: [ItemKind | null, ItemKind | null, ItemKind | null];
   slot: 0 | 1 | 2;
   hold: Hold | null;
+  // 0..100.
+  health: number;
+  // Seconds left before respawn while downed, else null.
+  downed: number | null;
+  // Seconds left per body id before it may hurt this player again.
+  hitCooldown: Map<string, number>;
+}
+
+export interface PendingDamage {
+  playerId: string;
+  source: 'fall' | 'vehicle' | 'prop' | 'debug';
+  amount: number;
 }
 
 export interface StepInputs {
@@ -79,6 +98,14 @@ export interface Players {
   teleport(id: string, pos: Vec3): void;
   // The pushes found by the last stepOnFoot, cleared by the call (rule F4).
   takePushIntents(): PushIntent[];
+  // The falls found by the last stepOnFoot (rule H3), cleared by the call.
+  takeDamage(): PendingDamage[];
+  // Rule H5: the held prop is released in place, the hold is cleared and the timer starts. The world drops the hook first.
+  setDowned(id: string): void;
+  // Rule H10: health set, downed cleared.
+  revive(id: string, health: number): void;
+  // Rules H6 and H8: at findSpawn, health PLAYER_REVIVE_HEALTH, no downed, no hit cooldowns. Returns the spot.
+  respawn(id: string): Vec3;
   // Rule K2: false when the player is seated, has full hands, or the prop is held or unknown.
   pickUp(id: string, propId: string): boolean;
   // Rule K3, along the given aim; does nothing with empty hands.
@@ -358,6 +385,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
   };
 
   let intents: PushIntent[] = [];
+  let damage: PendingDamage[] = [];
 
   // Rules H1 to H3: one intent per body this player walked into the side of.
   const gatherPushes = (state: PlayerState, wish: { x: number; z: number }, collisions: ReadonlyArray<{ handle: number; normalY: number }>) => {
@@ -385,8 +413,9 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     const { fields, pressed } = step;
     const wish = wishVelocity(state.yaw, finite(fields.moveX), finite(fields.moveY));
     const wasOn = state.ground?.bodyId ?? null;
+    const wasAirborne = !state.grounded;
     const entry = entries.get(state.id)!;
-    const { collisions } = stepWalk(
+    const { collisions, moveVy } = stepWalk(
       { controller, collider: entry.collider, groups: worldGroups },
       state,
       pressed.jump,
@@ -405,6 +434,10 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
           }
         }
       }
+    }
+    if (wasAirborne && state.grounded) {
+      const amount = damageAbove(Math.max(0, -moveVy), FALL_DAMAGE_SPEED, FALL_DAMAGE);
+      if (amount > 0) damage.push({ playerId: state.id, source: 'fall', amount });
     }
     state.ground = standingOn === null ? null : { bodyId: standingOn, localPos: toBodyFrame(bodyOf(standingOn).body, state.pos) };
     // Leaving a body takes its velocity, even on a tick the controller still reports grounded (the body's edge, or its snap).
@@ -433,6 +466,9 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         inventory: [null, null, null],
         slot: 0,
         hold: null,
+        health: PLAYER_MAX_HEALTH,
+        downed: null,
+        hitCooldown: new Map(),
       };
       const collider = physics.createCollider(
         rapier.ColliderDesc.capsule(CAPSULE_HALF_SEGMENT, PLAYER_RADIUS)
@@ -453,6 +489,13 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     all: () => [...entries.values()].map(({ state }) => state),
     stepOnFoot(inputs) {
       intents = [];
+      damage = [];
+      for (const { state } of entries.values()) {
+        for (const [bodyId, left] of state.hitCooldown) {
+          if (left - TICK_DT <= 0) state.hitCooldown.delete(bodyId);
+          else state.hitCooldown.set(bodyId, left - TICK_DT);
+        }
+      }
       for (const { state } of entries.values()) {
         const step = inputs.get(state.id) ?? NEUTRAL_STEP;
         state.yaw = finite(step.fields.yaw);
@@ -512,6 +555,38 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       const taken = intents;
       intents = [];
       return taken;
+    },
+    takeDamage() {
+      const taken = damage;
+      damage = [];
+      return taken;
+    },
+    setDowned(id) {
+      const state = entries.get(id)?.state;
+      if (!state) return;
+      releaseHeld(state, state.yaw, vec3(0, 0, 0));
+      state.hold = null;
+      state.downed = DOWNED_TIMEOUT;
+    },
+    revive(id, health) {
+      const state = entries.get(id)?.state;
+      if (!state) return;
+      state.health = health;
+      state.downed = null;
+    },
+    respawn(id) {
+      const pos = findSpawn(id);
+      const state = entries.get(id)?.state;
+      if (!state) return pos;
+      state.hold = null;
+      restAt(state, pos);
+      state.seat = null;
+      state.grounded = false;
+      state.health = PLAYER_REVIVE_HEALTH;
+      state.downed = null;
+      state.hitCooldown.clear();
+      placeCollider(id);
+      return pos;
     },
     pickUp(id, propId) {
       const state = entries.get(id)?.state;

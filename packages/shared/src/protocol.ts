@@ -91,6 +91,10 @@ export interface PlayerSnapshot {
   slot: 0 | 1 | 2;
   // The item use in progress; progress is 0..1.
   hold: { action: string; targetId: string; progress: number } | null;
+  // The server's health rounded down, 0..100.
+  health: number;
+  // Seconds left before respawn while downed.
+  downed: number | null;
 }
 
 export interface SnapshotMessage extends WorldSnapshot {

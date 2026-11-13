@@ -15,7 +15,7 @@ export interface CheckpointRecord {
   health: number;
   props: Map<string, BodyPose>;
   items: { id: string; kind: ItemKind; centre: Vec3; rot: Quat }[];
-  players: Map<string, { inventory: (ItemKind | null)[] }>;
+  players: Map<string, { inventory: (ItemKind | null)[]; health: number }>;
 }
 
 const conjugate = (q: Quat): Quat => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
@@ -63,7 +63,7 @@ export interface RecordInput {
   heldIds: ReadonlySet<string>;
   courseProps: readonly Placed[];
   items: PropSnapshot[];
-  players: { id: string; inventory: readonly (ItemKind | null)[] }[];
+  players: { id: string; inventory: readonly (ItemKind | null)[]; health: number }[];
 }
 
 // Rule Q4: a held prop is recorded at its course spawn.
@@ -83,6 +83,6 @@ export function recordState(input: RecordInput): CheckpointRecord {
     health: input.health,
     props,
     items: input.items.map((item) => ({ id: item.id, kind: item.kind as ItemKind, centre: { ...item.pos }, rot: { ...item.rot } })),
-    players: new Map(input.players.map((player) => [player.id, { inventory: [...player.inventory] }])),
+    players: new Map(input.players.map((player) => [player.id, { inventory: [...player.inventory], health: player.health }])),
   };
 }

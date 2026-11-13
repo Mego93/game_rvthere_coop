@@ -34,6 +34,8 @@ export interface WalkEnv {
 }
 
 export interface WalkResult {
+  // The vy the move used, after the jump and gravity.
+  moveVy: number;
   collisions: ReadonlyArray<{ handle: number; normalY: number }>;
 }
 
@@ -59,6 +61,7 @@ export function stepWalk(env: WalkEnv, state: WalkState, pressedJump: boolean, w
     state.vy = PLAYER_JUMP_SPEED;
   }
   state.vy -= GRAVITY * TICK_DT;
+  const moveVy = state.vy;
 
   const maxChange = (state.grounded ? PLAYER_GROUND_ACCEL : PLAYER_AIR_ACCEL) * TICK_DT;
   const dx = wish.x - state.walk.x;
@@ -90,5 +93,5 @@ export function stepWalk(env: WalkEnv, state: WalkState, pressedJump: boolean, w
     const hit = controller.computedCollision(i);
     if (hit?.collider) collisions.push({ handle: hit.collider.handle, normalY: hit.normal1.y });
   }
-  return { collisions };
+  return { moveVy, collisions };
 }

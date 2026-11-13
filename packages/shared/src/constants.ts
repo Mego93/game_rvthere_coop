@@ -196,6 +196,36 @@ export const ITEM_REFUEL = 0.5;
 export const ITEM_REPAIR = 0.5;
 // m above the feet where a dropped item appears.
 export const DROP_HEIGHT = 0.3;
+
+// Player health.
+// Health of a new player and a late joiner.
+export const PLAYER_MAX_HEALTH = 100;
+// Health after a revive or a respawn.
+export const PLAYER_REVIVE_HEALTH = 50;
+// A restart restores at least this.
+export const PLAYER_RESTART_FLOOR = 50;
+// s before a downed player respawns.
+export const DOWNED_TIMEOUT = 30;
+// m/s landing speed that costs nothing; a jump lands at about 4.8, a fall from the RV's roof (2.9 m) at about 7.5, from the Lodgy's (1.5 m) at about 5.4.
+export const FALL_DAMAGE_SPEED = 9;
+// Health per m/s above it.
+export const FALL_DAMAGE = 10;
+// m/s relative speed that costs nothing.
+export const VEHICLE_HIT_SPEED = 5;
+// Health per m/s above it.
+export const VEHICLE_HIT_DAMAGE = 8;
+// m/s relative speed that costs nothing; a thrown crate leaves the hands at 7.
+export const PROP_HIT_SPEED = 6;
+// Health per m/s above it.
+export const PROP_HIT_DAMAGE = 5;
+// s; one body hurts one player at most once in this time.
+export const HIT_COOLDOWN = 0.5;
+// Health added to a hurt player.
+export const HEALTH_KIT_HEAL = 50;
+// m, feet to feet (3D), for a health kit on a teammate.
+export const HEAL_RANGE = 2;
+// rad; a teammate is near the crosshair within this angle of the aim.
+export const HEAL_AIM_ANGLE = 0.35;
 export interface ItemKindConfig {
   halfExtents: Vec3;
   mass: number;
@@ -205,6 +235,7 @@ export interface ItemKindConfig {
 export const ITEM_KINDS = deepFreeze({
   jerrycan: { halfExtents: vec3(0.12, 0.25, 0.2), mass: 20, friction: 0.8 },
   toolbox: { halfExtents: vec3(0.25, 0.12, 0.12), mass: 10, friction: 0.8 },
+  healthKit: { halfExtents: vec3(0.18, 0.08, 0.14), mass: 2, friction: 0.8 },
 } satisfies Record<string, ItemKindConfig>);
 export type ItemKind = keyof typeof ITEM_KINDS;
 

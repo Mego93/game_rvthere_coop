@@ -1,12 +1,13 @@
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
-import { DROP_HEIGHT, GRAVITY, HOOK_RANGE, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
+import { DROP_HEIGHT, GRAVITY, HOOK_RANGE, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
+import { everyoneDowned, stepDowned } from './health';
 import { stepHold, useTarget } from './holds';
 import { AXIS_Y, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
 import { interactCandidates, resolveInteract, splitCandidates } from './interact';
-import { createPlayers, type PlayerState, type StepInputs } from './player';
+import { createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
 import { elapsedAfter, reachedFinish, vehicleLost } from './rules';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
@@ -81,6 +82,8 @@ export interface World {
   debugWinch(): Winch;
   // Tests only: the vehicle, to set its fuel and health.
   debugVehicle(): Vehicle;
+  // Tests only: queues damage for the player, applied on the next step.
+  debugHurt(id: string, amount: number): void;
   // Frees the physics world. The world must not be used afterwards.
   dispose(): void;
 }
@@ -117,6 +120,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   let restartPending = false;
   let respawns = 0;
   let record: CheckpointRecord;
+  let debugDamage: PendingDamage[] = [];
 
   const recordCheckpoint = (index: number) => {
     const checkpoint = course.checkpoints[index]!;
@@ -129,7 +133,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       heldIds,
       courseProps: course.props,
       items: items.snapshot(),
-      players: players.all().map((player) => ({ id: player.id, inventory: player.inventory })),
+      players: players.all().map((player) => ({ id: player.id, inventory: player.inventory, health: player.health })),
     });
     players.setFallbackSpawn(checkpoint.spawn.pos);
   };
@@ -141,6 +145,14 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     for (const { id, slot } of players.all()) {
       const raw = inputs.get(id) ?? { ...NEUTRAL_INPUT, slot };
       const before = previous.get(id) ?? NEUTRAL_INPUT;
+      previous.set(id, raw);
+      const downed = players.get(id)!.downed !== null;
+      if (downed) {
+        // Rule H5: a downed player's input is neutral; previous still records the raw one.
+        const { yaw, pitch, slot: held } = players.get(id)!;
+        result.set(id, { fields: { ...NEUTRAL_INPUT, yaw, pitch, slot: held }, pressed: { jump: false, interact: false, drop: false } });
+        continue;
+      }
       const fields: InputFields = {
         ...raw,
         moveX: finite(raw.moveX),
@@ -157,7 +169,6 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         },
       });
       if (raw.use === true && before.use !== true) usePressed.add(id);
-      previous.set(id, raw);
     }
     return result;
   };
@@ -307,12 +318,50 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     const body = vehicle.body;
     const mount = add(body.translation(), rotate(body.rotation(), vehicleConfig.winchMount));
     for (const player of players.all()) {
-      if (player.seat !== null) continue;
+      if (player.seat !== null || player.downed !== null) continue;
       const reel = onFoot.get(player.id)?.fields.reel;
       if ((reel !== 1 && reel !== -1) || length(sub(mount, add(player.pos, vec3(0, PUSH_HEIGHT, 0)))) > HOOK_RANGE) continue;
       return reel;
     }
     return 0;
+  };
+
+  // Rule H2.
+  const hurt = (player: PlayerState, amount: number, events: WorldEvent[], justDowned: Set<string>) => {
+    if (!(amount > 0) || player.seat !== null || player.downed !== null || player.respawnIn !== null) return;
+    player.health = Math.max(0, player.health - amount);
+    events.push({ kind: 'hurt', tick, playerId: player.id, pos: { ...player.pos } });
+    if (player.health > 0) return;
+    releaseHook(player.id, 'drop');
+    players.setDowned(player.id);
+    justDowned.add(player.id);
+    events.push({ kind: 'downed', tick, playerId: player.id, pos: { ...player.pos } });
+  };
+
+  const respawnPlayer = (player: PlayerState, events: WorldEvent[]) => {
+    const pos = players.respawn(player.id);
+    respawns += 1;
+    events.push({ kind: 'respawn', tick, playerId: player.id, pos });
+  };
+
+  // Rules H2, H6 and H7, after the characters have moved and before the kill plane.
+  const stepHealth = (events: WorldEvent[]) => {
+    const justDowned = new Set<string>();
+    // Hits before falls; the debug damage last.
+    const rank = { vehicle: 0, prop: 0, fall: 1, debug: 2 };
+    const pending = [...players.takeDamage(), ...debugDamage];
+    debugDamage = [];
+    for (const player of players.all()) {
+      const own = pending.filter((entry) => entry.playerId === player.id).sort((a, b) => rank[a.source] - rank[b.source]);
+      for (const entry of own) hurt(player, entry.amount, events, justDowned);
+    }
+    for (const player of players.all()) {
+      if (player.downed === null || player.respawnIn !== null || justDowned.has(player.id)) continue;
+      const left = stepDowned(player.downed, false);
+      if (left === 'respawn') respawnPlayer(player, events);
+      else player.downed = left;
+    }
+    if (everyoneDowned(players.all())) for (const player of players.all()) respawnPlayer(player, events);
   };
 
   const killPlane = (events: WorldEvent[]) => {
@@ -328,6 +377,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       releaseHook(player.id, 'stow');
       players.resetHeld(player.id);
       players.setSeat(player.id, null, pos);
+      player.health = PLAYER_REVIVE_HEALTH;
+      player.downed = null;
+      player.hitCooldown.clear();
       respawns += 1;
       events.push({ kind: 'respawn', tick, playerId: player.id, pos });
     }
@@ -368,6 +420,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     for (const player of players.all()) {
       const saved = record.players.get(player.id);
       players.restoreInventory(player.id, saved?.inventory ?? []);
+      player.health = saved ? Math.max(saved.health, PLAYER_RESTART_FLOOR) : PLAYER_MAX_HEALTH;
+      player.downed = null;
+      player.hitCooldown.clear();
       players.setSeat(player.id, null, players.findSpawn(player.id));
     }
     let level = 1;
@@ -413,6 +468,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       const pulled = winch.afterCharacters((id) => players.holdPose(id));
       if (pulled !== null) players.setHands(pulled, null);
       const events: WorldEvent[] = [];
+      stepHealth(events);
       killPlane(events);
       resetLastTick = new Set(props.killPlane(course.killPlaneY));
       items.killPlane(course.killPlaneY);
@@ -449,6 +505,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         grounded: player.grounded,
         inventory: [...player.inventory],
         slot: player.slot,
+        health: Math.floor(player.health),
+        downed: player.downed,
         hold: player.hold ? { action: player.hold.action, targetId: player.hold.targetId, progress: player.hold.progress } : null,
       })),
       props: [...props.snapshot(), ...items.snapshot()],
@@ -486,6 +544,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     debugBody: (id) => (id === 'vehicle' ? vehicle.body : props.get(id)?.body ?? items.get(id)?.body),
     debugWinch: () => winch,
     debugVehicle: () => vehicle,
+    debugHurt(id, amount) {
+      debugDamage.push({ playerId: id, source: 'debug', amount });
+    },
     dispose() {
       players.dispose();
       props.dispose();

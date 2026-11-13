@@ -4,6 +4,7 @@ export * from './course';
 export * from './courses/build';
 export * from './courses/index';
 export * from './groups';
+export * from './health';
 export * from './holds';
 export * from './interact';
 export * from './items';
