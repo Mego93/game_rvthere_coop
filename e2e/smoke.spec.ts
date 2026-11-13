@@ -223,3 +223,10 @@ test('the course props are drawn: the overlay counts four and the page has no er
   const before = await tick(page);
   await expect.poll(() => tick(page)).toBeGreaterThan(before);
 });
+
+test('the winch cable is shown, stowed at the start, and the page has no errors', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await expect(page.locator('#overlay')).toContainText(/cable\s+stowed 0\.0 m/);
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
+});
