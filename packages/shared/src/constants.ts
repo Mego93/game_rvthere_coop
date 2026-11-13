@@ -1,4 +1,4 @@
-import { deepFreeze } from './math';
+import { deepFreeze, vec3, type Vec3 } from './math';
 
 export const TICK_RATE = 60;
 export const TICK_DT = 1 / TICK_RATE;
@@ -107,3 +107,37 @@ export const PREDICTION_IGNORE_DISTANCE = 0.002;
 export const PREDICTION_MAX_PENDING = 120;
 
 export const PLAYER_COLOUR_PATTERN = /^#[0-9a-f]{6}$/;
+
+// Props and push.
+export type PropClass = 'light' | 'heavy';
+export interface PropKindConfig {
+  class: PropClass;
+  halfExtents: Vec3;
+  mass: number;
+  friction: number;
+}
+
+export const PROP_KINDS = deepFreeze({
+  crate: { class: 'light', halfExtents: vec3(0.3, 0.3, 0.3), mass: 15, friction: 0.6 },
+  barrier: { class: 'heavy', halfExtents: vec3(1.0, 0.5, 0.4), mass: 150, friction: 0.5 },
+} satisfies Record<string, PropKindConfig>);
+export type PropKind = keyof typeof PROP_KINDS;
+
+// N per player.
+export const PUSH_FORCE = 1500;
+// N per player on a vehicle tipped more than 45 degrees.
+export const PUSH_FORCE_TIPPED = 4000;
+// m/s^2; caps the force on light things at mass times this.
+export const PUSH_MAX_ACCEL = 10;
+// m above the feet, where a player pushes.
+export const PUSH_HEIGHT = 1.0;
+// Pushers counted on the vehicle, in join order.
+export const PUSH_MAX_PUSHERS_VEHICLE = 4;
+// m, from the feet to the nearest point of a prop's box.
+export const HANDS_RANGE = 2;
+// m, a held prop's centre in the holder's yaw frame, from the feet.
+export const HOLD_OFFSET: Vec3 = deepFreeze(vec3(0, 1.1, -0.75));
+// m/s along the aim, added to the holder's horizontal velocity.
+export const THROW_SPEED = 7;
+// m or quaternion component; a smaller change is not sent.
+export const PROP_MOVED_EPSILON = 1e-4;

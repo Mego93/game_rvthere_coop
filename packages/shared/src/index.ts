@@ -6,6 +6,7 @@ export * from './interact';
 export * from './math';
 export * from './player';
 export * from './predictor';
+export * from './props';
 export * from './protocol';
 export * from './rapier';
 export * from './seats';

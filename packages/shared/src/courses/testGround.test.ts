@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, expect, test } from 'vitest';
-import { GRAVITY, REFERENCE_SLOPES_DEG, type ReferenceSlope } from '../constants';
+import { GRAVITY, PROP_KINDS, REFERENCE_SLOPES_DEG, type PropKind, type ReferenceSlope } from '../constants';
 import { degToRad } from '../math';
 import { buildStatics } from '../statics';
 import { getCourse } from './index';
@@ -54,4 +54,17 @@ test.each(Object.keys(REFERENCE_SLOPES_DEG) as ReferenceSlope[])('the %s slope r
   const hit = probe(pose.pos.x, pose.pos.y, pose.pos.z);
   expect(hit!.distance).toBeCloseTo(1, 1);
   expect(hit!.surface).toBe('road');
+});
+
+test('props are known kinds with unique ids and rest on ground', () => {
+  expect(testGround.props).toHaveLength(4);
+  const ids = testGround.props.map((prop) => prop.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  for (const prop of testGround.props) {
+    expect(Object.hasOwn(PROP_KINDS, prop.kind), prop.id).toBe(true);
+    const hit = probe(prop.pose.pos.x, prop.pose.pos.y, prop.pose.pos.z);
+    expect(hit, prop.id).not.toBeNull();
+    expect(hit!.distance, prop.id).toBeCloseTo(1, 2);
+    expect(PROP_KINDS[prop.kind as PropKind].halfExtents.y).toBeGreaterThan(0);
+  }
 });

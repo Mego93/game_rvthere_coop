@@ -1,6 +1,6 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { GRAVITY, TICK_DT, TICK_RATE } from './constants';
-import type { Box, BuiltCourse, GroundBox } from './course';
+import type { Box, BuiltCourse, GroundBox, Placed } from './course';
 import { getCourse } from './courses/index';
 import { deepFreeze, type Pose } from './math';
 import type { Rapier } from './rapier';
@@ -40,4 +40,9 @@ export function withBoxes(course: BuiltCourse, extra: { ground?: GroundBox[]; wa
     ground: [...course.ground, ...(extra.ground ?? [])],
     walls: [...course.walls, ...(extra.walls ?? [])],
   });
+}
+
+// A new, frozen course with the props added after the course's own.
+export function withProps(course: BuiltCourse, props: Placed[]): BuiltCourse {
+  return deepFreeze({ ...course, props: [...course.props, ...props] });
 }

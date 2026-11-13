@@ -4,8 +4,9 @@ import { getCourse } from './courses/index';
 import type { Vec3 } from './math';
 import { resolveInteract } from './interact';
 import { createPlayers, type StepInputs } from './player';
+import { createProps, type PropSnapshot } from './props';
 import { NEUTRAL_INPUT, type InputFields, type PlayerSnapshot } from './protocol';
-import type { Rapier } from './rapier';
+import type { Rapier, RigidBody } from './rapier';
 import { chooseSeat } from './seats';
 import { buildStatics } from './statics';
 import { createVehicle, type VehicleState } from './vehicle';
@@ -28,6 +29,8 @@ export interface WorldSnapshot {
   vehicle: VehicleState;
   // In join order.
   players: PlayerSnapshot[];
+  // Every prop, course order; pos is the box centre.
+  props: PropSnapshot[];
 }
 
 export interface WorldDebug {
@@ -46,6 +49,8 @@ export interface World {
   removePlayer(id: string): void;
   teleportPlayer(id: string, pos: Vec3): void;
   debug(): WorldDebug;
+  // Tests only: the rigid body of the vehicle ('vehicle') or of a prop.
+  debugBody(id: 'vehicle' | string): RigidBody | undefined;
   // Frees the physics world. The world must not be used afterwards.
   dispose(): void;
 }
@@ -69,6 +74,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   physics.step();
   physics.timestep = TICK_DT;
 
+  const props = createProps(rapier, physics, course);
   const players = createPlayers(rapier, physics, vehicle, course);
   const previous = new Map<string, InputFields>();
   let tick = 0;
@@ -151,6 +157,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       players.stepOnFoot(onFoot);
       const events: WorldEvent[] = [];
       killPlane(events);
+      props.killPlane(course.killPlaneY);
       return events;
     },
     snapshot: () => ({
@@ -167,6 +174,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         vy: player.vy,
         grounded: player.grounded,
       })),
+      props: props.snapshot(),
     }),
     addPlayer: (id) => void players.add(id),
     removePlayer(id) {
@@ -175,8 +183,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     },
     teleportPlayer: (id, pos) => players.teleport(id, pos),
     debug: () => ({ forwardSpeed: vehicle.forwardSpeed(), wheelSurfaces: vehicle.wheelSurfaces() }),
+    debugBody: (id) => (id === 'vehicle' ? vehicle.body : props.get(id)?.body),
     dispose() {
       players.dispose();
+      props.dispose();
       physics.free();
     },
   };

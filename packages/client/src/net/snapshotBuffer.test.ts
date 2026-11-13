@@ -23,6 +23,7 @@ const snapshot = (tick: number, players: PlayerSnapshot[] = []): WorldSnapshot =
     steer: 0,
   },
   players,
+  props: [],
 });
 
 // Snapshots every 3 ticks, each arriving exactly when the server's clock reads its tick time plus `latency`.
