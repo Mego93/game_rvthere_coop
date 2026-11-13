@@ -15,6 +15,7 @@ export interface ServerOptions {
   // The folder holding the built client.
   clientDir: string;
   vehicleId?: string;
+  courseId?: string;
   // Told about every failure the server survives. The default prints it.
   onError?: (error: unknown) => void;
 }
@@ -50,7 +51,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
         },
       },
     },
-    { vehicleId: options.vehicleId },
+    { vehicleId: options.vehicleId, courseId: options.courseId },
   );
 
   const http = createServer((request, response) => {

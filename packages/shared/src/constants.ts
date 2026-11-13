@@ -128,6 +128,8 @@ export interface PropKindConfig {
 export const PROP_KINDS = deepFreeze({
   crate: { class: 'light', halfExtents: vec3(0.3, 0.3, 0.3), mass: 15, friction: 0.6, anchor: null },
   barrier: { class: 'heavy', halfExtents: vec3(1.0, 0.5, 0.4), mass: 150, friction: 0.5, anchor: vec3(0, 0.5, 0) },
+  cart: { class: 'light', halfExtents: vec3(0.5, 0.4, 0.8), mass: 40, friction: 0.6, anchor: null },
+  scooter: { class: 'light', halfExtents: vec3(0.3, 0.45, 0.6), mass: 30, friction: 0.6, anchor: null },
 } satisfies Record<string, PropKindConfig>);
 export type PropKind = keyof typeof PROP_KINDS;
 
@@ -184,3 +186,77 @@ export const ITEM_KINDS = deepFreeze({
   toolbox: { halfExtents: vec3(0.25, 0.12, 0.12), mass: 10, friction: 0.8 },
 } satisfies Record<string, ItemKindConfig>);
 export type ItemKind = keyof typeof ITEM_KINDS;
+
+// Segments.
+export const ROAD_WIDTH = 10;
+// m, longest ground piece.
+export const ROAD_PIECE_LENGTH = 10;
+// rad, the largest yaw change of one piece of a curve.
+export const ROAD_MAX_PIECE_YAW = Math.PI / 18;
+export const ROAD_THICKNESS = 1;
+// m added at both ends of each piece where the yaw changes.
+export const ROAD_JOINT_OVERLAP = 0.6;
+// m between the walls.
+export const ALLEY_WIDTH = 6;
+export const ALLEY_WALL_HEIGHT = 3;
+// m, alley walls and fences.
+export const WALL_THICKNESS = 0.5;
+// m of alley per clutter item at density 1.
+export const ALLEY_CLUTTER_SPACING = 6;
+// m of road before the sand.
+export const SAND_APRON = 50;
+// m outside the road edge.
+export const PALM_OFFSET = 0.5;
+// m of flat road before the bank's ramp.
+export const BANK_APPROACH = 15;
+// m of flat road at the top of the bank.
+export const BANK_TOP = 10;
+// Half extents of a ford rock.
+export const FORD_ROCK: Vec3 = deepFreeze(vec3(0.3, 0.12, 0.3));
+// m between rows of obstacles.
+export const ROADWORKS_ROW_SPACING = 12;
+// Barriers per row, centred at x = -3, 0, 3.
+export const ROADWORKS_ROW = 3;
+export const FENCE_HEIGHT = 1.2;
+// m from the entry to the checkpoint spawn, along the route.
+export const SEGMENT_SPAWN_INSET = 8;
+// m, the shortest route a segment may have.
+export const SEGMENT_MIN_LENGTH = 15;
+// Half extents along y and z of a checkpoint trigger; x is half the segment width.
+export const CHECKPOINT_TRIGGER: Vec3 = deepFreeze(vec3(0, 2, 2));
+// m of flat road after the last segment.
+export const FINISH_PAD = 20;
+// m under the lowest ground top.
+export const KILL_PLANE_BELOW = 20;
+// Half extents of the ground pad beside the road.
+export const STOP_PAD: Vec3 = deepFreeze(vec3(4, 0.5, 8));
+// Half extents of a stop's parking zone.
+export const STOP_ZONE: Vec3 = deepFreeze(vec3(2.5, 2, 5));
+// m above the ground.
+export const COIN_HEIGHT = 1;
+// m between the barriers of a row.
+export const ROADWORKS_BARRIER_SPACING = 3;
+// m along the road to the first row of barriers.
+export const ROADWORKS_FIRST_ROW = 16;
+// m of road after the last row of barriers.
+export const ROADWORKS_LAST_ROW_CLEARANCE = 8;
+// m to either side of the centre line, where ford rocks lie (the wheel tracks).
+export const FORD_ROCK_LATERAL = 1.0;
+// m between a clutter item and the alley wall.
+export const ALLEY_WALL_CLEARANCE = 0.1;
+// m into the top of a bank where the first boulders stand.
+export const BOULDER_FIRST_ALONG = 3;
+// m between each further pair of boulders.
+export const BOULDER_PAIR_SPACING = 2;
+// m in from the road edge where boulders stand.
+export const BOULDER_EDGE_INSET = 1;
+// m, half the thickness of the water decor.
+export const WATER_HALF_THICKNESS = 0.05;
+// m of gap between the road edge and a stop's parking zone.
+export const STOP_ZONE_GAP = 0.5;
+// m between the zone's outer side and the operate point.
+export const STOP_OPERATE_GAP = 1;
+// m along the road from the operate point to a fuel stop's shop counter.
+export const STOP_COUNTER_OFFSET = 2;
+// Half extents of the finish trigger; its centre is half its height above the road.
+export const FINISH_TRIGGER: Vec3 = deepFreeze(vec3(ROAD_WIDTH / 2, 2, 2));
