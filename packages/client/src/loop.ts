@@ -3,6 +3,8 @@ import { CLIENT_MAX_CATCHUP_STEPS, TICK_DT } from '@lodgy/shared';
 export interface FixedStepper {
   // Adds elapsed frame time and runs the ticks that are due. Returns how many ran.
   advance(frameSeconds: number): number;
+  // The part of the next tick already elapsed, in [0, 1).
+  alpha(): number;
 }
 
 export function createFixedStepper(tick: () => void): FixedStepper {
@@ -22,6 +24,7 @@ export function createFixedStepper(tick: () => void): FixedStepper {
       if (accumulator >= TICK_DT) accumulator = 0;
       return steps;
     },
+    alpha: () => accumulator / TICK_DT,
   };
 }
 

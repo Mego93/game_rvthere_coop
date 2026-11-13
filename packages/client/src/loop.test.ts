@@ -52,3 +52,14 @@ test('later frames give the elapsed seconds, never negative, capped', () => {
   expect(clock(1010)).toBe(0);
   expect(clock(1500)).toBe(0.25);
 });
+
+test('alpha is the fraction of a tick left in the accumulator', () => {
+  const { stepper } = counter();
+  expect(stepper.alpha()).toBe(0);
+  stepper.advance(TICK_DT);
+  expect(stepper.alpha()).toBe(0);
+  stepper.advance(TICK_DT * 0.5);
+  expect(stepper.alpha()).toBeCloseTo(0.5, 12);
+  stepper.advance(TICK_DT * 100);
+  expect(stepper.alpha()).toBe(0);
+});
