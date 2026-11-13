@@ -36,6 +36,12 @@ const snapshot = (
   players,
   props,
   cable: { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 1, -tick), length: 0, reel: 0 },
+  elapsed: tick / 60,
+  checkpoint: 0,
+  checkpointCount: 2,
+  restarts: 0,
+  respawns: 0,
+  won: false,
 });
 
 // Snapshots every 3 ticks, each arriving exactly when the server's clock reads its tick time plus `latency`.

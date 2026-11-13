@@ -70,7 +70,7 @@ test.each(['lodgy', 'rv'] as const)('the %s creeps less than 0.1 m/s on the stee
 
 const input = (fields: Partial<PlayerInput>): PlayerInput => ({ ...NEUTRAL_INPUT, seq: 0, ...fields });
 
-test('two players board, and the driver drives the Lodgy 100 m down the course in under 40 s', () => {
+test('two players board, and the driver drives the Lodgy down the course, records cp-1 and wins in under 40 s', () => {
   const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
   world.addPlayer('p1');
   world.addPlayer('p2');
@@ -81,13 +81,36 @@ test('two players board, and the driver drives the Lodgy 100 m down the course i
   expect(seats).toEqual(['driver', 'seat1']);
 
   let ticks = 0;
-  while (world.snapshot().vehicle.pos.z > -100 && ticks < 40 * 60) {
-    world.step(new Map([['p1', input({ moveY: 1 })]]));
+  let recorded = false;
+  while (world.status().state !== 'won' && ticks < 40 * 60) {
+    const events = world.step(new Map([['p1', input({ moveY: 1 })]]));
+    recorded ||= events.some((event) => event.kind === 'checkpoint');
     ticks += 1;
   }
-  expect(world.snapshot().vehicle.pos.z).toBeLessThanOrEqual(-100);
+  expect(world.status().state).toBe('won');
+  expect(recorded).toBe(true);
+  expect(world.snapshot().checkpoint).toBe(1);
+  expect(world.snapshot().vehicle.pos.z).toBeLessThanOrEqual(-98);
   expect(ticks).toBeLessThan(40 * 60);
   expect(world.snapshot().players.map((player) => player.seat)).toEqual(['driver', 'seat1']);
+});
+
+test('the Lodgy at full throttle crosses the ramp and lands upright', () => {
+  const rig = createRig(RAPIER, 'lodgy', { pos: vec3(8, 0, -40), rot: IDENTITY });
+  const wheelsDown = () => rig.vehicle.wheelSurfaces().filter((surface) => surface !== null).length;
+  let crossed = false;
+  let landed = false;
+  for (let i = 0; i < 20 * TICK_RATE && !landed; i++) {
+    rig.run(1 / TICK_RATE, { throttle: 1 });
+    const pos = rig.vehicle.state().pos;
+    if (!crossed) crossed = pos.z < -60 && wheelsDown() === 0;
+    else landed = wheelsDown() >= 2;
+  }
+  expect(crossed).toBe(true);
+  expect(landed).toBe(true);
+  rig.run(1, { throttle: 1 });
+  expect(rotate(rig.vehicle.state().rot, vec3(0, 1, 0)).y).toBeGreaterThan(0.9);
+  rig.world.free();
 });
 
 test('four players walking into the roof of a Lodgy on its side right it; one does not', () => {

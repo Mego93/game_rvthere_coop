@@ -91,6 +91,8 @@ export interface Players {
   holdPose(id: string): Pose | null;
   // Rule S1.
   findSpawn(forId: string | null): Vec3;
+  // Where findSpawn falls back to when no slot is valid; the last checkpoint's spawn.
+  setFallbackSpawn(pos: Vec3): void;
   findExit(seat: SeatConfig): Vec3 | null;
   dispose(): void;
 }
@@ -198,6 +200,8 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     return overlapsAnything(feet) ? null : feet;
   };
 
+  let fallbackSpawn = course.checkpoints[0]?.spawn.pos ?? vec3(0, 0, 0);
+
   const findSpawn = (forId: string | null): Vec3 => {
     const body = vehicle.body.translation();
     const turn = quatFromAxisAngle(AXIS_Y, yawOf(vehicle.body.rotation()));
@@ -209,8 +213,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       if (others.some(({ state }) => Math.hypot(state.pos.x - feet.x, state.pos.z - feet.z) < 2 * PLAYER_RADIUS)) continue;
       return feet;
     }
-    const fallback = course.checkpoints[0]?.spawn.pos ?? vec3(0, 0, 0);
-    return vec3(fallback.x, fallback.y, fallback.z);
+    return vec3(fallbackSpawn.x, fallbackSpawn.y, fallbackSpawn.z);
   };
 
   const findExit = (seat: SeatConfig): Vec3 | null => {
@@ -545,6 +548,9 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       return state && state.hands !== null ? holdPoseAt(state.pos, state.yaw) : null;
     },
     findSpawn,
+    setFallbackSpawn(pos) {
+      fallbackSpawn = vec3(pos.x, pos.y, pos.z);
+    },
     findExit,
     dispose() {
       for (const { collider } of entries.values()) physics.removeCollider(collider, false);

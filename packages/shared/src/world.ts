@@ -1,3 +1,4 @@
+import { enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { DROP_HEIGHT, GRAVITY, HOOK_RANGE, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
@@ -6,6 +7,7 @@ import { add, length, rotate, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
 import { interactCandidates, resolveInteract, splitCandidates } from './interact';
 import { createPlayers, type PlayerState, type StepInputs } from './player';
+import { elapsedAfter, reachedFinish, vehicleLost } from './rules';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
 import { NEUTRAL_INPUT, type InputFields, type PlayerSnapshot } from './protocol';
@@ -35,6 +37,21 @@ export interface WorldSnapshot {
   // Every prop in course order, then every item; pos is the box centre.
   props: PropSnapshot[];
   cable: CableSnapshot;
+  // Seconds of the run; it stops at the win.
+  elapsed: number;
+  // Index of the last recorded checkpoint.
+  checkpoint: number;
+  checkpointCount: number;
+  restarts: number;
+  respawns: number;
+  won: boolean;
+}
+
+export interface WorldStatus {
+  state: 'running' | 'won';
+  elapsed: number;
+  restarts: number;
+  respawns: number;
 }
 
 export interface WorldDebug {
@@ -54,6 +71,7 @@ export interface World {
   addPlayer(id: string): void;
   removePlayer(id: string): void;
   teleportPlayer(id: string, pos: Vec3): void;
+  status(): WorldStatus;
   debug(): WorldDebug;
   // Tests only: the rigid body of the vehicle ('vehicle') or of a prop.
   debugBody(id: 'vehicle' | string): RigidBody | undefined;
@@ -91,6 +109,28 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const previous = new Map<string, InputFields>();
   const usePressed = new Set<string>();
   let tick = 0;
+  let runTicks = 0;
+  let won = false;
+  const restarts = 0;
+  let respawns = 0;
+  let record: CheckpointRecord;
+
+  const recordCheckpoint = (index: number) => {
+    const checkpoint = course.checkpoints[index]!;
+    const heldIds = new Set(props.all().filter((prop) => prop.heldBy !== null).map((prop) => prop.id));
+    record = recordState({
+      index,
+      fuel: vehicle.fuel(),
+      health: vehicle.health(),
+      props: props.snapshot(),
+      heldIds,
+      courseProps: course.props,
+      items: items.snapshot(),
+      players: players.all().map((player) => ({ id: player.id, inventory: player.inventory })),
+    });
+    players.setFallbackSpawn(checkpoint.spawn.pos);
+  };
+  recordCheckpoint(0);
 
   const stepInputsFor = (inputs: ReadonlyMap<string, InputFields>): Map<string, StepInputs> => {
     const result = new Map<string, StepInputs>();
@@ -285,6 +325,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       releaseHook(player.id, 'stow');
       players.resetHeld(player.id);
       players.setSeat(player.id, null, pos);
+      respawns += 1;
       events.push({ kind: 'respawn', tick, playerId: player.id, pos });
     }
   };
@@ -320,6 +361,17 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       resetLastTick = new Set(props.killPlane(course.killPlaneY));
       items.killPlane(course.killPlaneY);
       for (const id of resetLastTick) winch.onPropReset(id);
+      if (!won) {
+        runTicks += 1;
+        const centre = vehicle.body.translation();
+        const entered = enteredCheckpoint(course, centre, record.index);
+        if (entered !== null) {
+          recordCheckpoint(entered);
+          events.push({ kind: 'checkpoint', tick, pos: vec3(centre.x, centre.y, centre.z) });
+        }
+        const lost = vehicleLost(centre, vehicle.health(), course.killPlaneY);
+        if (reachedFinish(centre, course.finish, lost)) won = true;
+      }
       return events;
     },
     snapshot: () => ({
@@ -342,7 +394,14 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       })),
       props: [...props.snapshot(), ...items.snapshot()],
       cable: winch.state(),
+      elapsed: elapsedAfter(runTicks),
+      checkpoint: record.index,
+      checkpointCount: course.checkpoints.length,
+      restarts,
+      respawns,
+      won,
     }),
+    status: () => ({ state: won ? 'won' : 'running', elapsed: elapsedAfter(runTicks), restarts, respawns }),
     addPlayer: (id) => void players.add(id),
     removePlayer(id) {
       releaseHook(id, 'drop');

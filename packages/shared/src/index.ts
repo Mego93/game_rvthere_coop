@@ -1,4 +1,5 @@
 export * from './constants';
+export * from './checkpoints';
 export * from './course';
 export * from './courses/build';
 export * from './courses/index';
@@ -12,6 +13,7 @@ export * from './predictor';
 export * from './props';
 export * from './protocol';
 export * from './rapier';
+export * from './rules';
 export * from './seats';
 export * from './segments';
 export * from './statics';
