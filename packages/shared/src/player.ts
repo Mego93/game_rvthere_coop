@@ -48,8 +48,8 @@ export interface PlayerState {
   grounded: boolean;
   ground: GroundRef | null;
   seat: string | null;
-  // The id of the prop being held.
-  hands: string | null;
+  // The id of the prop being held, or 'hook' for the winch hook.
+  hands: 'hook' | string | null;
   // Seconds left below the kill plane.
   respawnIn: number | null;
 }
@@ -78,8 +78,10 @@ export interface Players {
   pickUp(id: string, propId: string): boolean;
   // Rule K3, along the given aim; does nothing with empty hands.
   throwHeld(id: string, yaw: number, pitch: number): void;
-  // Rule K6: the held prop returns to its spawn.
+  // Rule K6: the held prop returns to its spawn. Nothing for the hook.
   resetHeld(id: string): void;
+  // The winch hook in or out of the hands; the world owns the cable's side of it.
+  setHands(id: string, hands: 'hook' | null): void;
   // Where the player's held prop is placed: the hold pose, or null with empty hands.
   holdPose(id: string): Pose | null;
   // Rule S1.
@@ -332,6 +334,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
 
   // Rules K3 and K5: released at the hold pose, or above the head when that spot is blocked.
   const releaseHeld = (state: PlayerState, yaw: number, velocity: Vec3) => {
+    if (state.hands === 'hook') return;
     const prop = state.hands === null ? undefined : props.get(state.hands);
     state.hands = null;
     if (!prop) return;
@@ -518,9 +521,13 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     },
     resetHeld(id) {
       const state = entries.get(id)?.state;
-      if (!state || state.hands === null) return;
+      if (!state || state.hands === null || state.hands === 'hook') return;
       props.resetToSpawn(state.hands);
       state.hands = null;
+    },
+    setHands(id, hands) {
+      const state = entries.get(id)?.state;
+      if (state) state.hands = hands;
     },
     holdPose(id) {
       const state = entries.get(id)?.state;

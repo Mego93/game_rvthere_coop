@@ -33,6 +33,7 @@ const snapshot = (
   },
   players,
   props,
+  cable: { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 1, -tick), length: 0, reel: 0 },
 });
 
 // Snapshots every 3 ticks, each arriving exactly when the server's clock reads its tick time plus `latency`.
@@ -41,6 +42,13 @@ function filled(ticks: number[], latency = 0) {
   for (const tick of ticks) buffer.push(snapshot(tick), tick * TICK_DT + latency);
   return buffer;
 }
+
+test('copies the cable into the sample and the latest', () => {
+  const buffer = filled([0, 3, 6]);
+  expect(buffer.sample(3 * TICK_DT + INTERPOLATION_DELAY)?.cable.state).toBe('stowed');
+  expect(buffer.latestCable()?.hookPos).toEqual(vec3(0, 1, -6));
+  expect(createSnapshotBuffer().latestCable()).toBeNull();
+});
 
 test('gives nothing before the first snapshot', () => {
   const buffer = createSnapshotBuffer();

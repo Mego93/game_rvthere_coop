@@ -5,6 +5,7 @@ import {
   TICK_DT,
   lerp,
   nlerp,
+  type CableSnapshot,
   type PlayerSnapshot,
   type PropSnapshot,
   type SnapshotMessage,
@@ -16,11 +17,13 @@ export interface SnapshotBuffer {
   // Stores a snapshot received at local time `receivedAt` (seconds). Snapshots older than the newest are ignored.
   push(snapshot: SnapshotMessage, receivedAt: number): void;
   // The world as it was INTERPOLATION_DELAY before local time `now`, or null before any snapshot.
-  sample(now: number): { vehicle: VehicleState; players: PlayerSnapshot[]; props: PropSnapshot[] } | null;
+  sample(now: number): { vehicle: VehicleState; players: PlayerSnapshot[]; props: PropSnapshot[]; cable: CableSnapshot } | null;
   // The tick of the newest snapshot, or 0 before any.
   latestTick(): number;
   // Every prop as of the newest snapshot, partial snapshots merged in.
   latestProps(): PropSnapshot[];
+  // The cable as of the newest snapshot, or null before any.
+  latestCable(): CableSnapshot | null;
 }
 
 function blend(a: VehicleState, b: VehicleState, t: number): VehicleState {
@@ -56,10 +59,20 @@ function copyVehicle(v: VehicleState): VehicleState {
 
 const copyProp = (p: PropSnapshot): PropSnapshot => ({ id: p.id, kind: p.kind, pos: copyVec(p.pos), rot: { ...p.rot } });
 
+const copyCable = (c: CableSnapshot): CableSnapshot => ({
+  state: c.state,
+  holderId: c.holderId,
+  anchorId: c.anchorId,
+  hookPos: copyVec(c.hookPos),
+  length: c.length,
+  reel: c.reel,
+});
+
 const copyWorld = (w: WorldSnapshot) => ({
   vehicle: copyVehicle(w.vehicle),
   players: w.players.map(copyPlayer),
   props: w.props.map(copyProp),
+  cable: copyCable(w.cable),
 });
 
 function blendProps(from: readonly PropSnapshot[], to: readonly PropSnapshot[], t: number): PropSnapshot[] {
@@ -119,9 +132,15 @@ export function createSnapshotBuffer(): SnapshotBuffer {
         vehicle: blend(from.snapshot.vehicle, to.snapshot.vehicle, t),
         players: to.snapshot.players.map((p) => blendPlayer(before.get(p.playerId), p, t)),
         props: blendProps(from.snapshot.props, to.snapshot.props, t),
+        // Interpolated in Task 4 of step 6; until then the newer one.
+        cable: copyCable(to.snapshot.cable),
       };
     },
     latestTick: () => entries[entries.length - 1]?.snapshot.tick ?? 0,
+    latestCable() {
+      const newest = entries[entries.length - 1];
+      return newest ? copyCable(newest.snapshot.cable) : null;
+    },
     latestProps: () => (entries[entries.length - 1]?.snapshot.props ?? []).map(copyProp),
   };
 }

@@ -1081,4 +1081,22 @@ describe('hands', () => {
     expect(prop.body.translation().y).toBeCloseTo(CRATE_1_CENTRE.y, 6);
     expect(prop.body.translation().z).toBeCloseTo(CRATE_1_CENTRE.z, 6);
   });
+
+  test('V6: with the hook in the hands, throw and reset do nothing, pickUp is refused, and remove does not touch props', () => {
+    const { players, props, tick } = harness();
+    players.add('p1');
+    players.teleport('p1', OPEN);
+    players.setHands('p1', 'hook');
+    tick({});
+    expect(players.pickUp('p1', 'crate-1')).toBe(false);
+    players.throwHeld('p1', 0, 0);
+    expect(players.get('p1')!.hands).toBe('hook');
+    players.resetHeld('p1');
+    expect(players.get('p1')!.hands).toBe('hook');
+    expect(players.holdPose('p1')).not.toBeNull();
+    expect(props.get('crate-1')!.heldBy).toBeNull();
+    players.remove('p1');
+    expect(props.get('crate-1')!.heldBy).toBeNull();
+    expect(props.get('crate-1')!.body.isDynamic()).toBe(true);
+  });
 });

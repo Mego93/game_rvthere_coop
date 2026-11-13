@@ -2,7 +2,7 @@ import { GRAVITY, PLAYER_KILL_RESPAWN_DELAY, PUSH_MAX_PUSHERS_VEHICLE, TICK_DT, 
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import type { Vec3 } from './math';
-import { interactCandidates, resolveInteract } from './interact';
+import { interactCandidates, resolveInteract, splitCandidates } from './interact';
 import { createPlayers, type StepInputs } from './player';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
@@ -11,6 +11,7 @@ import type { Rapier, RigidBody } from './rapier';
 import { buildStatics } from './statics';
 import { createVehicle, type VehicleState } from './vehicle';
 import { getVehicleConfig, type VehicleConfig } from './vehicles';
+import { createWinch, type CableSnapshot, type Winch } from './winch';
 
 export interface WorldOptions {
   courseId: string;
@@ -31,6 +32,7 @@ export interface WorldSnapshot {
   players: PlayerSnapshot[];
   // Every prop, course order; pos is the box centre.
   props: PropSnapshot[];
+  cable: CableSnapshot;
 }
 
 export interface WorldDebug {
@@ -51,6 +53,8 @@ export interface World {
   debug(): WorldDebug;
   // Tests only: the rigid body of the vehicle ('vehicle') or of a prop.
   debugBody(id: 'vehicle' | string): RigidBody | undefined;
+  // Tests only: the winch.
+  debugWinch(): Winch;
   // Frees the physics world. The world must not be used afterwards.
   dispose(): void;
 }
@@ -76,6 +80,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
 
   const props = createProps(rapier, physics, course);
   const players = createPlayers(rapier, physics, vehicle, props, course);
+  const winch = createWinch(rapier, physics, vehicle, props, course);
   const previous = new Map<string, InputFields>();
   let tick = 0;
 
@@ -104,6 +109,15 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     return result;
   };
 
+  // Rule V6: the world owns the hook. A player's hook is stowed or dropped at their feet, then their hands are cleared.
+  const releaseHook = (id: string, how: 'stow' | 'drop') => {
+    const player = players.get(id);
+    if (!player || player.hands !== 'hook') return;
+    if (how === 'stow') winch.stow();
+    else winch.drop(player.pos);
+    players.setHands(id, null);
+  };
+
   // Rules I1, V3, K1 and K2: in join order, so of two players pressing for one seat or crate the earlier gets it.
   // The aim is this tick's input (R6), not the yaw the player ended the last tick with.
   const resolveInteracts = (onFoot: ReadonlyMap<string, StepInputs>) => {
@@ -113,22 +127,29 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       const taken = new Set<string>();
       for (const other of players.all()) if (other.seat !== null) taken.add(other.seat);
       const heldProps = new Set(props.all().filter((prop) => prop.heldBy !== null).map((prop) => prop.id));
-      const candidates =
-        player.seat === null && player.hands === null
-          ? interactCandidates({
-              config: vehicleConfig,
-              vehiclePos: vehicle.body.translation(),
-              vehicleRot: vehicle.body.rotation(),
-              feet: player.pos,
-              yaw: step.fields.yaw,
-              pitch: step.fields.pitch,
-              takenSeats: taken,
-              props: props.snapshot(),
-              heldProps,
-            })
-          : [];
-      const action = resolveInteract({ seat: player.seat, hands: player.hands, candidates });
+      const found = interactCandidates({
+        config: vehicleConfig,
+        vehiclePos: vehicle.body.translation(),
+        vehicleRot: vehicle.body.rotation(),
+        feet: player.pos,
+        yaw: step.fields.yaw,
+        pitch: step.fields.pitch,
+        seat: player.seat,
+        hands: player.hands,
+        takenSeats: taken,
+        props: props.snapshot(),
+        heldProps,
+        cable: winch.state(),
+        anchors: course.anchors,
+      });
+      const action = resolveInteract({
+        seat: player.seat,
+        hands: player.hands,
+        holdsHook: player.hands === 'hook',
+        ...splitCandidates(found),
+      });
       if (action?.kind === 'board') {
+        releaseHook(player.id, 'stow');
         players.setSeat(player.id, action.seatId);
       } else if (action?.kind === 'exitSeat') {
         const seat = vehicleConfig.seats.find((candidate) => candidate.id === player.seat);
@@ -137,6 +158,18 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         players.throwHeld(player.id, step.fields.yaw, step.fields.pitch);
       } else if (action?.kind === 'pickUp') {
         players.pickUp(player.id, action.propId);
+      } else if (action?.kind === 'attachHook') {
+        if (winch.attach(action.anchorId)) players.setHands(player.id, null);
+      } else if (action?.kind === 'dropHook') {
+        releaseHook(player.id, 'drop');
+      } else if (action?.kind === 'takeHook') {
+        winch.take(player.id);
+        if (winch.state().holderId === player.id) players.setHands(player.id, 'hook');
+      } else if (action?.kind === 'detachHook') {
+        winch.detach(player.id);
+        if (winch.state().holderId === player.id) players.setHands(player.id, 'hook');
+      } else if (action?.kind === 'releaseHook') {
+        winch.release();
       }
     }
   };
@@ -178,6 +211,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       player.respawnIn -= TICK_DT;
       if (player.respawnIn > 1e-9) continue;
       const pos = players.findSpawn(player.id);
+      releaseHook(player.id, 'stow');
       players.resetHeld(player.id);
       players.setSeat(player.id, null, pos);
       events.push({ kind: 'respawn', tick, playerId: player.id, pos });
@@ -201,9 +235,12 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       physics.step();
       tick += 1;
       players.stepOnFoot(onFoot);
+      const pulled = winch.afterCharacters((id) => players.holdPose(id));
+      if (pulled !== null) players.setHands(pulled, null);
       const events: WorldEvent[] = [];
       killPlane(events);
       resetLastTick = new Set(props.killPlane(course.killPlaneY));
+      for (const id of resetLastTick) winch.onPropReset(id);
       return events;
     },
     snapshot: () => ({
@@ -222,15 +259,18 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         grounded: player.grounded,
       })),
       props: props.snapshot(),
+      cable: winch.state(),
     }),
     addPlayer: (id) => void players.add(id),
     removePlayer(id) {
+      releaseHook(id, 'drop');
       players.remove(id);
       previous.delete(id);
     },
     teleportPlayer: (id, pos) => players.teleport(id, pos),
     debug: () => ({ forwardSpeed: vehicle.forwardSpeed(), wheelSurfaces: vehicle.wheelSurfaces() }),
     debugBody: (id) => (id === 'vehicle' ? vehicle.body : props.get(id)?.body),
+    debugWinch: () => winch,
     dispose() {
       players.dispose();
       props.dispose();

@@ -14,4 +14,5 @@ export * from './statics';
 export * from './vehicle';
 export * from './vehicles';
 export * from './walk';
+export * from './winch';
 export * from './world';

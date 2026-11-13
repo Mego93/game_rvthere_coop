@@ -122,7 +122,7 @@ export function createGame(
   // A prop in a player's hands is drawn at that player's hold pose; the rest where the snapshot puts them.
   const syncPropMeshes = (props: PropSnapshot[], players: PlayerSnapshot[]) => {
     const held = new Map<string, PlayerSnapshot>();
-    for (const player of players) if (player.hands !== null) held.set(player.hands, player);
+    for (const player of players) if (player.hands !== null && player.hands !== 'hook') held.set(player.hands, player);
     const present = new Set<string>();
     for (const prop of props) {
       present.add(prop.id);
@@ -198,6 +198,8 @@ export function createGame(
       server: latestLocal?.pos ?? null,
       aim: { yaw: mouse.yaw(), pitch: mouse.pitch() },
       propPoses: sampled?.props ?? [],
+      cable: sampled?.cable ?? null,
+      anchors: course.anchors,
     });
     renderer.render(scene, camera);
     frameRequest = requestAnimationFrame(frame);
@@ -210,7 +212,7 @@ export function createGame(
     pushSnapshot(snapshot) {
       buffer.push(snapshot, performance.now() / 1000);
       predictor.setVehicle(snapshot.vehicle.pos, snapshot.vehicle.rot);
-      const held = new Set(snapshot.players.flatMap((player) => (player.hands === null ? [] : [player.hands])));
+      const held = new Set(snapshot.players.flatMap((player) => (player.hands === null || player.hands === 'hook' ? [] : [player.hands])));
       predictor.setProps(buffer.latestProps().filter((prop) => !held.has(prop.id)));
       const entry = snapshot.players.find((player) => player.playerId === playerId);
       latestLocal = entry ?? null;
