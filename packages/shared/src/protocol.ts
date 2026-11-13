@@ -233,6 +233,10 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   value.inventory.length === 3 &&
   value.inventory.every((slot) => slot === null || isText(slot)) &&
   (value.slot === 0 || value.slot === 1 || value.slot === 2) &&
+  finite(value.health) &&
+  value.health >= 0 &&
+  value.health <= 100 &&
+  (value.downed === null || (finite(value.downed) && value.downed >= 0)) &&
   (value.hold === null || (isRecord(value.hold) && isText(value.hold.action) && isText(value.hold.targetId) && finite(value.hold.progress)));
 const isPropSnapshot = (value: unknown): value is PropSnapshot =>
   isRecord(value) && isText(value.id) && isText(value.kind) && isVec3(value.pos) && isQuat(value.rot);

@@ -1102,3 +1102,154 @@ describe('hands', () => {
     expect(props.get('crate-1')!.body.isDynamic()).toBe(true);
   });
 });
+
+describe('what is a hit (rules H4, J2, J9)', () => {
+  const CRATE = 'crate-1';
+  const stand = (h: ReturnType<typeof harness>, id: string, at: Vec3) => {
+    const player = h.players.add(id);
+    h.players.teleport(id, at);
+    h.run(30);
+    return player;
+  };
+  // The crate comes at the player's chest from +x at 12 m/s.
+  const shoot = (h: ReturnType<typeof harness>, feet: Vec3) => {
+    const body = h.props.get(CRATE)!.body;
+    body.setTranslation(vec3(feet.x + 1.5, feet.y + 0.98, feet.z), true);
+    body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    body.setLinvel(vec3(-12, 0, 0), true);
+    body.setAngvel(vec3(0, 0, 0), true);
+  };
+  const stash = (h: ReturnType<typeof harness>) => {
+    const body = h.props.get(CRATE)!.body;
+    body.setTranslation(vec3(-50, 0.5, 50), true);
+    body.setLinvel(vec3(0, 0, 0), true);
+    body.setAngvel(vec3(0, 0, 0), true);
+  };
+  // The damage found over some ticks, and the largest cooldown map seen.
+  const watch = (h: ReturnType<typeof harness>, id: string, ticks: number, inputs: Record<string, Partial<InputFields>> = {}) => {
+    let amounts: number[] = [];
+    let entries = 0;
+    for (let i = 0; i < ticks; i++) {
+      h.tick(inputs);
+      amounts = amounts.concat(h.players.takeDamage().filter((d) => d.playerId === id).map((d) => d.amount));
+      entries = Math.max(entries, h.players.get(id)!.hitCooldown.size);
+    }
+    return { amounts, entries };
+  };
+
+  test('J9: a downed player is not hit and gets no cooldown entry; the same shot hurts a standing one', () => {
+    const h = harness();
+    const feet = vec3(10, 0.02, 20);
+    stand(h, 'p1', feet);
+    shoot(h, feet);
+    const live = watch(h, 'p1', 15);
+    expect(live.amounts).toHaveLength(1);
+    expect(live.entries).toBe(1);
+    stash(h);
+    watch(h, 'p1', 40);
+    expect(h.players.get('p1')!.hitCooldown.size).toBe(0);
+    h.players.setDowned('p1');
+    shoot(h, h.players.get('p1')!.pos);
+    const down = watch(h, 'p1', 15);
+    expect(down.amounts).toEqual([]);
+    expect(down.entries).toBe(0);
+  });
+
+  test('J2: a player on the roof of a vehicle that drives and brakes hard is not hit by it', () => {
+    const h = harness();
+    const body = h.rig.vehicle.body;
+    const player = h.players.add('p1');
+    const at = body.translation();
+    h.players.teleport('p1', vec3(at.x, at.y + LODGY.halfExtents.y + 0.1, at.z));
+    h.run(30);
+    expect(player.ground?.bodyId).toBe('vehicle');
+    h.vehicleRun.beforePhysics = () => body.setLinvel(vec3(0, 0, -8), true);
+    const driving = watch(h, 'p1', 60);
+    h.vehicleRun.beforePhysics = () => body.setLinvel(vec3(0, 0, 0), true);
+    const braking = watch(h, 'p1', 60);
+    expect(driving.amounts.concat(braking.amounts)).toEqual([]);
+    expect(driving.entries + braking.entries).toBe(0);
+    expect(player.ground?.bodyId).toBe('vehicle');
+  });
+
+  test('J2: landing on the roof of a moving vehicle is not a hit', () => {
+    const h = harness();
+    const body = h.rig.vehicle.body;
+    const player = h.players.add('p1');
+    h.vehicleRun.beforePhysics = () => body.setLinvel(vec3(0, 0, -8), true);
+    h.run(10);
+    const at = body.translation();
+    // The vehicle drives 8 m/s for the 0.71 s of the fall, so the player is dropped that far ahead.
+    h.players.teleport('p1', vec3(at.x, at.y + LODGY.halfExtents.y + 2.5, at.z - 5.7));
+    const landing = watch(h, 'p1', 90);
+    expect(player.ground?.bodyId).toBe('vehicle');
+    expect(landing.amounts).toEqual([]);
+    expect(landing.entries).toBe(0);
+  });
+
+  test('J2: landing on two props side by side is not a hit', () => {
+    const h = harness();
+    const second = h.props.get('crate-3')!.body;
+    second.setTranslation(vec3(10, 0.3, 10.1), true);
+    h.run(30);
+    const player = h.players.add('p1');
+    h.players.teleport('p1', vec3(10, 3.6, 9.8));
+    const landing = watch(h, 'p1', 90);
+    expect(player.ground).not.toBeNull();
+    expect(landing.amounts).toEqual([]);
+    expect(landing.entries).toBe(0);
+  });
+
+  test('J2: a player riding the vehicle is not hit by a prop moving with it, but is by the same prop moving relative to the ground', () => {
+    const run = (propSpeed: number) => {
+      const h = harness();
+      const body = h.rig.vehicle.body;
+      const crate = h.props.get(CRATE)!.body;
+      const player = h.players.add('p1');
+      const at = body.translation();
+      // The player stands on the roof with the crate just behind, and walks back into it.
+      h.players.teleport('p1', vec3(at.x, at.y + LODGY.halfExtents.y + 0.1, at.z));
+      h.run(30);
+      h.vehicleRun.beforePhysics = () => {
+        body.setLinvel(vec3(0, 0, -10), true);
+        crate.setLinvel(vec3(0, 0, -propSpeed), true);
+      };
+      const start = player.pos;
+      crate.setTranslation(vec3(start.x, start.y + 0.31, start.z + 0.62), true);
+      crate.setAngvel(vec3(0, 0, 0), true);
+      return { h, player, ...watch(h, 'p1', 30, { p1: { moveY: -1 } }) };
+    };
+    const together = run(10);
+    expect(together.player.ground?.bodyId).toBe('vehicle');
+    expect(together.amounts).toEqual([]);
+    const sliding = run(24);
+    expect(sliding.amounts.length).toBeGreaterThan(0);
+  });
+
+  test('H4: a failed shove-out that falls back to a spawn slot does not count as a hit', () => {
+    const probe = harness();
+    const zp = probe.rig.vehicle.body.translation().z - LODGY.halfExtents.z - 1.5;
+    const course = withBoxes(testGround, { walls: [{ center: vec3(0, 1, zp - 3.1), halfExtents: vec3(3, 1, 3), rot: IDENTITY }] });
+    const h = harness(course);
+    const body = h.rig.vehicle.body;
+    const player = h.players.add('p1');
+    h.players.teleport('p1', vec3(body.translation().x, 0.02, zp));
+    h.run(10);
+    h.vehicleRun.beforePhysics = () => body.setLinvel(vec3(0, 0, -10), true);
+    let relocated = false;
+    let last = { ...player.pos };
+    let all: number[] = [];
+    let seen = 0;
+    // Up to ten ticks after the move: the vehicle later wanders back into the player, which is an ordinary contact.
+    for (let i = 0; i < 90 && seen < 10; i++) {
+      h.tick({});
+      all = all.concat(h.players.takeDamage().map((d) => d.amount));
+      if (relocated) seen += 1;
+      if (Math.hypot(player.pos.x - last.x, player.pos.z - last.z) > 0.5) relocated = true;
+      last = { ...player.pos };
+    }
+    expect(relocated).toBe(true);
+    expect(all).toEqual([]);
+    expect(player.hitCooldown.size).toBe(0);
+  });
+});

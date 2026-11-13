@@ -69,7 +69,7 @@ test('props are known kinds with unique ids and rest on ground', () => {
 });
 
 test('pickups are item kinds and rest on ground', () => {
-  expect(testGround.pickups.map((pickup) => pickup.id)).toEqual(['jerrycan-1', 'jerrycan-2', 'toolbox-1']);
+  expect(testGround.pickups.map((pickup) => pickup.id)).toEqual(['jerrycan-1', 'jerrycan-2', 'toolbox-1', 'healthKit-1']);
   for (const pickup of testGround.pickups) {
     expect(Object.hasOwn(ITEM_KINDS, pickup.kind), pickup.id).toBe(true);
     const hit = probe(pickup.pose.pos.x, pickup.pose.pos.y, pickup.pose.pos.z);

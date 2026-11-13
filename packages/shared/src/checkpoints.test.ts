@@ -493,7 +493,7 @@ describe('world: restart restores items', () => {
     expect(playerOf(world, 'p1').inventory).toEqual(['jerrycan', null, null]);
     recordCp1(world);
     const recorded = world.snapshot().props.filter((prop) => Object.hasOwn(ITEM_KINDS, prop.kind));
-    expect(recorded.map((item) => item.id)).toEqual(['jerrycan-2', 'toolbox-1']);
+    expect(recorded.map((item) => item.id)).toEqual(['jerrycan-2', 'toolbox-1', 'healthKit-1']);
     standAt(world, 'p1', -3, 14);
     tap(world, 'p1', { interact: true });
     tap(world, 'p1', { drop: true, slot: 1 });
@@ -501,7 +501,7 @@ describe('world: restart restores items', () => {
     tap(world, 'p1', { interact: true, slot: 1 });
     expect(playerOf(world, 'p1').inventory).toEqual(['jerrycan', 'toolbox', null]);
     const dropped = world.snapshot().props.filter((prop) => Object.hasOwn(ITEM_KINDS, prop.kind));
-    expect(dropped.map((item) => item.id)).toEqual(['item-1']);
+    expect(dropped.map((item) => item.id)).toEqual(['healthKit-1', 'item-1']);
     world.restartCheckpoint();
     world.step(new Map());
     expect(playerOf(world, 'p1').inventory).toEqual(['jerrycan', null, null]);
@@ -509,6 +509,7 @@ describe('world: restart restores items', () => {
     expect(items.map((item) => [item.id, item.kind])).toEqual([
       ['jerrycan-2', 'jerrycan'],
       ['toolbox-1', 'toolbox'],
+      ['healthKit-1', 'healthKit'],
     ]);
     for (const item of items) {
       const was = recorded.find((candidate) => candidate.id === item.id)!;

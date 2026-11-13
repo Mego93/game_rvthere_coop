@@ -2,6 +2,11 @@ import {
   DOWNED_TIMEOUT,
   FALL_DAMAGE,
   FALL_DAMAGE_SPEED,
+  HIT_COOLDOWN,
+  PROP_HIT_DAMAGE,
+  PROP_HIT_SPEED,
+  VEHICLE_HIT_DAMAGE,
+  VEHICLE_HIT_SPEED,
   PLAYER_CONTROLLER_OFFSET,
   PLAYER_EYE_HEIGHT,
   PLAYER_HEIGHT,
@@ -24,7 +29,7 @@ import {
 } from './constants';
 import type { BuiltCourse } from './course';
 import type { Hold } from './holds';
-import { damageAbove } from './health';
+import { damageAbove, relativeSpeed } from './health';
 import { GROUP_GROUND, GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, sub, vec3, yawOf, type Pose, type Quat, type Vec3 } from './math';
 import { exitPoints } from './seats';
@@ -276,6 +281,13 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     return { x: v.x + w.y * r.z - w.z * r.y, z: v.z + w.x * r.y - w.y * r.x };
   };
 
+  const velocity3At = (body: RigidBody, point: Vec3): Vec3 => {
+    const v = body.linvel();
+    const w = body.angvel();
+    const r = sub(point, body.worldCom());
+    return vec3(v.x + w.y * r.z - w.z * r.y, v.y + w.z * r.x - w.x * r.z, v.z + w.x * r.y - w.y * r.x);
+  };
+
   const fromBodyFrame = (body: RigidBody, local: Vec3): Vec3 => add(body.translation(), rotate(body.rotation(), local));
 
   const toBodyFrame = (body: RigidBody, world: Vec3): Vec3 =>
@@ -299,10 +311,11 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     return true;
   };
 
-  const shoveOut = (state: PlayerState) => {
+  // Rule H4 (a): the body that was shoved out of, with the unit horizontal normal from it to the player.
+  const shoveOut = (state: PlayerState): { bodyId: string; n: Vec3 } | null => {
     const overlapped = touching(state.pos).body;
-    if (overlapped === null) return;
-    if (liftOntoTop(state, overlapped)) return;
+    if (overlapped === null) return null;
+    if (liftOntoTop(state, overlapped)) return null;
     const { body } = bodyOf(overlapped);
     const centre = body.translation();
     let dx = state.pos.x - centre.x;
@@ -314,13 +327,14 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       dz = -Math.sin(yaw);
       distance = 1;
     }
+    const hit = { bodyId: overlapped, n: vec3(dx / distance, 0, dz / distance) };
     for (let along = SHOVE_STEP; along <= SHOVE_MAX_DISTANCE + 1e-9; along += SHOVE_STEP) {
       const candidate = vec3(state.pos.x + (dx / distance) * along, state.pos.y, state.pos.z + (dz / distance) * along);
       const found = touching(candidate);
       if (found.statics) break;
       if (found.body === null) {
         state.pos = candidate;
-        return;
+        return hit;
       }
     }
     state.pos = findSpawn(state.id);
@@ -328,6 +342,8 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     state.walk = { x: 0, z: 0 };
     state.carry = { x: 0, z: 0 };
     state.hold = null;
+    // The move to a spawn slot is a teleport and costs nothing (rule J2).
+    return null;
   };
 
   const seatConfig = (seatId: string): SeatConfig | undefined => vehicle.config.seats.find((seat) => seat.id === seatId);
@@ -409,7 +425,20 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     }
   };
 
-  const move = (state: PlayerState, step: StepInputs) => {
+  // Rules H4, J3, J4: a touching body resets its cooldown every tick; a hit counts only when none was live.
+  const registerHit = (state: PlayerState, bodyId: string, n: Vec3, playerVel: Vec3) => {
+    const live = state.hitCooldown.has(bodyId);
+    state.hitCooldown.set(bodyId, HIT_COOLDOWN);
+    if (live) return;
+    const { body } = bodyOf(bodyId);
+    const centre = vec3(state.pos.x, state.pos.y + PLAYER_HEIGHT / 2, state.pos.z);
+    const speed = relativeSpeed(body.linvel(), body.angvel(), body.worldCom(), centre, playerVel, n);
+    const vehicleHit = bodyId === 'vehicle';
+    const amount = vehicleHit ? damageAbove(speed, VEHICLE_HIT_SPEED, VEHICLE_HIT_DAMAGE) : damageAbove(speed, PROP_HIT_SPEED, PROP_HIT_DAMAGE);
+    if (amount > 0) damage.push({ playerId: state.id, source: vehicleHit ? 'vehicle' : 'prop', amount });
+  };
+
+  const move = (state: PlayerState, step: StepInputs, startGround: string | null, shoved: { bodyId: string; n: Vec3 } | null) => {
     const { fields, pressed } = step;
     const wish = wishVelocity(state.yaw, finite(fields.moveX), finite(fields.moveY));
     const wasOn = state.ground?.bodyId ?? null;
@@ -438,6 +467,24 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     if (wasAirborne && state.grounded) {
       const amount = damageAbove(Math.max(0, -moveVy), FALL_DAMAGE_SPEED, FALL_DAMAGE);
       if (amount > 0) damage.push({ playerId: state.id, source: 'fall', amount });
+    }
+    if (state.downed === null) {
+      // Rule J2: the ground, and contacts with an upward normal, are not hits.
+      const contacts = new Map<string, Vec3>();
+      const skip = (bodyId: string) => bodyId === startGround || bodyId === wasOn || bodyId === standingOn;
+      if (shoved && !skip(shoved.bodyId)) contacts.set(shoved.bodyId, shoved.n);
+      for (const hit of collisions) {
+        if (hit.normalY >= MIN_UP_NORMAL) continue;
+        const prop = props.byCollider(hit.handle);
+        const bodyId = hit.handle === vehicle.chassisHandle ? 'vehicle' : prop && prop.heldBy === null ? prop.id : null;
+        if (bodyId === null || skip(bodyId) || contacts.has(bodyId)) continue;
+        contacts.set(bodyId, hit.normal);
+      }
+      if (contacts.size > 0) {
+        const ground = startGround === null ? vec3(0, 0, 0) : velocity3At(bodyOf(startGround).body, state.pos);
+        const playerVel = vec3(state.walk.x + state.carry.x + ground.x, state.vy + ground.y, state.walk.z + state.carry.z + ground.z);
+        for (const [bodyId, n] of contacts) registerHit(state, bodyId, n, playerVel);
+      }
     }
     state.ground = standingOn === null ? null : { bodyId: standingOn, localPos: toBodyFrame(bodyOf(standingOn).body, state.pos) };
     // Leaving a body takes its velocity, even on a tick the controller still reports grounded (the body's edge, or its snap).
@@ -505,14 +552,16 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
           continue;
         }
         if (state.ground && groundLost(state.ground)) state.ground = null;
+        const startGround = state.ground?.bodyId ?? null;
+        let shoved: { bodyId: string; n: Vec3 } | null = null;
         if (state.ground) {
           state.pos = fromBodyFrame(bodyOf(state.ground.bodyId).body, state.ground.localPos);
           placeCollider(state.id);
         } else {
-          shoveOut(state);
+          shoved = shoveOut(state);
           placeCollider(state.id);
         }
-        move(state, step);
+        move(state, step, startGround, shoved);
       }
       // Rule K4.
       for (const { state } of entries.values()) {

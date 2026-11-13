@@ -54,9 +54,12 @@ export function createPlayerMesh(name: string, colour: string): THREE.Group {
   return group;
 }
 
+// A downed player lies on their back, rotated 90 degrees about the yaw-right axis; the capsule stays upright.
 export function placePlayerMesh(mesh: THREE.Group, player: PlayerSnapshot): void {
-  mesh.position.set(player.pos.x, player.pos.y, player.pos.z);
-  mesh.rotation.y = player.yaw;
+  const downed = player.downed !== null;
+  mesh.position.set(player.pos.x, player.pos.y + (downed ? PLAYER_RADIUS : 0), player.pos.z);
+  mesh.rotation.order = 'YXZ';
+  mesh.rotation.set(downed ? Math.PI / 2 : 0, player.yaw, 0);
 }
 
 // Frees the GPU resources of a mesh made by createPlayerMesh.

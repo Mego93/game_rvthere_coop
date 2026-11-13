@@ -35,6 +35,7 @@ describe('createItems', () => {
       ['jerrycan-1', 'jerrycan'],
       ['jerrycan-2', 'jerrycan'],
       ['toolbox-1', 'toolbox'],
+      ['healthKit-1', 'healthKit'],
     ]);
     for (const item of list) {
       const half = ITEM_KINDS[item.kind as keyof typeof ITEM_KINDS].halfExtents;
@@ -48,7 +49,7 @@ describe('createItems', () => {
     expect(items.take('toolbox-1')).toBe('toolbox');
     expect(items.take('toolbox-1')).toBeNull();
     expect(items.get('toolbox-1')).toBeUndefined();
-    expect(items.snapshot().map((item) => item.id)).toEqual(['jerrycan-1', 'jerrycan-2']);
+    expect(items.snapshot().map((item) => item.id)).toEqual(['jerrycan-1', 'jerrycan-2', 'healthKit-1']);
     physics.free();
   });
 
@@ -59,8 +60,8 @@ describe('createItems', () => {
     items.take('item-1');
     expect(items.drop('jerrycan', vec3(7, 1, 5))).toBe('item-3');
     const list = items.snapshot();
-    expect(list.map((item) => item.id)).toEqual(['jerrycan-1', 'jerrycan-2', 'toolbox-1', 'item-2', 'item-3']);
-    expect(list[3]!.pos.y).toBeCloseTo(1 + ITEM_KINDS.jerrycan.halfExtents.y, 6);
+    expect(list.map((item) => item.id)).toEqual(['jerrycan-1', 'jerrycan-2', 'toolbox-1', 'healthKit-1', 'item-2', 'item-3']);
+    expect(list[4]!.pos.y).toBeCloseTo(1 + ITEM_KINDS.jerrycan.halfExtents.y, 6);
     physics.free();
   });
 
@@ -304,7 +305,7 @@ describe('items in the world', () => {
       ...testGround.props.map((prop) => prop.id),
       ...testGround.pickups.map((pickup) => pickup.id),
     ]);
-    expect(snapshot.props.slice(-1)[0]).toMatchObject({ id: 'toolbox-1', kind: 'toolbox' });
+    expect(snapshot.props.slice(-1)[0]).toMatchObject({ id: 'healthKit-1', kind: 'healthKit' });
     expect(snapshot.players[0]).toMatchObject({ inventory: [null, null, null], slot: 2 });
     world.dispose();
   });

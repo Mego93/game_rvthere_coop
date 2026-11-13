@@ -105,6 +105,7 @@ Roles are not assigned.
 - A player has 100 health. It does not regenerate.
 - A player is hurt by: landing from a fall above a speed threshold; being hit by the vehicle above a relative speed threshold; being hit by any prop moving above a speed threshold. Damage scales with the speed above the threshold.
 - A seated player takes no damage.
+- The speed of a hit is the closing speed along the contact normal, so walking into a resting vehicle or prop costs nothing. One body hurts a player at most once per continuous contact; contact must break for 0.5 s before it can hurt again. The body a player stands on never hurts them.
 - At 0 health the player is **downed**: they lie where they fell, cannot move or act, drop what is in their hands, keep their inventory, and take no further damage. A downed player still falls, can be shoved, and is subject to the kill plane.
 - A teammate revives a downed player by using a health kit on them. The player gets up with 50 health.
 - If nobody revives them within 30 s, the player **respawns** beside the vehicle with 50 health, and one respawn is counted. The 30 s timer pauses while a teammate's revive hold is running on them.
@@ -134,7 +135,7 @@ A player has two separate things:
 | Health kit | A teammate in range and near the crosshair who is downed | Revives at 50 health |
 | Health kit | A teammate in range and near the crosshair with health below 100; otherwise oneself if below 100 | Health +50 |
 
-With no valid target, use does nothing. A downed teammate is preferred over a hurt one.
+With no valid target, use does nothing. A downed teammate is preferred over a hurt one. "In range" for a health kit is within 2 m (feet to feet) and "near the crosshair" is within 20° of the aim, measured from the eye to the teammate's centre; the crosshair is checked when the hold starts, range while it runs.
 
 ### Hold actions
 
@@ -497,7 +498,7 @@ snapshot {
   tick, ackSeq, full,
   vehicle { pos, rot, linvel, throttle, steer, fuel, health },
   players [ {
-    playerId, pos, yaw, health,
+    playerId, pos, yaw, health,                         // health 0..100, rounded down
     walk: { x, z }, carry: { x, z }, vy, grounded,   // the walking state the predictor resets to
     downed:  seconds left | null,
     seat:    seatId | null,

@@ -36,7 +36,7 @@ export interface WalkEnv {
 export interface WalkResult {
   // The vy the move used, after the jump and gravity.
   moveVy: number;
-  collisions: ReadonlyArray<{ handle: number; normalY: number }>;
+  collisions: ReadonlyArray<{ handle: number; normalY: number; normal: Vec3 }>;
 }
 
 export function createWalkController(_rapier: Rapier, physics: RapierWorld): RAPIER.KinematicCharacterController {
@@ -88,10 +88,10 @@ export function stepWalk(env: WalkEnv, state: WalkState, pressedJump: boolean, w
   }
   placeCollider(collider, state.pos);
 
-  const collisions: { handle: number; normalY: number }[] = [];
+  const collisions: { handle: number; normalY: number; normal: Vec3 }[] = [];
   for (let i = 0; i < controller.numComputedCollisions(); i++) {
     const hit = controller.computedCollision(i);
-    if (hit?.collider) collisions.push({ handle: hit.collider.handle, normalY: hit.normal1.y });
+    if (hit?.collider) collisions.push({ handle: hit.collider.handle, normalY: hit.normal1.y, normal: vec3(hit.normal1.x, hit.normal1.y, hit.normal1.z) });
   }
   return { moveVy, collisions };
 }

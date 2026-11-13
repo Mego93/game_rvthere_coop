@@ -12,7 +12,7 @@ import {
   type Vec3,
   type VehicleState,
 } from '@lodgy/shared';
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import type { RunStatus } from '../net/snapshotBuffer';
 import { interactHint, overlayText } from './overlay';
 
@@ -293,4 +293,45 @@ test('shows FINISHED on its own line only once won', () => {
 
 test('shows no time line before the first snapshot', () => {
   expect(withStatus(null)).not.toContain('time ');
+});
+
+test('C2: shows the health line after the slots, and the downed timer rounded up while downed', () => {
+  const text = lines([nearDoor]);
+  expect(text.indexOf('health   100')).toBe(text.indexOf('slots    [-] - -') + 1);
+  expect(text.some((line) => line.startsWith('DOWNED'))).toBe(false);
+  expect(lines([holding({ health: 40 })])).toContain('health   40');
+  const after = (downed: number) => lines([holding({ health: 0, downed })]);
+  expect(after(30)).toContain('DOWNED   30s');
+  expect(after(29.5)).toContain('DOWNED   30s');
+  expect(after(29.01)).toContain('DOWNED   30s');
+  expect(after(29)).toContain('DOWNED   29s');
+  expect(after(0.01)).toContain('DOWNED   1s');
+  const down = after(30);
+  expect(down.indexOf('DOWNED   30s')).toBe(down.indexOf('health   0') + 1);
+});
+
+describe('C2: health kit hints', () => {
+  const kit = (changes: Partial<PlayerSnapshot> = {}) => holding({ inventory: ['healthKit', null, null], ...changes });
+  // Badr stands 1.5 m ahead of Amal, who looks at the chest.
+  const mate = (changes: Partial<PlayerSnapshot> = {}) => ({ ...player('p2', nearDoor.pos.x, nearDoor.pos.z - 1.5), ...changes });
+  const aimed = (players: PlayerSnapshot[]) =>
+    overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players, localId: 'p1', predicted: null, server: null, ...noAim, aim: { yaw: 0, pitch: -0.45 } }).split('\n');
+
+  test('names the downed teammate to revive and the hurt one to heal', () => {
+    expect(aimed([kit(), mate({ health: 0, downed: 20 })])).toContain('hint     Hold F to revive Badr');
+    expect(aimed([kit(), mate({ health: 40 })])).toContain('hint     Hold F to heal Badr');
+  });
+
+  test('heals oneself when hurt and no teammate qualifies', () => {
+    expect(aimed([kit({ health: 60 }), mate()])).toContain('hint     Hold F to heal yourself');
+  });
+
+  test('no hint at full health with nobody hurt, or without the kit selected', () => {
+    expect(aimed([kit(), mate()]).some((line) => line.includes('Hold F'))).toBe(false);
+    expect(aimed([kit({ slot: 1 }), mate({ health: 0, downed: 20 })]).some((line) => line.includes('Hold F'))).toBe(false);
+  });
+
+  test('a downed local player gets no hint', () => {
+    expect(aimed([kit({ health: 0, downed: 20 }), mate({ health: 40 })]).some((line) => line.includes('Hold F'))).toBe(false);
+  });
 });

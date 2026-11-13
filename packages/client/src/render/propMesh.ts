@@ -11,7 +11,16 @@ const material = (color: number) => new THREE.MeshLambertMaterial({ color, flatS
 export function createPropMesh(kind: string): THREE.Mesh {
   if (Object.hasOwn(ITEM_KINDS, kind)) {
     const h = ITEM_KINDS[kind as ItemKind].halfExtents;
-    return new THREE.Mesh(new THREE.BoxGeometry(h.x * 2, h.y * 2, h.z * 2), material(ITEM_COLOURS[kind as ItemKind]));
+    const box = new THREE.Mesh(new THREE.BoxGeometry(h.x * 2, h.y * 2, h.z * 2), material(ITEM_COLOURS[kind as ItemKind]));
+    if (kind === 'healthKit') {
+      // A red cross on top, its bars standing on the lid.
+      for (const [w, d] of [[h.x * 1.2, h.z * 0.4], [h.x * 0.4, h.z * 1.2]] as const) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h.y * 0.1, d), material(0xd32f2f));
+        bar.position.y = h.y * 1.05;
+        box.add(bar);
+      }
+    }
+    return box;
   }
   if (!Object.hasOwn(PROP_KINDS, kind)) {
     return new THREE.Mesh(new THREE.BoxGeometry(UNKNOWN_HALF * 2, UNKNOWN_HALF * 2, UNKNOWN_HALF * 2), material(0x888888));

@@ -217,9 +217,9 @@ test('an empty name is refused on the page, before anything is sent', async ({ p
   expect(sockets).toBe(0);
 });
 
-test('the course props are drawn: the overlay counts four props and three pickups and the page has no errors', async ({ page }) => {
+test('the course props are drawn: the overlay counts four props and four pickups and the page has no errors', async ({ page }) => {
   await createRoom(page, 'Amal');
-  await expect(page.locator('#overlay')).toContainText('props    7');
+  await expect(page.locator('#overlay')).toContainText('props    8');
   const before = await tick(page);
   await expect.poll(() => tick(page)).toBeGreaterThan(before);
 });
@@ -237,6 +237,11 @@ test('fuel and slots are shown: a full tank, three empty slots, and the page has
   await expect(page.locator('#overlay')).toContainText(/slots\s+\[-\] - -/);
   const before = await tick(page);
   await expect.poll(() => tick(page)).toBeGreaterThan(before);
+});
+
+test('the local player starts at full health', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await expect(page.locator('#overlay')).toContainText(/^health   100$/m);
 });
 
 test('the timer runs: the clock rises and the checkpoint shows the first of two', async ({ page }) => {
