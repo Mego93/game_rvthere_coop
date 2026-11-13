@@ -5538,6 +5538,81 @@ git commit -m "test(e2e): prove that only the driver's keys move the vehicle
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
+- [ ] **Step 11: Prove the hand-over by the throttle, not the distance**
+
+The re-review found that the hand-over check added in step 9 could pass with no input from Badr: when Amal leaves, the vehicle is still rolling at about 5 m/s, and coasting alone covers the 3 m the check asked for. The overlay's `throttle` value is what the server applied to the vehicle, so it shows whose keys the server obeys whatever the speed. The test now reads it in three places: it stays 0 on both pages while Badr holds the key as a passenger, it rises above 0.9 while Amal drives, and it rises above 0.9 again when Badr drives after Amal has left.
+
+Apply this change to `e2e/smoke.spec.ts`. The main session provides it as a patch file for `git apply`; it ran the result three times beforehand, 12 passed each time.
+
+```diff
+diff --git a/e2e/smoke.spec.ts b/e2e/smoke.spec.ts
+index 16cec6e..e54a956 100644
+--- a/e2e/smoke.spec.ts
++++ b/e2e/smoke.spec.ts
+@@ -8,6 +8,8 @@ async function overlayNumber(page: Page, pattern: RegExp): Promise<number> {
+ }
+ const tick = (page: Page) => overlayNumber(page, /tick\s+(\d+)/);
+ const vehicleZ = (page: Page) => overlayNumber(page, /pos\s+\S+\s+\S+\s+(\S+)/);
++// The throttle the server applied to the vehicle, from 0 to 1. It shows whose keys the server obeys without depending on speed.
++const throttle = (page: Page) => overlayNumber(page, /throttle\s+(\S+)/);
+ // The whole list of players as the overlay shows it, for example "Amal (drives), Badr".
+ async function players(page: Page): Promise<string> {
+   const text = (await page.locator('#overlay').textContent()) ?? '';
+@@ -71,15 +73,19 @@ test('two players share a room and see the same vehicle, driven by the first', a
+   // Badr's throttle does nothing: only the first player drives. Two seconds of throttle would move the vehicle several metres.
+   await badr.keyboard.down('KeyW');
+   await badr.waitForTimeout(2000);
+-  expect(await vehicleZ(amal)).toBeGreaterThan(-0.5);
+-  expect(await vehicleZ(badr)).toBeGreaterThan(-0.5);
++  for (const page of [amal, badr]) {
++    expect(await throttle(page)).toBe(0);
++    expect(await vehicleZ(page)).toBeGreaterThan(-0.5);
++  }
+   await badr.keyboard.up('KeyW');
+ 
+-  // Amal drives forward, and both pages see the vehicle move.
++  // Amal drives forward, and both pages see the throttle applied and the vehicle move.
+   await amal.keyboard.down('KeyW');
++  await expect.poll(() => throttle(badr)).toBeGreaterThan(0.9);
+   await expect.poll(() => vehicleZ(amal), { timeout: 10_000 }).toBeLessThan(-3);
+   await expect.poll(() => vehicleZ(badr), { timeout: 10_000 }).toBeLessThan(-3);
+   await amal.keyboard.up('KeyW');
++  await expect.poll(() => throttle(badr)).toBe(0);
+ 
+   // The game canvas has been given its drawing size.
+   for (const page of [amal, badr]) {
+@@ -89,11 +95,12 @@ test('two players share a room and see the same vehicle, driven by the first', a
+   }
+ 
+   // When Amal leaves, Badr drives. This also shows that Badr's keys do reach the server, so the check above meant something.
++  // The vehicle is still rolling, so the throttle is the proof, not the distance.
+   await amal.close();
+   await expect.poll(() => players(badr)).toBe('Badr (drives)');
+-  const before = await vehicleZ(badr);
++  expect(await throttle(badr)).toBe(0);
+   await badr.keyboard.down('KeyW');
+-  await expect.poll(() => vehicleZ(badr), { timeout: 10_000 }).toBeLessThan(before - 3);
++  await expect.poll(() => throttle(badr)).toBeGreaterThan(0.9);
+   await badr.keyboard.up('KeyW');
+ });
+ 
+```
+
+Run: `npm run e2e`
+Expected: `12 passed`, in about 25 to 45 seconds.
+
+Run: `npm run typecheck`
+Expected: exits 0.
+
+- [ ] **Step 12: Commit**
+
+```bash
+git add e2e/smoke.spec.ts
+git commit -m "test(e2e): read the applied throttle to prove who drives
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
 ---
 
 ### Task 10: Record the step in the roadmap and the spec
