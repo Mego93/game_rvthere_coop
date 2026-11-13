@@ -104,14 +104,14 @@ These are decisions, not omissions. Do not "fix" them.
 - Consumes: the step 1 workspace.
 - Produces: `npm run typecheck` checks each package with its own config. `shared` has no DOM library.
 
-- [ ] **Step 1: Create the branch**
+- [x] **Step 1: Create the branch**
 
 ```bash
 git checkout main
 git checkout -b step-2-server-rooms-snapshots
 ```
 
-- [ ] **Step 2: Replace the two root configs**
+- [x] **Step 2: Replace the two root configs**
 
 `tsconfig.base.json`:
 
@@ -157,7 +157,7 @@ git checkout -b step-2-server-rooms-snapshots
 
 (`e2e` and `playwright.config.ts` do not exist yet; they arrive in Task 9.)
 
-- [ ] **Step 3: Create the package configs**
+- [x] **Step 3: Create the package configs**
 
 `packages/shared/tsconfig.json`:
 
@@ -189,7 +189,7 @@ git checkout -b step-2-server-rooms-snapshots
 }
 ```
 
-- [ ] **Step 4: Change the typecheck script**
+- [x] **Step 4: Change the typecheck script**
 
 In the root `package.json`, replace the line
 
@@ -203,7 +203,7 @@ with
     "typecheck": "tsc -p packages/shared && tsc -p packages/client && tsc -p tsconfig.json",
 ```
 
-- [ ] **Step 5: Run the checks**
+- [x] **Step 5: Run the checks**
 
 Run: `npm run typecheck`
 Expected: exits 0 with no output after the command echo.
@@ -211,7 +211,7 @@ Expected: exits 0 with no output after the command echo.
 Run: `npm test`
 Expected: 9 files, 57 tests passing.
 
-- [ ] **Step 6: Prove that `shared` cannot see the DOM**
+- [x] **Step 6: Prove that `shared` cannot see the DOM**
 
 Create the temporary file `packages/shared/src/zz-probe.ts` containing the single line:
 
@@ -224,7 +224,7 @@ Expected: FAIL with an error saying the name `document` cannot be found.
 
 Delete `packages/shared/src/zz-probe.ts`, then run `npm run typecheck` again. Expected: exits 0. Confirm with `git status --short` that the probe file is gone.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tsconfig.base.json tsconfig.json package.json packages/shared/tsconfig.json packages/client/tsconfig.json
@@ -251,7 +251,7 @@ One server process will run many rooms from the same course and vehicle objects,
   - `MAX_CATCHUP_STEPS` is renamed `CLIENT_MAX_CATCHUP_STEPS`
   - new constants: `SERVER_MAX_CATCHUP_STEPS`, `SNAPSHOT_EVERY_TICKS`, `INTERPOLATION_DELAY`, `SNAPSHOT_BUFFER_SIZE`, `CLOCK_OFFSET_SMOOTHING`, `MAX_PLAYERS`, `NAME_MAX_LENGTH`, `PLAYER_COLOURS`, `INPUT_QUEUE_MAX`, `INPUT_QUEUE_FAST_ABOVE`, `NEUTRAL_AFTER_TICKS`, `PING_INTERVAL`, `SILENCE_TIMEOUT`, `RATE_LIMIT_PER_SECOND`, `RATE_LIMIT_CLOSE_AFTER`, `EMPTY_ROOM_TIMEOUT`
 
-- [ ] **Step 1: Replace the three test files**
+- [x] **Step 1: Replace the three test files**
 
 `packages/shared/src/math.test.ts`:
 
@@ -474,12 +474,12 @@ test('ignores a frame time that is not a positive number', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npm test`
 Expected: FAIL. The new tests in `math.test.ts`, `world.test.ts` and `loop.test.ts` fail (for example `lerp is not a function`, a wrong error message for `constructor`, `world.dispose is not a function`). The other six files still pass.
 
-- [ ] **Step 3: Replace `math.ts`, `constants.ts`, `world.ts` and `loop.ts`**
+- [x] **Step 3: Replace `math.ts`, `constants.ts`, `world.ts` and `loop.ts`**
 
 `packages/shared/src/math.ts`:
 
@@ -754,7 +754,7 @@ export function createFixedStepper(tick: () => void): FixedStepper {
 }
 ```
 
-- [ ] **Step 4: Make the registries safe and freeze the data**
+- [x] **Step 4: Make the registries safe and freeze the data**
 
 Replace `packages/shared/src/courses/index.ts` with:
 
@@ -789,7 +789,7 @@ In `packages/shared/src/vehicles.ts` make four one-line changes:
 
 Each line to replace occurs exactly once. If one does not, stop and report.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npm test`
 Expected: 9 files, 66 tests passing.
@@ -800,7 +800,7 @@ Expected: exits 0.
 Run: `npm run experiment:cable`
 Expected: passes, and the row `lodgy     150  1.00     22.53      0.98     0.08        0.19               0.98` is unchanged.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/shared/src packages/client/src/loop.ts packages/client/src/loop.test.ts
@@ -832,7 +832,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - `SOCKET_PATH = '/ws'`
   - `PlayerInput.seq` starts at 1; an `ackSeq` of 0 means no input has been consumed.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/shared/src/protocol.test.ts`:
 
@@ -941,12 +941,12 @@ test('the shared neutral input cannot be modified', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run packages/shared/src/protocol.test.ts`
 Expected: FAIL, because `cleanName`, `cleanRoom`, `neutralInput` and `parseClientMessage` are not exported yet.
 
-- [ ] **Step 3: Replace `protocol.ts`**
+- [x] **Step 3: Replace `protocol.ts`**
 
 `packages/shared/src/protocol.ts`:
 
@@ -1124,7 +1124,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
 
 `protocol.ts` and `world.ts` import each other's types. Both imports are type-only, so nothing is circular at run time.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npm test`
 Expected: 10 files, 97 tests passing.
@@ -1132,7 +1132,7 @@ Expected: 10 files, 97 tests passing.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/shared/src/protocol.ts packages/shared/src/protocol.test.ts
@@ -1159,7 +1159,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - `createRateLimiter(): RateLimiter` with `hit(now: number): 'ok' | 'drop' | 'close'`
   - `createInputQueue(): InputQueue` with `push(input: PlayerInput): void`, `next(): { input: InputFields; fresh: boolean }`, `ackSeq(): number`
 
-- [ ] **Step 1: Create the package**
+- [x] **Step 1: Create the package**
 
 `packages/server/package.json`:
 
@@ -1218,12 +1218,12 @@ and replace the `devDependencies` block with
   }
 ```
 
-- [ ] **Step 2: Install**
+- [x] **Step 2: Install**
 
 Run: `npm install`
 Expected: packages are added, `found 0 vulnerabilities`. The `EBADENGINE` warning is expected.
 
-- [ ] **Step 3: Write the failing tests**
+- [x] **Step 3: Write the failing tests**
 
 `packages/server/src/room/nouns.test.ts`:
 
@@ -1397,12 +1397,12 @@ test('a new input after the neutral substitute is used again', () => {
 });
 ```
 
-- [ ] **Step 4: Run the tests to verify they fail**
+- [x] **Step 4: Run the tests to verify they fail**
 
 Run: `npx vitest run packages/server`
 Expected: FAIL in all three files, because `./nouns`, `./rateLimit` and `./inputQueue` cannot be resolved.
 
-- [ ] **Step 5: Write the implementations**
+- [x] **Step 5: Write the implementations**
 
 `packages/server/src/room/nouns.ts`:
 
@@ -1529,7 +1529,7 @@ export function createInputQueue(): InputQueue {
 }
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `npm test`
 Expected: 13 files, 114 tests passing.
@@ -1537,7 +1537,7 @@ Expected: 13 files, 114 tests passing.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add package.json package-lock.json packages/server
@@ -1546,7 +1546,7 @@ git commit -m "feat(server): add the server package with nouns, rate limiter and
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 8: Write the import guard test**
+- [x] **Step 8: Write the import guard test**
 
 The review of this task found that `packages/server/tsconfig.json` does not fully enforce the room layer's import rule: `import … from 'ws'` type-checks, and it brings Node's types in with it, after which `node:` imports and `setTimeout` compile in every room file. This test closes the hole. It lives in `src/node` because it reads files with Node; no tsconfig type-checks it until Task 6 adds `tsconfig.node.json`, and Vitest runs it from now on. It makes one test per room file, so the test count grows as later tasks add room files.
 
@@ -1593,7 +1593,7 @@ test.each(roomFiles)('room/%s imports only room files and @lodgy/shared', (file)
 });
 ```
 
-- [ ] **Step 9: Watch the guard fail, then pass**
+- [x] **Step 9: Watch the guard fail, then pass**
 
 Create a temporary file `packages/server/src/room/zzProbe.ts`:
 
@@ -1613,7 +1613,7 @@ Expected: 14 files, 121 tests passing.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add packages/server/src/node/roomImports.test.ts
@@ -1652,7 +1652,7 @@ Behaviour, in the order a connection meets it:
 - A player whose connection closes, goes silent for 6 s or is closed by the rate limiter leaves the room. If they were admin, the first remaining player becomes admin.
 - Each room steps its world 60 times a second, at most 3 steps per timer callback, and sends a snapshot every 3 ticks. The first snapshot each connection receives has `full: true`.
 
-- [ ] **Step 1: Write the types and the test fakes**
+- [x] **Step 1: Write the types and the test fakes**
 
 `packages/server/src/room/types.ts`:
 
@@ -1808,7 +1808,7 @@ export function connectFakeClient(server: RoomServer): FakeClient {
 }
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 `packages/server/src/room/server.test.ts`:
 
@@ -2232,12 +2232,12 @@ test('stop frees every room', () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `npx vitest run packages/server/src/room/server.test.ts`
 Expected: FAIL, because `./server` cannot be resolved.
 
-- [ ] **Step 4: Write the room and the room server**
+- [x] **Step 4: Write the room and the room server**
 
 `packages/server/src/room/room.ts`:
 
@@ -2580,7 +2580,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npm test`
 Expected: 15 files, 159 tests passing.
@@ -2588,7 +2588,7 @@ Expected: 15 files, 159 tests passing.
 Run: `npm run typecheck`
 Expected: exits 0. This also proves the room layer uses no Node or DOM global, because `packages/server/tsconfig.json` provides neither.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/server/src/room
@@ -2597,7 +2597,7 @@ git commit -m "feat(server): add the room layer
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 7: Write the failing tests for the room limit and for failures**
+- [x] **Step 7: Write the failing tests for the room limit and for failures**
 
 The review of this task found two gaps, and steps 7 to 10 close them. Steps 1 to 6 above are kept as they were first built.
 
@@ -2788,12 +2788,12 @@ index 6ef05b1..1407d3b 100644
    host();
 ```
 
-- [ ] **Step 8: Run the tests to verify they fail**
+- [x] **Step 8: Run the tests to verify they fail**
 
 Run: `npx vitest run packages/server`
 Expected: FAIL, 4 failed and 63 passed, in 2 failed files. The four failures are the new tests: `Error: simulation failed`, `expected +0 to be undefined`, `Error: socket failed` and `Error: close failed`.
 
-- [ ] **Step 9: Write the room limit and the failure handling**
+- [x] **Step 9: Write the room limit and the failure handling**
 
 Apply this change to `packages/shared/src/constants.ts`, `packages/shared/src/protocol.ts`, `packages/server/src/room/types.ts` and `packages/server/src/room/server.ts`. The main session provides it as a second patch file.
 
@@ -2978,7 +2978,7 @@ Expected: 16 files, 164 tests passing.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add packages/shared/src/constants.ts packages/shared/src/protocol.ts packages/server/src/room
@@ -3007,7 +3007,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - `npm run dev`: runs the game server on port 3000 and Vite beside it; Vite forwards `/ws` to the game server
   - environment variables read by `main.ts`: `PORT`, `VEHICLE`, `LODGY_DEV`
 
-- [ ] **Step 1: Add the adapter's config and the scripts**
+- [x] **Step 1: Add the adapter's config and the scripts**
 
 `packages/server/tsconfig.node.json`:
 
@@ -3088,7 +3088,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 `packages/server/src/node/server.test.ts`:
 
@@ -3269,12 +3269,12 @@ test('a binary message or an oversized message closes the connection', async () 
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `npx vitest run packages/server/src/node`
 Expected: FAIL, because `./listen` and `./static` cannot be resolved.
 
-- [ ] **Step 4: Write the adapter**
+- [x] **Step 4: Write the adapter**
 
 `packages/server/src/node/static.ts`:
 
@@ -3480,7 +3480,7 @@ if (process.env.LODGY_DEV) {
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npm test`
 Expected: 17 files, 172 tests passing. The integration test takes about a second, because it drives a real server in real time.
@@ -3488,7 +3488,7 @@ Expected: 17 files, 172 tests passing. The integration test takes about a second
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 6: Start the server once by hand**
+- [x] **Step 6: Start the server once by hand**
 
 Run this in the background, with its output going to a file outside the repository:
 
@@ -3507,7 +3507,7 @@ Expected: `200` twice. Then stop the server you started (kill that process only)
 
 The page served here still runs the step 1 client, which does not talk to the server yet. Task 8 changes that.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add package.json scripts/dev.mjs packages/client/vite.config.ts packages/server
@@ -3516,7 +3516,7 @@ git commit -m "feat(server): add the node adapter and the run scripts
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 8: Write the failing tests for failures at the adapter**
+- [x] **Step 8: Write the failing tests for failures at the adapter**
 
 The review of this task found three ways in which one request or one socket could end the whole process. Steps 8 to 11 close them. Steps 1 to 7 above are kept as they were first built.
 
@@ -3671,12 +3671,12 @@ index e4ca516..8694f22 100644
    expect(contentType('x.wasm')).toBe('application/wasm');
 ```
 
-- [ ] **Step 9: Run the tests to verify they fail**
+- [x] **Step 9: Run the tests to verify they fail**
 
 Run: `npx vitest run packages/server/src/node`
 Expected: FAIL after about 25 seconds, 4 failed and 21 passed, in 2 failed files. The four failures are the new tests, and Vitest also lists unhandled errors: `message failed`, `tick failed`, `EACCES` and `EADDRINUSE`.
 
-- [ ] **Step 10: Contain the failures**
+- [x] **Step 10: Contain the failures**
 
 Apply this change to `packages/server/src/node/listen.ts` and `packages/server/src/node/static.ts`. The main session provides it as a second patch file.
 
@@ -3793,7 +3793,7 @@ Expected: 18 files, 176 tests passing, and no unhandled error.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add packages/server/src/node
@@ -3820,7 +3820,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 `socket.ts` has no unit test: it is a thin wrapper around the browser's `WebSocket`, and the Playwright test in Task 9 exercises it.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/client/src/session.test.ts`:
 
@@ -3991,12 +3991,12 @@ test('keeps only the newest snapshots', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run packages/client`
 Expected: FAIL in the three new files, because `./session`, `./route` and `./snapshotBuffer` cannot be resolved. The older client tests still pass.
 
-- [ ] **Step 3: Write the implementations**
+- [x] **Step 3: Write the implementations**
 
 `packages/client/src/session.ts`:
 
@@ -4165,7 +4165,7 @@ export function openSocket(url: string, handlers: SocketHandlers): GameSocket {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npm test`
 Expected: 21 files, 193 tests passing.
@@ -4173,7 +4173,7 @@ Expected: 21 files, 193 tests passing.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/client/src/session.ts packages/client/src/session.test.ts packages/client/src/route.ts packages/client/src/route.test.ts packages/client/src/net
@@ -4182,7 +4182,7 @@ git commit -m "feat(client): add session, routing, socket and snapshot interpola
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 6: Write the failing tests for server messages and the stored token**
+- [x] **Step 6: Write the failing tests for server messages and the stored token**
 
 The review of this task found two places where the page trusted data it had not checked. Steps 6 to 9 close them. Steps 1 to 5 above are kept as they were first built.
 
@@ -4322,12 +4322,12 @@ index c6fe07f..debffe2 100644
 +});
 ```
 
-- [ ] **Step 7: Run the tests to verify they fail**
+- [x] **Step 7: Run the tests to verify they fail**
 
 Run: `npx vitest run packages/shared/src/protocol.test.ts packages/client/src/session.test.ts`
 Expected: FAIL, 36 failed and 35 passed, in 2 failed files: `parseServerMessage is not a function`, `cleanToken is not a function`, `expected 'short' to be '00112233445566778899aabbccddeeff'` and `Error: QuotaExceededError`.
 
-- [ ] **Step 8: Check server messages and the stored token**
+- [x] **Step 8: Check server messages and the stored token**
 
 Apply this change to `packages/shared/src/protocol.ts`, `packages/client/src/session.ts` and `packages/client/src/net/socket.ts`. The main session provides it as a second patch file.
 
@@ -4503,7 +4503,7 @@ Expected: 21 files, 229 tests passing.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add packages/shared/src/protocol.ts packages/shared/src/protocol.test.ts packages/client/src
@@ -4539,7 +4539,7 @@ How the page behaves:
 
 The form and the canvas wiring have no unit test; the Playwright test in Task 9 covers them.
 
-- [ ] **Step 1: Replace the overlay test**
+- [x] **Step 1: Replace the overlay test**
 
 `packages/client/src/ui/overlay.test.ts`:
 
@@ -4595,12 +4595,12 @@ test('says it is waiting before the first snapshot', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run packages/client/src/ui/overlay.test.ts`
 Expected: FAIL: the old `overlayText` expects a world, not this data.
 
-- [ ] **Step 3: Replace the overlay**
+- [x] **Step 3: Replace the overlay**
 
 `packages/client/src/ui/overlay.ts`:
 
@@ -4642,7 +4642,7 @@ export function overlayText({ lobby, tick, fps, vehicle }: OverlayData): string 
 }
 ```
 
-- [ ] **Step 4: Write the home form, the game and the new entry point**
+- [x] **Step 4: Write the home form, the game and the new entry point**
 
 `packages/client/src/ui/home.ts`:
 
@@ -5069,7 +5069,7 @@ Replace `packages/client/index.html` with:
 </html>
 ```
 
-- [ ] **Step 5: Run the checks**
+- [x] **Step 5: Run the checks**
 
 Run: `npm test`
 Expected: 21 files, 231 tests passing.
@@ -5080,7 +5080,7 @@ Expected: exits 0.
 Run: `npm run build`
 Expected: ends with `✓ built in …`. The bundle is now about 540 kB, because the page no longer contains Rapier. A warning about chunks larger than 500 kB is still expected.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/client/index.html packages/client/src/main.ts packages/client/src/game.ts packages/client/src/ui
@@ -5089,7 +5089,7 @@ git commit -m "feat(client): play through the server, with a home page
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 7: Stop the form zooming and clipping on a phone**
+- [x] **Step 7: Stop the form zooming and clipping on a phone**
 
 The review of this task found that the form's fields inherited 14px text from their labels. iOS Safari zooms the page when a focused field's text is smaller than 16px, and the zoom can stay once the game starts. The same change lets the form scroll when the keyboard leaves less height than the form needs. This is a styles-only change, so it has no test; the smoke test of Task 9 still has to pass with it, and how it looks on a real iPhone is the owner's check at step 14.
 
@@ -5136,7 +5136,7 @@ Expected: 21 files, 231 tests passing.
 Run: `npm run build`
 Expected: ends with `✓ built in …`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add packages/client/index.html
@@ -5157,7 +5157,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: `npm start`, and the element ids listed in Task 8.
 - Produces: `npm run e2e`. It builds the client, starts the real server on port 3100, and runs six tests in two projects: `desktop` (1280×720) and `phone` (an iPhone 14 landscape viewport with touch; in Chromium as first built, in WebKit after steps 7 and 8).
 
-- [ ] **Step 1: Add Playwright**
+- [x] **Step 1: Add Playwright**
 
 In the root `package.json`, add this line directly after the `"start": …` line:
 
@@ -5182,7 +5182,7 @@ Expected: packages are added, `found 0 vulnerabilities`.
 Run: `npx playwright install chromium`
 Expected: it downloads Chromium's headless shell (about 100 MB, into the user's cache folder, not the repository), or reports that it is already installed.
 
-- [ ] **Step 2: Ignore the test output folders**
+- [x] **Step 2: Ignore the test output folders**
 
 In `.gitignore`, add these two lines directly after the line `.superpowers/`:
 
@@ -5191,7 +5191,7 @@ test-results/
 playwright-report/
 ```
 
-- [ ] **Step 3: Write the configuration and the test**
+- [x] **Step 3: Write the configuration and the test**
 
 `playwright.config.ts`:
 
@@ -5357,14 +5357,14 @@ test('an empty name is refused on the page, before anything is sent', async ({ p
 });
 ```
 
-- [ ] **Step 4: Run the smoke test**
+- [x] **Step 4: Run the smoke test**
 
 Run: `npm run e2e`
 Expected: `12 passed`, in about 20 to 40 seconds including the build. If port 3100 is in use the run fails at start-up; report that rather than changing the port.
 
 If a test fails, read `test-results/<test name>/error-context.md`, which holds the page's state at the failure, and include it in your report. Do not change a test or the page to make it pass.
 
-- [ ] **Step 5: Run the other checks**
+- [x] **Step 5: Run the other checks**
 
 Run: `npm test`
 Expected: 21 files, 231 tests passing. The Playwright test is not part of it.
@@ -5375,7 +5375,7 @@ Expected: exits 0.
 Run: `git status --short`
 Expected: only `.gitignore`, `package.json`, `package-lock.json`, `playwright.config.ts` and `e2e/` are listed. `test-results/` must not appear.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add .gitignore package.json package-lock.json playwright.config.ts e2e
@@ -5384,7 +5384,7 @@ git commit -m "test(e2e): add the browser smoke test
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 7: Run the phone project in WebKit**
+- [x] **Step 7: Run the phone project in WebKit**
 
 The owner asked during the step for the smoke test to cover Safari where possible. Playwright's WebKit is the engine of Safari, so the `phone` project now runs in it. The main session ran the six tests in WebKit three times beforehand; all passed.
 
@@ -5411,7 +5411,7 @@ Expected: `12 passed`, the six `[phone]` tests among them, in about 20 to 40 sec
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add playwright.config.ts
@@ -5420,7 +5420,7 @@ git commit -m "test(e2e): run the phone project in WebKit
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 9: Make the smoke test prove what its titles say**
+- [x] **Step 9: Make the smoke test prove what its titles say**
 
 The review of this task found that the check "Badr's throttle does nothing" could pass even if Badr's input were applied: 700 ms of throttle moves the vehicle about half a metre, which is the threshold, and nothing showed that Badr's keys reached the server at all. Three smaller points are fixed with it.
 
@@ -5529,7 +5529,7 @@ Expected: `12 passed`, in about 25 to 45 seconds.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add e2e/smoke.spec.ts
@@ -5538,7 +5538,7 @@ git commit -m "test(e2e): prove that only the driver's keys move the vehicle
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 11: Prove the hand-over by the throttle, not the distance**
+- [x] **Step 11: Prove the hand-over by the throttle, not the distance**
 
 The re-review found that the hand-over check added in step 9 could pass with no input from Badr: when Amal leaves, the vehicle is still rolling at about 5 m/s, and coasting alone covers the 3 m the check asked for. The overlay's `throttle` value is what the server applied to the vehicle, so it shows whose keys the server obeys whatever the speed. The test now reads it in three places: it stays 0 on both pages while Badr holds the key as a passenger, it rises above 0.9 while Amal drives, and it rises above 0.9 again when Badr drives after Amal has left.
 
@@ -5604,7 +5604,7 @@ Expected: `12 passed`, in about 25 to 45 seconds.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add e2e/smoke.spec.ts
@@ -5628,12 +5628,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 Every text to replace below occurs exactly once. If one does not, stop and report.
 
-- [ ] **Step 1: Run every check one last time**
+- [x] **Step 1: Run every check one last time**
 
 Run: `npm test && npm run typecheck && npm run build && npm run e2e`
 Expected: 231 tests passing, typecheck exits 0, build ends with `✓ built in …`, `12 passed`.
 
-- [ ] **Step 2: Update `ROADMAP.md`**
+- [x] **Step 2: Update `ROADMAP.md`**
 
 Replace the two paragraphs of "Current state" with:
 
@@ -5704,7 +5704,7 @@ Append these rows to the decisions log:
 | 2026-11-12 | A test checks the room layer's imports | Found in review: the room tsconfig cannot stop an import of `ws`, which brings Node's types in with it |
 ```
 
-- [ ] **Step 3: Update the spec**
+- [x] **Step 3: Update the spec**
 
 In `docs/superpowers/specs/2026-11-11-lodgy-coop-design.md`, make these replacements.
 
@@ -5856,11 +5856,11 @@ with
 `bad_phase`, `bad_message`, `server_full`, `cannot_buy`
 ```
 
-- [ ] **Step 4: Tick this plan's checkboxes**
+- [x] **Step 4: Tick this plan's checkboxes**
 
 In `docs/superpowers/plans/step-2-server-rooms-snapshots.md`, change `- [ ]` to `- [x]` for every step that was completed, including this task's. Change nothing else in the plan.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ROADMAP.md docs/superpowers

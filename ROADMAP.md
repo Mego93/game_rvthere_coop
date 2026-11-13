@@ -7,9 +7,9 @@ Single source of truth for where the project stands. Update it in the same commi
 
 ## Current state
 
-**Current step:** step 2 is planned. Next action: implement the step 2 plan with subagents.
+**Current step:** step 2 is done. Next action: write the plan for step 3.
 
-**Runnable today:** `npm run dev` opens a page where the Lodgy (or the RV, with `?vehicle=rv`) drives around the test ground. The simulation runs in the page; there is no server yet.
+**Runnable today:** `npm run dev` starts the game server and the page. Create a room on the home page and share its address; everyone who opens it sees the same vehicle on the test ground, driven by the first player in the room. There are no characters on foot yet.
 
 ## Steps (spec 1: engine and course 1)
 
@@ -18,7 +18,7 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | # | Step | Status | Branch | Plan | Sign-off |
 |---|---|---|---|---|---|
 | 1 | Workspace scaffold, Rapier passed into `shared`, test ground, both vehicle configs as boxes, drivable in one tab, keyboard input, text overlay, force-based cable experiment | done | step-1-scaffold-and-drivable-vehicle | [plan](docs/superpowers/plans/step-1-scaffold-and-drivable-vehicle.md) | Automated tests |
-| 2 | Server (`room` layer and `node` adapter), validation, rate limit, liveness, home page, create and join by noun, snapshots, interpolation, Playwright test begins | planned | | [plan](docs/superpowers/plans/step-2-server-rooms-snapshots.md) | Automated tests |
+| 2 | Server (`room` layer and `node` adapter), validation, rate limit, liveness, home page, create and join by noun, snapshots, interpolation, Playwright test begins | done | step-2-server-rooms-snapshots | [plan](docs/superpowers/plans/step-2-server-rooms-snapshots.md) | Automated tests |
 | 3 | Server-side players on foot: movement, moving bodies, shove-out, spawn slots, seats, kill-plane respawn; shoulder camera and crosshair; iPhone load check | todo | | | Automated tests |
 | 4 | Client prediction of walking and jumping | todo | | | Automated tests |
 | 5 | Push, hands, light debris, heavy obstacles, prop kill plane | todo | | | Automated tests |
@@ -54,19 +54,26 @@ Requires Node 22.12 or later. Node 23 and 25 work but print an `EBADENGINE` warn
 | Command | What it does |
 |---|---|
 | `npm install` | Installs every package in the workspace |
-| `npm test` | Runs all unit and scenario tests once |
+| `npx playwright install chromium webkit` | Downloads the two browsers the smoke test uses; needed once |
+| `npm run dev` | Starts the game server on port 3000 and the page with live reload. Open the address Vite prints, normally `http://localhost:5173/`; it also prints the address for other devices on the same Wi-Fi |
+| `npm start` | Builds the page and serves everything on one port, `http://localhost:3000/`. This is the mode for play sessions and for the tunnel |
+| `npm test` | Runs all unit, scenario and server integration tests once |
 | `npm run test:watch` | Runs tests on every change |
-| `npm run typecheck` | Typechecks every package, config and experiment |
-| `npm run dev` | Starts the client at `http://localhost:5173/`, also reachable from other devices on the same Wi-Fi |
+| `npm run e2e` | Runs the browser smoke test; it starts its own server on port 3100 |
+| `npm run typecheck` | Typechecks every package, config, experiment and the smoke test |
 | `npm run build` | Builds the client into `packages/client/dist` |
 | `npm run experiment:cable` | Re-runs the winch cable experiment and prints its table |
 
-In the page: WASD to drive, Space to brake. Add `?vehicle=rv` to the address for the RV.
+Set `PORT` to change the server's port, and `VEHICLE=rv` to run every room with the RV: `VEHICLE=rv npm run dev`.
+
+In the page: WASD to drive, Space to brake. Only the first player in the room drives until seats exist (step 3).
 
 ## Known issues
 
 - A braked vehicle creeps at under 0.1 m/s on the steep (25°) reference slope. The wheel model causes it; a scenario test bounds it.
-- The production bundle is about 4.9 MB because Rapier's WebAssembly is inlined. Acceptable for now.
+- The production bundle is about 0.5 MB. It returns to about 5 MB at step 4, when client prediction brings Rapier back into the page.
+- A vehicle that has rolled over or is stuck cannot be recovered yet: create a new room. Pushing arrives at step 5, the winch at step 6 and checkpoint restart at step 8.
+- Reloading the page, or losing the connection, returns the player to the name form, and joining again makes a new player. Held slots arrive at step 11 and automatic reconnection at step 19.
 - With the starting values the RV cannot move off from rest on sand: sand's rolling resistance (0.25 × its weight, about 9200 N) exceeds its engine force (7500 N). The Lodgy crawls. The test "sand slows it" passes for the RV at zero distance. The owner decides whether the RV should bog down completely; the test gets an explicit bound either way once decided.
 
 ## Carried into later steps
@@ -75,19 +82,16 @@ Findings from the step 1 review that belong to a later step. Each step's plan mu
 
 | Step | Item |
 |---|---|
-| 2 | Decide how Node runs `shared`: its `exports` point at TypeScript source with extensionless imports, which Node cannot resolve natively, so the server needs a runner or a bundle (a new dependency) |
-| 2 | Give each package its own tsconfig before `@types/node` arrives, so that DOM and Node globals do not typecheck inside `shared` |
-| 2 | Add `World.dispose()` to free the Rapier world; rooms and restarts discard worlds |
-| 2 | Reject non-finite numbers in the input validator, with a test, and coerce them to 0 in `world.step`: one `NaN` throttle freezes the vehicle permanently |
-| 2 | Use `Object.hasOwn` in `getCourse` and `getVehicleConfig`: ids such as `constructor` currently pass |
-| 2 | Build the inputs map in join order (the driver is its first entry until step 3), and use a neutral input that keeps `yaw`, `pitch` and `slot` |
-| 2 | Make the shared constant objects read-only (`IDENTITY`, `AXIS_X`, `AXIS_Y`, `NEUTRAL_INPUT`, `VEHICLES`, `testGround`): one process will share them across rooms |
-| 2 | Rename `MAX_CATCHUP_STEPS` to mark it as the client's value when the server's (3) is added |
-| 2 | Rewrite `overlayText` to take snapshot data instead of a `World`, and guard the fixed stepper against `NaN` and negative frame times |
 | 3 | Keyboard source: call `preventDefault` for game keys; test opposite keys on every axis, key repeat and `dispose` |
+| 3 | When the server consumes two queued inputs in one tick, only the second reaches the world, so a button pressed only in the first would be missed. Merge presses when seats and jumping arrive |
+| 3 | The snapshot gains `players`; the client's snapshot buffer interpolates the vehicle only, and `parseServerMessage` must check the new fields |
+| 4 | The page no longer bundles Rapier; prediction brings it back, and the bundle size with it |
 | 6 | Use the tension formula of `experiments/cable/cable.experiment.ts` exactly, or re-run the sweep. Test near the stall angle as well as at 25°, add a test tying stiffness to reel speed, and test the 25 m maximum length and the test ground's anchor |
 | 7 | A vehicle at rest reports a vertical speed of about −0.06 m/s; impact thresholds and "at rest" checks must allow for it |
 | 8 | Test the test ground's ramp, finish and trigger boxes when checkpoints first use them |
+| 11 | `lobby` gains `timeOfDay` and `weather`; held slots replace the immediate removal of a disconnected player; the admin's choice replaces `VEHICLE` |
+| 19 | The page does not reconnect by itself after the socket closes; it returns to the name form |
+| 19 | The server caps rooms (50) but not connections: add a cap on connections in total and per address when the server is exposed through the tunnel (behind it, the address is in the `CF-Connecting-IP` header), and stop sending to a socket whose send buffer keeps growing |
 
 ## Decisions log
 
@@ -118,3 +122,15 @@ Decisions made during the design and afterwards. Change the spec too when a deci
 | 2026-11-12 | The test ground gains its props, obstacles, stops and coins in the steps that first simulate them | Avoids placing data nothing reads yet |
 | 2026-11-12 | All four wheels are driven on both vehicles | Keeps slope behaviour dependent on engine force alone |
 | 2026-11-12 | Friction, stopped-speed and suspension-force values moved from `vehicle.ts` and `statics.ts` into `constants.ts` | Whole-branch review: the spec allows no tuning literals outside the two tuning files |
+| 2026-11-12 | The server runs from its TypeScript source with `tsx`; there is no server build step | `shared` exports its source, which Node cannot load by itself; a bundle step waits for the hosting decision at step 19 |
+| 2026-11-12 | Liveness uses `ping` and `pong` messages, not WebSocket ping frames | Keeps the room layer independent of the transport; a frozen page stops answering, which is the case to detect |
+| 2026-11-12 | The WebSocket endpoint is `/ws`; input `seq` starts at 1, so an `ackSeq` of 0 means none | Left open by the spec; both sides need the same answer |
+| 2026-11-12 | Shared course, vehicle and constant objects are frozen at run time | One server process runs many rooms from the same objects |
+| 2026-11-12 | A room with nobody connected is paused | Saves the cost of simulating an empty room and avoids a burst of catch-up ticks on return |
+| 2026-11-12 | `VEHICLE=rv` selects the RV for every room until the lobby exists | Keeps the RV drivable for handling work before step 11 |
+| 2026-11-13 | The smoke test's phone project runs in WebKit, the engine of Safari, with an iPhone 14 viewport and touch | Asked for by the owner during step 2. It is not Safari on a real iPhone, which stays the owner's check at step 14 |
+| 2026-11-12 | The server holds at most 50 rooms and refuses `create` beyond that with `server_full` | Found in review: each room is a physics world, and nothing bounded how many one visitor could create |
+| 2026-11-12 | A connection that throws is dropped and a room whose simulation throws is closed; both are reported and the other rooms carry on | Found in review: one error inside the tick stopped every room |
+| 2026-11-12 | The Node adapter contains every failure it can: file read errors, server errors, and exceptions in socket and timer callbacks are reported and the process carries on | Found in review: any one of them ended the process, and every room with it |
+| 2026-11-12 | The page checks every server message with `parseServerMessage` and drops what fails; unknown fields are kept | Found in review: the page may be older than the server, and one snapshot without finite numbers spoiled the interpolation until a reload |
+| 2026-11-12 | A test checks the room layer's imports | Found in review: the room tsconfig cannot stop an import of `ws`, which brings Node's types in with it |

@@ -411,13 +411,15 @@ The `room` layer holds all room, lobby and simulation-loop logic. It talks to an
   - After 30 s the slot is freed and its inventory drops at a spawn slot.
   - A `join` whose token matches a slot that is still connected replaces the old connection at once.
 - **Admin.** The player who creates the room. When the admin's slot is freed, the role passes to the longest-connected player; if nobody is connected, to the next player who joins.
-- **Liveness.** The server pings each connection every 2 s and treats 6 s of silence as a disconnect.
-- **Simulation.** Each room in `playing` owns one world, stepped at a fixed 60 Hz. A snapshot is broadcast at 20 Hz. The loop runs at most 3 catch-up steps per iteration and discards the remaining backlog.
+- **Liveness.** The server sends each connection a `ping` message every 2 s, which the client answers with `pong`, and treats 6 s without any message from a connection as a disconnect.
+- **Simulation.** Each room in `playing` owns one world, stepped at a fixed 60 Hz. A snapshot is broadcast at 20 Hz. The loop runs at most 3 catch-up steps per iteration and discards the remaining backlog. A room with nobody connected is paused: its world keeps its state, and no ticks are owed when someone returns.
 - **Inputs.** The server keeps a queue of at most 8 inputs per player, dropping the oldest on overflow. It consumes one per tick, or two when the queue holds more than 3. With an empty queue it repeats the last input, which never counts as a new button press. After 15 ticks with no new input it substitutes a neutral input: axes at 0, buttons released, reel 0, aim unchanged.
 - **Rate limit.** Messages beyond 120 per second from one connection are dropped. A connection that stays over the limit for 3 s is closed.
 - A room is deleted when it has had no connected players for 60 s.
+- **Room limit.** The server holds at most 50 rooms. A `create` beyond that is refused with `server_full`.
+- **Failures.** A connection whose socket throws is dropped. A room whose simulation throws is closed and its players are disconnected. Both are logged, and the other rooms carry on.
 - No database.
-- One process serves the built client and the WebSocket on the same port (default 3000). Any path that is not a static file serves the client, which reads the noun from the URL.
+- One process serves the built client and the WebSocket on the same port (default 3000). Any path that is not a static file serves the client, which reads the noun from the URL. The WebSocket endpoint is `/ws`.
 
 ### Lobby
 
@@ -446,7 +448,7 @@ Client to server:
 
 | Message | Allowed | Refusal |
 |---|---|---|
-| `create { name, token }` | Not yet in a room | `bad_message` |
+| `create { name, token }` | Not yet in a room | `bad_message`, `server_full` |
 | `join { room, name, token }` | Not yet in a room | `unknown_room`, `room_full`, `name_taken` |
 | `ready { ready }` | `lobby` | `bad_phase` |
 | `configure { courseId, vehicleId, timeOfDay, weather }` | Admin, `lobby` | `not_admin`, `bad_phase` |
@@ -457,10 +459,11 @@ Client to server:
 | `next {}` | Admin, `results`, not the last course | `not_admin`, `bad_phase` |
 | `buy { item }` | `playing`, player on foot within range of a shop counter | `cannot_buy` |
 | `input { … }` | `playing` | Ignored in other phases |
+| `pong {}` | Any time, in answer to `ping` | Never refused |
 
 Every message is validated for shape and its numbers are clamped. A malformed message gets `bad_message` and is dropped.
 
-`input { seq, moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop }`. The client sends one per simulation tick, with `seq` increasing by 1.
+`input { seq, moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop }`. The client sends one per simulation tick, with `seq` starting at 1 and increasing by 1.
 
 | Field | On foot | As driver |
 |---|---|---|
@@ -480,7 +483,8 @@ Server to client:
 - `snapshot` — see below
 - `event { kind, tick, playerId?, pos? }` — to everyone, for one-off moments that drive sound and HUD. Kinds: `impact`, `checkpoint`, `vehicleLost`, `pickup`, `use`, `hookAttach`, `hookDetach`, `coin`, `buy`, `hurt`, `downed`, `revive`, `respawn`.
 - `results { courseId, vehicleId, timeOfDay, weather, elapsed, restarts, respawns, wallet, coinsCollected, coinsTotal, finalTime, stars, assisted, campaignTotal? }`
-- `error { reason }` with reasons `unknown_room`, `room_full`, `name_taken`, `kicked`, `not_admin`, `not_ready`, `bad_phase`, `bad_message`, `cannot_buy`
+- `ping {}` — to every connection, every 2 s
+- `error { reason }` with reasons `unknown_room`, `room_full`, `name_taken`, `kicked`, `not_admin`, `not_ready`, `bad_phase`, `bad_message`, `server_full`, `cannot_buy`
 
 **Snapshot.**
 
@@ -504,7 +508,7 @@ snapshot {
 }
 ```
 
-- `ackSeq` is the last input sequence number the server consumed for the receiving client. Everything else is identical for every client.
+- `ackSeq` is the last input sequence number the server consumed for the receiving client, or 0 before any. Everything else is identical for every client.
 - `seat` and `ground` are separate: a seated player has a `seat`; a player standing on the vehicle, a prop or an obstacle has a `ground`.
 - `cable.state` is `stowed`, `held`, `ground` or `attached`.
 - `props` lists only props that moved since the previous snapshot. A snapshot with `full` set lists every prop; it is sent to a client when it joins and to everyone after any restart or skip.
@@ -589,7 +593,7 @@ Hosting uses Cloudflare.
 - **During development and for play sessions:** the server runs on the owner's machine. Players on the same Wi-Fi open `http://<LAN-IP>:3000/<noun>`. Players elsewhere use a Cloudflare Tunnel, which gives the local server a public `https` address while it runs.
 - **Always-on hosting** is decided at the last build step, between Cloudflare Containers (the same Node process in a container) and Workers with Durable Objects (one object per room). The choice is made then, against the platform's limits and pricing at that time. A Durable Object adapter, if chosen, replaces only the `node` adapter.
 
-The client derives the WebSocket URL from the page origin (`ws` for `http`, `wss` for `https`).
+The client derives the WebSocket URL from the page origin (`ws` for `http`, `wss` for `https`). The server runs from its TypeScript source with `tsx`; there is no server build step.
 
 ## 3. Error handling
 
@@ -676,7 +680,7 @@ Each step ends in something runnable. Progress is tracked in `ROADMAP.md`. Each 
 
 Steps 1 to 15 run on a flat test ground with a ramp, reference slopes, a sand patch, an anchor, a heavy obstacle, a few props, a fuel station with a shop, a garage, a few coins, two checkpoints and a finish. Each of these is added to the test ground by the step that first simulates it.
 
-Until the lobby exists (step 11), creating a room starts a run on the test ground at once, with the Lodgy, and anyone opening the link joins it.
+Until the lobby exists (step 11), creating a room starts a run on the test ground at once, with the Lodgy, and anyone opening the link joins it. Starting the server with `VEHICLE=rv` uses the RV instead. Until then the `lobby` message has no `timeOfDay` or `weather`, a disconnected player's slot is freed at once, and a reload joins as a new player.
 
 | # | Step | Sign-off |
 |---|---|---|
