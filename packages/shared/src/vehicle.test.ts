@@ -1,8 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { DRIVER_DOOR_RANGE, GRAVITY, SURFACES, TICK_RATE, VEHICLE_UPSIDE_DOWN_DRAIN } from './constants';
-import { testGround } from './courses/testGround';
-import { SAND_PATCH_CENTER } from './courses/testGround';
+import { SAND_PATCH_CENTER, testGround } from './courses/testGround';
 import { IDENTITY, quatFromAxisAngle, vec3, yawOf, type Pose } from './math';
 import { createRig, withBoxes } from './testRig';
 import { VEHICLES, getVehicleConfig, type VehicleId } from './vehicles';
@@ -279,15 +278,19 @@ describe('the lodgy against a wall', () => {
     rig.run(1);
     if (speed !== undefined) rig.vehicle.body.setLinvel({ x: 0, y: 0, z: -speed }, true);
     rig.run(Math.max(6, (distance / 5) * 2), { throttle });
-    return rig.vehicle.health();
+    return { health: rig.vehicle.health(), z: rig.vehicle.body.translation().z };
   };
 
   test('(5) full throttle from 30 m costs 0.2 to 0.35, from 60 m costs more, a 2 m/s roll costs nothing', () => {
-    const near = wallRun(30, 1);
-    const far = wallRun(60, 1);
+    const near = wallRun(30, 1).health;
+    const far = wallRun(60, 1).health;
     expect(near).toBeGreaterThan(1 - 0.35);
     expect(near).toBeLessThan(1 - 0.2);
     expect(far).toBeLessThan(near);
-    expect(wallRun(5, 0, 2)).toBe(1);
+    const roll = wallRun(5, 0, 2);
+    // The centre rests half a length from the face when the bumper touches it.
+    expect(roll.z).toBeLessThan(-5 + 0.3);
+    expect(roll.z).toBeGreaterThan(-5 - 0.3);
+    expect(roll.health).toBe(1);
   });
 });
