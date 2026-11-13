@@ -41,7 +41,7 @@ function pair() {
 const fallFrom = (world: World, id: string, feet: Vec3) => {
   world.teleportPlayer(id, feet);
   run(world, 150);
-  return PLAYER_MAX_HEALTH - me(world, id).health;
+  return PLAYER_MAX_HEALTH - world.debugPlayerHealth(id);
 };
 
 describe('falls (W1)', () => {
@@ -55,11 +55,10 @@ describe('falls (W1)', () => {
     expect(kinds(events, 'downed')).toHaveLength(0);
   });
 
-  test('W1: 8.99 m/s costs nothing and 5.02 m up costs about 8', () => {
+  test('W1: 8.99 m/s costs nothing and 5.02 m up costs 8.1 within 0.5', () => {
     const world = pair();
     expect(fallFrom(world, 'p1', vec3(5, 4.22, 20))).toBe(0);
-    // 8.1 damage leaves 91.9, which the snapshot rounds down to 91.
-    expect(fallFrom(world, 'p2', vec3(5, 5.02, 20))).toBe(9);
+    expect(Math.abs(fallFrom(world, 'p2', vec3(5, 5.02, 20)) - 8.1)).toBeLessThan(0.5);
   });
 
   test('W1: a jump in place costs nothing', () => {
@@ -169,15 +168,28 @@ describe('downed (W4)', () => {
 
   test('a button held through the downed time is not a press on revival', () => {
     const world = pair();
-    world.debugHurt('p1', 100);
+    world.teleportPlayer('p1', vec3(-2, 0.02, 15.2));
+    run(world, 30);
+    run(world, 1, new Map([['p1', input({ interact: true, yaw: 0, pitch: -0.45 })]]));
     run(world, 1);
-    const holding = new Map([['p1', input({ jump: true })]]);
-    run(world, 60, holding);
-    // Respawned by the timeout while jump is still held: no jump.
-    run(world, 1800, holding);
-    expect(me(world, 'p1').downed).toBeNull();
+    expect(me(world, 'p1').inventory[me(world, 'p1').slot]).toBe('toolbox');
+    world.debugHurt('p1', 100);
+    const holding = new Map([['p1', input({ drop: true })]]);
+    run(world, 1);
+    expect(me(world, 'p1').downed).not.toBeNull();
+    // Drop is held through the whole downed time and is not a press while downed.
+    run(world, 1799, holding);
+    expect(me(world, 'p1').downed).not.toBeNull();
+    expect(me(world, 'p1').inventory[me(world, 'p1').slot]).toBe('toolbox');
     run(world, 1, holding);
-    expect(me(world, 'p1').vy).toBeLessThanOrEqual(0);
+    expect(me(world, 'p1').downed).toBeNull();
+    // The first live tick after the respawn: the held drop is still not a press.
+    run(world, 1, holding);
+    expect(me(world, 'p1').inventory[me(world, 'p1').slot]).toBe('toolbox');
+    // A fresh press does drop it.
+    run(world, 1);
+    run(world, 1, holding);
+    expect(me(world, 'p1').inventory[me(world, 'p1').slot]).toBeNull();
   });
 });
 
@@ -282,6 +294,239 @@ describe('respawns (W5, W9, W10)', () => {
   });
 });
 
+describe('the downed timer and the kill plane (W10)', () => {
+  test('W10: the timer is paused while respawnIn is set; the kill plane respawns once, after 3 s', () => {
+    const world = pair();
+    world.debugHurt('p1', 100);
+    run(world, 1);
+    // About 29 s down, so a running timer would run out within the 3 s below.
+    run(world, 1740);
+    expect(me(world, 'p1').downed).toBeLessThan(1.5);
+    const before = world.snapshot().respawns;
+    world.teleportPlayer('p1', vec3(60, world.course.killPlaneY - 1, 40));
+    const delay = Math.round(PLAYER_KILL_RESPAWN_DELAY * TICK_RATE);
+    const early = run(world, delay - 5);
+    expect(kinds(early, 'respawn', 'p1')).toHaveLength(0);
+    // The downed timer has not moved while respawnIn is set.
+    expect(me(world, 'p1').downed).toBeLessThan(1.5);
+    expect(me(world, 'p1').downed).toBeGreaterThan(0.5);
+    const events = run(world, 10);
+    expect(kinds(events, 'respawn', 'p1')).toHaveLength(1);
+    expect(world.snapshot().respawns).toBe(before + 1);
+    expect(me(world, 'p1').downed).toBeNull();
+    expect(me(world, 'p1').health).toBe(PLAYER_REVIVE_HEALTH);
+    expect(kinds(run(world, 120), 'respawn')).toHaveLength(0);
+  });
+});
+
+describe('vehicle hits (W2)', () => {
+  const driveInto = (world: World) => {
+    world.teleportPlayer('p1', vec3(30, 0.02, 30));
+    world.teleportPlayer('p2', vec3(0, 0.02, -7));
+    run(world, 30);
+    world.debugBody('vehicle')!.setLinvel(vec3(0, 0, -10), true);
+  };
+
+  test('W2: the Lodgy driven into a standing player at 10 m/s hurts once, about 40, at about tick 26', () => {
+    const world = make('p1', 'p2');
+    driveInto(world);
+    let hitTick = -1;
+    let hurts = 0;
+    for (let i = 0; i < 120; i++) {
+      const events = world.step(new Map());
+      for (const event of kinds(events, 'hurt', 'p2')) {
+        hurts += 1;
+        hitTick = i;
+        expect(event.playerId).toBe('p2');
+      }
+    }
+    // Still being shoved along: contact keeps the cooldown live, so no second hit.
+    expect(hurts).toBe(1);
+    expect(hitTick).toBeGreaterThanOrEqual(22);
+    expect(hitTick).toBeLessThanOrEqual(30);
+    expect(Math.abs(PLAYER_MAX_HEALTH - world.debugPlayerHealth('p2') - 39.5)).toBeLessThan(1.5);
+    expect(me(world, 'p2').pos.z).toBeLessThan(-9);
+  });
+
+  test('W2: no more damage for 0.5 s after the hit, and none while the contact lasts', () => {
+    const world = make('p1', 'p2');
+    driveInto(world);
+    run(world, 30);
+    const healthAfter = world.debugPlayerHealth('p2');
+    expect(healthAfter).toBeLessThan(PLAYER_MAX_HEALTH);
+    const events = run(world, 30);
+    expect(kinds(events, 'hurt', 'p2')).toHaveLength(0);
+    expect(world.debugPlayerHealth('p2')).toBe(healthAfter);
+  });
+
+  test('W2: a seated player in the vehicle takes nothing', () => {
+    const world = make('p1', 'p2');
+    world.teleportPlayer('p1', vec3(30, 0.02, 30));
+    run(world, 30);
+    run(world, 1, new Map([['p2', input({ interact: true })]]));
+    expect(me(world, 'p2').seat).not.toBeNull();
+    world.debugBody('vehicle')!.setLinvel(vec3(0, 0, -10), true);
+    run(world, 60);
+    expect(world.debugPlayerHealth('p2')).toBe(PLAYER_MAX_HEALTH);
+  });
+
+  test('W2: walking at full speed into the parked Lodgy costs nothing, and so does jumping into it', () => {
+    for (const jumping of [false, true]) {
+      const world = make('p1', 'p2');
+      world.teleportPlayer('p2', vec3(30, 0.02, 30));
+      world.teleportPlayer('p1', vec3(0, 0.02, -8));
+      run(world, 30);
+      for (let i = 0; i < 120; i++) {
+        world.step(new Map([['p1', input({ moveY: 1, yaw: Math.PI, jump: jumping && i % 40 === 0 })]]));
+      }
+      // It reached the vehicle: held up short of where it would have walked to.
+      expect(me(world, 'p1').pos.z).toBeGreaterThan(-3);
+      expect(me(world, 'p1').pos.z).toBeLessThan(0);
+      expect(world.debugPlayerHealth('p1')).toBe(PLAYER_MAX_HEALTH);
+    }
+  });
+});
+
+describe('prop hits (W3)', () => {
+  const crateAt = (world: World, pos: Vec3, vel: Vec3) => {
+    const body = world.debugBody('crate-1')!;
+    body.setTranslation(pos, true);
+    body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    body.setLinvel(vel, true);
+    body.setAngvel(vec3(0, 0, 0), true);
+  };
+
+  test('W3: a crate thrown at a teammate costs at most 10, and more than 0', () => {
+    const world = make('p1', 'p2');
+    world.teleportPlayer('p1', vec3(0, 0.02, 20));
+    world.teleportPlayer('p2', vec3(0, 0.02, 18));
+    crateAt(world, vec3(0, 0.5, 19), vec3(0, 0, 0));
+    run(world, 30);
+    run(world, 1, new Map([['p1', input({ interact: true, yaw: 0, pitch: -0.6 })]]));
+    run(world, 1, new Map([['p1', input()]]));
+    expect(me(world, 'p1').hands).toBe('crate-1');
+    run(world, 1, new Map([['p1', input({ interact: true, yaw: 0, pitch: 0 })]]));
+    const events = run(world, 40, new Map([['p1', input()]]));
+    const damage = PLAYER_MAX_HEALTH - world.debugPlayerHealth('p2');
+    expect(kinds(events, 'hurt', 'p2')).toHaveLength(1);
+    expect(damage).toBeGreaterThan(0);
+    expect(damage).toBeLessThanOrEqual(10);
+    expect(Math.abs(damage - 5.4)).toBeLessThan(1);
+  });
+
+  test('W3: a crate given 12 m/s by debugBody hurts, about 30', () => {
+    const world = pair();
+    world.teleportPlayer('p2', vec3(0, 0.02, 18));
+    run(world, 30);
+    crateAt(world, vec3(0, 1.0, 16.5), vec3(0, 0, 12));
+    const events = run(world, 40);
+    expect(kinds(events, 'hurt', 'p2')).toHaveLength(1);
+    expect(Math.abs(PLAYER_MAX_HEALTH - world.debugPlayerHealth('p2') - 30)).toBeLessThan(2);
+  });
+
+  test('W3: a crate lying on the ground does not hurt a player who walks into it', () => {
+    const world = pair();
+    world.teleportPlayer('p1', vec3(10, 0.02, 14));
+    run(world, 30);
+    run(world, 120, new Map([['p1', input({ moveY: 1 })]]));
+    expect(me(world, 'p1').pos.z).toBeLessThan(10);
+    expect(world.debugPlayerHealth('p1')).toBe(PLAYER_MAX_HEALTH);
+  });
+
+  test('W3: a player standing on a prop is not hit by it', () => {
+    const world = pair();
+    world.teleportPlayer('p1', vec3(10, 0.02, 14));
+    run(world, 30);
+    const body = world.debugBody('crate-1')!;
+    const top = body.translation().y + 0.5;
+    world.teleportPlayer('p1', vec3(body.translation().x, top + 0.3, body.translation().z));
+    run(world, 40);
+    expect(me(world, 'p1').ground).not.toBeNull();
+    body.setLinvel(vec3(0, 0, 8), true);
+    run(world, 20);
+    expect(world.debugPlayerHealth('p1')).toBe(PLAYER_MAX_HEALTH);
+  });
+});
+
+describe('hit cooldowns (W11)', () => {
+  // A crate comes at the player's chest from +x at 12 m/s.
+  const shoot = (world: World, id: string) => {
+    const pos = me(world, id).pos;
+    const body = world.debugBody('crate-1')!;
+    body.setTranslation(vec3(pos.x + 1.5, pos.y + 0.98, pos.z), true);
+    body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    body.setLinvel(vec3(-12, 0, 0), true);
+    body.setAngvel(vec3(0, 0, 0), true);
+  };
+  const stash = (world: World) => {
+    const body = world.debugBody('crate-1')!;
+    body.setTranslation(vec3(-50, 0.5, 50), true);
+    body.setLinvel(vec3(0, 0, 0), true);
+    body.setAngvel(vec3(0, 0, 0), true);
+  };
+  const hurts = (events: WorldEvent[], id: string) => kinds(events, 'hurt', id).length;
+
+  test('a second hit by the same body within 0.5 s does nothing', () => {
+    const world = pair();
+    world.teleportPlayer('p1', vec3(5, 0.02, 20));
+    run(world, 30);
+    shoot(world, 'p1');
+    expect(hurts(run(world, 15), 'p1')).toBe(1);
+    stash(world);
+    run(world, 2);
+    shoot(world, 'p1');
+    expect(hurts(run(world, 15), 'p1')).toBe(0);
+  });
+
+  test('cooldowns count down: a second hit after 0.5 s without contact hurts', () => {
+    const world = pair();
+    world.teleportPlayer('p1', vec3(5, 0.02, 20));
+    run(world, 30);
+    shoot(world, 'p1');
+    expect(hurts(run(world, 15), 'p1')).toBe(1);
+    stash(world);
+    run(world, 40);
+    shoot(world, 'p1');
+    expect(hurts(run(world, 15), 'p1')).toBe(1);
+  });
+
+  test('everyone downed clears the cooldown: a hit right after the respawn hurts', () => {
+    const world = make('p1');
+    run(world, 30);
+    world.teleportPlayer('p1', vec3(5, 0.02, 20));
+    run(world, 30);
+    shoot(world, 'p1');
+    expect(hurts(run(world, 15), 'p1')).toBe(1);
+    stash(world);
+    world.debugHurt('p1', 100);
+    const events = run(world, 1);
+    expect(kinds(events, 'respawn', 'p1')).toHaveLength(1);
+    run(world, 10);
+    shoot(world, 'p1');
+    expect(hurts(run(world, 15), 'p1')).toBe(1);
+  });
+
+  test('W11: a crate hit at T, a restart at T + 1 and a second 12 m/s crate at T + 5 hurts', () => {
+    const world = pair();
+    world.teleportPlayer('p1', vec3(0, 0.95, -50));
+    world.debugBody('vehicle')!.setTranslation(vec3(0, 0.95, -50), true);
+    run(world, 30);
+    expect(world.snapshot().checkpoint).toBe(1);
+    world.teleportPlayer('p1', vec3(5, 0.02, 20));
+    run(world, 30);
+    shoot(world, 'p1');
+    expect(hurts(run(world, 15), 'p1')).toBe(1);
+    stash(world);
+    world.restartCheckpoint();
+    run(world, 1);
+    expect(world.debugPlayerHealth('p1')).toBe(PLAYER_MAX_HEALTH);
+    run(world, 4);
+    world.teleportPlayer('p1', vec3(5, 0.02, 20));
+    shoot(world, 'p1');
+    expect(hurts(run(world, 15), 'p1')).toBe(1);
+  });
+});
+
 describe('restart (W11)', () => {
   const CP1 = vec3(0, 0.95, -50);
   const recordCp1 = (world: World) => {
@@ -331,16 +576,24 @@ describe('restart (W11)', () => {
 });
 
 describe('determinism (W13)', () => {
-  test('W13: two worlds with the same inputs through a fall, a downed timer and a respawn have equal snapshots', () => {
+  test('W13: two worlds with the same inputs through a fall, a vehicle hit, a crate hit and a downed timer have equal snapshots', () => {
     const script = (world: World) => {
       world.addPlayer('p1');
       world.addPlayer('p2');
       world.teleportPlayer('p2', vec3(30, 0.02, 30));
       for (let i = 0; i < 600; i++) {
         if (i === 10) world.teleportPlayer('p1', vec3(5, 8.02, 20));
-        if (i === 200) world.debugHurt('p1', 100);
+        if (i === 100) world.teleportPlayer('p2', vec3(0, 0.02, -7));
+        if (i === 130) world.debugBody('vehicle')!.setLinvel(vec3(0, 0, -10), true);
+        if (i === 300) {
+          world.teleportPlayer('p2', vec3(40, 0.02, 30));
+          const crate = world.debugBody('crate-1')!;
+          crate.setTranslation(vec3(40, 1.0, 28.5), true);
+          crate.setLinvel(vec3(0, 0, 12), true);
+        }
+        if (i === 400) world.debugHurt('p1', 100);
         const move = i % 90 < 45 ? 1 : -1;
-        world.step(new Map([['p1', input({ moveY: move, yaw: i / 100 })], ['p2', input({ moveX: 1 })]]));
+        world.step(new Map([['p1', input({ moveY: move, yaw: i / 100 })], ['p2', input(i < 100 ? { moveX: 1 } : {})]]));
       }
       return world.snapshot();
     };
@@ -348,6 +601,9 @@ describe('determinism (W13)', () => {
     const b = make();
     const first = script(a);
     const second = script(b);
+    // p2 took both the vehicle's hit and the crate's.
+    expect(first.players[1]!.health).toBeLessThan(40);
+    expect(first.players[1]!.health).toBeGreaterThan(0);
     expect(first.players[0]!.downed).not.toBeNull();
     expect(first.players[0]!.health).toBe(0);
     expect(second).toEqual(first);

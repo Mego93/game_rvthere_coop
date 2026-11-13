@@ -84,6 +84,8 @@ export interface World {
   debugVehicle(): Vehicle;
   // Tests only: queues damage for the player, applied on the next step.
   debugHurt(id: string, amount: number): void;
+  // Tests only: the player's health before the snapshot rounds it down.
+  debugPlayerHealth(id: string): number;
   // Frees the physics world. The world must not be used afterwards.
   dispose(): void;
 }
@@ -544,6 +546,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     debugBody: (id) => (id === 'vehicle' ? vehicle.body : props.get(id)?.body ?? items.get(id)?.body),
     debugWinch: () => winch,
     debugVehicle: () => vehicle,
+    debugPlayerHealth: (id) => players.get(id)!.health,
     debugHurt(id, amount) {
       debugDamage.push({ playerId: id, source: 'debug', amount });
     },
