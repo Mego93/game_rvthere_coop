@@ -13,11 +13,13 @@ import {
   PLAYER_SNAP_DISTANCE,
   PLAYER_STEP_HEIGHT,
   PLAYER_WALK_SPEED,
+  SHOVE_MAX_DISTANCE,
+  SHOVE_STEP,
   TICK_DT,
 } from './constants';
 import type { BuiltCourse } from './course';
 import { GROUP_GROUND, GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
-import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, vec3, yawOf, type Vec3 } from './math';
+import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, sub, vec3, yawOf, type Quat, type Vec3 } from './math';
 import { NEUTRAL_INPUT, type InputFields } from './protocol';
 import type { Rapier, RapierWorld } from './rapier';
 import type { Vehicle } from './vehicle';
@@ -102,6 +104,8 @@ export function aimRay(pos: Vec3, yaw: number, pitch: number): { origin: Vec3; d
 const CAPSULE_HALF_SEGMENT = PLAYER_HEIGHT / 2 - PLAYER_RADIUS;
 const SPAWN_RAY_HEIGHT = 3;
 const SPAWN_RAY_LENGTH = 6;
+const MIN_UP_NORMAL = Math.cos(degToRad(PLAYER_MAX_SLOPE_DEG));
+const conjugate = (q: Quat): Quat => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
 
 export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Vehicle, course: BuiltCourse): Players {
   const worldGroups = groups(GROUP_WORLD, GROUP_WORLD);
@@ -123,21 +127,27 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     entry.collider.setTranslation({ x: pos.x, y: pos.y + PLAYER_HEIGHT / 2, z: pos.z });
   };
 
-  const overlapsAnything = (feet: Vec3): boolean => {
+  const touching = (feet: Vec3): { vehicle: boolean; statics: boolean } => {
     const centre = { x: feet.x, y: feet.y + PLAYER_OVERLAP_LIFT + PLAYER_HEIGHT / 2, z: feet.z };
-    let hit = false;
+    const found = { vehicle: false, statics: false };
     physics.intersectionsWithShape(
       centre,
       IDENTITY,
       capsule,
-      () => {
-        hit = true;
-        return false;
+      (collider) => {
+        if (collider.handle === vehicle.chassisHandle) found.vehicle = true;
+        else found.statics = true;
+        return true;
       },
       undefined,
       worldGroups,
     );
-    return hit;
+    return found;
+  };
+
+  const overlapsAnything = (feet: Vec3): boolean => {
+    const found = touching(feet);
+    return found.vehicle || found.statics;
   };
 
   const groundBelow = (x: number, z: number, fromY: number): number | null => {
@@ -178,10 +188,65 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     state.respawnIn = null;
   };
 
+  // Horizontal velocity of the vehicle at a point: linear plus angular, about the body's world centre of mass.
+  const vehicleVelocityAt = (point: Vec3): { x: number; z: number } => {
+    const v = vehicle.body.linvel();
+    const w = vehicle.body.angvel();
+    const r = sub(point, vehicle.body.worldCom());
+    return { x: v.x + w.y * r.z - w.z * r.y, z: v.z + w.x * r.y - w.y * r.x };
+  };
+
+  const standsOnVehicle = (): boolean => {
+    for (let i = 0; i < controller.numComputedCollisions(); i++) {
+      const hit = controller.computedCollision(i);
+      if (hit?.collider?.handle === vehicle.chassisHandle && hit.normal1.y >= MIN_UP_NORMAL) return true;
+    }
+    return false;
+  };
+
+  const fromVehicleFrame = (local: Vec3): Vec3 =>
+    add(vehicle.body.translation(), rotate(vehicle.body.rotation(), local));
+
+  const toVehicleFrame = (world: Vec3): Vec3 =>
+    rotate(conjugate(vehicle.body.rotation()), sub(world, vehicle.body.translation()));
+
+  const shoveOut = (state: PlayerState) => {
+    if (!touching(state.pos).vehicle) return;
+    const centre = vehicle.body.translation();
+    let dx = state.pos.x - centre.x;
+    let dz = state.pos.z - centre.z;
+    let distance = Math.hypot(dx, dz);
+    if (distance < 1e-6) {
+      const yaw = yawOf(vehicle.body.rotation());
+      dx = Math.cos(yaw);
+      dz = -Math.sin(yaw);
+      distance = 1;
+    }
+    for (let along = SHOVE_STEP; along <= SHOVE_MAX_DISTANCE + 1e-9; along += SHOVE_STEP) {
+      const candidate = vec3(state.pos.x + (dx / distance) * along, state.pos.y, state.pos.z + (dz / distance) * along);
+      const found = touching(candidate);
+      if (found.statics) break;
+      if (!found.vehicle) {
+        state.pos = candidate;
+        return;
+      }
+    }
+    state.pos = findSpawn(state.id);
+    state.vy = 0;
+    state.walk = { x: 0, z: 0 };
+    state.carry = { x: 0, z: 0 };
+  };
+
   const move = (state: PlayerState, step: StepInputs) => {
     const { fields, pressed } = step;
     const wish = wishVelocity(state.yaw, finite(fields.moveX), finite(fields.moveY));
-    if (pressed.jump && state.grounded) state.vy = PLAYER_JUMP_SPEED;
+    const wasOnVehicle = state.ground !== null;
+    let jumped = false;
+    if (pressed.jump && state.grounded) {
+      state.vy = PLAYER_JUMP_SPEED;
+      jumped = true;
+      if (wasOnVehicle) state.carry = vehicleVelocityAt(state.pos);
+    }
     state.vy -= GRAVITY * TICK_DT;
 
     const maxChange = (state.grounded ? PLAYER_GROUND_ACCEL : PLAYER_AIR_ACCEL) * TICK_DT;
@@ -204,9 +269,12 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     const moved = controller.computedMovement();
     state.pos = vec3(state.pos.x + moved.x, state.pos.y + moved.y, state.pos.z + moved.z);
     state.grounded = controller.computedGrounded();
+    state.ground = state.grounded && standsOnVehicle() ? { bodyId: 'vehicle', localPos: toVehicleFrame(state.pos) } : null;
     if (state.grounded) {
       state.vy = 0;
       state.carry = { x: 0, z: 0 };
+    } else if (wasOnVehicle && !jumped) {
+      state.carry = vehicleVelocityAt(state.pos);
     }
     placeCollider(state.id);
   };
@@ -250,8 +318,15 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         const step = inputs.get(state.id) ?? NEUTRAL_STEP;
         state.yaw = finite(step.fields.yaw);
         state.pitch = finite(step.fields.pitch);
-        // Seated placement and standing on the vehicle come with the seat and vehicle-frame rules.
+        // Seated placement comes with the seat rules.
         if (state.seat !== null) continue;
+        if (state.ground) {
+          state.pos = fromVehicleFrame(state.ground.localPos);
+          placeCollider(state.id);
+        } else {
+          shoveOut(state);
+          placeCollider(state.id);
+        }
         move(state, step);
       }
     },

@@ -142,7 +142,8 @@ export function createVehicle(
         // A positive steering angle turns left, so right-positive input is negated.
         if (i < FRONT_WHEELS) controller.setWheelSteering(i, -steer * config.maxSteer);
       }
-      controller.updateVehicle(TICK_DT);
+      // Wheel rays ignore players.
+      controller.updateVehicle(TICK_DT, undefined, groups(GROUP_WORLD, GROUP_WORLD));
     },
     state() {
       const t = body.translation();

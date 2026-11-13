@@ -9,10 +9,11 @@ import {
 } from './constants';
 import { testGround, slopePose } from './courses/testGround';
 import type { BuiltCourse } from './course';
-import { IDENTITY, vec3, type Pose } from './math';
+import { IDENTITY, quatFromAxisAngle, rotate, vec3, yawOf, AXIS_Y, type Pose, type Quat, type Vec3 } from './math';
 import { aimRay, createPlayers, wishVelocity } from './player';
 import { NEUTRAL_INPUT, type InputFields } from './protocol';
 import { createRig, withBoxes } from './testRig';
+import { getVehicleConfig } from './vehicles';
 
 beforeAll(async () => {
   await RAPIER.init();
@@ -21,11 +22,12 @@ beforeAll(async () => {
 const ORIGIN: Pose = { pos: vec3(0, 0, 0), rot: IDENTITY };
 
 // A settled Lodgy at the origin with players on foot; the harness computes presses as the world does (rule T1).
-function harness(course: BuiltCourse = testGround) {
-  const rig = createRig(RAPIER, 'lodgy', ORIGIN, course);
+function harness(course: BuiltCourse = testGround, spawn: Pose = ORIGIN) {
+  const rig = createRig(RAPIER, 'lodgy', spawn, course);
   rig.run(1);
   const players = createPlayers(RAPIER, rig.world, rig.vehicle, course);
   const previous = new Map<string, InputFields>();
+  const vehicleRun = { controls: { throttle: 0, steer: 0, brake: false }, beforePhysics: () => {} };
   const tick = (inputs: Record<string, Partial<InputFields>> = {}) => {
     const map = new Map<string, { fields: InputFields; pressed: { jump: boolean; interact: boolean; drop: boolean } }>();
     for (const player of players.all()) {
@@ -41,14 +43,15 @@ function harness(course: BuiltCourse = testGround) {
       });
       previous.set(player.id, fields);
     }
-    rig.vehicle.step({ throttle: 0, steer: 0, brake: false });
+    rig.vehicle.step(vehicleRun.controls);
+    vehicleRun.beforePhysics();
     rig.world.step();
     players.stepOnFoot(map);
   };
   const run = (ticks: number, inputs: Record<string, Partial<InputFields>> = {}) => {
     for (let i = 0; i < ticks; i++) tick(inputs);
   };
-  return { rig, players, tick, run };
+  return { rig, players, tick, run, vehicleRun };
 }
 
 describe('wishVelocity', () => {
@@ -286,5 +289,219 @@ describe('spawning and teleporting', () => {
     players.remove('p1');
     expect(players.all().map((p) => p.id)).toEqual(['p3', 'p2']);
     expect(players.get('p1')).toBeUndefined();
+  });
+});
+
+const LODGY = getVehicleConfig('lodgy');
+
+const conjugate = (q: Quat): Quat => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
+const toLocal = (body: { translation(): Vec3; rotation(): Quat }, p: Vec3): Vec3 =>
+  rotate(conjugate(body.rotation()), vec3(p.x - body.translation().x, p.y - body.translation().y, p.z - body.translation().z));
+const insideChassis = (body: { translation(): Vec3; rotation(): Quat }, p: Vec3): boolean => {
+  const l = toLocal(body, p);
+  const h = LODGY.halfExtents;
+  return Math.abs(l.x) < h.x && Math.abs(l.y) < h.y && Math.abs(l.z) < h.z;
+};
+
+describe('standing on the vehicle', () => {
+  test('a player dropped 0.1 m above the roof lands on the vehicle', () => {
+    const { rig, players, run } = harness();
+    const player = players.add('p1');
+    const body = rig.vehicle.body.translation();
+    players.teleport('p1', vec3(body.x, body.y + LODGY.halfExtents.y + 0.1, body.z));
+    run(30);
+    expect(player.grounded).toBe(true);
+    expect(player.ground?.bodyId).toBe('vehicle');
+    expect(player.carry).toEqual({ x: 0, z: 0 });
+  });
+
+  test('walking on the roof moves 1.9 to 2.25 m along the axis in 0.5 s, and walking on drops the player to the ground', () => {
+    const { rig, players, run } = harness();
+    const player = players.add('p1');
+    const body = rig.vehicle.body.translation();
+    players.teleport('p1', vec3(body.x, body.y + LODGY.halfExtents.y + 0.1, body.z));
+    run(30);
+    const start = player.ground!.localPos;
+    run(30, { p1: { moveY: 1 } });
+    const local = player.ground!.localPos;
+    expect(start.z - local.z).toBeGreaterThan(1.9);
+    expect(start.z - local.z).toBeLessThan(2.25);
+    expect(local.x).toBeCloseTo(start.x, 1);
+    run(90, { p1: { moveY: 1 } });
+    expect(player.ground).toBeNull();
+    expect(player.pos.y).toBeLessThan(0.1);
+    expect(player.pos.z).toBeLessThan(body.z - LODGY.halfExtents.z);
+  });
+
+  test('a player on the roof is carried along by the vehicle', () => {
+    const { rig, players, run, vehicleRun } = harness();
+    const player = players.add('p1');
+    const body = rig.vehicle.body.translation();
+    players.teleport('p1', vec3(body.x, body.y + LODGY.halfExtents.y + 0.1, body.z));
+    run(30);
+    const before = player.ground!.localPos;
+    vehicleRun.beforePhysics = () => rig.vehicle.body.setLinvel({ x: 0, y: 0, z: -10 }, true);
+    run(60);
+    expect(player.ground).not.toBeNull();
+    expect(player.ground!.localPos.z).toBeCloseTo(before.z, 1);
+    expect(rig.vehicle.body.translation().z).toBeLessThan(body.z - 8);
+    expect(player.pos.z).toBeCloseTo(rig.vehicle.body.translation().z + before.z, 1);
+  });
+
+  test('a jump from the moving roof carries the vehicle\'s horizontal velocity until landing', () => {
+    const { rig, players, tick, run, vehicleRun } = harness();
+    const player = players.add('p1');
+    const body = rig.vehicle.body.translation();
+    players.teleport('p1', vec3(body.x, body.y + LODGY.halfExtents.y + 0.1, body.z));
+    run(30);
+    vehicleRun.beforePhysics = () => rig.vehicle.body.setLinvel({ x: 0, y: 0, z: -10 }, true);
+    run(5);
+    tick({ p1: { jump: true } });
+    expect(player.ground).toBeNull();
+    expect(player.carry.x).toBeCloseTo(0, 0);
+    expect(Math.abs(player.carry.x)).toBeLessThan(0.2);
+    expect(player.carry.z).toBeGreaterThan(-10.2);
+    expect(player.carry.z).toBeLessThan(-9.8);
+  });
+
+  test('landing back on the roof sets the ground again and zeroes the carry', () => {
+    const { rig, players, tick, run, vehicleRun } = harness();
+    const player = players.add('p1');
+    const body = rig.vehicle.body.translation();
+    players.teleport('p1', vec3(body.x, body.y + LODGY.halfExtents.y + 0.1, body.z));
+    run(30);
+    vehicleRun.beforePhysics = () => rig.vehicle.body.setLinvel({ x: 0, y: 0, z: -10 }, true);
+    run(5);
+    tick({ p1: { jump: true } });
+    let airborne = 1;
+    while (player.ground === null && airborne < 200) {
+      tick({});
+      airborne += 1;
+    }
+    expect(player.ground?.bodyId).toBe('vehicle');
+    expect(player.carry).toEqual({ x: 0, z: 0 });
+    expect(player.ground!.localPos.z).toBeCloseTo(0, 0);
+  });
+
+  test('landing on static ground after leaving the vehicle clears ground and carry', () => {
+    const { rig, players, tick, run, vehicleRun } = harness();
+    const player = players.add('p1');
+    const body = rig.vehicle.body.translation();
+    players.teleport('p1', vec3(body.x, body.y + LODGY.halfExtents.y + 0.1, body.z));
+    run(30);
+    vehicleRun.beforePhysics = () => rig.vehicle.body.setLinvel({ x: 0, y: 0, z: -10 }, true);
+    run(5);
+    // Strafe right off the roof while the vehicle drives away.
+    tick({ p1: { jump: true, moveX: 1 } });
+    for (let i = 0; i < 200 && !(player.grounded && player.ground === null && i > 3); i++) tick({ p1: { moveX: 1 } });
+    expect(player.ground).toBeNull();
+    expect(player.carry).toEqual({ x: 0, z: 0 });
+  });
+});
+
+describe('shoving a player out of the vehicle\'s way', () => {
+  const driveAt = (speed: number) => ({ x: 0, y: 0, z: -speed });
+
+  test('a stationary player in the path ends ahead of the front face and never inside the chassis', () => {
+    const { rig, players, run, tick, vehicleRun } = harness();
+    const body = rig.vehicle.body;
+    const player = players.add('p1');
+    const z = body.translation().z - LODGY.halfExtents.z - 1.5;
+    players.teleport('p1', vec3(body.translation().x, 0.02, z));
+    run(10);
+    vehicleRun.beforePhysics = () => body.setLinvel(driveAt(5), true);
+    for (let i = 0; i < 4 * TICK_RATE; i++) {
+      tick({});
+      expect(Number.isFinite(player.pos.x + player.pos.y + player.pos.z)).toBe(true);
+      expect(insideChassis(body, player.pos)).toBe(false);
+    }
+    expect(toLocal(body, player.pos).z).toBeLessThan(-LODGY.halfExtents.z);
+    expect(body.translation().z).toBeLessThan(z + LODGY.halfExtents.z - 5);
+  });
+
+  test('with a wall behind the player there is no room, so the player goes to a spawn slot', () => {
+    const probe = harness();
+    const zp = probe.rig.vehicle.body.translation().z - LODGY.halfExtents.z - 1.5;
+    const course = withBoxes(testGround, {
+      walls: [{ center: vec3(0, 1, zp - 3.1), halfExtents: vec3(3, 1, 3), rot: IDENTITY }],
+    });
+    const { rig, players, run, tick, vehicleRun } = harness(course);
+    const body = rig.vehicle.body;
+    const player = players.add('p1');
+    players.teleport('p1', vec3(body.translation().x, 0.02, zp));
+    run(10);
+    vehicleRun.beforePhysics = () => body.setLinvel(driveAt(5), true);
+    let relocated = false;
+    let last = { ...player.pos };
+    for (let i = 0; i < 4 * TICK_RATE; i++) {
+      tick({});
+      expect(Number.isFinite(player.pos.x + player.pos.y + player.pos.z)).toBe(true);
+      expect(insideChassis(body, player.pos)).toBe(false);
+      const inWall = Math.abs(player.pos.x) < 3 && player.pos.z > zp - 6.1 && player.pos.z < zp - 0.1;
+      expect(inWall).toBe(false);
+      if (!relocated && Math.hypot(player.pos.x - last.x, player.pos.z - last.z) > 0.5) {
+        relocated = true;
+        const turn = quatFromAxisAngle(AXIS_Y, yawOf(body.rotation()));
+        const nearest = Math.min(
+          ...LODGY.spawnSlots.map((slot) => {
+            const at = rotate(turn, slot);
+            return Math.hypot(body.translation().x + at.x - player.pos.x, body.translation().z + at.z - player.pos.z);
+          }),
+        );
+        expect(nearest).toBeLessThan(0.05);
+      }
+      last = { ...player.pos };
+    }
+    expect(relocated).toBe(true);
+  });
+
+  test('a rolled vehicle carries a player on its upward side and not one beside it', () => {
+    const rolled: Pose = { pos: vec3(0, 0.98, 0), rot: quatFromAxisAngle(vec3(0, 0, 1), Math.PI / 2) };
+    const { rig, players, run } = harness(testGround, rolled);
+    const body = rig.vehicle.body;
+    const on = players.add('p1');
+    const beside = players.add('p2');
+    const top = body.translation();
+    const up = rotate(body.rotation(), vec3(1, 0, 0));
+    expect(up.y).toBeGreaterThan(0.9);
+    players.teleport('p1', vec3(top.x, top.y + LODGY.halfExtents.x + 0.1, top.z));
+    players.teleport('p2', vec3(top.x + 3, 0.02, top.z));
+    run(60);
+    expect(on.ground?.bodyId).toBe('vehicle');
+    expect(beside.ground).toBeNull();
+    for (const p of [on, beside]) expect(Number.isFinite(p.pos.x + p.pos.y + p.pos.z)).toBe(true);
+  });
+});
+
+describe('players never change the vehicle', () => {
+  test('a player standing in the path of a driven vehicle does not make the chassis rise or tilt', () => {
+    const { rig, players, run, tick, vehicleRun } = harness();
+    const body = rig.vehicle.body;
+    const settled = body.translation().y;
+    players.add('p1');
+    const z = body.translation().z - LODGY.halfExtents.z - 3;
+    players.teleport('p1', vec3(body.translation().x, 0.02, z));
+    run(10);
+    vehicleRun.controls = { throttle: 1, steer: 0, brake: false };
+    for (let i = 0; i < 4 * TICK_RATE; i++) {
+      tick({});
+      expect(Math.abs(body.translation().y - settled)).toBeLessThan(0.02);
+    }
+    expect(body.translation().z).toBeLessThan(z);
+  });
+
+  test('a player under a wheel is ignored by the wheel rays', () => {
+    const { rig, players, tick } = harness();
+    const body = rig.vehicle.body;
+    const settled = body.translation().y;
+    players.add('p1');
+    const at = body.translation();
+    players.teleport('p1', vec3(at.x - LODGY.wheelX, 0.02, at.z - LODGY.wheelZ));
+    let worst = 0;
+    for (let i = 0; i < 30; i++) {
+      tick({});
+      worst = Math.max(worst, Math.abs(body.translation().y - settled));
+    }
+    expect(worst).toBeLessThan(0.02);
   });
 });
