@@ -17,7 +17,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 } } },
-    // An iPhone-sized touch viewport. It runs in Chromium so that only one browser has to be installed.
-    { name: 'phone', use: { ...devices['iPhone 14 landscape'], browserName: 'chromium' } },
+    // An iPhone in landscape, in WebKit, the engine of Safari. It is not Safari on a real iPhone, which is the owner's check.
+    { name: 'phone', use: { ...devices['iPhone 14 landscape'] } },
   ],
 });
