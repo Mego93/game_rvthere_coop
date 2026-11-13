@@ -30,3 +30,23 @@ test('remembers the last name used', () => {
   saveName(store, 'Amal');
   expect(savedName(store)).toBe('Amal');
 });
+
+test('a stored token the server would refuse is replaced', () => {
+  const store = createMemoryStore();
+  for (const bad of ['short', 'has spaces in it, which is not allowed', 'x'.repeat(65)]) {
+    store.setItem('lodgy.token', bad);
+    expect(sessionToken(store, countUp)).toBe('00112233445566778899aabbccddeeff');
+    expect(store.getItem('lodgy.token')).toBe('00112233445566778899aabbccddeeff');
+  }
+});
+
+test('a store that refuses writes still gives a token, and saving a name does not throw', () => {
+  const refusing = {
+    getItem: () => null,
+    setItem: () => {
+      throw new Error('QuotaExceededError');
+    },
+  };
+  expect(sessionToken(refusing, countUp)).toBe('00112233445566778899aabbccddeeff');
+  expect(() => saveName(refusing, 'Amal')).not.toThrow();
+});

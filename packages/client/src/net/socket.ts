@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage } from '@lodgy/shared';
+import { parseServerMessage, type ClientMessage, type ServerMessage } from '@lodgy/shared';
 
 export interface GameSocket {
   // Sends a message, or does nothing if the socket is not open.
@@ -19,12 +19,9 @@ export function openSocket(url: string, handlers: SocketHandlers): GameSocket {
   socket.addEventListener('open', () => handlers.onOpen());
   socket.addEventListener('close', () => handlers.onClose());
   socket.addEventListener('message', (event) => {
-    let message: ServerMessage;
-    try {
-      message = JSON.parse(String(event.data)) as ServerMessage;
-    } catch {
-      return;
-    }
+    // A message the page cannot use is dropped.
+    const message = parseServerMessage(String(event.data));
+    if (!message) return;
     if (message.type === 'ping') socket.send('{"type":"pong"}');
     else handlers.onMessage(message);
   });

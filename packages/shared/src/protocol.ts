@@ -1,5 +1,6 @@
 import { NAME_MAX_LENGTH } from './constants';
-import { clamp, deepFreeze } from './math';
+import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
+import type { VehicleState } from './vehicle';
 import type { WorldSnapshot } from './world';
 
 export interface PlayerInput {
@@ -49,6 +50,7 @@ export type ClientMessage =
 export type Phase = 'lobby' | 'playing' | 'results';
 
 export type ErrorReason = 'unknown_room' | 'room_full' | 'name_taken' | 'bad_message' | 'server_full';
+const ERROR_REASONS: readonly string[] = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full'] satisfies ErrorReason[];
 
 export interface LobbyPlayer {
   playerId: string;
@@ -99,7 +101,8 @@ export function cleanRoom(value: unknown): string | null {
   return ROOM_PATTERN.test(room) ? room : null;
 }
 
-const cleanToken = (value: unknown): string | null =>
+// A session token the server accepts, or null.
+export const cleanToken = (value: unknown): string | null =>
   typeof value === 'string' && TOKEN_PATTERN.test(value) ? value : null;
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -163,6 +166,68 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     }
     case 'pong':
       return { type: 'pong' };
+    default:
+      return null;
+  }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isText = (value: unknown): value is string => typeof value === 'string';
+const isCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+const isVec3 = (value: unknown): value is Vec3 =>
+  isRecord(value) && finite(value.x) && finite(value.y) && finite(value.z);
+const isQuat = (value: unknown): value is Quat => isRecord(value) && finite(value.w) && isVec3(value);
+const isVehicleState = (value: unknown): value is VehicleState =>
+  isRecord(value) &&
+  isVec3(value.pos) &&
+  isQuat(value.rot) &&
+  isVec3(value.linvel) &&
+  finite(value.throttle) &&
+  finite(value.steer);
+const isLobbyPlayer = (value: unknown): value is LobbyPlayer =>
+  isRecord(value) &&
+  isText(value.playerId) &&
+  isText(value.name) &&
+  isText(value.colour) &&
+  typeof value.ready === 'boolean' &&
+  typeof value.connected === 'boolean';
+
+// Checks one message from the server. Returns null for anything the page cannot use.
+// The server is trusted, but the page may be older than it, and one snapshot without finite numbers would spoil the interpolation for good.
+// Fields this version does not know are kept, so a newer server can add to a message.
+export function parseServerMessage(raw: string): ServerMessage | null {
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isRecord(data)) return null;
+  const message = data as unknown as ServerMessage;
+  switch (data.type) {
+    case 'ping':
+      return message;
+    case 'welcome':
+      return isText(data.playerId) && isText(data.room) ? message : null;
+    case 'error':
+      if (!isText(data.reason)) return null;
+      // A reason this version does not know is shown as a general refusal.
+      return ERROR_REASONS.includes(data.reason) ? message : { type: 'error', reason: 'bad_message' };
+    case 'lobby':
+      return isText(data.room) &&
+        (data.phase === 'lobby' || data.phase === 'playing' || data.phase === 'results') &&
+        Array.isArray(data.players) &&
+        data.players.every(isLobbyPlayer) &&
+        (data.adminId === null || isText(data.adminId)) &&
+        isText(data.courseId) &&
+        isText(data.vehicleId)
+        ? message
+        : null;
+    case 'snapshot':
+      return isCount(data.tick) && isCount(data.ackSeq) && typeof data.full === 'boolean' && isVehicleState(data.vehicle)
+        ? message
+        : null;
     default:
       return null;
   }
