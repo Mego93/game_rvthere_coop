@@ -13,6 +13,8 @@ export interface TouchControls {
   onButton(handler: (name: TouchButtonName, down: boolean) => void): void;
   onSlot(handler: (slot: 0 | 1 | 2, down: boolean) => void): void;
   onCancel(handler: () => void): void;
+  // Releases every held button; the source calls it when it cancels.
+  releaseAll(): void;
 }
 
 export interface TouchSourceOptions {
@@ -26,6 +28,8 @@ export interface TouchSourceOptions {
 export type TouchSource = GameInput & {
   joystick(): { origin: { x: number; y: number }; point: { x: number; y: number } } | null;
 };
+
+export const hasJoystick = (input: GameInput): input is TouchSource => typeof (input as Partial<TouchSource>).joystick === 'function';
 
 interface TouchLike {
   identifier: number;
@@ -59,6 +63,7 @@ export function createTouchSource({ surface, win, doc, width, controls }: TouchS
     for (const button of Object.values(buttons)) button.reset();
     dropLatched = false;
     clearLongPress();
+    controls.releaseAll();
   };
   const drain = () => {
     const { dx, dy } = tracker.takeLook();

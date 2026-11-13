@@ -16,7 +16,7 @@ test('the keyboard and touch sources produce the same input fields', () => {
     win: new EventTarget(),
     doc: Object.assign(new EventTarget(), { visibilityState: 'visible' }),
     width: () => 800,
-    controls: { onButton() {}, onSlot() {}, onCancel() {} },
+    controls: { onButton() {}, onSlot() {}, onCancel() {}, releaseAll() {} },
   });
   const samples = [keyboard.sample(), touch.sample()];
   expect(Object.keys(samples[0]!).sort()).toEqual(Object.keys(samples[1]!).sort());

@@ -17,7 +17,7 @@ import {
 } from '@lodgy/shared';
 import * as THREE from 'three';
 import type { GameInput } from './input/source';
-import type { TouchSource } from './input/touch';
+import { hasJoystick } from './input/touch';
 import { createFixedStepper, createFrameClock } from './loop';
 import { createSnapshotBuffer } from './net/snapshotBuffer';
 import { predictionActive } from './prediction/gate';
@@ -226,7 +226,7 @@ export function createGame(
     });
     if (view.touchUi) {
       view.touchUi.update(touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable }));
-      view.touchUi.setJoystick((input as TouchSource).joystick());
+      view.touchUi.setJoystick(hasJoystick(input) ? input.joystick() : null);
     }
     renderer.render(scene, camera);
     frameRequest = requestAnimationFrame(frame);

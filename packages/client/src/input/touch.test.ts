@@ -12,10 +12,12 @@ function setup() {
   let onButton: (name: TouchButtonName, down: boolean) => void = () => {};
   let onSlot: (slot: 0 | 1 | 2, down: boolean) => void = () => {};
   let onCancel: () => void = () => {};
+  let released = 0;
   const controls: TouchControls = {
     onButton: (h) => (onButton = h),
     onSlot: (h) => (onSlot = h),
     onCancel: (h) => (onCancel = h),
+    releaseAll: () => (released += 1),
   };
   const source = createTouchSource({ surface, win, doc, width: () => 800, controls });
   const touch = (type: string, id: number, x: number, y: number) => {
@@ -34,6 +36,7 @@ function setup() {
     button: (name: TouchButtonName, down: boolean) => onButton(name, down),
     slot: (slot: 0 | 1 | 2, down: boolean) => onSlot(slot, down),
     cancel: () => onCancel(),
+    released: () => released,
   };
 }
 
@@ -213,6 +216,7 @@ test('a disposed source receives nothing from controls that keep every handler',
     onButton: (h) => handlers.button.push(h),
     onSlot: (h) => handlers.slot.push(h),
     onCancel: (h) => handlers.cancel.push(h),
+    releaseAll() {},
   };
   const make = () =>
     createTouchSource({ surface: new EventTarget(), win: new EventTarget(), doc: Object.assign(new EventTarget(), { visibilityState: 'visible' }), width: () => 800, controls });
@@ -227,7 +231,7 @@ test('a disposed source receives nothing from controls that keep every handler',
 
 test('with controls that replace the handler, only the second source sees events', () => {
   let onButton: (n: TouchButtonName, d: boolean) => void = () => {};
-  const controls: TouchControls = { onButton: (h) => (onButton = h), onSlot() {}, onCancel() {} };
+  const controls: TouchControls = { onButton: (h) => (onButton = h), onSlot() {}, onCancel() {}, releaseAll() {} };
   const make = () =>
     createTouchSource({ surface: new EventTarget(), win: new EventTarget(), doc: Object.assign(new EventTarget(), { visibilityState: 'visible' }), width: () => 800, controls });
   const first = make();
@@ -245,7 +249,7 @@ test('the surface listeners are non-passive and the touch events are default-pre
     added.push([type, options]);
     original(type, listener, options as AddEventListenerOptions);
   }) as typeof surface.addEventListener;
-  createTouchSource({ surface, win: new EventTarget(), doc: Object.assign(new EventTarget(), { visibilityState: 'visible' }), width: () => 800, controls: { onButton() {}, onSlot() {}, onCancel() {} } });
+  createTouchSource({ surface, win: new EventTarget(), doc: Object.assign(new EventTarget(), { visibilityState: 'visible' }), width: () => 800, controls: { onButton() {}, onSlot() {}, onCancel() {}, releaseAll() {} } });
   for (const type of ['touchstart', 'touchmove', 'touchend']) {
     expect(added.find(([t]) => t === type)?.[1]).toEqual({ passive: false });
     const event = Object.assign(new Event(type, { cancelable: true }), { changedTouches: [{ identifier: 1, clientX: 1, clientY: 1 }] });
@@ -265,8 +269,16 @@ test('dispose removes the blur and visibilitychange listeners too', () => {
       remove(type, listener);
     }) as typeof target.removeEventListener;
   }
-  const source = createTouchSource({ surface: new EventTarget(), win, doc, width: () => 800, controls: { onButton() {}, onSlot() {}, onCancel() {} } });
+  const source = createTouchSource({ surface: new EventTarget(), win, doc, width: () => 800, controls: { onButton() {}, onSlot() {}, onCancel() {}, releaseAll() {} } });
   source.dispose();
   expect(removed).toContain('blur');
   expect(removed).toContain('visibilitychange');
+});
+
+test('every kind of cancel tells the controls to release their held buttons', () => {
+  for (const [, cancel] of cancels) {
+    const h = setup();
+    cancel(h);
+    expect(h.released()).toBeGreaterThan(0);
+  }
 });

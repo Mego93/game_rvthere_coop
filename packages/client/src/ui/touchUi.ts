@@ -1,7 +1,9 @@
 import type { ItemKind } from '@lodgy/shared';
 import { JOYSTICK_RADIUS } from '../input/touchConfig';
 import type { TouchButtonName, TouchControls } from '../input/touch';
+import { createOwnedPress } from './ownedPress';
 import type { TouchView } from './touchView';
+import { changedFields } from './touchViewDiff';
 
 export interface TouchUi {
   update(view: TouchView): void;
@@ -31,18 +33,17 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
   let slotHandler: (slot: 0 | 1 | 2, down: boolean) => void = () => {};
   let cancelHandler: () => void = () => {};
   const releases = new Set<() => void>();
+  const releaseOf = new WeakMap<HTMLElement, () => void>();
 
   root.id = 'touch-ui';
   root.hidden = true;
   const style = document.createElement('style');
   style.textContent = STYLE;
 
-  // Follows the touch that started on it, so other touches landing on the same element are ignored.
   const press = (element: HTMLElement, onChange: (down: boolean) => void) => {
-    let owner: number | null = null;
+    const owned = createOwnedPress();
     const release = () => {
-      if (owner === null) return;
-      owner = null;
+      if (!owned.cancel()) return;
       element.classList.remove('down');
       onChange(false);
     };
@@ -56,36 +57,46 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
       (event) => {
         swallow(event);
         const first = (event as TouchEvent).changedTouches[0];
-        if (owner !== null || !first) return;
-        owner = first.identifier;
+        if (!first || !owned.start(first.identifier)) return;
         element.classList.add('down');
         onChange(true);
       },
       { passive: false },
     );
-    const finish = (event: Event) => {
-      swallow(event);
-      if (owner !== null && Array.from((event as TouchEvent).changedTouches).some((touch) => touch.identifier === owner)) release();
-    };
-    element.addEventListener('touchend', finish, { passive: false });
+    element.addEventListener(
+      'touchend',
+      (event) => {
+        swallow(event);
+        const ids = Array.from((event as TouchEvent).changedTouches, (touch) => touch.identifier);
+        if (owned.end(ids)) {
+          element.classList.remove('down');
+          onChange(false);
+        }
+      },
+      { passive: false },
+    );
     element.addEventListener(
       'touchcancel',
       (event) => {
         swallow(event);
         // A system gesture took the touches; nothing may stay held.
-        for (const other of releases) other();
+        releaseAll();
         cancelHandler();
       },
       { passive: false },
     );
+    return release;
   };
 
+  const releaseAll = () => {
+    for (const release of releases) release();
+  };
   const make = (id: string, label: string, onChange: (down: boolean) => void) => {
     const element = document.createElement('button');
     element.type = 'button';
     element.id = id;
     element.textContent = label;
-    press(element, onChange);
+    releaseOf.set(element, press(element, onChange));
     return element;
   };
 
@@ -120,32 +131,42 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
 
   root.append(style, ring, actions, slotBox);
 
-  let shown: { seated: boolean; useVisible: boolean; reelVisible: boolean; slots: string; selected: number } | null = null;
+  let shown: TouchView | null = null;
+  let joystickKey = '';
+  // A button that disappears while held must not stay down.
+  const hide = (element: HTMLElement, hidden: boolean) => {
+    element.hidden = hidden;
+    if (hidden) releaseOf.get(element)?.();
+  };
 
   return {
     onButton: (handler) => (buttonHandler = handler),
     onSlot: (handler) => (slotHandler = handler),
     onCancel: (handler) => (cancelHandler = handler),
+    releaseAll,
     update(view) {
-      const next = { seated: view.seated, useVisible: view.useVisible, reelVisible: view.reelVisible, slots: view.slots.join(','), selected: view.selected };
-      if (shown && shown.seated === next.seated && shown.useVisible === next.useVisible && shown.reelVisible === next.reelVisible && shown.slots === next.slots && shown.selected === next.selected) return;
-      if (!shown || shown.seated !== next.seated) jump.textContent = next.seated ? 'Brake' : 'Jump';
-      if (!shown || shown.useVisible !== next.useVisible) use.hidden = !next.useVisible;
-      if (!shown || shown.reelVisible !== next.reelVisible) {
-        reelIn.hidden = !next.reelVisible;
-        reelOut.hidden = !next.reelVisible;
+      const changed = changedFields(shown, view);
+      if (changed.size === 0) return;
+      if (changed.has('seated')) jump.textContent = view.seated ? 'Brake' : 'Jump';
+      if (changed.has('useVisible')) hide(use, !view.useVisible);
+      if (changed.has('reelVisible')) {
+        hide(reelIn, !view.reelVisible);
+        hide(reelOut, !view.reelVisible);
       }
-      if (!shown || shown.slots !== next.slots) view.slots.forEach((kind, index) => (slotButtons[index]!.textContent = slotLabel(kind)));
-      if (!shown || shown.selected !== next.selected || shown.slots !== next.slots) {
+      if (changed.has('slots')) view.slots.forEach((kind, index) => (slotButtons[index]!.textContent = slotLabel(kind)));
+      if (changed.has('slots') || changed.has('selected')) {
         slotButtons.forEach((element, index) => {
           const selected = index === view.selected;
           element.classList.toggle('selected', selected);
           element.setAttribute('aria-pressed', String(selected));
         });
       }
-      shown = next;
+      shown = { ...view, slots: [...view.slots] };
     },
     setJoystick(state) {
+      const key = state ? `${state.origin.x},${state.origin.y},${state.point.x},${state.point.y}` : '';
+      if (key === joystickKey) return;
+      joystickKey = key;
       ring.hidden = state === null;
       if (!state) return;
       ring.style.left = `${state.origin.x - JOYSTICK_RADIUS}px`;
@@ -159,12 +180,13 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
     setVisible(visible) {
       root.hidden = !visible;
       if (!visible) {
-        for (const release of releases) release();
+        releaseAll();
         ring.hidden = true;
+        joystickKey = '';
       }
     },
     dispose() {
-      for (const release of releases) release();
+      releaseAll();
       root.replaceChildren();
     },
   };
