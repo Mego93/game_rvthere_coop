@@ -95,10 +95,11 @@ Plan check. Slot 0 to the driver door point: 1.2 m horizontal (both vehicles), i
 ```ts
 export const GROUP_WORLD = 0x0001;   // ground, walls, vehicle chassis
 export const GROUP_PLAYER = 0x0002;
+export const GROUP_GROUND = 0x0004;  // ground boxes only; the spawn ray uses it to ignore walls and the chassis
 export function groups(membership: number, filter: number): number   // ((membership << 16) | filter) >>> 0
 ```
 
-Rapier lets two colliders interact only if `(A.membership & B.filter) && (B.membership & A.filter)`. Ground, walls and the chassis use `groups(GROUP_WORLD, GROUP_WORLD)`. Player colliders use `groups(GROUP_PLAYER, 0)`: they interact with nothing in the solver, and wheel rays ignore them. Every query by the character controller, the overlap tests and the downward spawn rays passes `groups(GROUP_WORLD, GROUP_WORLD)` as the filter groups. Changes `statics.ts` and `vehicle.ts` (the chassis collider's groups). `Vehicle` gains `readonly chassisHandle: number`.
+Rapier lets two colliders interact only if `(A.membership & B.filter) && (B.membership & A.filter)`. Walls and the chassis use `groups(GROUP_WORLD, GROUP_WORLD)`; ground boxes use `groups(GROUP_WORLD | GROUP_GROUND, GROUP_WORLD)`. Player colliders use `groups(GROUP_PLAYER, 0)`: they interact with nothing in the solver, and wheel rays ignore them. Every query by the character controller, and the overlap tests pass `groups(GROUP_WORLD, GROUP_WORLD)` as the filter groups; the downward spawn rays pass `groups(GROUP_WORLD, GROUP_GROUND)`. The vehicle's `updateVehicle` call passes `groups(GROUP_WORLD, GROUP_WORLD)` so wheel rays skip players (Task 4: it is not optional, a measured player under a wheel moved the chassis 0.14 m). Changes `statics.ts` and `vehicle.ts` (the chassis collider's groups). `Vehicle` gains `readonly chassisHandle: number`.
 
 ### `shared/src/player.ts` (new)
 
