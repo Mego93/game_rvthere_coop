@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-11-lodgy-coop-design.md`, build step 2, and the nine step-2 rows of "Carried into later steps" in `ROADMAP.md`.
 
-**Status of this plan's code:** every file below was drafted and run in a scratch workspace before the plan was written (clean install, 195 tests passing in 21 files, typecheck clean, production build succeeding, 12 Playwright tests passing, `npm run dev` and `npm start` both exercised). Copy the code exactly. If something fails that the plan says should pass, stop and report; do not improvise a fix.
+**Status of this plan's code:** every file below was drafted and run in a scratch workspace before the plan was written (clean install, 231 tests passing in 21 files, typecheck clean, production build succeeding, 12 Playwright tests passing, `npm run dev` and `npm start` both exercised). Copy the code exactly. If something fails that the plan says should pass, stop and report; do not improvise a fix.
 
 ## Global Constraints
 
@@ -4182,6 +4182,336 @@ git commit -m "feat(client): add session, routing, socket and snapshot interpola
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
+- [ ] **Step 6: Write the failing tests for server messages and the stored token**
+
+The review of this task found two places where the page trusted data it had not checked. Steps 6 to 9 close them. Steps 1 to 5 above are kept as they were first built.
+
+- `socket.ts` cast whatever JSON arrived to a `ServerMessage`. A snapshot without finite numbers would spoil the interpolation until the page was reloaded. The new `parseServerMessage` in `packages/shared/src/protocol.ts` checks each message, and `socket.ts` drops what it rejects. Fields it does not know are kept, and an error reason it does not know becomes `bad_message`.
+- `session.ts` returned any stored token. One the server refuses would stop the tab from ever joining a room. `cleanToken` is now exported from `shared`, and a stored token that fails it is replaced. A store that refuses writes no longer makes `sessionToken` or `saveName` throw.
+
+Apply this change to `packages/shared/src/protocol.test.ts` and `packages/client/src/session.test.ts`. The main session provides the same change as a patch file for `git apply`.
+
+```diff
+diff --git a/packages/client/src/session.test.ts b/packages/client/src/session.test.ts
+index e610305..224a894 100644
+--- a/packages/client/src/session.test.ts
++++ b/packages/client/src/session.test.ts
+@@ -30,3 +30,23 @@ test('remembers the last name used', () => {
+   saveName(store, 'Amal');
+   expect(savedName(store)).toBe('Amal');
+ });
++
++test('a stored token the server would refuse is replaced', () => {
++  const store = createMemoryStore();
++  for (const bad of ['short', 'has spaces in it, which is not allowed', 'x'.repeat(65)]) {
++    store.setItem('lodgy.token', bad);
++    expect(sessionToken(store, countUp)).toBe('00112233445566778899aabbccddeeff');
++    expect(store.getItem('lodgy.token')).toBe('00112233445566778899aabbccddeeff');
++  }
++});
++
++test('a store that refuses writes still gives a token, and saving a name does not throw', () => {
++  const refusing = {
++    getItem: () => null,
++    setItem: () => {
++      throw new Error('QuotaExceededError');
++    },
++  };
++  expect(sessionToken(refusing, countUp)).toBe('00112233445566778899aabbccddeeff');
++  expect(() => saveName(refusing, 'Amal')).not.toThrow();
++});
+diff --git a/packages/shared/src/protocol.test.ts b/packages/shared/src/protocol.test.ts
+index c6fe07f..debffe2 100644
+--- a/packages/shared/src/protocol.test.ts
++++ b/packages/shared/src/protocol.test.ts
+@@ -1,5 +1,15 @@
+ import { expect, test } from 'vitest';
+-import { NEUTRAL_INPUT, cleanName, cleanRoom, neutralInput, parseClientMessage, type PlayerInput } from './protocol';
++import {
++  NEUTRAL_INPUT,
++  cleanName,
++  cleanRoom,
++  cleanToken,
++  neutralInput,
++  parseClientMessage,
++  parseServerMessage,
++  type PlayerInput,
++  type ServerMessage,
++} from './protocol';
+ 
+ const TOKEN = 'abcdefghijklmnop';
+ const INPUT: PlayerInput = { ...NEUTRAL_INPUT, seq: 1 };
+@@ -100,3 +110,78 @@ test('the shared neutral input cannot be modified', () => {
+     (NEUTRAL_INPUT as { moveX: number }).moveX = 1;
+   }).toThrow(TypeError);
+ });
++
++test('cleanToken accepts what parseClientMessage accepts as a token', () => {
++  expect(cleanToken('abcdefghijklmnop')).toBe('abcdefghijklmnop');
++  expect(cleanToken('abcdefghijklmno')).toBeNull();
++  expect(cleanToken('abcdefghijklmnop!')).toBeNull();
++  expect(cleanToken(null)).toBeNull();
++});
++
++const vehicle = {
++  pos: { x: 1, y: 2, z: 3 },
++  rot: { x: 0, y: 0, z: 0, w: 1 },
++  linvel: { x: 0, y: 0, z: -4 },
++  throttle: 1,
++  steer: 0,
++};
++const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle };
++const lobby = {
++  type: 'lobby',
++  room: 'camel',
++  phase: 'playing',
++  players: [{ playerId: 'p1', name: 'Amal', colour: '#e4572e', ready: false, connected: true }],
++  adminId: 'p1',
++  courseId: 'test',
++  vehicleId: 'lodgy',
++};
++
++test.each<ServerMessage>([
++  { type: 'ping' },
++  { type: 'welcome', playerId: 'p1', room: 'camel' },
++  { type: 'error', reason: 'room_full' },
++  lobby as ServerMessage,
++  { ...lobby, players: [], adminId: null } as ServerMessage,
++  snapshot as ServerMessage,
++  { ...snapshot, tick: 0, ackSeq: 0, full: true } as ServerMessage,
++])('parseServerMessage accepts %j', (message) => {
++  expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
++});
++
++test.each([
++  ['text that is not JSON', 'not json'],
++  ['null', 'null'],
++  ['an array', '[]'],
++  ['a number', '5'],
++  ['no type', '{}'],
++  ['an unknown type', '{"type":"teleport"}'],
++  ['a welcome without a room', '{"type":"welcome","playerId":"p1"}'],
++  ['an error without a reason', '{"type":"error"}'],
++  ['a lobby whose players are not a list', JSON.stringify({ ...lobby, players: 'Amal' })],
++  ['a lobby player without a name', JSON.stringify({ ...lobby, players: [{ playerId: 'p1' }] })],
++  ['a lobby with an unknown phase', JSON.stringify({ ...lobby, phase: 'paused' })],
++  ['a lobby whose admin is a number', JSON.stringify({ ...lobby, adminId: 1 })],
++  ['a snapshot without a vehicle', JSON.stringify({ ...snapshot, vehicle: undefined })],
++  ['a snapshot whose tick is text', JSON.stringify({ ...snapshot, tick: '30' })],
++  ['a snapshot whose tick is null', JSON.stringify({ ...snapshot, tick: null })],
++  ['a snapshot whose tick is negative', JSON.stringify({ ...snapshot, tick: -1 })],
++  ['a snapshot whose tick is not whole', JSON.stringify({ ...snapshot, tick: 1.5 })],
++  ['a snapshot whose tick is too large to be finite', JSON.stringify(snapshot).replace('"tick":30', '"tick":1e999')],
++  ['a snapshot whose ackSeq is missing', JSON.stringify({ ...snapshot, ackSeq: undefined })],
++  ['a snapshot whose full is not a boolean', JSON.stringify({ ...snapshot, full: 1 })],
++  ['a snapshot whose position lacks z', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, pos: { x: 1, y: 2 } } })],
++  ['a snapshot whose rotation lacks w', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, rot: { x: 0, y: 0, z: 0 } } })],
++  ['a snapshot whose velocity is null', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, linvel: null } })],
++  ['a snapshot whose throttle is text', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, throttle: 'full' } })],
++])('parseServerMessage rejects %s', (_label, raw) => {
++  expect(parseServerMessage(raw)).toBeNull();
++});
++
++test('parseServerMessage shows a reason it does not know as a general refusal', () => {
++  expect(parseServerMessage('{"type":"error","reason":"kicked"}')).toEqual({ type: 'error', reason: 'bad_message' });
++});
++
++test('parseServerMessage keeps fields it does not know, so a newer server can add to a message', () => {
++  const newer = { ...snapshot, players: [{ playerId: 'p1' }] };
++  expect(parseServerMessage(JSON.stringify(newer))).toEqual(newer);
++});
+```
+
+- [ ] **Step 7: Run the tests to verify they fail**
+
+Run: `npx vitest run packages/shared/src/protocol.test.ts packages/client/src/session.test.ts`
+Expected: FAIL, 36 failed and 35 passed, in 2 failed files: `parseServerMessage is not a function`, `cleanToken is not a function`, `expected 'short' to be '00112233445566778899aabbccddeeff'` and `Error: QuotaExceededError`.
+
+- [ ] **Step 8: Check server messages and the stored token**
+
+Apply this change to `packages/shared/src/protocol.ts`, `packages/client/src/session.ts` and `packages/client/src/net/socket.ts`. The main session provides it as a second patch file.
+
+```diff
+diff --git a/packages/client/src/net/socket.ts b/packages/client/src/net/socket.ts
+index 824bd31..9a6f161 100644
+--- a/packages/client/src/net/socket.ts
++++ b/packages/client/src/net/socket.ts
+@@ -1,4 +1,4 @@
+-import type { ClientMessage, ServerMessage } from '@lodgy/shared';
++import { parseServerMessage, type ClientMessage, type ServerMessage } from '@lodgy/shared';
+ 
+ export interface GameSocket {
+   // Sends a message, or does nothing if the socket is not open.
+@@ -19,12 +19,9 @@ export function openSocket(url: string, handlers: SocketHandlers): GameSocket {
+   socket.addEventListener('open', () => handlers.onOpen());
+   socket.addEventListener('close', () => handlers.onClose());
+   socket.addEventListener('message', (event) => {
+-    let message: ServerMessage;
+-    try {
+-      message = JSON.parse(String(event.data)) as ServerMessage;
+-    } catch {
+-      return;
+-    }
++    // A message the page cannot use is dropped.
++    const message = parseServerMessage(String(event.data));
++    if (!message) return;
+     if (message.type === 'ping') socket.send('{"type":"pong"}');
+     else handlers.onMessage(message);
+   });
+diff --git a/packages/client/src/session.ts b/packages/client/src/session.ts
+index c259426..204f5ba 100644
+--- a/packages/client/src/session.ts
++++ b/packages/client/src/session.ts
+@@ -1,3 +1,5 @@
++import { cleanToken } from '@lodgy/shared';
++
+ const TOKEN_KEY = 'lodgy.token';
+ const NAME_KEY = 'lodgy.name';
+ 
+@@ -18,17 +20,27 @@ export function createMemoryStore(): KeyValueStore {
+   };
+ }
+ 
++// Storage can refuse a write (it is full, or a private mode forbids it); the value is then not remembered.
++function remember(store: KeyValueStore, key: string, value: string): void {
++  try {
++    store.setItem(key, value);
++  } catch {
++    return;
++  }
++}
++
+ // The token that identifies this tab to the server. It is made once and kept in the given store.
+ export function sessionToken(store: KeyValueStore, fillRandom: (bytes: Uint8Array<ArrayBuffer>) => void): string {
+-  const existing = store.getItem(TOKEN_KEY);
++  // A stored value the server would refuse is replaced; with it, this tab could never join a room.
++  const existing = cleanToken(store.getItem(TOKEN_KEY));
+   if (existing) return existing;
+   const bytes = new Uint8Array(16);
+   fillRandom(bytes);
+   const token = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+-  store.setItem(TOKEN_KEY, token);
++  remember(store, TOKEN_KEY, token);
+   return token;
+ }
+ 
+ export const savedName = (store: KeyValueStore): string => store.getItem(NAME_KEY) ?? '';
+ 
+-export const saveName = (store: KeyValueStore, name: string): void => store.setItem(NAME_KEY, name);
++export const saveName = (store: KeyValueStore, name: string): void => remember(store, NAME_KEY, name);
+diff --git a/packages/shared/src/protocol.ts b/packages/shared/src/protocol.ts
+index 460aacd..b28ddf8 100644
+--- a/packages/shared/src/protocol.ts
++++ b/packages/shared/src/protocol.ts
+@@ -1,5 +1,6 @@
+ import { NAME_MAX_LENGTH } from './constants';
+-import { clamp, deepFreeze } from './math';
++import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
++import type { VehicleState } from './vehicle';
+ import type { WorldSnapshot } from './world';
+ 
+ export interface PlayerInput {
+@@ -49,6 +50,7 @@ export type ClientMessage =
+ export type Phase = 'lobby' | 'playing' | 'results';
+ 
+ export type ErrorReason = 'unknown_room' | 'room_full' | 'name_taken' | 'bad_message' | 'server_full';
++const ERROR_REASONS: readonly string[] = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full'] satisfies ErrorReason[];
+ 
+ export interface LobbyPlayer {
+   playerId: string;
+@@ -99,7 +101,8 @@ export function cleanRoom(value: unknown): string | null {
+   return ROOM_PATTERN.test(room) ? room : null;
+ }
+ 
+-const cleanToken = (value: unknown): string | null =>
++// A session token the server accepts, or null.
++export const cleanToken = (value: unknown): string | null =>
+   typeof value === 'string' && TOKEN_PATTERN.test(value) ? value : null;
+ 
+ const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+@@ -167,3 +170,65 @@ export function parseClientMessage(raw: string): ClientMessage | null {
+       return null;
+   }
+ }
++
++const isRecord = (value: unknown): value is Record<string, unknown> =>
++  typeof value === 'object' && value !== null && !Array.isArray(value);
++const isText = (value: unknown): value is string => typeof value === 'string';
++const isCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
++const isVec3 = (value: unknown): value is Vec3 =>
++  isRecord(value) && finite(value.x) && finite(value.y) && finite(value.z);
++const isQuat = (value: unknown): value is Quat => isRecord(value) && finite(value.w) && isVec3(value);
++const isVehicleState = (value: unknown): value is VehicleState =>
++  isRecord(value) &&
++  isVec3(value.pos) &&
++  isQuat(value.rot) &&
++  isVec3(value.linvel) &&
++  finite(value.throttle) &&
++  finite(value.steer);
++const isLobbyPlayer = (value: unknown): value is LobbyPlayer =>
++  isRecord(value) &&
++  isText(value.playerId) &&
++  isText(value.name) &&
++  isText(value.colour) &&
++  typeof value.ready === 'boolean' &&
++  typeof value.connected === 'boolean';
++
++// Checks one message from the server. Returns null for anything the page cannot use.
++// The server is trusted, but the page may be older than it, and one snapshot without finite numbers would spoil the interpolation for good.
++// Fields this version does not know are kept, so a newer server can add to a message.
++export function parseServerMessage(raw: string): ServerMessage | null {
++  let data: unknown;
++  try {
++    data = JSON.parse(raw);
++  } catch {
++    return null;
++  }
++  if (!isRecord(data)) return null;
++  const message = data as unknown as ServerMessage;
++  switch (data.type) {
++    case 'ping':
++      return message;
++    case 'welcome':
++      return isText(data.playerId) && isText(data.room) ? message : null;
++    case 'error':
++      if (!isText(data.reason)) return null;
++      // A reason this version does not know is shown as a general refusal.
++      return ERROR_REASONS.includes(data.reason) ? message : { type: 'error', reason: 'bad_message' };
++    case 'lobby':
++      return isText(data.room) &&
++        (data.phase === 'lobby' || data.phase === 'playing' || data.phase === 'results') &&
++        Array.isArray(data.players) &&
++        data.players.every(isLobbyPlayer) &&
++        (data.adminId === null || isText(data.adminId)) &&
++        isText(data.courseId) &&
++        isText(data.vehicleId)
++        ? message
++        : null;
++    case 'snapshot':
++      return isCount(data.tick) && isCount(data.ackSeq) && typeof data.full === 'boolean' && isVehicleState(data.vehicle)
++        ? message
++        : null;
++    default:
++      return null;
++  }
++}
+```
+
+Run: `npm test`
+Expected: 21 files, 229 tests passing.
+
+Run: `npm run typecheck`
+Expected: exits 0.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add packages/shared/src/protocol.ts packages/shared/src/protocol.test.ts packages/client/src
+git commit -m "fix(client): check server messages and the stored token
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
 ---
 
 ### Task 8: The page plays through the server
@@ -4742,7 +5072,7 @@ Replace `packages/client/index.html` with:
 - [ ] **Step 5: Run the checks**
 
 Run: `npm test`
-Expected: 21 files, 195 tests passing.
+Expected: 21 files, 231 tests passing.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -4981,7 +5311,7 @@ If a test fails, read `test-results/<test name>/error-context.md`, which holds t
 - [ ] **Step 5: Run the other checks**
 
 Run: `npm test`
-Expected: 21 files, 195 tests passing. The Playwright test is not part of it.
+Expected: 21 files, 231 tests passing. The Playwright test is not part of it.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -5016,7 +5346,7 @@ Every text to replace below occurs exactly once. If one does not, stop and repor
 - [ ] **Step 1: Run every check one last time**
 
 Run: `npm test && npm run typecheck && npm run build && npm run e2e`
-Expected: 195 tests passing, typecheck exits 0, build ends with `✓ built in …`, `12 passed`.
+Expected: 231 tests passing, typecheck exits 0, build ends with `✓ built in …`, `12 passed`.
 
 - [ ] **Step 2: Update `ROADMAP.md`**
 
@@ -5065,7 +5395,7 @@ In the "Carried into later steps" table, delete the nine rows whose first column
 
 ```markdown
 | 3 | When the server consumes two queued inputs in one tick, only the second reaches the world, so a button pressed only in the first would be missed. Merge presses when seats and jumping arrive |
-| 3 | The snapshot gains `players`; the client's snapshot buffer interpolates the vehicle only |
+| 3 | The snapshot gains `players`; the client's snapshot buffer interpolates the vehicle only, and `parseServerMessage` must check the new fields |
 | 4 | The page no longer bundles Rapier; prediction brings it back, and the bundle size with it |
 | 11 | `lobby` gains `timeOfDay` and `weather`; held slots replace the immediate removal of a disconnected player; the admin's choice replaces `VEHICLE` |
 | 19 | The page does not reconnect by itself after the socket closes; it returns to the name form |
@@ -5085,6 +5415,7 @@ Append these rows to the decisions log:
 | 2026-11-12 | The server holds at most 50 rooms and refuses `create` beyond that with `server_full` | Found in review: each room is a physics world, and nothing bounded how many one visitor could create |
 | 2026-11-12 | A connection that throws is dropped and a room whose simulation throws is closed; both are reported and the other rooms carry on | Found in review: one error inside the tick stopped every room |
 | 2026-11-12 | The Node adapter contains every failure it can: file read errors, server errors, and exceptions in socket and timer callbacks are reported and the process carries on | Found in review: any one of them ended the process, and every room with it |
+| 2026-11-12 | The page checks every server message with `parseServerMessage` and drops what fails; unknown fields are kept | Found in review: the page may be older than the server, and one snapshot without finite numbers spoiled the interpolation until a reload |
 | 2026-11-12 | A test checks the room layer's imports | Found in review: the room tsconfig cannot stop an import of `ws`, which brings Node's types in with it |
 ```
 
