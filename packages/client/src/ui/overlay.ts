@@ -141,6 +141,8 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
     if (hint) lines.push(`hint     ${hint}`);
     if (local) {
       lines.push(`slots    ${local.inventory.map((kind, index) => (index === local.slot ? `[${kind ?? '-'}]` : (kind ?? '-'))).join(' ')}`);
+      lines.push(`health   ${local.health}`);
+      if (local.downed !== null) lines.push(`DOWNED   ${Math.ceil(local.downed - 1e-9)}s`);
       if (local.hold) lines.push(`hold     ${percent(local.hold.progress)}`);
       const selected = local.inventory[local.slot];
       const half = config.halfExtents;
@@ -153,9 +155,18 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
         vehicle: { pos: vehicle.pos, rot: vehicle.rot, half, fuel: vehicle.fuel, health: vehicle.health },
         players: others,
       };
-      if (local.seat === null && useTarget(selected ?? null, context)) {
+      const target = local.seat === null ? useTarget(selected ?? null, context) : null;
+      if (target) {
         if (selected === 'jerrycan') lines.push('hint     Hold F to refuel');
         else if (selected === 'toolbox') lines.push('hint     Hold F to repair');
+        else if (selected === 'healthKit') {
+          const mate = others.find((other) => other.id === target);
+          if (!mate) lines.push('hint     Hold F to heal yourself');
+          else {
+            const name = lobby.players.find((info) => info.playerId === mate.id)?.name ?? mate.id;
+            lines.push(`hint     Hold F to ${mate.downed !== null ? 'revive' : 'heal'} ${name}`);
+          }
+        }
       }
     }
   } else {

@@ -239,6 +239,11 @@ test('fuel and slots are shown: a full tank, three empty slots, and the page has
   await expect.poll(() => tick(page)).toBeGreaterThan(before);
 });
 
+test('the local player starts at full health', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await expect(page.locator('#overlay')).toContainText(/^health   100$/m);
+});
+
 test('the timer runs: the clock rises and the checkpoint shows the first of two', async ({ page }) => {
   await createRoom(page, 'Amal');
   const overlay = page.locator('#overlay');

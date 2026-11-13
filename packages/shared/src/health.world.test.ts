@@ -720,6 +720,53 @@ describe('health kits (W6, W7, W8, W12)', () => {
     expect(world.snapshot().respawns).toBe(respawns);
   });
 
+  const twoRevivers = () => {
+    const world = withKit('p3');
+    world.debugSetInventory('p3', ['healthKit', null, null]);
+    world.debugHurt('p2', 100);
+    run(world, 1);
+    return world;
+  };
+  const stand = (world: World, id: string, gap: number) => {
+    const at = me(world, 'p2').pos;
+    world.teleportPlayer(id, vec3(at.x, 0.02, at.z + gap));
+  };
+  const holdBy = (id: string) => input({ use: true, ...AIM });
+
+  test('two revivers on one target: only one revive happens, and the second kit is kept', () => {
+    const world = twoRevivers();
+    stand(world, 'p1', 1.5);
+    stand(world, 'p3', 1.9);
+    run(world, 20);
+    const events = run(world, TICKS, new Map([['p1', holdBy('p1')], ['p3', holdBy('p3')]]));
+    expect(kinds(events, 'revive')).toHaveLength(1);
+    expect(me(world, 'p2').downed).toBeNull();
+    expect(me(world, 'p2').health).toBe(PLAYER_REVIVE_HEALTH);
+    const kits = ['p1', 'p3'].map((id) => me(world, id).inventory[0]);
+    expect(kits.filter((kind) => kind === null)).toHaveLength(1);
+    expect(kits.filter((kind) => kind === 'healthKit')).toHaveLength(1);
+    expect(me(world, 'p1').hold).toBeNull();
+    expect(me(world, 'p3').hold).toBeNull();
+  });
+
+  test('a revive hold ends, keeping the kit, when the target is revived by someone else mid-hold', () => {
+    const world = twoRevivers();
+    stand(world, 'p1', 1.5);
+    stand(world, 'p3', 1.9);
+    run(world, 20);
+    run(world, 30, new Map([['p3', holdBy('p3')]]));
+    const both = new Map([['p1', holdBy('p1')], ['p3', holdBy('p3')]]);
+    run(world, TICKS - 31, both);
+    expect(me(world, 'p1').hold).toMatchObject({ action: 'revive', targetId: 'p2' });
+    expect(me(world, 'p2').downed).not.toBeNull();
+    const events = run(world, 31, both);
+    expect(kinds(events, 'revive')).toHaveLength(1);
+    expect(me(world, 'p2').downed).toBeNull();
+    expect(me(world, 'p3').inventory[0]).toBeNull();
+    expect(me(world, 'p1').inventory[0]).toBe('healthKit');
+    expect(me(world, 'p1').hold).toBeNull();
+  });
+
   test('W8: a health kit on a hurt teammate adds 50, capped at 100', () => {
     const world = withKit();
     world.debugHurt('p2', 70);

@@ -21,6 +21,7 @@ import { createKeyboardSource } from './input/keyboard';
 import { createMouseLook } from './input/mouse';
 import { createFixedStepper, createFrameClock } from './loop';
 import { createSnapshotBuffer } from './net/snapshotBuffer';
+import { predictionActive } from './prediction/gate';
 import { createReconciler } from './prediction/reconciler';
 import { updateFollowCamera } from './render/followCamera';
 import { createPlayerMesh, disposePlayerMesh, placePlayerMesh } from './render/playerMesh';
@@ -231,7 +232,7 @@ export function createGame(
       predictor.setProps(buffer.latestProps().filter((prop) => !held.has(prop.id)));
       const entry = snapshot.players.find((player) => player.playerId === playerId);
       latestLocal = entry ?? null;
-      if (entry && entry.seat === null && entry.ground === null) reconciler.correct(predictedFrom(entry), snapshot.ackSeq);
+      if (entry && predictionActive(entry)) reconciler.correct(predictedFrom(entry), snapshot.ackSeq);
       else reconciler.suspend();
     },
     stop() {

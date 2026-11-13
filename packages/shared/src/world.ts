@@ -7,6 +7,7 @@ import { holdTargetValid, pressTarget, stepHold, type UseContext } from './holds
 import { AXIS_Y, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
 import { interactCandidates, resolveInteract, splitCandidates } from './interact';
+import type { ItemKind } from './constants';
 import { aimRay, createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
 import { elapsedAfter, reachedFinish, vehicleLost } from './rules';
 import { requiredPushers, type PushIntent } from './push';
@@ -86,6 +87,8 @@ export interface World {
   debugHurt(id: string, amount: number): void;
   // Tests only: the player's health before the snapshot rounds it down.
   debugPlayerHealth(id: string): number;
+  // Tests only: replaces the player's inventory.
+  debugSetInventory(id: string, inventory: readonly (ItemKind | null)[]): void;
   // Frees the physics world. The world must not be used afterwards.
   dispose(): void;
 }
@@ -574,6 +577,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     debugWinch: () => winch,
     debugVehicle: () => vehicle,
     debugPlayerHealth: (id) => players.get(id)!.health,
+    debugSetInventory: (id, inventory) => players.restoreInventory(id, inventory),
     debugHurt(id, amount) {
       debugDamage.push({ playerId: id, source: 'debug', amount });
     },

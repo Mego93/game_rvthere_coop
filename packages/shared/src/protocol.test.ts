@@ -223,9 +223,25 @@ test.each([
   ['a vehicle without fuel', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, fuel: undefined } })],
   ['a vehicle whose fuel is text', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, fuel: '1' } })],
   ['a vehicle whose health is too large to be finite', JSON.stringify(snapshot).replace('"health":1', '"health":1e999')],
+  ['a player without health', JSON.stringify({ ...snapshot, players: [{ ...onFoot, health: undefined }] })],
+  ['a player whose health is negative', JSON.stringify({ ...snapshot, players: [{ ...onFoot, health: -1 }] })],
+  ['a player whose health is over 100', JSON.stringify({ ...snapshot, players: [{ ...onFoot, health: 101 }] })],
+  ['a player whose health is NaN', JSON.stringify({ ...snapshot, players: [{ ...onFoot, health: Number.NaN }] })],
+  ['a player whose health is text', JSON.stringify({ ...snapshot, players: [{ ...onFoot, health: '100' }] })],
+  ['a player without downed', JSON.stringify({ ...snapshot, players: [{ ...onFoot, downed: undefined }] })],
+  ['a player whose downed is negative', JSON.stringify({ ...snapshot, players: [{ ...onFoot, downed: -1 }] })],
+  ['a player whose downed is text', JSON.stringify({ ...snapshot, players: [{ ...onFoot, downed: '30' }] })],
+  ['a player whose downed is too large to be finite', JSON.stringify({ ...snapshot, players: [{ ...onFoot, downed: 1 }] }).replace('"downed":1', '"downed":1e999')],
   ['a snapshot whose throttle is text', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, throttle: 'full' } })],
 ])('parseServerMessage rejects %s', (_label, raw) => {
   expect(parseServerMessage(raw)).toBeNull();
+});
+
+test('C1: parseServerMessage accepts a downed player and fractional health', () => {
+  const downed = { ...onFoot, health: 0, downed: 29.5 };
+  const hurt = { ...onFoot, playerId: 'p2', health: 12.5 };
+  const parsed = parseServerMessage(JSON.stringify({ ...snapshot, players: [downed, hurt] }));
+  expect(parsed).toMatchObject({ type: 'snapshot', players: [{ health: 0, downed: 29.5 }, { health: 12.5, downed: null }] });
 });
 
 test('parseServerMessage accepts every error reason the server can send', () => {
