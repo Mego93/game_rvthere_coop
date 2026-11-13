@@ -93,12 +93,16 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
 
   // The pose last sent for each prop, whoever was sent it; the room's one record of what clients have been told.
   const lastSent = new Map<string, PropSnapshot>();
+  // Rule K8: a lost vehicle makes the next broadcast full for everyone.
+  let restarted = false;
 
   const broadcastSnapshot = () => {
     const snapshot = world.snapshot();
     // Rule I7: a prop or item that appeared or vanished cannot be told as a partial list, so everyone gets the whole.
     const idsChanged = snapshot.props.length !== lastSent.size || snapshot.props.some((prop) => !lastSent.has(prop.id));
-    if (idsChanged) lastSent.clear();
+    const full = idsChanged || restarted;
+    if (full) lastSent.clear();
+    restarted = false;
     const moved = snapshot.props.filter((prop) => {
       const sent = lastSent.get(prop.id);
       return !sent || movedSince(sent, prop);
@@ -108,9 +112,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       const message: SnapshotMessage = {
         type: 'snapshot',
         ...snapshot,
-        props: player.sentFull && !idsChanged ? moved : snapshot.props,
+        props: player.sentFull && !full ? moved : snapshot.props,
         ackSeq: player.queue.ackSeq(),
-        full: !player.sentFull || idsChanged,
+        full: !player.sentFull || full,
       };
       player.sentFull = true;
       player.connection.send(JSON.stringify(message));
@@ -120,7 +124,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   const stepOnce = () => {
     const inputs = new Map<string, InputFields>();
     for (const player of players) inputs.set(player.playerId, player.queue.next().input);
-    world.step(inputs);
+    if (world.step(inputs).some((event) => event.kind === 'vehicleLost')) restarted = true;
     tick += 1;
     if (tick % SNAPSHOT_EVERY_TICKS === 0) broadcastSnapshot();
   };

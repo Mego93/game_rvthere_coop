@@ -24,6 +24,17 @@ export interface SnapshotBuffer {
   latestProps(): PropSnapshot[];
   // The cable as of the newest snapshot, or null before any.
   latestCable(): CableSnapshot | null;
+  // The run's clock and counters as of the newest snapshot, or null before any.
+  latestStatus(): RunStatus | null;
+}
+
+export interface RunStatus {
+  elapsed: number;
+  checkpoint: number;
+  checkpointCount: number;
+  restarts: number;
+  respawns: number;
+  won: boolean;
 }
 
 function blend(a: VehicleState, b: VehicleState, t: number): VehicleState {
@@ -150,6 +161,12 @@ export function createSnapshotBuffer(): SnapshotBuffer {
     latestCable() {
       const newest = entries[entries.length - 1];
       return newest ? copyCable(newest.snapshot.cable) : null;
+    },
+    latestStatus() {
+      const newest = entries[entries.length - 1]?.snapshot;
+      if (!newest) return null;
+      const { elapsed, checkpoint, checkpointCount, restarts, respawns, won } = newest;
+      return { elapsed, checkpoint, checkpointCount, restarts, respawns, won };
     },
     latestProps: () => (entries[entries.length - 1]?.snapshot.props ?? []).map(copyProp),
   };

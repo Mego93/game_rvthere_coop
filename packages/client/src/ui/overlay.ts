@@ -16,9 +16,16 @@ import {
   type Vec3,
   type VehicleState,
 } from '@lodgy/shared';
+import type { RunStatus } from '../net/snapshotBuffer';
 
 const FORWARD = vec3(0, 0, -1);
 const percent = (fraction: number) => `${Math.floor(fraction * 100 + 1e-9)}%`;
+// Floors to tenths, so the display never runs ahead of the clock.
+const clock = (seconds: number) => {
+  const tenths = Math.floor(seconds * 10 + 1e-6);
+  const minutes = Math.floor(tenths / 600);
+  return `${minutes}:${((tenths % 600) / 10).toFixed(1).padStart(4, '0')}`;
+};
 const fixed = (value: number, digits = 1) => value.toFixed(digits).padStart(7);
 
 export interface OverlayData {
@@ -42,6 +49,8 @@ export interface OverlayData {
   cable: CableSnapshot | null;
   // The course's static anchors.
   anchors: readonly Placed[];
+  // The run's clock and counters, or null before the first snapshot.
+  status: RunStatus | null;
 }
 
 const STOWED: CableSnapshot = { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 0, 0), length: 0, reel: 0 };
@@ -99,7 +108,7 @@ export function interactHint(
 }
 
 // The debug text shown until the real HUD exists.
-export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses, cable, anchors }: OverlayData): string {
+export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses, cable, anchors, status }: OverlayData): string {
   const names = lobby.players.map((player) => {
     const snapshot = players.find((candidate) => candidate.playerId === player.playerId);
     return snapshot ? `${player.name} (${snapshot.seat ?? 'on foot'})` : player.name;
@@ -109,6 +118,10 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
     `players  ${names.join(', ')}`,
     `tick     ${tick}   fps ${Math.round(fps)}`,
   ];
+  if (status) {
+    lines.push(`time     ${clock(status.elapsed)}   cp ${status.checkpoint + 1}/${status.checkpointCount}   restarts ${status.restarts}   respawns ${status.respawns}`);
+    if (status.won) lines.push('FINISHED');
+  }
   if (vehicle) {
     const speed = dot(vehicle.linvel, rotate(vehicle.rot, FORWARD));
     lines.push(

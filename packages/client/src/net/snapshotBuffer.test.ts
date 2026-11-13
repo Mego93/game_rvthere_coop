@@ -349,3 +349,13 @@ test('copies the inventory, slot and hold of a player and the fuel and health of
   expect(view.vehicle.fuel).toBe(1);
   expect(view.vehicle.health).toBe(1);
 });
+
+test('latestStatus is null before any snapshot and then the newest snapshot\'s fields', () => {
+  expect(createSnapshotBuffer().latestStatus()).toBeNull();
+  const buffer = createSnapshotBuffer();
+  buffer.push(snapshot(3), 0);
+  buffer.push({ ...snapshot(6), checkpoint: 1, restarts: 2, respawns: 3, won: true }, 0.05);
+  expect(buffer.latestStatus()).toEqual({ elapsed: 6 / 60, checkpoint: 1, checkpointCount: 2, restarts: 2, respawns: 3, won: true });
+  buffer.push(snapshot(4), 0.06);
+  expect(buffer.latestStatus()?.elapsed).toBe(6 / 60);
+});

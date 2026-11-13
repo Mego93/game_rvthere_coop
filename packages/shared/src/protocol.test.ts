@@ -149,7 +149,7 @@ const seated = { ...onFoot, playerId: 'p2', seat: 'driver' };
 const onVehicle = { ...onFoot, playerId: 'p3', ground: { bodyId: 'vehicle', localPos: { x: 0, y: 1, z: 0 } } };
 const crate = { id: 'crate-1', kind: 'crate', pos: { x: 1, y: 0.3, z: 2 }, rot: { x: 0, y: 0, z: 0, w: 1 } };
 const cable = { state: 'attached', holderId: null, anchorId: 'anchor-1', hookPos: { x: 1, y: 0.5, z: -20 }, length: 12.5, reel: 1 };
-const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle, players: [onFoot], props: [crate], cable };
+const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle, players: [onFoot], props: [crate], cable, elapsed: 0.5, checkpoint: 0, checkpointCount: 2, restarts: 0, respawns: 0, won: false };
 const lobby = {
   type: 'lobby',
   room: 'camel',
@@ -168,6 +168,7 @@ test.each<ServerMessage>([
   { ...lobby, players: [], adminId: null } as ServerMessage,
   snapshot as ServerMessage,
   { ...snapshot, tick: 0, ackSeq: 0, full: true } as ServerMessage,
+  { ...snapshot, elapsed: 61.5, checkpoint: 1, restarts: 2, respawns: 3, won: true } as ServerMessage,
 ])('parseServerMessage accepts %j', (message) => {
   expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
 });
@@ -201,6 +202,17 @@ test.each([
   ['a cable whose length is text', JSON.stringify({ ...snapshot, cable: { ...cable, length: '12' } })],
   ['a cable whose length is not finite', JSON.stringify(snapshot).replace('"length":12.5', '"length":1e999')],
   ['a cable whose reel is 2', JSON.stringify({ ...snapshot, cable: { ...cable, reel: 2 } })],
+  ['a snapshot without elapsed', JSON.stringify({ ...snapshot, elapsed: undefined })],
+  ['a snapshot whose elapsed is negative', JSON.stringify({ ...snapshot, elapsed: -0.1 })],
+  ['a snapshot whose elapsed is text', JSON.stringify({ ...snapshot, elapsed: '1' })],
+  ['a snapshot whose elapsed is not finite', JSON.stringify(snapshot).replace('"elapsed":0.5', '"elapsed":1e999')],
+  ['a snapshot whose checkpoint is negative', JSON.stringify({ ...snapshot, checkpoint: -1 })],
+  ['a snapshot whose checkpoint is not whole', JSON.stringify({ ...snapshot, checkpoint: 0.5 })],
+  ['a snapshot without checkpointCount', JSON.stringify({ ...snapshot, checkpointCount: undefined })],
+  ['a snapshot whose restarts is text', JSON.stringify({ ...snapshot, restarts: '1' })],
+  ['a snapshot whose respawns is negative', JSON.stringify({ ...snapshot, respawns: -1 })],
+  ['a snapshot without won', JSON.stringify({ ...snapshot, won: undefined })],
+  ['a snapshot whose won is a number', JSON.stringify({ ...snapshot, won: 1 })],
   ['a snapshot whose ackSeq is missing', JSON.stringify({ ...snapshot, ackSeq: undefined })],
   ['a snapshot whose full is not a boolean', JSON.stringify({ ...snapshot, full: 1 })],
   ['a snapshot whose position lacks z', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, pos: { x: 1, y: 2 } } })],

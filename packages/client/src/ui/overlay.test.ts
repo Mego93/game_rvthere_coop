@@ -13,6 +13,7 @@ import {
   type VehicleState,
 } from '@lodgy/shared';
 import { expect, test } from 'vitest';
+import type { RunStatus } from '../net/snapshotBuffer';
 import { interactHint, overlayText } from './overlay';
 
 const lobby: LobbyMessage = {
@@ -39,7 +40,7 @@ const vehicle: VehicleState = {
 };
 
 const stowed: CableSnapshot = { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 0, 0), length: 0, reel: 0 };
-const noAim = { aim: { yaw: 0, pitch: 0 }, propPoses: [] as PropSnapshot[], cable: stowed as CableSnapshot | null, anchors: [] as Placed[] };
+const noAim = { aim: { yaw: 0, pitch: 0 }, propPoses: [] as PropSnapshot[], cable: stowed as CableSnapshot | null, anchors: [] as Placed[], status: null as RunStatus | null };
 
 const player = (playerId: string, x: number, z: number, seat: string | null = null): PlayerSnapshot => ({
   playerId,
@@ -266,4 +267,28 @@ test('hints to refuel or repair when the selected item suits the vehicle and it 
   expect(lines([holding({ inventory: ['jerrycan', null, null], pos: far.pos })], low).some((line) => line.includes('Hold F'))).toBe(false);
   expect(lines([holding({ inventory: ['jerrycan', null, null], seat: 'driver' })], low).some((line) => line.includes('Hold F'))).toBe(false);
   expect(lines([holding({ inventory: ['toString' as never, null, null] })], low).some((line) => line.includes('Hold F'))).toBe(false);
+});
+
+const run = (overrides: Partial<RunStatus> = {}): RunStatus => ({ elapsed: 0, checkpoint: 0, checkpointCount: 2, restarts: 0, respawns: 0, won: false, ...overrides });
+const withStatus = (status: RunStatus | null) =>
+  overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [], localId: 'p1', predicted: null, server: null, ...noAim, status });
+
+test('shows the clock, the checkpoint as index plus one, and the counters', () => {
+  expect(withStatus(run())).toContain('time     0:00.0   cp 1/2   restarts 0   respawns 0');
+  expect(withStatus(run({ elapsed: 75.39, checkpoint: 1, restarts: 2, respawns: 3 }))).toContain('time     1:15.3   cp 2/2   restarts 2   respawns 3');
+});
+
+test('floors the clock to tenths and pads the seconds', () => {
+  expect(withStatus(run({ elapsed: 9.99 }))).toContain('time     0:09.9');
+  expect(withStatus(run({ elapsed: 600 }))).toContain('time     10:00.0');
+  expect(withStatus(run({ elapsed: 59.95 }))).toContain('time     0:59.9');
+});
+
+test('shows FINISHED on its own line only once won', () => {
+  expect(withStatus(run()).split('\n')).not.toContain('FINISHED');
+  expect(withStatus(run({ won: true })).split('\n')).toContain('FINISHED');
+});
+
+test('shows no time line before the first snapshot', () => {
+  expect(withStatus(null)).not.toContain('time ');
 });

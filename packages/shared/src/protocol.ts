@@ -283,6 +283,13 @@ export function parseServerMessage(raw: string): ServerMessage | null {
     case 'snapshot':
       return isCount(data.tick) &&
         isCount(data.ackSeq) &&
+        finite(data.elapsed) &&
+        data.elapsed >= 0 &&
+        isCount(data.checkpoint) &&
+        isCount(data.checkpointCount) &&
+        isCount(data.restarts) &&
+        isCount(data.respawns) &&
+        typeof data.won === 'boolean' &&
         typeof data.full === 'boolean' &&
         isVehicleState(data.vehicle) &&
         Array.isArray(data.players) &&

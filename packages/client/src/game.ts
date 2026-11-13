@@ -214,6 +214,7 @@ export function createGame(
       propPoses: sampled?.props ?? [],
       cable: buffer.latestCable(),
       anchors: course.anchors,
+      status: buffer.latestStatus(),
     });
     renderer.render(scene, camera);
     frameRequest = requestAnimationFrame(frame);

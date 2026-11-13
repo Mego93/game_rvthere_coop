@@ -206,3 +206,23 @@ test('a course pickup reset by the kill plane is sent at its reset pose', () => 
   expect(seen.slice(lowest + 1).some((y) => y > 0)).toBe(true);
   room.dispose();
 });
+
+test('a lost vehicle makes the next snapshot full for every client', () => {
+  // No ground: the vehicle spawns over a gap, falls past the kill plane and is restarted at cp-0.
+  const gap: BuiltCourse = { ...course(0), props: [], ground: [] };
+  const { room, join, run } = setup(gap);
+  const a = join(1);
+  const b = join(2);
+  run(SNAPSHOT_EVERY_TICKS * 2);
+  for (const client of [a, b]) expect(client.received.at(-1)!.full).toBe(false);
+  run(240);
+  for (const client of [a, b]) {
+    const index = client.received.findIndex((message) => message.restarts === 1);
+    expect(index).toBeGreaterThan(1);
+    expect(client.received[index]!.full).toBe(true);
+    expect(client.received[index - 1]!.full).toBe(false);
+    // The flag is spent: the snapshot after it is partial again unless another restart came.
+    if (client.received[index + 1]!.restarts === 1) expect(client.received[index + 1]!.full).toBe(false);
+  }
+  room.dispose();
+});

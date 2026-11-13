@@ -412,10 +412,22 @@ describe('world: restart restores props', () => {
       expect(now.rot.w).toBeCloseTo(prop.rot.w, 6);
       expect(linvelOf(world, prop.id)).toBeLessThan(1e-9);
     }
-    // A locked heavy prop does not slide when a force pushes on it.
-    world.debugBody('barrier-1')!.applyImpulse({ x: 50, y: 0, z: 0 }, true);
-    settle(world, 5);
-    expect(propOf(world, 'barrier-1').pos.x).toBeCloseTo(before[2]!.pos.x, 3);
+    world.dispose();
+  });
+
+  test('(4) a heavy prop is locked at the restart tick, not only once the next tick re-locks it', () => {
+    const world = fresh();
+    settle(world, 30);
+    recordCp1(world);
+    const barrier = world.debugBody('barrier-1')!;
+    const at = propOf(world, 'barrier-1').pos;
+    // Unlocked at the physics level, as after a taut cable or a push by enough players.
+    barrier.setEnabledTranslations(true, true, true, true);
+    world.restartCheckpoint();
+    world.step(new Map());
+    barrier.applyImpulse({ x: 50, y: 0, z: 0 }, true);
+    world.step(new Map());
+    expect(propOf(world, 'barrier-1').pos.x).toBeCloseTo(at.x, 3);
     world.dispose();
   });
 
@@ -722,5 +734,46 @@ describe('world: restart and the tick order', () => {
     const first = play();
     expect(first).toBe(play());
     expect(JSON.parse(first).restarts).toBe(2);
+  });
+});
+
+describe('world: restart drops transient state', () => {
+  test('a push intent queued on the restart tick does not move the restored vehicle', () => {
+    const world = fresh();
+    world.addPlayer('p1');
+    settle(world, 60);
+    const rear = world.snapshot().vehicle.pos;
+    world.teleportPlayer('p1', vec3(rear.x, 0.1, rear.z + world.vehicleConfig.halfExtents.z + 0.5));
+    const walk = new Map([['p1', input({ moveY: 1 })]]);
+    for (let i = 0; i < 120; i++) world.step(walk);
+    expect(world.snapshot().vehicle.pos.z).toBeLessThan(rear.z - 0.3);
+    world.restartCheckpoint();
+    world.step(walk);
+    expect(world.status().restarts).toBe(1);
+    world.step(new Map());
+    const { linvel } = world.snapshot().vehicle;
+    expect(Math.hypot(linvel.x, linvel.z)).toBeLessThan(1e-3);
+    world.dispose();
+  });
+
+  test('the cable tension is 0 after a restart while the winch was taut', () => {
+    const tenAhead = {
+      ...testGround,
+      checkpoints: [{ ...testGround.checkpoints[0]!, spawn: { pos: vec3(-40, 0, -56.7), rot: IDENTITY } }, ...testGround.checkpoints.slice(1)],
+    };
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' }, tenAhead);
+    world.addPlayer('p1');
+    settle(world, 30);
+    seat(world, 'p1');
+    world.debugWinch().take('p1');
+    expect(world.debugWinch().attach('anchor-1')).toBe(true);
+    const reel = new Map([['p1', input({ reel: 1, jump: true })]]);
+    for (let i = 0; i < 120 && world.debug().cableTension === 0; i++) world.step(reel);
+    expect(world.debug().cableTension).toBeGreaterThan(0);
+    world.restartCheckpoint();
+    world.step(reel);
+    expect(world.status().restarts).toBe(1);
+    expect(world.debug().cableTension).toBe(0);
+    world.dispose();
   });
 });
