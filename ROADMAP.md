@@ -7,7 +7,7 @@ Single source of truth for where the project stands. Update it in the same commi
 
 ## Current state
 
-**Current step:** steps 5 and 6 are done and merged to the local `main` (branch `claude/tender-carson-9525v1`; whole-branch reviews clean); step 7 (fuel, health, inventory) is done on the same branch; step 15 (segments) runs in parallel in a worktree; step 8 (checkpoints) is next. The owner still has to check rendering and feel for steps 3 to 6 and the iPhone load (see "Working notes"). The branch is pushed; `main` is merged locally only.
+**Current step:** steps 5 and 6 are done and merged to the local `main` (branch `claude/tender-carson-9525v1`; whole-branch reviews clean); steps 7 and 15 are done and merged to the local `main` (whole-branch reviews clean); step 8 (checkpoints) is planned and reviewed. The owner still has to check rendering and feel for steps 3 to 6 and the iPhone load (see "Working notes"). The branch is pushed; `main` is merged locally only.
 
 **Runnable today:** `npm run dev` starts the game server and the page. Create a room on the home page and share its address; everyone who opens it appears as a character beside the same vehicle on the test ground. Players walk (WASD) and jump (Space), board with E at the nearest free seat (the driver's seat if standing at its door), drive from the driver seat, and leave with E. After clicking the canvas, the mouse looks around from a shoulder camera with a crosshair; while seated the camera follows the vehicle. The local player's walking and jumping are predicted on the page and corrected on each snapshot; the debug overlay shows the predicted position (`you`) and the server's (`server`) while prediction is active. Behind the start stand three crates and a heavy barrier: walking into the vehicle or a prop pushes it, E beside a crate picks it up and E again throws it along the aim, players can stand on props, and the barrier slides only while enough players push it (1 with one player, 2 with 2–3, 3 with 4–6). Four players can roll a Lodgy lying on its side back onto its wheels. The hook rests on the front bumper: E there (aiming at the bumper) takes it, E at an anchor (the orange posts) attaches it, E with no anchor near drops it; Q reels in and R reels out, from the driver seat or standing at the bumper. The barrier has an anchor on its top. The vehicle has fuel and health (shown in the overlay): fuel drains with throttle and an empty tank stops drive; hard impacts and lying upside down cost health. Two jerrycans and a toolbox lie behind the start: E picks one up into the first free slot, 1–3 select a slot, G drops it, and holding F for 3 s beside the vehicle refuels or repairs by 50%.
 
@@ -31,7 +31,7 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | 12 | HUD: mock-up pass, then compass, minimap, gauges, slots, prompts and downed markers | todo | | | Owner, visual check |
 | 13 | Conditions: rain grip, time-of-day and weather visuals | todo | | | Owner, visual check |
 | 14 | Touch input, floating joystick, touch UI, landscape layout, web app manifest | todo | | | Owner, on a real iPhone |
-| 15 | Segment system: six segment builders and the course builder | planned (runs in parallel with 7–14, owner's permission) | claude/tender-carson-9525v1 | [plan](docs/superpowers/plans/step-15-segments.md) | Automated tests |
+| 15 | Segment system: six segment builders and the course builder | done (built in parallel, merged after step 7) | claude/tender-carson-9525v1 | [plan](docs/superpowers/plans/step-15-segments.md) | Automated tests |
 | 16 | Course design pass, then course 1 (to the airport); measure snapshot size | todo | | | Owner, by playing it |
 | 17 | The RV: mesh and handling pass over course 1 | todo | | | Owner, by playing it |
 | 18 | Sound effects | todo | | | Owner |
@@ -62,6 +62,7 @@ Requires Node 22.12 or later. Node 23 and 25 work but print an `EBADENGINE` warn
 | `npm run e2e` | Runs the browser smoke test; it starts its own server on port 3100 |
 | `npm run typecheck` | Typechecks every package, config, experiment and the smoke test |
 | `npm run build` | Builds the client into `packages/client/dist` |
+| `COURSE=segment-demo npm run dev` | Runs every room on the segment demo course (every segment type, a fuel stop and a garage) instead of the test ground; combine with `VEHICLE=rv` |
 | `npm run experiment:cable` | Re-runs the winch cable experiment and prints its table |
 
 Set `PORT` to change the server's port when using `npm start`; `npm run dev` expects port 3000, because the page's proxy is fixed to it. Set `VEHICLE=rv` to run every room with the RV: `VEHICLE=rv npm run dev`.
@@ -83,6 +84,7 @@ What step 2 cost and what changed because of it. Estimates are rough, plus or mi
 - **Step 5 is unverified by hand:** how pushing feels (strength, the stronger push on a tipped vehicle), throwing distance, the barrier's slide, crates tumbling when pushed (accepted: the push acts at their top edge), climbing onto the roof from a crate or the barrier, and the prop meshes (colours chosen without design). Automated tests pass and the smoke test's desktop project passed in the preinstalled Chromium; WebKit was not run.
 - **Step 6 is unverified by hand:** how winching feels, the rope and hook's look, reaching the bumper and anchors with the aim, and dragging the barrier. Automated tests and the desktop smoke test pass.
 - **Step 7 is unverified by hand:** fuel duration, crash damage amounts, item meshes and the 3 s hold. The step-7 plan review agent stopped before reporting; the main session ran its probe instead (results in the plan).
+- **Step 15 is unverified by hand:** driving the demo course (joins, alley width for the RV, the bank with the winch, roadworks), and the new meshes (water, palms, boulders, stops). Boulders are drawn on the road edge but have no collider (anchors never do).
 - **Session of 2026-11-13 (cloud):** the owner allowed pushing the branch; `main` is merged locally and not pushed.
 - **Six-player cost (measured):** about 0.28 ms per tick; a snapshot is about 1.1 KB (about 150 bytes per player), roughly 134 KB/s per room to six clients at 20 Hz. Step 4's four new snapshot fields add roughly 90 bytes per player to that; measure again at step 16.
 
@@ -100,6 +102,7 @@ What step 2 cost and what changed because of it. Estimates are rough, plus or mi
 - Boarding while holding the hook stows it, but interact always drops the hook first, so that path is a guard with no test.
 - A long run-up over the test ground's ramp costs the Lodgy up to 2% health on landing (impact threshold 4 m/s per tick change, a starting value).
 - Dropped items collide with ground and walls only: they fall through the vehicle and props.
+- A ford rock reads as "airborne" to the wheel that rides on it (rocks are walls, not ground), so that wheel uses road grip for the tick.
 - A fifth pusher on the vehicle adds a little over four: the controller's contact flickers, and the cap counts the first four players pushing on each tick.
 - Shove-out runs at a fixed height, so shoving uphill on a slope can overlap the ground and send the player to a spawn slot.
 - A vehicle faster than about 22 m/s can lift a jumping player onto its roof (roof guard, D12).
@@ -228,3 +231,5 @@ Decisions made during the design and afterwards. Change the spec too when a deci
 | 2026-11-13 | Items are dynamic boxes in their own collision group that collide with statics only; they travel in the snapshot's `props` list; dropped items get `item-N` ids; the room sends a full snapshot when the set of ids changes (I6, I7) | The spec's "collide with static geometry only", and a way for pages to drop removed items |
 | 2026-11-13 | Using an item is a 3 s hold bound at the press of `use` to the selected item and its target; it resets on release, an invalid or out-of-range target, a slot or item change, seating or teleport; the press tick counts as the first tick (I8, I9) | The spec's hold rules made exact |
 | 2026-11-13 | A disconnected player's items drop at a spawn slot, stacked 0.3 m apart; respawn keeps the inventory (I11) | Until held slots arrive at step 11 |
+| 2026-11-13 | Step 15 decisions found while building: a curved road next to a sloped road is refused; a bank takes only its boulder count; boulders pair every 2 m (at most 8); palms are spread over the whole sand segment; ford rocks, alley clutter and road debris start after the checkpoint spawn's clearance; the finish trigger is a constant | Each found by a review or a failing B5 check; none changes the spec's behaviour |
+| 2026-11-13 | Step 7 review fixes: item use targets only known kinds; the shove-out's move to a spawn slot clears a hold; gauges round down so 100% means full | Whole-branch review of step 7 |
