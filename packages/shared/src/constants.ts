@@ -67,6 +67,12 @@ export const WINCH_FORCE_PER_WEIGHT = 0.6;
 export const WINCH_REEL_SPEED = 1;
 export const WINCH_MIN_LENGTH = 1.5;
 export const WINCH_MAX_LENGTH = 25;
+// m, from the chest to the winch box, an anchor point or a ground hook.
+export const HOOK_RANGE = 2;
+// m above a static anchor's pose, where the hook attaches.
+export const ANCHOR_HEIGHT = 0.5;
+// m, the downward search for ground under a dropped hook.
+export const HOOK_DROP_RAY = 50;
 
 // Players on foot.
 export const PLAYER_RADIUS = 0.35;
@@ -115,11 +121,13 @@ export interface PropKindConfig {
   halfExtents: Vec3;
   mass: number;
   friction: number;
+  // Where the winch hook attaches, in the prop's own frame from its centre; null for light props.
+  anchor: Vec3 | null;
 }
 
 export const PROP_KINDS = deepFreeze({
-  crate: { class: 'light', halfExtents: vec3(0.3, 0.3, 0.3), mass: 15, friction: 0.6 },
-  barrier: { class: 'heavy', halfExtents: vec3(1.0, 0.5, 0.4), mass: 150, friction: 0.5 },
+  crate: { class: 'light', halfExtents: vec3(0.3, 0.3, 0.3), mass: 15, friction: 0.6, anchor: null },
+  barrier: { class: 'heavy', halfExtents: vec3(1.0, 0.5, 0.4), mass: 150, friction: 0.5, anchor: vec3(0, 0.5, 0) },
 } satisfies Record<string, PropKindConfig>);
 export type PropKind = keyof typeof PROP_KINDS;
 

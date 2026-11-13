@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, expect, test } from 'vitest';
-import { GRAVITY, PROP_KINDS, REFERENCE_SLOPES_DEG, type ReferenceSlope } from '../constants';
+import { ANCHOR_HEIGHT, GRAVITY, PROP_KINDS, REFERENCE_SLOPES_DEG, type ReferenceSlope } from '../constants';
 import { degToRad } from '../math';
 import { buildStatics } from '../statics';
 import { getCourse } from './index';
@@ -66,4 +66,22 @@ test('props are known kinds with unique ids and rest on ground', () => {
     expect(hit, prop.id).not.toBeNull();
     expect(hit!.distance, prop.id).toBeCloseTo(1, 2);
   }
+});
+
+test('ids are unique across anchors and props', () => {
+  const ids = [...testGround.anchors, ...testGround.props].map((placed) => placed.id);
+  expect(new Set(ids).size).toBe(ids.length);
+});
+
+test('the three anchors exist; anchor-2 lies on the steep slope and anchor-3 is 10 m beyond the sand patch', () => {
+  const byId = new Map(testGround.anchors.map((anchor) => [anchor.id, anchor.pose.pos]));
+  expect([...byId.keys()]).toEqual(['anchor-1', 'anchor-2', 'anchor-3']);
+  const two = byId.get('anchor-2')!;
+  const hit = probe(two.x, two.y, two.z);
+  expect(Math.abs(hit!.distance - 1)).toBeLessThan(0.05);
+  expect(hit!.surface).toBe('road');
+  const three = byId.get('anchor-3')!;
+  expect(three.x).toBe(SAND_PATCH_CENTER.x);
+  expect(three.z).toBe(SAND_PATCH_CENTER.z - 15 - 10);
+  expect(ANCHOR_HEIGHT).toBe(0.5);
 });

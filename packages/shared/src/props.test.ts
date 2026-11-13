@@ -185,6 +185,12 @@ describe('props in the world', () => {
     expect(() => rig(course)).toThrow(/vehicle/);
   });
 
+  test('createProps rejects a prop whose id is hook or a static anchor id', () => {
+    const at = { pos: vec3(0, 0, 0), rot: IDENTITY };
+    expect(() => rig(withProps({ ...testGround, props: [] }, [{ id: 'hook', kind: 'crate', pose: at }]))).toThrow(/hook/);
+    expect(() => rig(withProps({ ...testGround, props: [] }, [{ id: 'anchor-1', kind: 'crate', pose: at }]))).toThrow(/anchor-1/);
+  });
+
   test('debugBody finds the vehicle and props, and nothing else', () => {
     const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
     expect(world.debugBody('vehicle')).toBeDefined();

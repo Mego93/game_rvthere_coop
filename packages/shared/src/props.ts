@@ -59,6 +59,8 @@ export function createProps(rapier: Rapier, physics: RapierWorld, course: BuiltC
 
   for (const placed of course.props) {
     if (placed.id === 'vehicle') throw new Error("Prop id 'vehicle' is reserved for the vehicle");
+    if (placed.id === 'hook') throw new Error("Prop id 'hook' is reserved for the winch hook");
+    if (course.anchors.some((anchor) => anchor.id === placed.id)) throw new Error(`Prop id ${placed.id} is also an anchor id`);
     if (!Object.hasOwn(PROP_KINDS, placed.kind)) throw new Error(`Unknown prop kind: ${placed.kind}`);
     const kind = placed.kind as PropKind;
     const config: PropKindConfig = PROP_KINDS[kind];
