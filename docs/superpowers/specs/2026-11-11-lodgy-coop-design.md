@@ -328,9 +328,9 @@ world.adminTool(tool);             // 'skipCheckpoint' | 'refill'; marks the run
 world.snapshot();                  // serialisable state
 world.status();                    // 'running' | 'won', plus the results fields
 
-const predictor = createPredictor(rapier, builtCourse);   // used by the client only
-predictor.setBodies(snapshot);     // positions the vehicle and prop stand-ins
-predictor.stepPlayer(state, input) // returns the next player state
+const predictor = createPredictor(rapier, builtCourse, vehicleConfig);   // used by the client only
+predictor.setVehicle(pos, rot);    // positions the vehicle stand-in (prop stand-ins arrive with props)
+predictor.stepPlayer(state, input, previousJump) // returns the next player state; the press is jump && !previousJump
 ```
 
 Restarting the course is not a world operation: the server discards the world and creates a new one.
@@ -497,6 +497,7 @@ snapshot {
   vehicle { pos, rot, linvel, throttle, steer, fuel, health },
   players [ {
     playerId, pos, yaw, health,
+    walk: { x, z }, carry: { x, z }, vy, grounded,   // the walking state the predictor resets to
     downed:  seconds left | null,
     seat:    seatId | null,
     ground:  { bodyId, localPos } | null,
@@ -512,6 +513,7 @@ snapshot {
 ```
 
 - `ackSeq` is the last input sequence number the server consumed for the receiving client, or 0 before any. Everything else is identical for every client.
+- `walk`, `carry`, `vy` and `grounded` are the player's walking state, sent for every player so that the snapshot stays identical for every client. The client resets its predicted player to them.
 - `seat` and `ground` are separate: a seated player has a `seat`; a player standing on the vehicle, a prop or an obstacle has a `ground`.
 - `cable.state` is `stowed`, `held`, `ground` or `attached`.
 - `props` lists only props that moved since the previous snapshot. A snapshot with `full` set lists every prop; it is sent to a client when it joins and to everyone after any restart or skip.
@@ -530,9 +532,9 @@ Binary encoding is deferred until snapshot size is measured as a problem. Snapsh
 ### Prediction
 
 - Only the local player's walking and jumping are predicted. Picking up, inventory, health, seating, pushing and everything else come from the server.
-- The client holds a prediction world built by `createPredictor` from the course's static colliders, plus kinematic stand-ins for the vehicle and props. The stand-ins are positioned from the latest snapshot, not the interpolated one. Other players are not in it.
-- On each snapshot the client resets the local player to the server's state and replays the inputs after `ackSeq`. Small corrections are smoothed and large ones snap; both thresholds are constants.
-- Prediction is off while the snapshot reports the local player as seated, downed, or standing on the vehicle or a heavy obstacle. The player is then drawn from the snapshot, relative to that body. Input lag while riding on the roof is accepted.
+- The client holds a prediction world built by `createPredictor` from the course's static colliders, plus stand-ins for the vehicle and props. The vehicle's stand-in is a dynamic box with the vehicle's half extents and gravity scale 0, not a kinematic or fixed one: the walking controller's autostep excludes only dynamic bodies, so a kinematic box could be stepped onto, and a fixed one is not found by queries after being moved. It is moved with `setTranslation` and `setRotation` from the latest snapshot, not the interpolated one, followed by two zero-length physics steps (in Rapier 0.21 the first zero step after moving a body removes its collider from the old place and the second inserts it at the new one). Other players are not in it.
+- On each snapshot the client resets the local player to the server's state and replays the inputs after `ackSeq`. Small corrections are smoothed and large ones snap; both thresholds are constants. The client records every input it sends, also while prediction is off; when prediction resumes it replays everything after `ackSeq`. The drawn position is blended between the previous and the current predicted position by the fixed stepper's alpha, plus the fading correction.
+- Prediction is on while the latest snapshot reports the local player unseated with `ground` null, and off otherwise; turning it on resets the predictor to the snapshot's state. It is off while the player is seated, downed, or standing on the vehicle or a heavy obstacle. The player is then drawn from the snapshot, relative to that body. Input lag while riding on the roof is accepted.
 - Mismatches next to a moving vehicle are expected and are absorbed by the correction smoothing.
 
 ### Menus
