@@ -1,5 +1,6 @@
 export * from './constants';
 export * from './course';
+export * from './courses/build';
 export * from './courses/index';
 export * from './groups';
 export * from './interact';
@@ -10,6 +11,7 @@ export * from './props';
 export * from './protocol';
 export * from './rapier';
 export * from './seats';
+export * from './segments';
 export * from './statics';
 export * from './vehicle';
 export * from './vehicles';

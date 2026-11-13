@@ -16,6 +16,8 @@ export interface Placed {
   id: string;
   kind: string;
   pose: Pose;
+  // Half extents, for decor drawn as a box (water).
+  size?: Vec3;
 }
 
 export interface ServiceStop {

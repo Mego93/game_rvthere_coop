@@ -153,3 +153,51 @@ export const THROW_SPEED = 7;
 export const THROW_HEAD_CLEARANCE = 0.05;
 // m or quaternion component; a smaller change is not sent.
 export const PROP_MOVED_EPSILON = 1e-4;
+
+// Segments.
+export const ROAD_WIDTH = 10;
+// m, longest ground piece.
+export const ROAD_PIECE_LENGTH = 10;
+// rad, the largest yaw change of one piece of a curve.
+export const ROAD_MAX_PIECE_YAW = Math.PI / 18;
+export const ROAD_THICKNESS = 1;
+// m added at both ends of each piece where the yaw changes.
+export const ROAD_JOINT_OVERLAP = 0.6;
+// m between the walls.
+export const ALLEY_WIDTH = 6;
+export const ALLEY_WALL_HEIGHT = 3;
+// m, alley walls and fences.
+export const WALL_THICKNESS = 0.5;
+// m of alley per clutter item at density 1.
+export const ALLEY_CLUTTER_SPACING = 6;
+// m of road before the sand.
+export const SAND_APRON = 50;
+// m outside the road edge.
+export const PALM_OFFSET = 0.5;
+// m of flat road before the bank's ramp.
+export const BANK_APPROACH = 15;
+// m of flat road at the top of the bank.
+export const BANK_TOP = 10;
+// Half extents of a ford rock.
+export const FORD_ROCK: Vec3 = deepFreeze(vec3(0.3, 0.12, 0.3));
+// m between rows of obstacles.
+export const ROADWORKS_ROW_SPACING = 12;
+// Barriers per row, centred at x = -3, 0, 3.
+export const ROADWORKS_ROW = 3;
+export const FENCE_HEIGHT = 1.2;
+// m from the entry to the checkpoint spawn, along the route.
+export const SEGMENT_SPAWN_INSET = 8;
+// m, the shortest route a segment may have.
+export const SEGMENT_MIN_LENGTH = 15;
+// Half extents along y and z of a checkpoint trigger; x is half the segment width.
+export const CHECKPOINT_TRIGGER: Vec3 = deepFreeze(vec3(0, 2, 2));
+// m of flat road after the last segment.
+export const FINISH_PAD = 20;
+// m under the lowest ground top.
+export const KILL_PLANE_BELOW = 20;
+// Half extents of the ground pad beside the road.
+export const STOP_PAD: Vec3 = deepFreeze(vec3(4, 0.5, 8));
+// Half extents of a stop's parking zone.
+export const STOP_ZONE: Vec3 = deepFreeze(vec3(2.5, 2, 5));
+// m above the ground.
+export const COIN_HEIGHT = 1;
