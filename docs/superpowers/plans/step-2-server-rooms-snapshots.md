@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-11-lodgy-coop-design.md`, build step 2, and the nine step-2 rows of "Carried into later steps" in `ROADMAP.md`.
 
-**Status of this plan's code:** every file below was drafted and run in a scratch workspace before the plan was written (clean install, 191 tests passing in 20 files, typecheck clean, production build succeeding, 12 Playwright tests passing, `npm run dev` and `npm start` both exercised). Copy the code exactly. If something fails that the plan says should pass, stop and report; do not improvise a fix.
+**Status of this plan's code:** every file below was drafted and run in a scratch workspace before the plan was written (clean install, 195 tests passing in 21 files, typecheck clean, production build succeeding, 12 Playwright tests passing, `npm run dev` and `npm start` both exercised). Copy the code exactly. If something fails that the plan says should pass, stop and report; do not improvise a fix.
 
 ## Global Constraints
 
@@ -3516,6 +3516,292 @@ git commit -m "feat(server): add the node adapter and the run scripts
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
+- [ ] **Step 8: Write the failing tests for failures at the adapter**
+
+The review of this task found three ways in which one request or one socket could end the whole process. Steps 8 to 11 close them. Steps 1 to 7 above are kept as they were first built.
+
+- A file that fails to open or read raised an `error` event that nobody handled. `serveStatic` now sends files through `pipeline`, which ends that response and closes the file.
+- `ws` repeats the HTTP server's `error` events on the WebSocket server, where nobody listened, so a port already in use ended the process instead of rejecting `startServer`. Both servers now have an error listener, and a failed start stops the room timer and rejects.
+- An exception thrown inside a socket or timer callback was uncaught. Those callbacks now run inside `contain`, which reports the error through the new `ServerOptions.onError` (it prints by default) and, for a message, drops that socket.
+
+Apply this change. It adds two tests to `packages/server/src/node/server.test.ts` and the new file `packages/server/src/node/failure.test.ts` with two more. The main session provides the same change as a patch file for `git apply`.
+
+```diff
+diff --git a/packages/server/src/node/failure.test.ts b/packages/server/src/node/failure.test.ts
+new file mode 100644
+index 0000000..779b244
+--- /dev/null
++++ b/packages/server/src/node/failure.test.ts
+@@ -0,0 +1,100 @@
++import { SOCKET_PATH, type ServerMessage } from '@lodgy/shared';
++import { afterAll, beforeAll, expect, test, vi } from 'vitest';
++import WebSocket from 'ws';
++import { startServer, type RunningServer } from './listen';
++
++// What the stand-in room server below is told to do.
++const failing = vi.hoisted(() => ({ tick: false }));
++
++// The real room layer does not throw on any message, so failures are injected around it.
++vi.mock('../room/server', async (importOriginal) => {
++  const original = await importOriginal<typeof import('../room/server')>();
++  const createRoomServer: typeof original.createRoomServer = (deps, options) => {
++    const server = original.createRoomServer(deps, options);
++    const stopFailingTimer = deps.timer.every(0.01, () => {
++      if (failing.tick) throw new Error('tick failed');
++    });
++    return {
++      ...server,
++      connect(connection) {
++        const handle = server.connect(connection);
++        return {
++          message(data) {
++            if (data === 'throw') throw new Error('message failed');
++            handle.message(data);
++          },
++          closed() {
++            handle.closed();
++            throw new Error('closed failed');
++          },
++        };
++      },
++      stop() {
++        stopFailingTimer();
++        server.stop();
++      },
++    };
++  };
++  return { ...original, createRoomServer };
++});
++
++const errors: string[] = [];
++let server: RunningServer;
++
++beforeAll(async () => {
++  server = await startServer({
++    port: 0,
++    clientDir: '/nonexistent',
++    onError: (error) => errors.push(error instanceof Error ? error.message : String(error)),
++  });
++});
++
++afterAll(async () => {
++  await server.close();
++});
++
++function open(): Promise<WebSocket> {
++  return new Promise((resolve, reject) => {
++    const socket = new WebSocket(`ws://localhost:${server.port}${SOCKET_PATH}`);
++    socket.once('open', () => resolve(socket));
++    socket.once('error', reject);
++  });
++}
++const closed = (socket: WebSocket) => new Promise<void>((resolve) => socket.once('close', () => resolve()));
++
++test('a failure while handling a message drops that connection only', async () => {
++  const bystander = await open();
++  const culprit = await open();
++  const culpritClosed = closed(culprit);
++  culprit.send('throw');
++  await culpritClosed;
++  expect(errors).toContain('message failed');
++  // The close handler failed too, and that was contained as well.
++  await vi.waitFor(() => expect(errors).toContain('closed failed'));
++
++  // The other connection still works: it can create a room.
++  const welcome = new Promise<ServerMessage>((resolve) =>
++    bystander.once('message', (data) => resolve(JSON.parse(data.toString()) as ServerMessage)),
++  );
++  bystander.send(JSON.stringify({ type: 'create', name: 'Amal', token: 'failure-token-amal' }));
++  expect((await welcome).type).toBe('welcome');
++  const bystanderClosed = closed(bystander);
++  bystander.close();
++  await bystanderClosed;
++});
++
++test('a failure inside a timer callback is reported and the server keeps running', async () => {
++  failing.tick = true;
++  await vi.waitFor(() => expect(errors).toContain('tick failed'));
++  failing.tick = false;
++
++  const socket = await open();
++  const welcome = new Promise<ServerMessage>((resolve) =>
++    socket.once('message', (data) => resolve(JSON.parse(data.toString()) as ServerMessage)),
++  );
++  socket.send(JSON.stringify({ type: 'create', name: 'Badr', token: 'failure-token-badr' }));
++  expect((await welcome).type).toBe('welcome');
++  const socketClosed = closed(socket);
++  socket.close();
++  await socketClosed;
++});
+diff --git a/packages/server/src/node/server.test.ts b/packages/server/src/node/server.test.ts
+index e4ca516..8694f22 100644
+--- a/packages/server/src/node/server.test.ts
++++ b/packages/server/src/node/server.test.ts
+@@ -1,4 +1,4 @@
+-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
++import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+ import { request } from 'node:http';
+ import { tmpdir } from 'node:os';
+ import path from 'node:path';
+@@ -120,6 +120,25 @@ test('never serves a file outside the client folder', async () => {
+   expect(resolveStaticPath('/srv/dist', '/%E0%A4%A')).toBeNull();
+ });
+ 
++test('a file that cannot be read ends that response and leaves the server running', async () => {
++  const locked = path.join(clientDir, 'assets', 'locked.js');
++  await writeFile(locked, 'console.log("locked")');
++  await chmod(locked, 0o000);
++  // The headers are sent before the file is opened, so the failure shows as a broken response.
++  const body = await fetch(url('/assets/locked.js'))
++    .then((response) => response.text())
++    .catch(() => 'failed');
++  // As root the file is still readable; either way the server must survive.
++  expect(['failed', 'console.log("locked")']).toContain(body);
++  await chmod(locked, 0o644);
++  expect((await fetch(url('/'))).status).toBe(200);
++});
++
++test('starting on a port that is already in use is refused', async () => {
++  await expect(startServer({ port: server.port, clientDir })).rejects.toThrow(/EADDRINUSE/);
++  expect((await fetch(url('/'))).status).toBe(200);
++});
++
+ test('knows the content types the client needs', () => {
+   expect(contentType('a/b/index.html')).toBe('text/html; charset=utf-8');
+   expect(contentType('x.wasm')).toBe('application/wasm');
+```
+
+- [ ] **Step 9: Run the tests to verify they fail**
+
+Run: `npx vitest run packages/server/src/node`
+Expected: FAIL after about 25 seconds, 4 failed and 21 passed, in 2 failed files. The four failures are the new tests, and Vitest also lists unhandled errors: `message failed`, `tick failed`, `EACCES` and `EADDRINUSE`.
+
+- [ ] **Step 10: Contain the failures**
+
+Apply this change to `packages/server/src/node/listen.ts` and `packages/server/src/node/static.ts`. The main session provides it as a second patch file.
+
+```diff
+diff --git a/packages/server/src/node/listen.ts b/packages/server/src/node/listen.ts
+index dfa5fa5..46bb0b7 100644
+--- a/packages/server/src/node/listen.ts
++++ b/packages/server/src/node/listen.ts
+@@ -15,6 +15,8 @@ export interface ServerOptions {
+   // The folder holding the built client.
+   clientDir: string;
+   vehicleId?: string;
++  // Told about every failure the server survives. The default prints it.
++  onError?: (error: unknown) => void;
+ }
+ 
+ export interface RunningServer {
+@@ -25,15 +27,25 @@ export interface RunningServer {
+ // Wires the room layer to real sockets, real time and an initialised Rapier, and serves the client on the same port.
+ export async function startServer(options: ServerOptions): Promise<RunningServer> {
+   await RAPIER.init();
++  const report = options.onError ?? ((error: unknown) => console.error(error));
++  // An exception thrown inside a socket or timer callback would end the process, and every room with it.
++  const contain = (fn: () => void, onFailure?: () => void) => {
++    try {
++      fn();
++    } catch (error) {
++      report(error);
++      onFailure?.();
++    }
++  };
+   const rooms = createRoomServer(
+     {
+       rapier: RAPIER,
+       clock: () => performance.now() / 1000,
+       random: Math.random,
+-      onError: (error) => console.error(error),
++      onError: report,
+       timer: {
+         every(seconds, fn) {
+-          const id = setInterval(fn, seconds * 1000);
++          const id = setInterval(() => contain(fn), seconds * 1000);
+           return () => clearInterval(id);
+         },
+       },
+@@ -45,6 +57,8 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
+     serveStatic(options.clientDir, request, response).catch(() => response.destroy());
+   });
+   const sockets = new WebSocketServer({ server: http, path: SOCKET_PATH, maxPayload: MAX_MESSAGE_BYTES });
++  // ws repeats the HTTP server's errors here, and an error event nobody listens to is thrown. They are handled on `http`.
++  sockets.on('error', () => {});
+   sockets.on('connection', (socket) => {
+     const handle = rooms.connect({
+       send(data) {
+@@ -55,17 +69,27 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
+     socket.on('message', (data, isBinary) => {
+       // The protocol is JSON text; a binary frame is not part of it.
+       if (isBinary) socket.close();
+-      else handle.message(data.toString());
++      else contain(() => handle.message(data.toString()), () => socket.terminate());
+     });
+-    socket.on('close', () => handle.closed());
++    socket.on('close', () => contain(() => handle.closed()));
+     // An oversized or malformed frame raises an error; the socket is then dropped.
+     socket.on('error', () => socket.terminate());
+   });
+ 
+-  await new Promise<void>((resolve, reject) => {
+-    http.once('error', reject);
+-    http.listen(options.port, resolve);
+-  });
++  try {
++    await new Promise<void>((resolve, reject) => {
++      http.once('error', reject);
++      http.listen(options.port, () => {
++        http.off('error', reject);
++        resolve();
++      });
++    });
++  } catch (error) {
++    // The port is taken, most likely. Without this the room timer would keep the process alive.
++    rooms.stop();
++    throw error;
++  }
++  http.on('error', report);
+ 
+   return {
+     port: (http.address() as AddressInfo).port,
+diff --git a/packages/server/src/node/static.ts b/packages/server/src/node/static.ts
+index 5efebb3..7c93a30 100644
+--- a/packages/server/src/node/static.ts
++++ b/packages/server/src/node/static.ts
+@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
+ import { stat } from 'node:fs/promises';
+ import type { IncomingMessage, ServerResponse } from 'node:http';
+ import path from 'node:path';
++import { pipeline } from 'node:stream';
+ 
+ const CONTENT_TYPES: Record<string, string> = {
+   '.html': 'text/html; charset=utf-8',
+@@ -78,5 +79,6 @@ export async function serveStatic(root: string, request: IncomingMessage, respon
+     response.end();
+     return;
+   }
+-  createReadStream(file).pipe(response);
++  // pipeline closes the file if the client goes away, and a read error ends the response, not the process.
++  pipeline(createReadStream(file), response, () => {});
+ }
+```
+
+Run: `npm test`
+Expected: 18 files, 176 tests passing, and no unhandled error.
+
+Run: `npm run typecheck`
+Expected: exits 0.
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add packages/server/src/node
+git commit -m "fix(server): keep the process alive when a file, socket or timer fails
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
 ---
 
 ### Task 7: Client session, routing, socket and interpolation
@@ -3882,7 +4168,7 @@ export function openSocket(url: string, handlers: SocketHandlers): GameSocket {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npm test`
-Expected: 20 files, 189 tests passing.
+Expected: 21 files, 193 tests passing.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -4456,7 +4742,7 @@ Replace `packages/client/index.html` with:
 - [ ] **Step 5: Run the checks**
 
 Run: `npm test`
-Expected: 20 files, 191 tests passing.
+Expected: 21 files, 195 tests passing.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -4695,7 +4981,7 @@ If a test fails, read `test-results/<test name>/error-context.md`, which holds t
 - [ ] **Step 5: Run the other checks**
 
 Run: `npm test`
-Expected: 20 files, 191 tests passing. The Playwright test is not part of it.
+Expected: 21 files, 195 tests passing. The Playwright test is not part of it.
 
 Run: `npm run typecheck`
 Expected: exits 0.
@@ -4730,7 +5016,7 @@ Every text to replace below occurs exactly once. If one does not, stop and repor
 - [ ] **Step 1: Run every check one last time**
 
 Run: `npm test && npm run typecheck && npm run build && npm run e2e`
-Expected: 191 tests passing, typecheck exits 0, build ends with `✓ built in …`, `12 passed`.
+Expected: 195 tests passing, typecheck exits 0, build ends with `✓ built in …`, `12 passed`.
 
 - [ ] **Step 2: Update `ROADMAP.md`**
 
@@ -4783,7 +5069,7 @@ In the "Carried into later steps" table, delete the nine rows whose first column
 | 4 | The page no longer bundles Rapier; prediction brings it back, and the bundle size with it |
 | 11 | `lobby` gains `timeOfDay` and `weather`; held slots replace the immediate removal of a disconnected player; the admin's choice replaces `VEHICLE` |
 | 19 | The page does not reconnect by itself after the socket closes; it returns to the name form |
-| 19 | The server caps rooms (50) but not connections: add a cap on connections in total and per address when the server is exposed through the tunnel (behind it, the address is in the `CF-Connecting-IP` header) |
+| 19 | The server caps rooms (50) but not connections: add a cap on connections in total and per address when the server is exposed through the tunnel (behind it, the address is in the `CF-Connecting-IP` header), and stop sending to a socket whose send buffer keeps growing |
 ```
 
 Append these rows to the decisions log:
@@ -4798,6 +5084,7 @@ Append these rows to the decisions log:
 | 2026-11-12 | The smoke test's phone project runs in Chromium with an iPhone viewport and touch | One browser download instead of two; real iPhone behaviour is the owner's check at step 14 |
 | 2026-11-12 | The server holds at most 50 rooms and refuses `create` beyond that with `server_full` | Found in review: each room is a physics world, and nothing bounded how many one visitor could create |
 | 2026-11-12 | A connection that throws is dropped and a room whose simulation throws is closed; both are reported and the other rooms carry on | Found in review: one error inside the tick stopped every room |
+| 2026-11-12 | The Node adapter contains every failure it can: file read errors, server errors, and exceptions in socket and timer callbacks are reported and the process carries on | Found in review: any one of them ended the process, and every room with it |
 | 2026-11-12 | A test checks the room layer's imports | Found in review: the room tsconfig cannot stop an import of `ws`, which brings Node's types in with it |
 ```
 
