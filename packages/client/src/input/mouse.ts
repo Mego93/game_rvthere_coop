@@ -23,7 +23,10 @@ export function createMouseLook(canvas: HTMLElement, doc: Document): MouseLook {
   const locked = () => doc.pointerLockElement === canvas;
 
   const onClick = () => {
-    if (!locked()) canvas.requestPointerLock();
+    if (locked()) return;
+    // iOS Safari has no requestPointerLock and Chrome's promise can reject.
+    const request: unknown = canvas.requestPointerLock?.();
+    if (request instanceof Promise) request.catch(() => {});
   };
   const onMove = (event: Event) => {
     if (!locked()) return;

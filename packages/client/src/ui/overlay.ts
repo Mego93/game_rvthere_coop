@@ -1,7 +1,6 @@
 import {
   chooseSeat,
   dot,
-  getVehicleConfig,
   resolveInteract,
   rotate,
   vec3,
@@ -16,6 +15,7 @@ const fixed = (value: number, digits = 1) => value.toFixed(digits).padStart(7);
 
 export interface OverlayData {
   lobby: LobbyMessage;
+  config: VehicleConfig;
   tick: number;
   fps: number;
   // Null until the first snapshot arrives.
@@ -41,7 +41,7 @@ export function interactHint(
 }
 
 // The debug text shown until the real HUD exists.
-export function overlayText({ lobby, tick, fps, vehicle, players, localId }: OverlayData): string {
+export function overlayText({ lobby, config, tick, fps, vehicle, players, localId }: OverlayData): string {
   const names = lobby.players.map((player) => {
     const snapshot = players.find((candidate) => candidate.playerId === player.playerId);
     return snapshot ? `${player.name} (${snapshot.seat ?? 'on foot'})` : player.name;
@@ -59,7 +59,7 @@ export function overlayText({ lobby, tick, fps, vehicle, players, localId }: Ove
       `throttle ${fixed(vehicle.throttle, 2)}   steer ${fixed(vehicle.steer, 2)}`,
     );
     const local = players.find((player) => player.playerId === localId);
-    const hint = local ? interactHint(getVehicleConfig(lobby.vehicleId), vehicle, local, players) : null;
+    const hint = local ? interactHint(config, vehicle, local, players) : null;
     if (hint) lines.push(`hint     ${hint}`);
   } else {
     lines.push('waiting for the server…');

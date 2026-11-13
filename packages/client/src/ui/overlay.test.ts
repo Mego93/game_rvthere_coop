@@ -45,7 +45,7 @@ const far = player('p1', 40, -32.24);
 const rv = getVehicleConfig('rv');
 
 const call = (players: PlayerSnapshot[], localId = 'p1', v: VehicleState | null = vehicle) =>
-  overlayText({ lobby, tick: 180, fps: 59.6, vehicle: v, players, localId });
+  overlayText({ lobby, config: rv, tick: 180, fps: 59.6, vehicle: v, players, localId });
 
 test('shows the room and each player with their state', () => {
   const text = call([player('p1', 0, 0, 'driver'), player('p2', 3, 0)]);
@@ -91,7 +91,7 @@ test('interactHint: with the driver seat taken, a free seat still says board', (
 });
 
 test('shows the speed along the vehicle, the position and the controls', () => {
-  const text = overlayText({ lobby, tick: 180, fps: 60, vehicle, players: [], localId: 'p1' });
+  const text = overlayText({ lobby, config: rv, tick: 180, fps: 60, vehicle, players: [], localId: 'p1' });
   expect(text).toContain('speed       36.0 km/h');
   expect(text).toContain('pos          1.3     1.7   -30.0');
   expect(text).toContain('throttle    1.00   steer   -0.50');
@@ -99,11 +99,11 @@ test('shows the speed along the vehicle, the position and the controls', () => {
 
 test('speed is negative when the vehicle rolls backwards, whichever way it faces', () => {
   const facingLeft = { ...vehicle, rot: quatFromAxisAngle(AXIS_Y, Math.PI / 2), linvel: vec3(5, 0, 0) };
-  expect(overlayText({ lobby, tick: 1, fps: 60, vehicle: facingLeft, players: [], localId: 'p1' })).toContain('speed      -18.0 km/h');
+  expect(overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle: facingLeft, players: [], localId: 'p1' })).toContain('speed      -18.0 km/h');
 });
 
 test('says it is waiting before the first snapshot', () => {
-  const text = overlayText({ lobby, tick: 0, fps: 60, vehicle: null, players: [], localId: 'p1' });
+  const text = overlayText({ lobby, config: rv, tick: 0, fps: 60, vehicle: null, players: [], localId: 'p1' });
   expect(text).toContain('waiting for the server');
   expect(text).not.toContain('speed');
 });

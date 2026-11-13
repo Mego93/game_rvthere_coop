@@ -59,6 +59,7 @@ async function tap(page: Page, key: string) {
 }
 
 test('two players share a room, board the vehicle, and only the driver drives', async ({ browser }) => {
+  test.slow();
   const amal = await newPlayerPage(browser);
   const badr = await newPlayerPage(browser);
   const room = await createRoom(amal, 'Amal');

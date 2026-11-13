@@ -104,3 +104,21 @@ test('dispose removes every listener', () => {
   doc.dispatchEvent(Object.assign(new Event('mousemove'), { movementX: 100, movementY: 100 }));
   expect(look.yaw()).toBe(0);
 });
+
+test('a click does not throw when the canvas has no requestPointerLock', () => {
+  const canvas = new EventTarget();
+  createMouseLook(canvas as unknown as HTMLElement, new EventTarget() as unknown as Document);
+  expect(() => canvas.dispatchEvent(new Event('click'))).not.toThrow();
+});
+
+test('a rejected pointer-lock promise causes no unhandled rejection', async () => {
+  const unhandled: unknown[] = [];
+  const onUnhandled = (reason: unknown) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  const canvas = Object.assign(new EventTarget(), { requestPointerLock: () => Promise.reject(new Error('denied')) });
+  createMouseLook(canvas as unknown as HTMLElement, new EventTarget() as unknown as Document);
+  canvas.dispatchEvent(new Event('click'));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  process.off('unhandledRejection', onUnhandled);
+  expect(unhandled).toEqual([]);
+});

@@ -49,7 +49,8 @@ export function createGame(
   const course = getCourse(lobby.courseId);
   const cameraBoxes = [...course.ground, ...course.walls];
   const scene = createScene(course);
-  const vehicleMesh = createVehicleMesh(getVehicleConfig(lobby.vehicleId));
+  const vehicleConfig = getVehicleConfig(lobby.vehicleId);
+  const vehicleMesh = createVehicleMesh(vehicleConfig);
   vehicleMesh.visible = false;
   scene.add(vehicleMesh);
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
@@ -129,7 +130,7 @@ export function createGame(
     } else if (vehicle) {
       updateFollowCamera(camera, vehicle, frameSeconds);
     }
-    overlay.textContent = overlayText({ lobby, tick: buffer.latestTick(), fps, vehicle, players, localId: playerId });
+    overlay.textContent = overlayText({ lobby, config: vehicleConfig, tick: buffer.latestTick(), fps, vehicle, players, localId: playerId });
     renderer.render(scene, camera);
     frameRequest = requestAnimationFrame(frame);
   });
