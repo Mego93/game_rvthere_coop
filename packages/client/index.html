@@ -39,7 +39,8 @@
         position: fixed;
         inset: 0;
         display: grid;
-        place-items: center;
+        /* With the keyboard open on a phone in landscape the form is taller than the screen, so it must scroll. */
+        overflow-y: auto;
         background: #cfe6f5;
       }
       #home[hidden],
@@ -50,6 +51,8 @@
         display: grid;
         gap: 12px;
         width: min(320px, 90vw);
+        /* Centres the form, and unlike centring on the container keeps its top reachable when it overflows. */
+        margin: auto;
         padding: 24px;
         background: #fff;
         border-radius: 8px;
@@ -68,6 +71,8 @@
       #home-form button {
         padding: 10px;
         font: inherit;
+        /* iOS Safari zooms the page when a focused field's text is smaller than 16px. */
+        font-size: 16px;
         border: 1px solid #9ab;
         border-radius: 6px;
       }
