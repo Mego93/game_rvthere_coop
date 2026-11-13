@@ -18,6 +18,7 @@ import {
   ROAD_WIDTH,
   SAND_APRON,
   SEGMENT_MIN_LENGTH,
+  SEGMENT_SPAWN_INSET,
   STOP_PAD,
   STOP_ZONE,
   WALL_THICKNESS,
@@ -485,6 +486,8 @@ describe('sand', () => {
   });
 });
 
+const FORD_ROCKS_FROM = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z + FORD_ROCK.z;
+
 describe('ford', () => {
   test('the water decor covers the riverbed at its surface', () => {
     const seg = buildSegment(ford(20, 0));
@@ -501,9 +504,24 @@ describe('ford', () => {
       expect(w.halfExtents).toEqual(FORD_ROCK);
       expect(w.center.x).toBeCloseTo(i % 2 === 0 ? -1 : 1, 9);
       expect(w.center.y - w.halfExtents.y).toBeCloseTo(0, 9);
-      expect(w.center.z).toBeCloseTo(-((i + 0.5) / 6) * 20, 9);
+      expect(w.center.z).toBeCloseTo(-(FORD_ROCKS_FROM + ((i + 0.5) / 6) * (20 - FORD_ROCK.z - FORD_ROCKS_FROM)), 9);
     });
     expect(seg.props).toHaveLength(0);
+  });
+
+  test.each([
+    [15, 1],
+    [15, 6],
+    [20, 6],
+    [40, 12],
+  ])('a %d m ford with %d rocks keeps them clear of the checkpoint spawn and the RV standing on it', (width, rocks) => {
+    const seg = buildSegment(ford(width, rocks));
+    expect(seg.walls).toHaveLength(rocks);
+    const spawnEnd = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z;
+    for (const w of seg.walls) {
+      expect(-w.center.z - w.halfExtents.z).toBeGreaterThanOrEqual(spawnEnd - 1e-9);
+      expect(-w.center.z + w.halfExtents.z).toBeLessThanOrEqual(width + 1e-9);
+    }
   });
 
   test('a ford shorter than the minimum route throws', () => {

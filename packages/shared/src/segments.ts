@@ -19,12 +19,14 @@ import {
   ROAD_THICKNESS,
   ROAD_WIDTH,
   SEGMENT_MIN_LENGTH,
+  SEGMENT_SPAWN_INSET,
   STOP_PAD,
   STOP_ZONE,
   type PropKind,
   type Surface,
 } from './constants';
 import type { Box, GroundBox, Placed, ServiceStop } from './course';
+import { VEHICLES } from './vehicles';
 import { AXIS_X, AXIS_Y, add, degToRad, quatFromAxisAngle, quatMul, rotate, vec3, type Quat, type Vec3 } from './math';
 
 export interface Placement {
@@ -334,9 +336,11 @@ function buildFord(def: Extract<SegmentDef, { type: 'ford' }>): LocalSegment {
   const bed: Piece = { start: vec3(0, 0, 0), yaw: 0, pitch: 0, length: def.width, alongStart: 0, horizontal: def.width, surface: 'riverbed' };
   const surfaceAt = surfaceOnPieces([bed]);
   const id = idCounter();
-  const walls = evenSlots(def.rocks, def.width).map(
+  // Rocks start past the RV standing on the checkpoint spawn, so none lands under a wheel there.
+  const from = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z + FORD_ROCK.z;
+  const walls = evenSlots(def.rocks, def.width - FORD_ROCK.z - from).map(
     (slot): Box => ({
-      center: offsetFrom(surfaceAt(slot.along), slot.side * 1.0, FORD_ROCK.y),
+      center: offsetFrom(surfaceAt(from + slot.along), slot.side * 1.0, FORD_ROCK.y),
       halfExtents: FORD_ROCK,
       rot: yawQuat(0),
     }),
