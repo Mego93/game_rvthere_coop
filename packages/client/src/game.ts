@@ -212,7 +212,7 @@ export function createGame(
       server: latestLocal?.pos ?? null,
       aim: { yaw: mouse.yaw(), pitch: mouse.pitch() },
       propPoses: sampled?.props ?? [],
-      cable: sampled?.cable ?? null,
+      cable: buffer.latestCable(),
       anchors: course.anchors,
     });
     renderer.render(scene, camera);
