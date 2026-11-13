@@ -12,6 +12,7 @@
         height: 100%;
         overflow: hidden;
         background: #cfe6f5;
+        font: 16px/1.4 system-ui, sans-serif;
       }
       #game {
         display: block;
@@ -31,11 +32,89 @@
         pointer-events: none;
         white-space: pre;
       }
+      #overlay:empty {
+        display: none;
+      }
+      #home {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: #cfe6f5;
+      }
+      #home[hidden],
+      #home [hidden] {
+        display: none;
+      }
+      #home-form {
+        display: grid;
+        gap: 12px;
+        width: min(320px, 90vw);
+        padding: 24px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+      }
+      #home-form h1 {
+        margin: 0;
+        font-size: 22px;
+      }
+      #home-form label {
+        display: grid;
+        gap: 4px;
+        font-size: 14px;
+      }
+      #home-form input,
+      #home-form button {
+        padding: 10px;
+        font: inherit;
+        border: 1px solid #9ab;
+        border-radius: 6px;
+      }
+      #home-form button {
+        color: #fff;
+        background: #2f6f9f;
+        border-color: #2f6f9f;
+      }
+      #home-form button:disabled {
+        opacity: 0.6;
+      }
+      #home-room-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: end;
+      }
+      #home-error {
+        margin: 0;
+        min-height: 1.4em;
+        color: #b3261e;
+        font-size: 14px;
+      }
     </style>
   </head>
   <body>
     <canvas id="game"></canvas>
     <pre id="overlay"></pre>
+    <div id="home" hidden>
+      <form id="home-form" novalidate>
+        <h1 id="home-title">Lodgy Co-op</h1>
+        <label>
+          Your name
+          <input id="home-name" maxlength="16" autocomplete="nickname" />
+        </label>
+        <button id="home-primary" type="submit">Create room</button>
+        <div id="home-room-row">
+          <label>
+            Or join a room
+            <input id="home-room" maxlength="24" autocapitalize="none" autocomplete="off" placeholder="camel" />
+          </label>
+          <button id="home-join" type="button">Join</button>
+        </div>
+        <p id="home-error" role="alert"></p>
+        <a id="home-link" href="/" hidden>Back to the home page</a>
+      </form>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
