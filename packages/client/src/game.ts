@@ -62,6 +62,8 @@ export function createGame(
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
   camera.position.set(0, 6, 14);
 
+  const predictor = createPredictor(rapier, course, vehicleConfig);
+  const reconciler = createReconciler(predictor);
   const resize = () => {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -74,8 +76,6 @@ export function createGame(
   const mouse = createMouseLook(renderer.domElement, document);
   const input = createInputSource(createKeyboardSource(window), mouse);
   const playerMeshes = new Map<string, { mesh: THREE.Group; name: string; colour: string }>();
-  const predictor = createPredictor(rapier, course, vehicleConfig);
-  const reconciler = createReconciler(predictor);
   // The local player's entry in the newest snapshot, not interpolated.
   let latestLocal: PlayerSnapshot | null = null;
   let seq = 0;
@@ -126,11 +126,14 @@ export function createGame(
     const vehicle = sampled?.vehicle ?? null;
     const interpolated = sampled?.players ?? [];
     const drawnPosition = reconciler.active ? (reconciler.view(frameSeconds, stepper.alpha())?.pos ?? null) : null;
-    const players = drawnPosition
-      ? interpolated.map((player) =>
-          player.playerId === playerId ? { ...player, pos: drawnPosition, yaw: mouse.yaw() } : player,
-        )
-      : interpolated;
+    let players = interpolated;
+    if (drawnPosition && latestLocal) {
+      // Seat and ground come from the newest snapshot so leaving a seat switches the view at once.
+      const drawn = { ...latestLocal, pos: drawnPosition, yaw: mouse.yaw(), seat: null, ground: null };
+      players = interpolated.some((player) => player.playerId === playerId)
+        ? interpolated.map((player) => (player.playerId === playerId ? drawn : player))
+        : [...interpolated, drawn];
+    }
     if (vehicle) {
       vehicleMesh.visible = true;
       placeVehicleMesh(vehicleMesh, vehicle);
