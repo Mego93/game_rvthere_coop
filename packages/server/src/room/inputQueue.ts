@@ -41,7 +41,7 @@ export function createInputQueue(): InputQueue {
       if (queue.length === 0) {
         ticksWithoutInput += 1;
         if (ticksWithoutInput >= NEUTRAL_AFTER_TICKS) last = neutralInput(last);
-        return { input: last, fresh: false };
+        return { input: { ...last }, fresh: false };
       }
       // A long queue means the client is ahead of the server; taking two brings the delay back down.
       const take = queue.length > INPUT_QUEUE_FAST_ABOVE ? 2 : 1;
@@ -50,7 +50,14 @@ export function createInputQueue(): InputQueue {
       ackSeq = seq;
       last = fields;
       ticksWithoutInput = 0;
-      return { input: last, fresh: true };
+      const result: InputFields = { ...fields };
+      // A tap in the skipped input must not vanish; `last` stays unmerged so a repeat is not a new press.
+      for (const earlier of consumed.slice(0, -1)) {
+        result.jump ||= earlier.jump;
+        result.interact ||= earlier.interact;
+        result.drop ||= earlier.drop;
+      }
+      return { input: result, fresh: true };
     },
     ackSeq: () => ackSeq,
   };

@@ -79,3 +79,56 @@ test('a new input after the neutral substitute is used again', () => {
   queue.push(input(2, { moveY: -1 }));
   expect(queue.next()).toMatchObject({ input: { moveY: -1 }, fresh: true });
 });
+
+// Five queued inputs make the next tick consume two (seq 1 and 2), the second being the one returned.
+const consumeTwo = (first: Partial<PlayerInput>, second: Partial<PlayerInput> = {}) => {
+  const queue = createInputQueue();
+  queue.push(input(1, first));
+  queue.push(input(2, second));
+  for (let seq = 3; seq <= 5; seq++) queue.push(input(seq));
+  return { queue, tick: queue.next() };
+};
+
+test.each(['jump', 'interact', 'drop'] as const)('keeps a %s tap from the first of two consumed inputs', (button) => {
+  const { tick, queue } = consumeTwo({ [button]: true, moveY: 1 });
+  expect(queue.ackSeq()).toBe(2);
+  expect(tick.input[button]).toBe(true);
+  expect(tick.input.moveY).toBe(0);
+  expect(tick.input.moveX).toBe(0.02);
+});
+
+test('takes axes, aim, use, reel and slot from the second of two consumed inputs', () => {
+  const { tick } = consumeTwo(
+    { moveX: 1, moveY: 1, yaw: 1, pitch: 1, use: true, reel: 1, slot: 1 },
+    { moveX: -1, moveY: -1, yaw: 2, pitch: 0.5, use: false, reel: -1, slot: 2 },
+  );
+  expect(tick.input).toEqual({ ...NEUTRAL_INPUT, moveX: -1, moveY: -1, yaw: 2, pitch: 0.5, reel: -1, slot: 2 });
+});
+
+test('returns a single consumed input unchanged', () => {
+  const queue = createInputQueue();
+  queue.push(input(1, { jump: true, yaw: 1 }));
+  const { seq, ...fields } = input(1, { jump: true, yaw: 1 });
+  expect(seq).toBe(1);
+  expect(queue.next().input).toEqual(fields);
+});
+
+test('returns copies: mutating one changes no later result', () => {
+  const queue = createInputQueue();
+  queue.push(input(1, { moveY: 1 }));
+  const first = queue.next().input;
+  first.moveY = -1;
+  first.jump = true;
+  expect(queue.next().input).toMatchObject({ moveY: 1, jump: false });
+  queue.push(input(2, { moveY: 0.5 }));
+  const fresh = queue.next().input;
+  fresh.moveY = 9;
+  expect(queue.next().input.moveY).toBe(0.5);
+});
+
+test('an empty queue repeats the unmerged second input after a merged tick', () => {
+  const { queue, tick } = consumeTwo({ interact: true });
+  expect(tick.input.interact).toBe(true);
+  for (let i = 0; i < 3; i++) queue.next();
+  expect(queue.next()).toMatchObject({ input: { interact: false, moveX: 0.05 }, fresh: false });
+});
