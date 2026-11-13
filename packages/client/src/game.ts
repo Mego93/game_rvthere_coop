@@ -134,11 +134,9 @@ export function createGame(
         entry = undefined;
       }
       if (!entry) {
-        const mesh = createPropMesh(prop.kind);
-        if (!mesh) continue;
-        entry = { mesh, kind: prop.kind };
+        entry = { mesh: createPropMesh(prop.kind), kind: prop.kind };
         propMeshes.set(prop.id, entry);
-        scene.add(mesh);
+        scene.add(entry.mesh);
       }
       const holder = held.get(prop.id);
       placePropMesh(entry.mesh, holder ? holdPoseAt(holder.pos, holder.yaw) : prop);
@@ -194,7 +192,7 @@ export function createGame(
       tick: buffer.latestTick(),
       fps,
       vehicle,
-      players: interpolated,
+      players,
       localId: playerId,
       predicted: drawnPosition,
       server: latestLocal?.pos ?? null,
