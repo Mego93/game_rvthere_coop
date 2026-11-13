@@ -20,6 +20,7 @@ D7. `respawn` events returned by `World.step` are ignored by the room until step
 D8. The shove-out search runs along one line, away from the vehicle's centre, and may not pass through static geometry; with no free place on that line the player goes to a spawn slot.
 D9. `createWorld` takes an optional third argument, a `BuiltCourse`, used instead of the id's course (tests use it to add walls and ledges). `createRig` takes the same.
 D10. Seat ids are `driver`, `seat1` … `seat5`, so they cannot be confused with player ids `p1` … `p6`.
+D12. Roof guard (added in Task 5): when a player's feet are inside the vehicle's footprint and no deeper than `PLAYER_STEP_HEIGHT` below its roof face (vehicle up within 45° of world up), the shove-out lifts the player onto the roof instead of shoving them sideways. Without it a rising roof pushed a falling player off the edge. A rolled vehicle's up-facing side gets no guard.
 D11. There is no way onto the vehicle's roof from the ground yet (the Lodgy roof is 1.5 m up, a jump reaches 1.27 m). Tests place players there with `teleportPlayer`; props at step 5 give players something to climb.
 
 ## Constants (`packages/shared/src/constants.ts`, one block "Players on foot")
@@ -372,7 +373,7 @@ Files: `e2e/smoke.spec.ts`, `playwright.config.ts`, `ROADMAP.md`, the spec.
 Scope:
 - Smoke test: the first case becomes: both pages list both players on foot; A presses E (keydown, 100 ms wait, keyup) and the overlay shows A as `driver`; A holds W and the applied throttle is 1 on both pages; B's W keys leave the throttle unchanged; B boards a seat with E; A presses E and leaves, and the throttle falls to 0. All numbers are read from the overlay.
 - Playwright `trace: 'retain-on-failure'` (carried row).
-- ROADMAP: step 3 → `done`; "Runnable today"; D1 to D11 in the decisions log; delete the step-3 carried rows; edit the step-4 row so it no longer lists the first-frame time step and the snapshot-buffer gaps done in Task 7, keeping "Test `ackSeq` through the neutral substitute"; list the iPhone check as open for the owner (the page over the same Wi-Fi: it loads, renders, shows both players). Spec: amend "Spawn slots" (D1), the `world` list (D4), and note D6.
+- ROADMAP: step 3 → `done`; "Runnable today"; D1 to D12 in the decisions log; amend the spec's "Player physics" with D12 and the shove rule (D8); delete the step-3 carried rows; edit the step-4 row so it no longer lists the first-frame time step and the snapshot-buffer gaps done in Task 7, keeping "Test `ackSeq` through the neutral substitute"; list the iPhone check as open for the owner (the page over the same Wi-Fi: it loads, renders, shows both players). Spec: amend "Spawn slots" (D1), the `world` list (D4), and note D6.
 Run: `npm test`, `npm run typecheck`, `npm run e2e`, `npm run build`.
 Commits: `test(e2e): board, drive and leave in the smoke test`, then `docs(roadmap): record step 3`.
 
