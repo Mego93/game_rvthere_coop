@@ -175,3 +175,10 @@ test('omits the prediction lines before the first snapshot', () => {
   expect(text).not.toContain('you ');
   expect(text).not.toContain('(predicted)');
 });
+
+test('shows how many props are in the sample', () => {
+  const crate = { id: 'crate-1', pos: vec3(0, 1, 0), rot: IDENTITY, linvel: vec3(0, 0, 0), angvel: vec3(0, 0, 0) } as unknown as PropSnapshot;
+  const text = overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [], localId: 'p1', predicted: null, server: null, aim: noAim.aim, propPoses: [crate, crate, crate] });
+  expect(text).toContain('props    3');
+  expect(call([])).toContain('props    0');
+});

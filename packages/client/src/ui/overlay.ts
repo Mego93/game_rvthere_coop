@@ -101,6 +101,7 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
   } else {
     lines.push('waiting for the server…');
   }
+  lines.push(`props    ${propPoses.length}`);
   lines.push('', 'WASD move   Space jump (brake when driving)   E board or leave   click to look');
   return lines.join('\n');
 }

@@ -216,3 +216,10 @@ test('an empty name is refused on the page, before anything is sent', async ({ p
   await expect(page).toHaveURL(/\/$/);
   expect(sockets).toBe(0);
 });
+
+test('the course props are drawn: the overlay counts four and the page has no errors', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await expect(page.locator('#overlay')).toContainText('props    4');
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
+});
