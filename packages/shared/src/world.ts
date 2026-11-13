@@ -2,13 +2,12 @@ import { GRAVITY, PLAYER_KILL_RESPAWN_DELAY, PUSH_MAX_PUSHERS_VEHICLE, TICK_DT, 
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import type { Vec3 } from './math';
-import { resolveInteract } from './interact';
+import { interactCandidates, resolveInteract } from './interact';
 import { createPlayers, type StepInputs } from './player';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
 import { NEUTRAL_INPUT, type InputFields, type PlayerSnapshot } from './protocol';
 import type { Rapier, RigidBody } from './rapier';
-import { chooseSeat } from './seats';
 import { buildStatics } from './statics';
 import { createVehicle, type VehicleState } from './vehicle';
 import { getVehicleConfig, type VehicleConfig } from './vehicles';
@@ -105,22 +104,39 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     return result;
   };
 
-  // Rules I1 and V3: in join order, so of two players pressing for one seat the earlier gets it.
+  // Rules I1, V3, K1 and K2: in join order, so of two players pressing for one seat or crate the earlier gets it.
+  // The aim is this tick's input (R6), not the yaw the player ended the last tick with.
   const resolveInteracts = (onFoot: ReadonlyMap<string, StepInputs>) => {
     for (const player of players.all()) {
-      if (!onFoot.get(player.id)?.pressed.interact) continue;
+      const step = onFoot.get(player.id);
+      if (!step?.pressed.interact) continue;
       const taken = new Set<string>();
       for (const other of players.all()) if (other.seat !== null) taken.add(other.seat);
-      const seatChoice =
-        player.seat === null
-          ? chooseSeat(vehicleConfig, vehicle.body.translation(), vehicle.body.rotation(), player.pos, taken)
-          : null;
-      const action = resolveInteract({ seat: player.seat, seatChoice });
+      const heldProps = new Set(props.all().filter((prop) => prop.heldBy !== null).map((prop) => prop.id));
+      const candidates =
+        player.seat === null && player.hands === null
+          ? interactCandidates({
+              config: vehicleConfig,
+              vehiclePos: vehicle.body.translation(),
+              vehicleRot: vehicle.body.rotation(),
+              feet: player.pos,
+              yaw: step.fields.yaw,
+              pitch: step.fields.pitch,
+              takenSeats: taken,
+              props: props.snapshot(),
+              heldProps,
+            })
+          : [];
+      const action = resolveInteract({ seat: player.seat, hands: player.hands, candidates });
       if (action?.kind === 'board') {
         players.setSeat(player.id, action.seatId);
       } else if (action?.kind === 'exitSeat') {
         const seat = vehicleConfig.seats.find((candidate) => candidate.id === player.seat);
         players.setSeat(player.id, null, (seat && players.findExit(seat)) ?? players.findSpawn(player.id));
+      } else if (action?.kind === 'throw') {
+        players.throwHeld(player.id, step.fields.yaw, step.fields.pitch);
+      } else if (action?.kind === 'pickUp') {
+        players.pickUp(player.id, action.propId);
       }
     }
   };
@@ -162,6 +178,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       player.respawnIn -= TICK_DT;
       if (player.respawnIn > 1e-9) continue;
       const pos = players.findSpawn(player.id);
+      players.resetHeld(player.id);
       players.setSeat(player.id, null, pos);
       events.push({ kind: 'respawn', tick, playerId: player.id, pos });
     }
@@ -197,6 +214,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         pos: { ...player.pos },
         yaw: player.yaw,
         seat: player.seat,
+        hands: player.hands,
         ground: player.ground ? { bodyId: player.ground.bodyId, localPos: { ...player.ground.localPos } } : null,
         walk: { ...player.walk },
         carry: { ...player.carry },

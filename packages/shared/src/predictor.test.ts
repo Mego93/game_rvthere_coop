@@ -242,6 +242,7 @@ describe('createPredictor', () => {
       pos: vec3(1, 2, 3),
       yaw: 0,
       seat: null,
+      hands: null,
       ground: null,
       walk: { x: 1, z: 2 },
       carry: { x: 3, z: 4 },

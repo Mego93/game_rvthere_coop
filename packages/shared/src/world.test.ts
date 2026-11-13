@@ -1,10 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { PLAYER_KILL_RESPAWN_DELAY, TICK_RATE } from './constants';
+import { HOLD_OFFSET, PLAYER_KILL_RESPAWN_DELAY, THROW_SPEED, TICK_RATE } from './constants';
 import { IDENTITY, add, quatFromAxisAngle, rotate, vec3, yawOf, AXIS_Y, type Vec3 } from './math';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
 import { testGround } from './courses/testGround';
-import { withBoxes } from './testRig';
+import { withBoxes, withProps } from './testRig';
 import { VEHICLES } from './vehicles';
 import { createWorld, type World } from './world';
 
@@ -620,4 +620,170 @@ test('determinism: the same inputs, boarding included, give the same snapshot', 
     return JSON.stringify(world.snapshot());
   };
   expect(play()).toBe(play());
+});
+
+describe('hands', () => {
+  // crate-1 sits at (10, 0.3, 8); a player 1.7 m east of it who looks west and down at it has it dead ahead.
+  const BESIDE = vec3(12, 0.02, 8);
+  const AT_CRATE = { yaw: Math.PI / 2, pitch: -Math.atan2(1.0, 1.7) };
+  const crateOf = (world: World, id = 'crate-1') => world.snapshot().props.find((prop) => prop.id === id)!;
+  const handsOf = (world: World, id: string) => world.snapshot().players.find((player) => player.playerId === id)!.hands;
+  const press = (world: World, ids: string[], fields: Partial<PlayerInput> = AT_CRATE) => {
+    world.step(new Map(ids.map((id) => [id, input({ ...fields, interact: true })])));
+    world.step(new Map(ids.map((id) => [id, input(fields)])));
+  };
+
+  function standBeside(ids: string[] = ['p1']) {
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+    for (const id of ids) world.addPlayer(id);
+    run(world, 30, new Map());
+    ids.forEach((id, index) => world.teleportPlayer(id, vec3(BESIDE.x + index * 0.05, BESIDE.y, BESIDE.z)));
+    run(world, 30, new Map());
+    return world;
+  }
+
+  test('interact beside a crate, aiming at it, picks it up; it then follows the hold pose while the player walks', () => {
+    const world = standBeside();
+    press(world, ['p1']);
+    expect(handsOf(world, 'p1')).toBe('crate-1');
+    const walk = input({ ...AT_CRATE, moveY: 1 });
+    for (let i = 0; i < 60; i++) {
+      world.step(new Map([['p1', walk]]));
+      const player = world.snapshot().players[0]!;
+      const turn = quatFromAxisAngle(AXIS_Y, AT_CRATE.yaw);
+      const expected = add(player.pos, rotate(turn, HOLD_OFFSET));
+      const crate = crateOf(world);
+      expect(crate.pos.x).toBeCloseTo(expected.x, 4);
+      expect(crate.pos.y).toBeCloseTo(expected.y, 4);
+      expect(crate.pos.z).toBeCloseTo(expected.z, 4);
+    }
+    expect(world.snapshot().players[0]!.pos.x).toBeLessThan(BESIDE.x - 3);
+  });
+
+  test('R6: the pick-up uses the yaw of the pressing tick, not the previous one', () => {
+    const world = standBeside();
+    // Facing away on the tick before; the press tick itself turns to the crate.
+    run(world, 5, new Map([['p1', input({ yaw: -Math.PI / 2, pitch: 0 })]]));
+    world.step(new Map([['p1', input({ ...AT_CRATE, interact: true })]]));
+    expect(handsOf(world, 'p1')).toBe('crate-1');
+  });
+
+  test('a crate out of range is not picked up', () => {
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+    world.addPlayer('p1');
+    run(world, 30, new Map());
+    world.teleportPlayer('p1', vec3(10 + 0.3 + 2.4, 0.02, 8));
+    run(world, 30, new Map());
+    press(world, ['p1'], { yaw: Math.PI / 2, pitch: -0.3 });
+    expect(handsOf(world, 'p1')).toBeNull();
+  });
+
+  test('aiming at the vehicle beside a crate boards instead; aiming at the crate picks it up', () => {
+    const probe = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+    probe.addPlayer('p1');
+    run(probe, 30, new Map());
+    const spot = probe.snapshot().players[0]!.pos;
+    const vehicle = probe.snapshot().vehicle.pos;
+    probe.dispose();
+    // The vehicle is the way the aim points; the crate sits right behind the player.
+    const toward = Math.hypot(vehicle.x - spot.x, vehicle.z - spot.z);
+    const dx = (vehicle.x - spot.x) / toward;
+    const dz = (vehicle.z - spot.z) / toward;
+    const yaw = Math.atan2(-dx, -dz);
+    const course = withProps(testGround, [
+      { id: 'near-crate', kind: 'crate', pose: { pos: vec3(spot.x - dx * 0.9, 0, spot.z - dz * 0.9), rot: IDENTITY } },
+    ]);
+    const make = () => {
+      const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' }, course);
+      world.addPlayer('p1');
+      run(world, 30, new Map());
+      return world;
+    };
+    const boarding = make();
+    press(boarding, ['p1'], { yaw, pitch: 0 });
+    expect(seatOf(boarding, 'p1')).toBe('driver');
+    expect(handsOf(boarding, 'p1')).toBeNull();
+    const picking = make();
+    press(picking, ['p1'], { yaw: yaw + Math.PI, pitch: -0.4 });
+    expect(seatOf(picking, 'p1')).toBeNull();
+    expect(handsOf(picking, 'p1')).toBe('near-crate');
+  });
+
+  test('interact again throws: the crate leaves along the aim at about THROW_SPEED and lands more than 3 m away', () => {
+    const world = standBeside();
+    press(world, ['p1']);
+    expect(handsOf(world, 'p1')).toBe('crate-1');
+    // Turn to face +X (away from where it came from) at pitch 0, then press.
+    const aim = { yaw: -Math.PI / 2, pitch: 0 };
+    world.step(new Map([['p1', input(aim)]]));
+    const feet = world.snapshot().players[0]!.pos;
+    world.step(new Map([['p1', input({ ...aim, interact: true })]]));
+    expect(handsOf(world, 'p1')).toBeNull();
+    const velocity = world.debugBody('crate-1')!.linvel();
+    expect(velocity.x).toBeGreaterThan(THROW_SPEED * 0.9);
+    expect(Math.abs(velocity.z)).toBeLessThan(0.1);
+    let landed = false;
+    for (let i = 0; i < 120 && !landed; i++) {
+      world.step(new Map([['p1', input(aim)]]));
+      landed = crateOf(world).pos.y < 0.31;
+    }
+    expect(landed).toBe(true);
+    const crate = crateOf(world).pos;
+    expect(Math.hypot(crate.x - feet.x, crate.z - feet.z)).toBeGreaterThan(3);
+  });
+
+  test('two players pressing on one tick for one crate: the earlier joiner gets it', () => {
+    const world = standBeside(['p1', 'p2']);
+    press(world, ['p1', 'p2']);
+    expect(handsOf(world, 'p1')).toBe('crate-1');
+    expect(handsOf(world, 'p2')).toBeNull();
+  });
+
+  test('a crate someone holds is not offered to the next player', () => {
+    const world = standBeside(['p1', 'p2']);
+    press(world, ['p1']);
+    press(world, ['p2']);
+    expect(handsOf(world, 'p2')).toBeNull();
+    expect(handsOf(world, 'p1')).toBe('crate-1');
+  });
+
+  test('a heavy barrier cannot be picked up', () => {
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+    world.addPlayer('p1');
+    run(world, 30, new Map());
+    world.teleportPlayer('p1', vec3(-10, 0.02, 10 + 0.4 + 1));
+    run(world, 30, new Map());
+    press(world, ['p1'], { yaw: 0, pitch: -0.2 });
+    expect(handsOf(world, 'p1')).toBeNull();
+  });
+
+  test('K6: a holder who falls below the kill plane gets the crate back at its spawn when they respawn', () => {
+    const world = standBeside();
+    press(world, ['p1']);
+    world.teleportPlayer('p1', vec3(60, world.course.killPlaneY - 1, 40));
+    let respawned = false;
+    for (let i = 0; i < 5 * TICK_RATE && !respawned; i++) {
+      respawned = world.step(new Map()).some((event) => event.kind === 'respawn');
+    }
+    expect(respawned).toBe(true);
+    expect(handsOf(world, 'p1')).toBeNull();
+    const crate = crateOf(world);
+    expect(crate.pos.x).toBeCloseTo(10, 2);
+    expect(crate.pos.y).toBeCloseTo(0.3, 2);
+    expect(crate.pos.z).toBeCloseTo(8, 2);
+    expect(world.debugBody('crate-1')!.isDynamic()).toBe(true);
+  });
+
+  test('K6: removing the holder drops the crate, dynamic again; teleporting keeps it in the hands', () => {
+    const world = standBeside(['p1', 'p2']);
+    press(world, ['p1']);
+    world.teleportPlayer('p1', vec3(60, 0.02, 40));
+    world.step(new Map());
+    expect(handsOf(world, 'p1')).toBe('crate-1');
+    expect(crateOf(world).pos.x).toBeCloseTo(60 + HOLD_OFFSET.x, 1);
+    world.removePlayer('p1');
+    expect(world.debugBody('crate-1')!.isDynamic()).toBe(true);
+    run(world, 60, new Map());
+    expect(crateOf(world).pos.y).toBeLessThan(0.35);
+  });
 });

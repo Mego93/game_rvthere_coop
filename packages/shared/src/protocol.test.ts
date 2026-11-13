@@ -133,6 +133,7 @@ const onFoot = {
   pos: { x: 1, y: 0, z: 2 },
   yaw: 0.5,
   seat: null,
+  hands: null,
   ground: null,
   walk: { x: 1, z: -2 },
   carry: { x: 0, z: 0 },

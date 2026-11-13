@@ -77,6 +77,8 @@ export interface PlayerSnapshot {
   pos: Vec3;
   yaw: number;
   seat: string | null;
+  // The id of the prop in the hands.
+  hands: string | null;
   ground: { bodyId: string; localPos: Vec3 } | null;
   // The state the local client's predictor resets to.
   walk: { x: number; z: number };

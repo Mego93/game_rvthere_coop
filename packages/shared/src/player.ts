@@ -7,14 +7,16 @@ import {
   PLAYER_RADIUS,
   PLAYER_STEP_HEIGHT,
   PLAYER_WALK_SPEED,
+  HOLD_OFFSET,
   PUSH_HEIGHT,
   PUSH_TIPPED_DEG,
   SHOVE_MAX_DISTANCE,
   SHOVE_STEP,
+  THROW_SPEED,
 } from './constants';
 import type { BuiltCourse } from './course';
 import { GROUP_GROUND, GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
-import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, sub, vec3, yawOf, type Quat, type Vec3 } from './math';
+import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, sub, vec3, yawOf, type Pose, type Quat, type Vec3 } from './math';
 import { exitPoints } from './seats';
 import { NEUTRAL_INPUT, type InputFields } from './protocol';
 import type { Props } from './props';
@@ -45,6 +47,8 @@ export interface PlayerState {
   grounded: boolean;
   ground: GroundRef | null;
   seat: string | null;
+  // The id of the prop being held.
+  hands: string | null;
   // Seconds left below the kill plane.
   respawnIn: number | null;
 }
@@ -69,6 +73,14 @@ export interface Players {
   teleport(id: string, pos: Vec3): void;
   // The pushes found by the last stepOnFoot, cleared by the call (rule F4).
   takePushIntents(): PushIntent[];
+  // Rule K2: false when the player is seated, has full hands, or the prop is held or unknown.
+  pickUp(id: string, propId: string): boolean;
+  // Rule K3, along the given aim; does nothing with empty hands.
+  throwHeld(id: string, yaw: number, pitch: number): void;
+  // Rule K6: the held prop returns to its spawn.
+  resetHeld(id: string): void;
+  // Where the player's held prop is placed: the hold pose, or null with empty hands.
+  holdPose(id: string): Pose | null;
   // Rule S1.
   findSpawn(forId: string | null): Vec3;
   findExit(seat: SeatConfig): Vec3 | null;
@@ -288,6 +300,47 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     placeCollider(state.id);
   };
 
+  const yawQuat = (yaw: number): Quat => quatFromAxisAngle(AXIS_Y, yaw);
+  const holdPoseAt = (feet: Vec3, yaw: number): Pose => {
+    const rot = yawQuat(yaw);
+    return { pos: add(feet, rotate(rot, HOLD_OFFSET)), rot };
+  };
+
+  const cuboids = new Map<string, InstanceType<Rapier['Cuboid']>>();
+  const boxBlocked = (pose: Pose, kind: string, half: Vec3): boolean => {
+    let shape = cuboids.get(kind);
+    if (!shape) {
+      shape = new rapier.Cuboid(half.x, half.y, half.z);
+      cuboids.set(kind, shape);
+    }
+    let blocked = false;
+    physics.intersectionsWithShape(
+      pose.pos,
+      pose.rot,
+      shape,
+      () => {
+        blocked = true;
+        return false;
+      },
+      undefined,
+      worldGroups,
+    );
+    return blocked;
+  };
+
+  // Rules K3 and K5: released at the hold pose, or above the head when that spot is blocked.
+  const releaseHeld = (state: PlayerState, yaw: number, velocity: Vec3) => {
+    const prop = state.hands === null ? undefined : props.get(state.hands);
+    state.hands = null;
+    if (!prop) return;
+    const half = prop.config.halfExtents;
+    const pose = holdPoseAt(state.pos, yaw);
+    const at = boxBlocked(pose, prop.kind, half)
+      ? { pos: add(state.pos, vec3(0, PLAYER_HEIGHT + half.y + 0.05, 0)), rot: pose.rot }
+      : pose;
+    props.release(prop.id, at.pos, at.rot, velocity);
+  };
+
   let intents: PushIntent[] = [];
 
   // Rules H1 to H3: one intent per body this player walked into the side of.
@@ -359,6 +412,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         grounded: true,
         ground: null,
         seat: null,
+        hands: null,
         respawnIn: null,
       };
       const collider = physics.createCollider(
@@ -372,6 +426,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     remove(id) {
       const entry = entries.get(id);
       if (!entry) return;
+      releaseHeld(entry.state, entry.state.yaw, vec3(0, 0, 0));
       physics.removeCollider(entry.collider, false);
       entries.delete(id);
     },
@@ -397,6 +452,16 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         }
         move(state, step);
       }
+      // Rule K4.
+      for (const { state } of entries.values()) {
+        const prop = state.hands === null ? undefined : props.get(state.hands);
+        if (!prop) continue;
+        const pose = holdPoseAt(state.pos, state.yaw);
+        prop.body.setTranslation(pose.pos, true);
+        prop.body.setRotation(pose.rot, true);
+        prop.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        prop.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      }
     },
     setSeat(id, seatId, pos) {
       const state = entries.get(id)?.state;
@@ -409,6 +474,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         return;
       }
       if (!seatConfig(seatId)) return;
+      releaseHeld(state, state.yaw, vec3(0, 0, 0));
       state.seat = seatId;
       state.respawnIn = null;
       placeSeated(state);
@@ -425,6 +491,38 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       const taken = intents;
       intents = [];
       return taken;
+    },
+    pickUp(id, propId) {
+      const state = entries.get(id)?.state;
+      const prop = props.get(propId);
+      if (!state || !prop || state.seat !== null || state.hands !== null) return false;
+      if (prop.heldBy !== null || prop.config.class !== 'light') return false;
+      props.hold(propId, id);
+      state.hands = propId;
+      return true;
+    },
+    throwHeld(id, yaw, pitch) {
+      const state = entries.get(id)?.state;
+      if (!state || state.hands === null) return;
+      const { dir } = aimRay(state.pos, yaw, pitch);
+      // Rule R13: a thrower on a body adds that body's velocity at their feet.
+      const base = state.ground
+        ? (() => {
+            const under = velocityAt(bodyOf(state.ground.bodyId).body, state.pos);
+            return { x: under.x + state.walk.x, z: under.z + state.walk.z };
+          })()
+        : { x: state.walk.x + state.carry.x, z: state.walk.z + state.carry.z };
+      releaseHeld(state, yaw, vec3(dir.x * THROW_SPEED + base.x, dir.y * THROW_SPEED, dir.z * THROW_SPEED + base.z));
+    },
+    resetHeld(id) {
+      const state = entries.get(id)?.state;
+      if (!state || state.hands === null) return;
+      props.resetToSpawn(state.hands);
+      state.hands = null;
+    },
+    holdPose(id) {
+      const state = entries.get(id)?.state;
+      return state && state.hands !== null ? holdPoseAt(state.pos, state.yaw) : null;
     },
     findSpawn,
     findExit,

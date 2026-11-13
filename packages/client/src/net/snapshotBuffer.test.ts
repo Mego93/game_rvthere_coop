@@ -105,6 +105,7 @@ const player = (playerId: string, x: number, yaw: number): PlayerSnapshot => ({
   pos: vec3(x, 0, 0),
   yaw,
   seat: null,
+  hands: null,
   ground: null,
   walk: { x: 0, z: 0 },
   carry: { x: 0, z: 0 },
@@ -157,6 +158,13 @@ test('seat and ground come from the newer snapshot', () => {
   const view = pair([seated], [standing]).sample((9 + DELAY_TICKS) * TICK_DT)!;
   expect(view.players[0]!.seat).toBeNull();
   expect(view.players[0]!.ground).toEqual({ bodyId: 'vehicle', localPos: vec3(1, 2, 3) });
+});
+
+test('hands come from the newer snapshot', () => {
+  const holding = { ...player('a', 0, 0), hands: 'crate-1' };
+  const view = pair([player('a', 0, 0)], [holding]).sample((9 + DELAY_TICKS) * TICK_DT)!;
+  expect(view.players[0]!.hands).toBe('crate-1');
+  expect(pair([holding], [player('a', 0, 0)]).sample((9 + DELAY_TICKS) * TICK_DT)!.players[0]!.hands).toBeNull();
 });
 
 test('walk, carry, vy and grounded come from the newer snapshot, as new objects', () => {

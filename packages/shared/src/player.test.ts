@@ -6,7 +6,9 @@ import {
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
   PLAYER_WALK_SPEED,
+  HOLD_OFFSET,
   SEAT_EXIT_DISTANCE,
+  THROW_SPEED,
   TICK_DT,
   TICK_RATE,
 } from './constants';
@@ -897,5 +899,186 @@ describe('standing on props', () => {
     props.get('crate-1')!.body.setTranslation({ x: 10, y: testGround.killPlaneY - 5, z: 8 }, true);
     tick({});
     expect(player.ground).toBeNull();
+  });
+});
+
+describe('hands', () => {
+  const OPEN = vec3(30, 0.02, 20);
+  const CRATE_1_CENTRE = vec3(10, 0.3, 8);
+  const holdPoint = (feet: Vec3, yaw: number) => ({
+    pos: vec3(feet.x, feet.y, feet.z),
+    rot: quatFromAxisAngle(AXIS_Y, yaw),
+  });
+
+  // A player in open ground holding crate-1.
+  function holder(course: BuiltCourse = testGround) {
+    const h = harness(course);
+    const player = h.players.add('p1');
+    h.players.teleport('p1', OPEN);
+    h.run(30);
+    expect(h.players.pickUp('p1', 'crate-1')).toBe(true);
+    h.run(1);
+    return { ...h, player };
+  }
+
+  test('pickUp sets the hands and holds the prop; a second pickUp, a held prop and a heavy one are refused', () => {
+    const { players, props } = harness();
+    const player = players.add('p1');
+    const other = players.add('p2');
+    expect(players.pickUp('p1', 'crate-1')).toBe(true);
+    expect(player.hands).toBe('crate-1');
+    expect(props.get('crate-1')!.heldBy).toBe('p1');
+    expect(players.pickUp('p1', 'crate-2')).toBe(false);
+    expect(players.pickUp('p2', 'crate-1')).toBe(false);
+    expect(players.pickUp('p2', 'barrier-1')).toBe(false);
+    expect(players.pickUp('p2', 'nothing')).toBe(false);
+    expect(other.hands).toBeNull();
+    players.setSeat('p2', 'driver');
+    expect(players.pickUp('p2', 'crate-2')).toBe(false);
+  });
+
+  test('the held prop is placed at the hold pose after every tick of walking', () => {
+    const { player, players, props, tick } = holder();
+    let yaw = 0;
+    for (let i = 0; i < 60; i++) {
+      yaw += 0.03;
+      tick({ p1: { moveY: 1, yaw } });
+      const pose = players.holdPose('p1')!;
+      const turn = holdPoint(player.pos, yaw).rot;
+      const expected = rotate(turn, HOLD_OFFSET);
+      expect(pose.pos.x).toBeCloseTo(player.pos.x + expected.x, 9);
+      expect(pose.pos.y).toBeCloseTo(player.pos.y + HOLD_OFFSET.y, 9);
+      expect(pose.pos.z).toBeCloseTo(player.pos.z + expected.z, 9);
+      const centre = props.get('crate-1')!.body.translation();
+      expect(centre.x).toBeCloseTo(pose.pos.x, 4);
+      expect(centre.y).toBeCloseTo(pose.pos.y, 4);
+      expect(centre.z).toBeCloseTo(pose.pos.z, 4);
+      expect(yawOf(props.get('crate-1')!.body.rotation())).toBeCloseTo(yaw, 4);
+    }
+    expect(Math.hypot(player.pos.x - OPEN.x, player.pos.z - OPEN.z)).toBeGreaterThan(2);
+  });
+
+  test('holdPose is null with empty hands', () => {
+    const { players } = harness();
+    players.add('p1');
+    expect(players.holdPose('p1')).toBeNull();
+  });
+
+  test('a throw leaves along the aim at THROW_SPEED and the crate lands more than 3 m from the feet', () => {
+    const { player, players, props, tick } = holder();
+    const feet = { ...player.pos };
+    players.throwHeld('p1', Math.PI / 2, 0);
+    const body = props.get('crate-1')!.body;
+    expect(player.hands).toBeNull();
+    expect(props.get('crate-1')!.heldBy).toBeNull();
+    const v = body.linvel();
+    // Yaw pi/2 faces -X.
+    expect(v.x).toBeCloseTo(-THROW_SPEED, 5);
+    expect(v.y).toBeCloseTo(0, 5);
+    expect(v.z).toBeCloseTo(0, 5);
+    let landed = false;
+    for (let i = 0; i < 120 && !landed; i++) {
+      tick({});
+      landed = body.translation().y < 0.31;
+    }
+    expect(landed).toBe(true);
+    expect(Math.hypot(body.translation().x - feet.x, body.translation().z - feet.z)).toBeGreaterThan(3);
+  });
+
+  test('a throw upward at pitch 45 degrees has the matching vertical speed', () => {
+    const { players, props } = holder();
+    players.throwHeld('p1', 0, Math.PI / 4);
+    const v = props.get('crate-1')!.body.linvel();
+    expect(v.y).toBeCloseTo(THROW_SPEED * Math.SQRT1_2, 5);
+    expect(v.z).toBeCloseTo(-THROW_SPEED * Math.SQRT1_2, 5);
+  });
+
+  test('R13: the thrower\'s own velocity is added: walking on foot, and standing on the moving vehicle', () => {
+    const walking = holder();
+    walking.run(20, { p1: { moveY: 1 } });
+    expect(walking.player.walk.z).toBeCloseTo(-PLAYER_WALK_SPEED, 3);
+    walking.players.throwHeld('p1', 0, 0);
+    expect(walking.props.get('crate-1')!.body.linvel().z).toBeCloseTo(-(THROW_SPEED + PLAYER_WALK_SPEED), 4);
+
+    const { rig, players, props, tick, run } = harness();
+    const player = players.add('p1');
+    const body = rig.vehicle.body.translation();
+    players.teleport('p1', vec3(body.x, body.y + LODGY.halfExtents.y + 0.1, body.z));
+    run(30);
+    players.pickUp('p1', 'crate-1');
+    rig.vehicle.body.setLinvel({ x: 0, y: 0, z: -5 }, true);
+    tick({});
+    expect(player.ground?.bodyId).toBe('vehicle');
+    players.throwHeld('p1', 0, 0);
+    expect(props.get('crate-1')!.body.linvel().z).toBeCloseTo(-(THROW_SPEED + 5), 0);
+  });
+
+  test('K3: with a wall in the way of the hold pose the prop is released above the head instead', () => {
+    const wall = { center: vec3(OPEN.x, 1.5, OPEN.z - 0.8), halfExtents: vec3(3, 1.5, 0.3), rot: IDENTITY };
+    const { player, players, props } = holder(withBoxes(testGround, { walls: [wall] }));
+    players.throwHeld('p1', 0, 0);
+    const centre = props.get('crate-1')!.body.translation();
+    expect(centre.x).toBeCloseTo(player.pos.x, 6);
+    expect(centre.z).toBeCloseTo(player.pos.z, 6);
+    expect(centre.y).toBeCloseTo(player.pos.y + PLAYER_HEIGHT + 0.3 + 0.05, 6);
+    expect(props.get('crate-1')!.body.linvel().z).toBeCloseTo(-THROW_SPEED, 5);
+  });
+
+  test('K3: with free space the throw starts at the hold pose', () => {
+    const { player, players, props } = holder();
+    players.throwHeld('p1', 0, 0);
+    const centre = props.get('crate-1')!.body.translation();
+    expect(centre.x).toBeCloseTo(player.pos.x, 6);
+    expect(centre.y).toBeCloseTo(player.pos.y + HOLD_OFFSET.y, 6);
+    expect(centre.z).toBeCloseTo(player.pos.z + HOLD_OFFSET.z, 6);
+  });
+
+  test('throwing with empty hands does nothing', () => {
+    const { players, props } = harness();
+    players.add('p1');
+    players.throwHeld('p1', 0, 0);
+    expect(props.get('crate-1')!.heldBy).toBeNull();
+  });
+
+  test('K5 (R3): seating a player who holds a prop drops it at the hold pose, at rest, dynamic again', () => {
+    const { player, players, props, tick } = holder();
+    const pose = players.holdPose('p1')!;
+    players.setSeat('p1', 'driver');
+    expect(player.seat).toBe('driver');
+    expect(player.hands).toBeNull();
+    const prop = props.get('crate-1')!;
+    expect(prop.heldBy).toBeNull();
+    expect(prop.body.isDynamic()).toBe(true);
+    expect(prop.body.translation().y).toBeCloseTo(pose.pos.y, 6);
+    expect(prop.body.linvel()).toEqual({ x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 60; i++) tick({});
+    expect(prop.body.translation().y).toBeLessThan(0.35);
+  });
+
+  test('K6: removing the holder releases the prop at the hold pose with zero velocity', () => {
+    const { players, props } = holder();
+    const pose = players.holdPose('p1')!;
+    players.remove('p1');
+    const prop = props.get('crate-1')!;
+    expect(prop.heldBy).toBeNull();
+    expect(prop.body.isDynamic()).toBe(true);
+    expect(prop.body.translation().x).toBeCloseTo(pose.pos.x, 6);
+    expect(prop.body.translation().y).toBeCloseTo(pose.pos.y, 6);
+    expect(prop.body.linvel()).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  test('K6: resetHeld sends the prop home and empties the hands; teleporting keeps it', () => {
+    const { player, players, props, tick } = holder();
+    players.teleport('p1', vec3(40, 0.02, 25));
+    expect(player.hands).toBe('crate-1');
+    tick({});
+    expect(props.get('crate-1')!.body.translation().x).toBeCloseTo(40, 6);
+    players.resetHeld('p1');
+    expect(player.hands).toBeNull();
+    const prop = props.get('crate-1')!;
+    expect(prop.heldBy).toBeNull();
+    expect(prop.body.translation().x).toBeCloseTo(CRATE_1_CENTRE.x, 6);
+    expect(prop.body.translation().y).toBeCloseTo(CRATE_1_CENTRE.y, 6);
+    expect(prop.body.translation().z).toBeCloseTo(CRATE_1_CENTRE.z, 6);
   });
 });

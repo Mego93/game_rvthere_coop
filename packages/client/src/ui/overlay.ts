@@ -1,11 +1,12 @@
 import {
-  chooseSeat,
   dot,
+  interactCandidates,
   resolveInteract,
   rotate,
   vec3,
   type LobbyMessage,
   type PlayerSnapshot,
+  type PropSnapshot,
   type VehicleConfig,
   type Vec3,
   type VehicleState,
@@ -27,6 +28,10 @@ export interface OverlayData {
   predicted: Vec3 | null;
   // The local player's position in the latest snapshot (not interpolated), or null if absent.
   server: Vec3 | null;
+  // The local mouse look, which is what interact aims with.
+  aim: { yaw: number; pitch: number };
+  // The props in the sampled world.
+  propPoses: PropSnapshot[];
 }
 
 // What pressing interact would do for the local player, or null if nothing.
@@ -35,18 +40,40 @@ export function interactHint(
   vehicle: VehicleState,
   local: PlayerSnapshot,
   players: PlayerSnapshot[],
+  yaw: number,
+  pitch: number,
+  props: readonly PropSnapshot[],
 ): string | null {
-  const taken = new Set<string>();
-  for (const player of players) if (player.seat !== null) taken.add(player.seat);
-  const seatChoice = local.seat === null ? chooseSeat(config, vehicle.pos, vehicle.rot, local.pos, taken) : null;
-  const action = resolveInteract({ seat: local.seat, seatChoice });
+  const takenSeats = new Set<string>();
+  const heldProps = new Set<string>();
+  for (const player of players) {
+    if (player.seat !== null) takenSeats.add(player.seat);
+    if (player.hands !== null) heldProps.add(player.hands);
+  }
+  const candidates =
+    local.seat === null && local.hands === null
+      ? interactCandidates({
+          config,
+          vehiclePos: vehicle.pos,
+          vehicleRot: vehicle.rot,
+          feet: local.pos,
+          yaw,
+          pitch,
+          takenSeats,
+          props,
+          heldProps,
+        })
+      : [];
+  const action = resolveInteract({ seat: local.seat, hands: local.hands, candidates });
   if (action?.kind === 'exitSeat') return 'E to leave the seat';
+  if (action?.kind === 'throw') return 'E to throw';
   if (action?.kind === 'board') return 'E to board';
+  if (action?.kind === 'pickUp') return 'E to pick up';
   return null;
 }
 
 // The debug text shown until the real HUD exists.
-export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server }: OverlayData): string {
+export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses }: OverlayData): string {
   const names = lobby.players.map((player) => {
     const snapshot = players.find((candidate) => candidate.playerId === player.playerId);
     return snapshot ? `${player.name} (${snapshot.seat ?? 'on foot'})` : player.name;
@@ -69,7 +96,7 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
       if (server) lines.push(`server   ${fixed(server.x)} ${fixed(server.y)} ${fixed(server.z)}`);
     }
     const local = players.find((player) => player.playerId === localId);
-    const hint = local ? interactHint(config, vehicle, local, players) : null;
+    const hint = local ? interactHint(config, vehicle, local, players, aim.yaw, aim.pitch, propPoses) : null;
     if (hint) lines.push(`hint     ${hint}`);
   } else {
     lines.push('waiting for the server…');
