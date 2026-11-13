@@ -1,5 +1,6 @@
 export * from './constants';
 export * from './checkpoints';
+export * from './coins';
 export * from './course';
 export * from './courses/build';
 export * from './courses/index';

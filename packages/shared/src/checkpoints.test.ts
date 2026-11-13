@@ -115,6 +115,9 @@ describe('recordState', () => {
       index: 1,
       fuel: 0.4,
       health: 0.9,
+      coinsLeft: ['coin-2'],
+      wallet: 1,
+      coinsCollected: 1,
       props: [moved('a', 9), moved('b', 8)],
       heldIds: new Set(['a']),
       courseProps: placed,
@@ -129,6 +132,7 @@ describe('recordState', () => {
     expect(record.players.get('p1')!.inventory).toEqual(['toolbox', null, null]);
     expect(record.players.get('p1')!.health).toBe(70);
     expect(record.fuel).toBe(0.4);
+    expect([record.coinsLeft, record.wallet, record.coinsCollected]).toEqual([['coin-2'], 1, 1]);
   });
 });
 

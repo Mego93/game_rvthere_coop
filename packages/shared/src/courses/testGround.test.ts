@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, expect, test } from 'vitest';
-import { ANCHOR_HEIGHT, GRAVITY, ITEM_KINDS, PROP_KINDS, REFERENCE_SLOPES_DEG, type ReferenceSlope } from '../constants';
+import { ANCHOR_HEIGHT, COIN_HEIGHT, GRAVITY, ITEM_KINDS, PROP_KINDS, REFERENCE_SLOPES_DEG, type ReferenceSlope } from '../constants';
 import { degToRad } from '../math';
 import { buildStatics } from '../statics';
 import { getCourse } from './index';
@@ -94,4 +94,13 @@ test('the three anchors exist; anchor-2 lies on the steep slope and anchor-3 is 
   expect(three.x).toBe(SAND_PATCH_CENTER.x);
   expect(three.z).toBe(SAND_PATCH_CENTER.z - 15 - 10);
   expect(ANCHOR_HEIGHT).toBe(0.5);
+});
+
+test('four coins, coin-1 to coin-4, float at the planned positions', () => {
+  expect(testGround.coins.map((coin) => [coin.id, coin.kind, coin.pose.pos.x, coin.pose.pos.y, coin.pose.pos.z])).toEqual([
+    ['coin-1', 'coin', 3, COIN_HEIGHT, -12],
+    ['coin-2', 'coin', -3, COIN_HEIGHT, -28],
+    ['coin-3', 'coin', 6, COIN_HEIGHT, -36],
+    ['coin-4', 'coin', -6, COIN_HEIGHT, -44],
+  ]);
 });

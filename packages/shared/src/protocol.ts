@@ -297,6 +297,13 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         isCount(data.checkpointCount) &&
         isCount(data.restarts) &&
         isCount(data.respawns) &&
+        Array.isArray(data.coinsLeft) &&
+        data.coinsLeft.every(isText) &&
+        isCount(data.wallet) &&
+        isCount(data.coinsCollected) &&
+        isCount(data.coinsTotal) &&
+        data.coinsLeft.length <= data.coinsTotal &&
+        data.coinsCollected <= data.coinsTotal &&
         typeof data.won === 'boolean' &&
         typeof data.full === 'boolean' &&
         isVehicleState(data.vehicle) &&

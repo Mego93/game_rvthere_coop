@@ -1,4 +1,4 @@
-import { REFERENCE_SLOPES_DEG, type ReferenceSlope, type Surface } from '../constants';
+import { COIN_HEIGHT, REFERENCE_SLOPES_DEG, type ReferenceSlope, type Surface } from '../constants';
 import type { BuiltCourse, GroundBox } from '../course';
 import { AXIS_X, IDENTITY, add, deepFreeze, degToRad, quatFromAxisAngle, rotate, vec3, type Pose, type Vec3 } from '../math';
 
@@ -56,7 +56,12 @@ export const testGround: BuiltCourse = deepFreeze({
     { id: 'anchor-3', kind: 'milestone', pose: { pos: vec3(SAND_PATCH_CENTER.x, 0, SAND_PATCH_CENTER.z - 25), rot: IDENTITY } },
   ],
   stops: [],
-  coins: [],
+  coins: [
+    { id: 'coin-1', kind: 'coin', pose: { pos: vec3(3, COIN_HEIGHT, -12), rot: IDENTITY } },
+    { id: 'coin-2', kind: 'coin', pose: { pos: vec3(-3, COIN_HEIGHT, -28), rot: IDENTITY } },
+    { id: 'coin-3', kind: 'coin', pose: { pos: vec3(6, COIN_HEIGHT, -36), rot: IDENTITY } },
+    { id: 'coin-4', kind: 'coin', pose: { pos: vec3(-6, COIN_HEIGHT, -44), rot: IDENTITY } },
+  ],
   decor: [],
   checkpoints: [
     {

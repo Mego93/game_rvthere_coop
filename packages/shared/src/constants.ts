@@ -316,3 +316,25 @@ export const FINISH_TRIGGER: Vec3 = deepFreeze(vec3(ROAD_WIDTH / 2, 2, 2));
 // Checkpoints.
 // Fuel and vehicle health are restored at least to this on a restart.
 export const RESTART_FLOOR = 0.5;
+
+// Coins, stops and shops.
+// m, the coin's touch sphere.
+export const COIN_RADIUS = 0.5;
+// s added to the final time per checkpoint restart.
+export const FINAL_RESTART_PENALTY = 60;
+// s added per player respawn.
+export const FINAL_RESPAWN_PENALTY = 30;
+// s taken off per coin left in the wallet.
+export const FINAL_COIN_BONUS = 5;
+// m, feet to the operate point (3D).
+export const STOP_OPERATE_RANGE = 2;
+// m, feet to the counter's box (3D).
+export const SHOP_RANGE = 2;
+// Coins per item.
+export const SHOP_PRICES: Record<ItemKind, number> = deepFreeze({ jerrycan: 3, toolbox: 3, healthKit: 2 });
+// Half extents of the counter box; it is centred 0.5 m above the counter point and unrotated.
+export const SHOP_COUNTER_HALF: Vec3 = deepFreeze(vec3(0.6, 0.5, 0.3));
+// m between consecutive snapshots of the local player beyond which the shop menu closes.
+export const SHOP_MENU_TELEPORT = 2;
+// s the shop menu shows a refusal.
+export const SHOP_ERROR_SECONDS = 2;

@@ -13,6 +13,9 @@ export interface CheckpointRecord {
   index: number;
   fuel: number;
   health: number;
+  coinsLeft: string[];
+  wallet: number;
+  coinsCollected: number;
   props: Map<string, BodyPose>;
   items: { id: string; kind: ItemKind; centre: Vec3; rot: Quat }[];
   players: Map<string, { inventory: (ItemKind | null)[]; health: number }>;
@@ -59,6 +62,9 @@ export interface RecordInput {
   index: number;
   fuel: number;
   health: number;
+  coinsLeft: readonly string[];
+  wallet: number;
+  coinsCollected: number;
   props: PropSnapshot[];
   heldIds: ReadonlySet<string>;
   courseProps: readonly Placed[];
@@ -81,6 +87,9 @@ export function recordState(input: RecordInput): CheckpointRecord {
     index: input.index,
     fuel: input.fuel,
     health: input.health,
+    coinsLeft: [...input.coinsLeft],
+    wallet: input.wallet,
+    coinsCollected: input.coinsCollected,
     props,
     items: input.items.map((item) => ({ id: item.id, kind: item.kind as ItemKind, centre: { ...item.pos }, rot: { ...item.rot } })),
     players: new Map(input.players.map((player) => [player.id, { inventory: [...player.inventory], health: player.health }])),

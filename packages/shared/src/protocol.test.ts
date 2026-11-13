@@ -151,7 +151,7 @@ const seated = { ...onFoot, playerId: 'p2', seat: 'driver' };
 const onVehicle = { ...onFoot, playerId: 'p3', ground: { bodyId: 'vehicle', localPos: { x: 0, y: 1, z: 0 } } };
 const crate = { id: 'crate-1', kind: 'crate', pos: { x: 1, y: 0.3, z: 2 }, rot: { x: 0, y: 0, z: 0, w: 1 } };
 const cable = { state: 'attached', holderId: null, anchorId: 'anchor-1', hookPos: { x: 1, y: 0.5, z: -20 }, length: 12.5, reel: 1 };
-const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle, players: [onFoot], props: [crate], cable, elapsed: 0.5, checkpoint: 0, checkpointCount: 2, restarts: 0, respawns: 0, won: false };
+const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle, players: [onFoot], props: [crate], cable, elapsed: 0.5, checkpoint: 0, checkpointCount: 2, restarts: 0, respawns: 0, won: false, coinsLeft: ['coin-1'], wallet: 0, coinsCollected: 1, coinsTotal: 2 };
 const lobby = {
   type: 'lobby',
   room: 'camel',
@@ -213,6 +213,12 @@ test.each([
   ['a snapshot without checkpointCount', JSON.stringify({ ...snapshot, checkpointCount: undefined })],
   ['a snapshot whose restarts is text', JSON.stringify({ ...snapshot, restarts: '1' })],
   ['a snapshot whose respawns is negative', JSON.stringify({ ...snapshot, respawns: -1 })],
+  ['a snapshot whose coinsLeft is not an array', JSON.stringify({ ...snapshot, coinsLeft: 'coin-1' })],
+  ['a snapshot whose coinsLeft holds a number', JSON.stringify({ ...snapshot, coinsLeft: [1] })],
+  ['a snapshot with more coinsLeft than coinsTotal', JSON.stringify({ ...snapshot, coinsLeft: ['a', 'b', 'c'] })],
+  ['a snapshot whose wallet is negative', JSON.stringify({ ...snapshot, wallet: -1 })],
+  ['a snapshot whose coinsTotal is text', JSON.stringify({ ...snapshot, coinsTotal: '2' })],
+  ['a snapshot whose coinsCollected exceeds coinsTotal', JSON.stringify({ ...snapshot, coinsCollected: 3 })],
   ['a snapshot without won', JSON.stringify({ ...snapshot, won: undefined })],
   ['a snapshot whose won is a number', JSON.stringify({ ...snapshot, won: 1 })],
   ['a snapshot whose ackSeq is missing', JSON.stringify({ ...snapshot, ackSeq: undefined })],

@@ -26,6 +26,8 @@ export interface SnapshotBuffer {
   latestCable(): CableSnapshot | null;
   // The run's clock and counters as of the newest snapshot, or null before any.
   latestStatus(): RunStatus | null;
+  // The ids of the coins still on the course as of the newest snapshot; empty before any.
+  latestCoinsLeft(): string[];
 }
 
 export interface RunStatus {
@@ -35,6 +37,9 @@ export interface RunStatus {
   restarts: number;
   respawns: number;
   won: boolean;
+  wallet: number;
+  coinsCollected: number;
+  coinsTotal: number;
 }
 
 function blend(a: VehicleState, b: VehicleState, t: number): VehicleState {
@@ -167,9 +172,10 @@ export function createSnapshotBuffer(): SnapshotBuffer {
     latestStatus() {
       const newest = entries[entries.length - 1]?.snapshot;
       if (!newest) return null;
-      const { elapsed, checkpoint, checkpointCount, restarts, respawns, won } = newest;
-      return { elapsed, checkpoint, checkpointCount, restarts, respawns, won };
+      const { elapsed, checkpoint, checkpointCount, restarts, respawns, won, wallet, coinsCollected, coinsTotal } = newest;
+      return { elapsed, checkpoint, checkpointCount, restarts, respawns, won, wallet, coinsCollected, coinsTotal };
     },
+    latestCoinsLeft: () => [...(entries[entries.length - 1]?.snapshot.coinsLeft ?? [])],
     latestProps: () => (entries[entries.length - 1]?.snapshot.props ?? []).map(copyProp),
   };
 }

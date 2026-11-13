@@ -271,7 +271,7 @@ test('hints to refuel or repair when the selected item suits the vehicle and it 
   expect(lines([holding({ inventory: ['toString' as never, null, null] })], low).some((line) => line.includes('Hold F'))).toBe(false);
 });
 
-const run = (overrides: Partial<RunStatus> = {}): RunStatus => ({ elapsed: 0, checkpoint: 0, checkpointCount: 2, restarts: 0, respawns: 0, won: false, ...overrides });
+const run = (overrides: Partial<RunStatus> = {}): RunStatus => ({ elapsed: 0, checkpoint: 0, checkpointCount: 2, restarts: 0, respawns: 0, won: false, wallet: 0, coinsCollected: 0, coinsTotal: 4, ...overrides });
 const withStatus = (status: RunStatus | null) =>
   overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [], localId: 'p1', predicted: null, server: null, ...noAim, status });
 

@@ -1,4 +1,5 @@
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
+import { coinTouched } from './coins';
 import { DROP_HEIGHT, GRAVITY, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
@@ -9,7 +10,7 @@ import { createItems } from './items';
 import { interactCandidates, resolveInteract, splitCandidates } from './interact';
 import type { ItemKind } from './constants';
 import { aimRay, createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
-import { elapsedAfter, reachedFinish, vehicleLost } from './rules';
+import { elapsedAfter, finalTime, reachedFinish, vehicleLost } from './rules';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
 import { NEUTRAL_INPUT, type InputFields, type PlayerSnapshot } from './protocol';
@@ -47,6 +48,11 @@ export interface WorldSnapshot {
   restarts: number;
   respawns: number;
   won: boolean;
+  // Ids of the coins still on the course, in course order.
+  coinsLeft: string[];
+  wallet: number;
+  coinsCollected: number;
+  coinsTotal: number;
 }
 
 export interface WorldStatus {
@@ -54,6 +60,10 @@ export interface WorldStatus {
   elapsed: number;
   restarts: number;
   respawns: number;
+  wallet: number;
+  coinsCollected: number;
+  coinsTotal: number;
+  finalTime: number;
 }
 
 export interface WorldDebug {
@@ -124,6 +134,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   let restarts = 0;
   let restartPending = false;
   let respawns = 0;
+  let coinsLeft = course.coins.map((coin) => coin.id);
+  let wallet = 0;
+  let coinsCollected = 0;
   let record: CheckpointRecord;
   let debugDamage: PendingDamage[] = [];
 
@@ -134,6 +147,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       index,
       fuel: vehicle.fuel(),
       health: vehicle.health(),
+      coinsLeft,
+      wallet,
+      coinsCollected,
       props: props.snapshot(),
       heldIds,
       courseProps: course.props,
@@ -370,8 +386,24 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
 
   const respawnPlayer = (player: PlayerState, events: WorldEvent[]) => {
     const pos = players.respawn(player.id);
-    respawns += 1;
+    if (!won) respawns += 1;
     events.push({ kind: 'respawn', tick, playerId: player.id, pos });
+  };
+
+  // Rule V1: the first player in join order to touch a coin takes it.
+  const stepCoins = (events: WorldEvent[]) => {
+    if (won) return;
+    for (const player of players.all()) {
+      if (player.seat !== null || player.downed !== null || player.respawnIn !== null) continue;
+      for (const id of coinsLeft) {
+        const coin = course.coins.find((candidate) => candidate.id === id)!;
+        if (!coinTouched(player.pos, coin.pose.pos)) continue;
+        coinsLeft = coinsLeft.filter((left) => left !== id);
+        wallet += 1;
+        coinsCollected += 1;
+        events.push({ kind: 'coin', tick, playerId: player.id, pos: { ...coin.pose.pos } });
+      }
+    }
   };
 
   // Rules H2, H6 and H7, after the characters have moved and before the kill plane.
@@ -412,7 +444,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       player.health = PLAYER_REVIVE_HEALTH;
       player.downed = null;
       player.hitCooldown.clear();
-      respawns += 1;
+      if (!won) respawns += 1;
       events.push({ kind: 'respawn', tick, playerId: player.id, pos });
     }
   };
@@ -444,6 +476,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       }
     }
     items.restore(record.items);
+    coinsLeft = [...record.coinsLeft];
+    wallet = record.wallet;
+    coinsCollected = record.coinsCollected;
     // Queries see nothing new until the broad phase has run (Rapier 0.21), as at creation.
     physics.timestep = 0;
     physics.step();
@@ -500,6 +535,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       vehicle.afterPhysics();
       const pulled = winch.afterCharacters((id) => players.holdPose(id));
       if (pulled !== null) players.setHands(pulled, null);
+      stepCoins(events);
       stepHealth(events);
       killPlane(events);
       resetLastTick = new Set(props.killPlane(course.killPlaneY));
@@ -549,11 +585,27 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       restarts,
       respawns,
       won,
+      coinsLeft: [...coinsLeft],
+      wallet,
+      coinsCollected,
+      coinsTotal: course.coins.length,
     }),
     restartCheckpoint() {
       if (!won) restartPending = true;
     },
-    status: () => ({ state: won ? 'won' : 'running', elapsed: elapsedAfter(runTicks), restarts, respawns }),
+    status() {
+      const elapsed = elapsedAfter(runTicks);
+      return {
+        state: won ? 'won' : 'running',
+        elapsed,
+        restarts,
+        respawns,
+        wallet,
+        coinsCollected,
+        coinsTotal: course.coins.length,
+        finalTime: finalTime({ elapsed, restarts, respawns, wallet }),
+      };
+    },
     addPlayer: (id) => void players.add(id),
     removePlayer(id) {
       releaseHook(id, 'drop');
