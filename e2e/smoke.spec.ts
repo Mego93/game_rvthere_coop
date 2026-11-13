@@ -16,6 +16,14 @@ async function players(page: Page): Promise<string> {
   return /^players\s+(.*)$/m.exec(text)?.[1] ?? '';
 }
 
+// A position line of the overlay, for example `you` or `server`, as x, y, z; null when the line is absent.
+async function overlayPosition(page: Page, label: string): Promise<[number, number, number] | null> {
+  const text = (await page.locator('#overlay').textContent()) ?? '';
+  const match = new RegExp(`^${label}\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)`, 'm').exec(text);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+const distance = (a: readonly number[], b: readonly number[]) => Math.hypot(...a.map((value, i) => value - b[i]!));
+
 // Uncaught errors in any page of the running test. A page can look right and still have failed, for example in WebGL.
 const pageErrors: string[] = [];
 const watch = (page: Page) => page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -120,6 +128,32 @@ test('two players share a room, board the vehicle, and only the driver drives', 
   for (const page of [amal, badr]) await expect(page.locator('#overlay')).toContainText('players  Amal (on foot), Badr (seat1)');
   for (const page of [amal, badr]) await expect.poll(() => throttle(page)).toBe(0);
   await amal.keyboard.up('KeyW');
+});
+
+test('the local player walks at once and the prediction agrees with the server', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await expect.poll(() => overlayPosition(page, 'you')).not.toBeNull();
+  const start = (await overlayPosition(page, 'you'))!;
+
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(1000);
+  await page.keyboard.up('KeyW');
+  await page.waitForTimeout(500);
+
+  const you = (await overlayPosition(page, 'you'))!;
+  const server = (await overlayPosition(page, 'server'))!;
+  expect(server).not.toBeNull();
+  expect(distance(you, start)).toBeGreaterThan(3);
+  expect(distance(you, server)).toBeLessThan(0.3);
+});
+
+test('a seated player is not predicted: the overlay has no you line', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await expect(page.locator('#overlay')).toContainText('hint     E to board');
+  expect(await overlayPosition(page, 'you')).not.toBeNull();
+  await tap(page, 'KeyE');
+  await expect(page.locator('#overlay')).toContainText('players  Amal (driver)');
+  await expect.poll(() => overlayPosition(page, 'you')).toBeNull();
 });
 
 test('a room can be joined from the home page by typing its name', async ({ browser }) => {
