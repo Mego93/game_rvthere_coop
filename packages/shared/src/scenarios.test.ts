@@ -11,7 +11,7 @@ import {
 } from './constants';
 import type { BuiltCourse } from './course';
 import { SAND_PATCH_CENTER, slopePose, testGround } from './courses/testGround';
-import { AXIS_X, IDENTITY, add, degToRad, dot, length, quatFromAxisAngle, rotate, vec3, type Pose } from './math';
+import { AXIS_X, IDENTITY, add, degToRad, dot, length, quatFromAxisAngle, rotate, sub, vec3, type Pose } from './math';
 import { createProps } from './props';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
 import { createRig, withBoxes } from './testRig';
@@ -181,7 +181,7 @@ describe.each(['lodgy', 'rv'] as const)('the %s on the winch', (id) => {
     const spawn: Pose = { pos: along(8), rot };
     const uphill = rotate(rot, vec3(0, 0, -1));
     const run = winchRun(id, course, spawn, 'stall', { maxSeconds: 20, done: () => false });
-    const gain = dot(vec3(run.rig.vehicle.body.translation().x - spawn.pos.x, run.rig.vehicle.body.translation().y - spawn.pos.y, run.rig.vehicle.body.translation().z - spawn.pos.z), uphill);
+    const gain = dot(sub(run.rig.vehicle.body.translation(), spawn.pos), uphill);
     return { ...run, gain };
   }
 

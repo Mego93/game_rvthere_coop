@@ -593,7 +593,7 @@ describe('the reel and obstacles (world)', () => {
     for (let i = 0; i < ticks; i++) world.step(inputs);
   };
   const cable = (world: World) => world.snapshot().cable;
-  const HOOK_RANGE_FAR = 6;
+  const FAR_FROM_BOX = 6;
   const mountOf = (world: World) => {
     const body = world.debugBody('vehicle')!;
     return add(body.translation(), rotate(body.rotation(), world.vehicleConfig.winchMount));
@@ -639,7 +639,7 @@ describe('the reel and obstacles (world)', () => {
     const { world } = setup(1, 0, tenAhead);
     attach(world, 'anchor-1');
     const before = cable(world).length;
-    standAtBox(world, 'p1', HOOK_RANGE_FAR);
+    standAtBox(world, 'p1', FAR_FROM_BOX);
     run(world, 30, new Map([['p1', input({ reel: 1 })]]));
     expect(cable(world).length).toBe(before);
     standAtBox(world, 'p1');
@@ -670,6 +670,28 @@ describe('the reel and obstacles (world)', () => {
     run(world, 30, new Map([['p2', input({ reel: 1 })]]));
     expect(cable(world).length).toBe(before);
     expect(cable(world).reel).toBe(0);
+    world.dispose();
+  });
+
+  test('of two players at the box the earlier joiner reel applies', () => {
+    const { world } = setup(2, 0, tenAhead);
+    attach(world, 'anchor-1');
+    standAtBox(world, 'p1');
+    standAtBox(world, 'p2');
+    run(world, 20);
+    const before = cable(world).length;
+    run(world, 30, new Map([['p1', input({ reel: 1 })], ['p2', input({ reel: -1 })]]));
+    expect(cable(world).length).toBeCloseTo(before - 0.5, 1);
+    world.dispose();
+  });
+
+  test('a seated driver reeling in with the hook on the ground stows it', () => {
+    const { world } = setup(1, 1);
+    world.debugWinch().take('p1');
+    world.debugWinch().drop(add(mountOf(world), vec3(0, 0, -1)));
+    expect(cable(world).state).toBe('ground');
+    run(world, 2, new Map([['p1', input({ reel: 1 })]]));
+    expect(cable(world).state).toBe('stowed');
     world.dispose();
   });
 
@@ -742,6 +764,8 @@ describe('the reel and obstacles (world)', () => {
       ticks += 1;
     }
     expect(ticks).toBeLessThan(10);
+    const linvel = barrier.linvel();
+    expect(length(vec3(linvel.x, linvel.y, linvel.z))).toBeGreaterThan(1e-6);
     run(world, 5, input1);
     expect(length(sub(barrier.translation(), start))).toBeGreaterThan(1e-4);
     world.dispose();
