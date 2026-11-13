@@ -221,3 +221,28 @@ How pushing feels (strength, the tipped boost), throwing distance, crates on the
 - Switching body types (dynamic ↔ kinematic) in Rapier 0.21 and restoring the collision groups.
 - Freeing order in `dispose`: players, props, then the physics world.
 - Snapshot size grows by the props that move; measured at step 16.
+
+## Amendments after the plan review (binding; where they differ from the text above, they win)
+
+R1. Task 3 tests (4) and (5): tyres' side grip holds the car, so pushes are at the **rear face** (+Z), walking toward −Z. Test (4): one player starting 0.5 m behind the rear face, walking −Z for 2 s, moves the Lodgy more than 0.5 m toward −Z; walking +Z (away) moves it less than 0.01 m. Players overlap each other freely across the 1.76 m rear face.
+R2. H4 for the vehicle: the intents of the first `PUSH_MAX_PUSHERS_VEHICLE` players **among those with an intent on the vehicle this tick**, in join order. Test (5): players 1–4 at the same spots in both runs (spread across the rear face), a fifth beside them in the second run; run **1 s**; the displacements agree within 2%.
+R3. K5 lives in `Players.setSeat` (seating a player who holds a prop releases it at the hold pose with zero velocity, K3's fallback applying). Interact never boards while holding (throw has priority). Task 4 test (7) calls `setSeat` directly in `player.test.ts`.
+R4. Task 6 test (1): the server world has a second, idle player far away (so `requiredPushers(2) = 2` and one pusher leaves the barrier locked).
+R5. Files and existing tests to change, in addition to those named:
+  - Task 1: `client/src/net/snapshotBuffer.test.ts` (the typed `snapshot()` helper gains `props: []`).
+  - Task 2: `player.test.ts` (calls of `createPlayers` gain `createProps(RAPIER, rig.world, course)`; the rig course has no props unless the test adds some).
+  - Task 4: `client/src/net/snapshotBuffer.ts` (`copyPlayer` copies `hands`) and its test; `client/src/ui/overlay.ts` `interactHint` and `overlay.test.ts`. The hint passes the local mouse pitch and yaw (new parameters `yaw: number, pitch: number`) and the sampled props; it shows `E to leave the seat`, `E to throw`, `E to board` or `E to pick up`; candidates are built with the same helper the world uses (export `interactCandidates(...)` from `interact.ts`, a pure function over poses, so the client and the server compute them alike).
+  - Task 7: `overlay.ts` (`OverlayData.props: number`, line `props    N`), `overlay.test.ts`.
+R6. Interact (tick step 1) uses **this tick's** sanitised input yaw and pitch for candidate angles and for the throw direction, not `player.yaw` from the previous tick.
+R7. Task 5 room test: `RoomConfig` gains optional `course?: BuiltCourse`, passed to `createWorld` (tests only). The test course is the test ground with `crate-1` lifted 2 m (via `withProps`), so it falls in the first snapshots and then rests. Moved detection compares each prop with the pose **last sent** for it (per room, updated when sent), not with the previous broadcast.
+R8. Every Rapier call that should act on a resting body wakes it: `applyImpulseAtPoint(..., true)`, `setEnabledTranslations(..., true)`, `lockRotations(true, true)`, `setBodyType(Dynamic, true)`, `setLinvel(..., true)`.
+R9. Shove-out line (F8): stop at statics; keep stepping while the candidate overlaps any dynamic body (vehicle or unheld prop); a free spot overlaps nothing; with none the player goes to a spawn slot.
+R10. At step 2, intents are dropped whose body is now held, was reset by the kill plane last tick, or whose player was removed or seated.
+R11. Corrections to the text: the crate tumbles when pushed (the contact is at its top edge); that is accepted. In the scratch test with walking pushers three right a Lodgy on its side; test (10) stays four yes, one no; if it fails, stop and report, do not retune.
+R12. Task 4 test (5): at pitch 0, the crate's first ground contact is more than 3 m horizontally from the thrower's feet.
+R13. K3 thrower velocity: when `ground` is set, the ground body's velocity at the feet plus `walk`; otherwise `walk + carry`.
+R14. Task 1 test (5): the Lodgy with a seated driver (via interact, or `setSeat` through the players module) starts with its front face 8 m from the barrier's near face, drives at full throttle into it; the barrier's **horizontal** displacement is below 0.01 m.
+R15. Task 3 test (7): a player teleported onto the centre of the parked Lodgy's roof walks toward −Z for 0.5 s; the vehicle moves less than 0.01 m.
+R16. `aimAngleToBox` "beside" case: the box's vertical span includes the eye height.
+R17. Types: `PropClass`, `PropKind` and `PropKindConfig { class: PropClass; halfExtents: Vec3; mass: number; friction: number }` live in `constants.ts`; no name is exported from two files. `createProps` throws on an unknown kind (course data is ours). The centre of mass is the box centre. `Props.dispose()` removes the bodies; `World.dispose` frees players, props, then the physics world. The snapshot buffer gains `latestProps(): PropSnapshot[]` (merged, newest) for `predictor.setProps`; its `push` takes a `SnapshotMessage`. Prop stand-ins use `setCanSleep(false)`.
+R18. Log F13: the push's contact point is the box point nearest `feet + (0, PUSH_HEIGHT, 0)`, not the true contact (spec "Push" amended). Delete the step-5 carried row, whose "use pushing" contradicts F6.
