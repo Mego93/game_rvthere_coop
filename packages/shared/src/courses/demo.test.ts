@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
 import {
+  ITEM_KINDS,
   PLAYER_HEIGHT,
   PLAYER_OVERLAP_LIFT,
   PLAYER_RADIUS,
@@ -195,6 +196,10 @@ describe('B5 every checkpoint of the demo', () => {
         const half = PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents;
         return { half, center: add(p.pose.pos, rotate(p.pose.rot, vec3(0, half.y, 0))), rot: p.pose.rot };
       }),
+      ...course.pickups.map((p) => {
+        const half = ITEM_KINDS[p.kind as keyof typeof ITEM_KINDS].halfExtents;
+        return { half, center: add(p.pose.pos, rotate(p.pose.rot, vec3(0, half.y, 0))), rot: p.pose.rot };
+      }),
     ];
     for (const cp of course.checkpoints) {
       for (const sx of [-1, 1]) {
@@ -261,6 +266,14 @@ describe('B8 the demo as a world', () => {
     for (let i = 0; i < 2 * TICK_RATE; i++) world.step(new Map());
     const end = world.snapshot().vehicle.pos;
     expect(Math.hypot(end.x - start.x, end.z - start.z)).toBeLessThan(0.05);
+    world.dispose();
+  });
+
+  test.each(VEHICLE_CONFIGS.map((c) => c.id))('%s: the world lists the first road\'s jerrycan and toolbox as pickups', (vehicleId) => {
+    const world = createWorld(RAPIER, { courseId: 'segment-demo', vehicleId });
+    const ids = world.snapshot().props.map((prop) => prop.id);
+    expect(course.pickups.map((p) => p.kind).sort()).toEqual(['jerrycan', 'toolbox']);
+    for (const pickup of course.pickups) expect(ids).toContain(pickup.id);
     world.dispose();
   });
 });

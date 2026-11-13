@@ -3,7 +3,15 @@ import type { CourseDef } from './build';
 export const segmentDemo: CourseDef = {
   id: 'segment-demo',
   segments: [
-    { type: 'road', length: 40, stop: { kind: 'fuel', side: 1, along: 20 } },
+    {
+      type: 'road',
+      length: 40,
+      stop: { kind: 'fuel', side: 1, along: 20 },
+      pickups: [
+        { kind: 'jerrycan', along: 30, lateral: -3 },
+        { kind: 'toolbox', along: 30, lateral: 3 },
+      ],
+    },
     { type: 'road', length: 60, curve: Math.PI / 4, debris: 4 },
     { type: 'alley', length: 50, clutter: 0.6 },
     { type: 'sand', length: 30, palms: 4 },
