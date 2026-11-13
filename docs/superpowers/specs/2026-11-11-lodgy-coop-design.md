@@ -543,7 +543,7 @@ Binary encoding is deferred until snapshot size is measured as a problem. Snapsh
 
 ### Camera and rendering
 
-- On foot, the camera sits behind and above the player's shoulder and moves closer when a wall is in the way. Seated, it orbits the vehicle.
+- On foot, the camera sits behind and above the player's shoulder and moves closer when a wall is in the way. Seated, it orbits the vehicle. For now the seated camera is the vehicle follow camera behind the vehicle.
 - If the WebGL context is lost, as iOS does to background tabs, the client reloads the page and rejoins with its session token.
 
 ### HUD

@@ -79,6 +79,7 @@ What step 2 cost and what changed because of it. Estimates are rough, plus or mi
 - **Where to look for savings:** let Sonnet write the code (done from step 3), review the plan before implementing (done from step 3), and run the dispatch-and-verify loop on a cheaper model while Fable keeps planning and designing fixes.
 - **Waiting on the owner:** the real-iPhone checks. Open for step 3: the page loads over the same Wi-Fi on a real iPhone, renders, and shows both players (nobody has tried it; only WebKit with an iPhone viewport ran in the smoke test). Touch controls follow at step 14.
 - **Step 3 is unverified by hand:** rendering and game feel (walking, jumping, the shoulder camera, how the characters look, the crosshair) and the iPhone load were not checked; they are for the owner. Automated tests pass. The smoke test ran in Chromium only in the session that wrote it (Playwright's browser download was blocked there, so the system Chrome was used); the WebKit phone project was not run.
+- **Six-player cost (measured):** about 0.28 ms per tick; a snapshot is about 1.1 KB (about 150 bytes per player), roughly 134 KB/s per room to six clients at 20 Hz.
 
 ## Known issues
 
@@ -89,6 +90,10 @@ What step 2 cost and what changed because of it. Estimates are rough, plus or mi
 - The RV cannot pull away from rest on sand, by the owner's decision (it is how a heavy road-going motorhome behaves): sand's rolling resistance (0.25 × its weight, about 9200 N) exceeds its engine force (7500 N), so it stays put in either direction until it is pushed or winched out. Arriving with speed it crosses: by arithmetic it loses about 0.45 m/s² and a 30 m patch costs it under 2 m/s from 15 m/s, not yet confirmed by a test. The Lodgy crawls through. The test "sand slows it" passes for the RV at zero distance and is replaced in the rows below.
 - The local player is drawn from interpolated snapshots, so it lags its own input by the interpolation delay until client prediction arrives in step 4.
 - Nobody can climb onto the vehicle's roof yet (D11): the Lodgy's roof is 1.5 m up and a jump reaches 1.27 m. Props at step 5 give players something to climb.
+- Shove-out runs at a fixed height, so shoving uphill on a slope can overlap the ground and send the player to a spawn slot.
+- A vehicle faster than about 22 m/s can lift a jumping player onto its roof (roof guard, D12).
+- The client interpolates through teleports, so after exiting a seat or respawning a player's mesh slides for one interval (visual, for the owner).
+- A quick double tap 16 ms apart can lose the second press because the world remembers the merged input.
 
 ## Carried into later steps
 
@@ -106,6 +111,7 @@ Findings from reviews that belong to a later step. Each step's plan must cover i
 | 11 | `lobby` gains `timeOfDay` and `weather`; held slots replace the immediate removal of a disconnected player; the admin's choice replaces `VEHICLE` |
 | 11 | Names are only trimmed and length-checked: control and invisible characters and look-alike letters pass, and a newline in a name forges lines in the debug overlay on other players' pages. A throw in the page's `lobby` handler leaves the page blank |
 | 14 | The home form on a real iPhone: no zoom when a field is focused, and the form scrolls with the keyboard open in landscape (its shadow is clipped when it overflows). Checked so far in Chromium and WebKit only |
+| 15 | Exit and spawn-slot validity should include a ray from the player's pivot to the point against walls (a thin wall lets a slot on the far side count as valid) |
 | 19 | The page does not reconnect by itself after the socket closes; it returns to the name form |
 | 19 | The server caps rooms (50) but not connections: add a cap on connections in total and per address when the server is exposed through the tunnel (behind it, the address is in the `CF-Connecting-IP` header), and stop sending to a socket whose send buffer keeps growing |
 | 19 | Room exhaustion: 50 connections that each create a room and leave hold the server at `server_full` for 60 s. Limit `create` per address, or give a room nobody else joined a short timeout |
