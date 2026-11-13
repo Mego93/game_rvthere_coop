@@ -1,9 +1,10 @@
-import { GRAVITY, PLAYER_KILL_RESPAWN_DELAY, TICK_DT, type Surface } from './constants';
+import { GRAVITY, PLAYER_KILL_RESPAWN_DELAY, PUSH_MAX_PUSHERS_VEHICLE, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import type { Vec3 } from './math';
 import { resolveInteract } from './interact';
 import { createPlayers, type StepInputs } from './player';
+import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
 import { NEUTRAL_INPUT, type InputFields, type PlayerSnapshot } from './protocol';
 import type { Rapier, RigidBody } from './rapier';
@@ -124,6 +125,33 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }
   };
 
+  let resetLastTick = new Set<string>();
+
+  // Rule H4 with R10: the pushes found last tick, minus those whose body or player has changed since.
+  const applyPushes = () => {
+    const live = players.takePushIntents().filter((intent) => {
+      const player = players.get(intent.playerId);
+      if (!player || player.seat !== null) return false;
+      if (intent.bodyId === 'vehicle') return true;
+      const prop = props.get(intent.bodyId);
+      return prop !== undefined && prop.heldBy === null && !resetLastTick.has(prop.id);
+    });
+    const apply = (intent: PushIntent, body: RigidBody) =>
+      body.applyImpulseAtPoint({ x: intent.force.x * TICK_DT, y: 0, z: intent.force.z * TICK_DT }, intent.point, true);
+    const vehicleIntents = live.filter((intent) => intent.bodyId === 'vehicle').slice(0, PUSH_MAX_PUSHERS_VEHICLE);
+    for (const intent of vehicleIntents) apply(intent, vehicle.body);
+    const needed = requiredPushers(players.all().length);
+    for (const prop of props.all()) {
+      const own = live.filter((intent) => intent.bodyId === prop.id);
+      if (prop.config.class === 'heavy') {
+        const unlocked = new Set(own.map((intent) => intent.playerId)).size >= needed;
+        if (unlocked === prop.locked) props.setLocked(prop.id, !unlocked);
+        if (!unlocked) continue;
+      }
+      for (const intent of own) apply(intent, prop.body);
+    }
+  };
+
   const killPlane = (events: WorldEvent[]) => {
     for (const player of players.all()) {
       if (player.seat !== null) continue;
@@ -145,6 +173,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     step(inputs) {
       const onFoot = stepInputsFor(inputs);
       resolveInteracts(onFoot);
+      applyPushes();
       const driver = players.all().find((player) => player.seat === 'driver');
       const controls = driver ? onFoot.get(driver.id)?.fields : undefined;
       vehicle.step({
@@ -157,7 +186,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       players.stepOnFoot(onFoot);
       const events: WorldEvent[] = [];
       killPlane(events);
-      props.killPlane(course.killPlaneY);
+      resetLastTick = new Set(props.killPlane(course.killPlaneY));
       return events;
     },
     snapshot: () => ({

@@ -7,6 +7,7 @@ import {
   PLAYER_RADIUS,
   PLAYER_STEP_HEIGHT,
   PLAYER_WALK_SPEED,
+  PUSH_HEIGHT,
   SHOVE_MAX_DISTANCE,
   SHOVE_STEP,
 } from './constants';
@@ -16,6 +17,7 @@ import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, sub, vec3, 
 import { exitPoints } from './seats';
 import { NEUTRAL_INPUT, type InputFields } from './protocol';
 import type { Props } from './props';
+import { contactPoint, pushForce, type PushIntent } from './push';
 import type { Rapier, RapierWorld, RigidBody } from './rapier';
 import type { Vehicle } from './vehicle';
 import { createWalkController, stepWalk } from './walk';
@@ -64,6 +66,8 @@ export interface Players {
   setSeat(id: string, seatId: string | null, pos?: Vec3): void;
   // Clears velocity, seat, ground and respawnIn; grounded false.
   teleport(id: string, pos: Vec3): void;
+  // The pushes found by the last stepOnFoot, cleared by the call (rule F4).
+  takePushIntents(): PushIntent[];
   // Rule S1.
   findSpawn(forId: string | null): Vec3;
   findExit(seat: SeatConfig): Vec3 | null;
@@ -102,6 +106,7 @@ const CAPSULE_HALF_SEGMENT = PLAYER_HEIGHT / 2 - PLAYER_RADIUS;
 const SPAWN_RAY_HEIGHT = 3;
 const SPAWN_RAY_LENGTH = 6;
 const MIN_UP_NORMAL = Math.cos(degToRad(PLAYER_MAX_SLOPE_DEG));
+const TIPPED_UP = Math.cos(degToRad(45));
 const conjugate = (q: Quat): Quat => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
 
 export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Vehicle, props: Props, course: BuiltCourse): Players {
@@ -282,6 +287,30 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     placeCollider(state.id);
   };
 
+  let intents: PushIntent[] = [];
+
+  // Rules H1 to H3: one intent per body this player walked into the side of.
+  const gatherPushes = (state: PlayerState, wish: { x: number; z: number }, collisions: ReadonlyArray<{ handle: number; normalY: number }>) => {
+    if (wish.x === 0 && wish.z === 0) return;
+    const pushPoint = vec3(state.pos.x, state.pos.y + PUSH_HEIGHT, state.pos.z);
+    const seen = new Set<string>();
+    for (const hit of collisions) {
+      if (hit.normalY >= MIN_UP_NORMAL) continue;
+      const prop = props.byCollider(hit.handle);
+      const bodyId = hit.handle === vehicle.chassisHandle ? 'vehicle' : prop && prop.heldBy === null ? prop.id : null;
+      if (bodyId === null || bodyId === state.ground?.bodyId || seen.has(bodyId)) continue;
+      seen.add(bodyId);
+      const { body, half } = bodyOf(bodyId);
+      const centre = body.translation();
+      const rot = body.rotation();
+      const contact = contactPoint(pushPoint, centre, rot, half);
+      const tipped = bodyId === 'vehicle' && rotate(rot, vec3(0, 1, 0)).y < TIPPED_UP;
+      const mass = bodyId === 'vehicle' ? vehicle.config.mass : props.get(bodyId)!.config.mass;
+      const force = pushForce(wish, pushPoint, contact, mass, tipped);
+      if (force) intents.push({ playerId: state.id, bodyId, point: contact, force });
+    }
+  };
+
   const move = (state: PlayerState, step: StepInputs) => {
     const { fields, pressed } = step;
     const wish = wishVelocity(state.yaw, finite(fields.moveX), finite(fields.moveY));
@@ -310,6 +339,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     state.ground = standingOn === null ? null : { bodyId: standingOn, localPos: toBodyFrame(bodyOf(standingOn).body, state.pos) };
     // Leaving a body takes its velocity, even on a tick the controller still reports grounded (the body's edge, or its snap).
     if (wasOn !== null && standingOn === null) state.carry = velocityAt(bodyOf(wasOn).body, state.pos);
+    gatherPushes(state, wish, collisions);
   };
 
   return {
@@ -347,6 +377,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     get: (id) => entries.get(id)?.state,
     all: () => [...entries.values()].map(({ state }) => state),
     stepOnFoot(inputs) {
+      intents = [];
       for (const { state } of entries.values()) {
         const step = inputs.get(state.id) ?? NEUTRAL_STEP;
         state.yaw = finite(step.fields.yaw);
@@ -388,6 +419,11 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       state.seat = null;
       state.grounded = false;
       placeCollider(id);
+    },
+    takePushIntents() {
+      const taken = intents;
+      intents = [];
+      return taken;
     },
     findSpawn,
     findExit,

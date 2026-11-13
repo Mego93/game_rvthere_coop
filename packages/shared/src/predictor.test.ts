@@ -168,6 +168,12 @@ describe('createPredictor', () => {
       const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
       world.addPlayer('p');
       for (let i = 0; i < 300; i++) world.step(new Map());
+      // The server now pushes the vehicle; the stand-in does not move.
+      const pinned = world.debugBody('vehicle')!;
+      pinned.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      pinned.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      pinned.setEnabledTranslations(false, false, false, true);
+      pinned.lockRotations(true, true);
       const vehicle = world.snapshot().vehicle;
       // Parked at the course start: walk at it from the side, jumping about a metre before.
       const start = vec3(vehicle.pos.x + 6, PLAYER_CONTROLLER_OFFSET, vehicle.pos.z);

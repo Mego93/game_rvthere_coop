@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, expect, test } from 'vitest';
 import type { ReferenceSlope } from './constants';
 import { slopePose } from './courses/testGround';
+import { quatFromAxisAngle, rotate, vec3 } from './math';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
 import { createRig } from './testRig';
 import type { VehicleId } from './vehicles';
@@ -71,4 +72,32 @@ test('two players board, and the driver drives the Lodgy 100 m down the course i
   expect(world.snapshot().vehicle.pos.z).toBeLessThanOrEqual(-100);
   expect(ticks).toBeLessThan(40 * 60);
   expect(world.snapshot().players.map((player) => player.seat)).toEqual(['driver', 'seat1']);
+});
+
+test('four players walking into the roof of a Lodgy on its side right it; one does not', () => {
+  const rightedWithin = (pushers: number, seconds: number): boolean => {
+    const ids = Array.from({ length: pushers }, (_, i) => `p${i}`);
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+    for (const id of ids) world.addPlayer(id);
+    for (let i = 0; i < 30; i++) world.step(new Map());
+    const body = world.debugBody('vehicle')!;
+    body.setRotation(quatFromAxisAngle(vec3(0, 0, 1), Math.PI / 2), true);
+    body.setTranslation({ x: 0, y: 1.2, z: 0 }, true);
+    for (let i = 0; i < 90; i++) world.step(new Map());
+    const side = world.snapshot().vehicle;
+    expect(rotate(side.rot, vec3(0, 1, 0)).y).toBeLessThan(0.1);
+    // Rolled by +90 degrees about Z, the roof faces -X.
+    const roofX = side.pos.x - world.vehicleConfig.halfExtents.y;
+    ids.forEach((id, i) => world.teleportPlayer(id, vec3(roofX - 0.6, 0.1, side.pos.z + (i - (pushers - 1) / 2) * 0.6)));
+    const inputs = new Map(ids.map((id) => [id, input({ moveY: 1, yaw: -Math.PI / 2 })] as const));
+    let righted = false;
+    for (let i = 0; i < seconds * 60 && !righted; i++) {
+      world.step(inputs);
+      righted = rotate(world.snapshot().vehicle.rot, vec3(0, 1, 0)).y > 0.9;
+    }
+    world.dispose();
+    return righted;
+  };
+  expect(rightedWithin(4, 10)).toBe(true);
+  expect(rightedWithin(1, 10)).toBe(false);
 });
