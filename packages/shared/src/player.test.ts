@@ -6,6 +6,7 @@ import {
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
   PLAYER_WALK_SPEED,
+  SEAT_EXIT_DISTANCE,
   TICK_DT,
   TICK_RATE,
 } from './constants';
@@ -503,19 +504,193 @@ describe('players never change the vehicle', () => {
     expect(body.translation().z).toBeLessThan(z);
   });
 
-  // A seated player is never shoved, so this is the way a capsule ends up under a wheel ray.
-  test('a seated capsule under a wheel ray does not move the chassis', () => {
-    const { rig, players, tick } = harness();
+  // No stepOnFoot here: a capsule left under the wheel for the whole run, which the shove-out would otherwise move.
+  test('a capsule under a wheel ray does not move the chassis', () => {
+    const { rig, players } = harness();
     const body = rig.vehicle.body;
     const settled = body.translation().y;
     players.add('p1');
     const at = body.translation();
-    players.setSeat('p1', 'driver', vec3(at.x - LODGY.wheelX, 0.02, at.z - LODGY.wheelZ));
+    players.teleport('p1', vec3(at.x - LODGY.wheelX, 0.02, at.z - LODGY.wheelZ));
     let worst = 0;
     for (let i = 0; i < 30; i++) {
-      tick({});
+      rig.vehicle.step({ throttle: 0, steer: 0, brake: false });
+      rig.world.step();
       worst = Math.max(worst, Math.abs(body.translation().y - settled));
     }
     expect(worst).toBeLessThan(0.02);
+  });
+});
+
+const seatWorld = (body: { translation(): Vec3; rotation(): Quat }, seatIndex: number): Vec3 => {
+  const at = rotate(body.rotation(), LODGY.seats[seatIndex]!.pos);
+  const t = body.translation();
+  return vec3(t.x + at.x, t.y + at.y - PLAYER_HEIGHT / 2, t.z + at.z);
+};
+
+describe('seats', () => {
+  test('sitting puts the player at the seat, with no ground, no velocity and not grounded', () => {
+    const { rig, players, run } = harness();
+    const player = players.add('p1');
+    run(10, { p1: { moveY: 1 } });
+    player.vy = -3;
+    player.carry = { x: 1, z: 1 };
+    players.setSeat('p1', 'driver');
+    expect(player.seat).toBe('driver');
+    expect(player.ground).toBeNull();
+    expect(player.walk).toEqual({ x: 0, z: 0 });
+    expect(player.carry).toEqual({ x: 0, z: 0 });
+    expect(player.vy).toBe(0);
+    expect(player.grounded).toBe(false);
+    expect(player.respawnIn).toBeNull();
+    const expected = seatWorld(rig.vehicle.body, 0);
+    expect(player.pos.x).toBeCloseTo(expected.x, 9);
+    expect(player.pos.y).toBeCloseTo(expected.y, 9);
+    expect(player.pos.z).toBeCloseTo(expected.z, 9);
+  });
+
+  test('a seated player on the vehicle is not on any ground, even after sitting down from the roof', () => {
+    const { rig, players, run } = harness();
+    const player = players.add('p1');
+    const body = rig.vehicle.body.translation();
+    players.teleport('p1', vec3(body.x, body.y + LODGY.halfExtents.y + 0.1, body.z));
+    run(30);
+    expect(player.ground).not.toBeNull();
+    players.setSeat('p1', 'seat1');
+    run(5);
+    expect(player.ground).toBeNull();
+    expect(player.grounded).toBe(false);
+  });
+
+  test('a seated player\'s pos follows the vehicle while it is driven, and the player is not shoved', () => {
+    const { rig, players, tick, vehicleRun } = harness();
+    const player = players.add('p1');
+    players.setSeat('p1', 'driver');
+    vehicleRun.controls = { throttle: 1, steer: 0.3, brake: false };
+    for (let i = 0; i < 180; i++) {
+      tick({});
+      const expected = seatWorld(rig.vehicle.body, 0);
+      expect(player.pos.x).toBeCloseTo(expected.x, 6);
+      expect(player.pos.y).toBeCloseTo(expected.y, 6);
+      expect(player.pos.z).toBeCloseTo(expected.z, 6);
+    }
+    expect(rig.vehicle.body.translation().z).toBeLessThan(-3);
+    expect(player.seat).toBe('driver');
+  });
+
+  test('a seated player can look around, but walking, jumping and dropping do nothing', () => {
+    const { rig, players, run } = harness();
+    const player = players.add('p1');
+    players.setSeat('p1', 'seat3');
+    run(3, { p1: { yaw: 1.1, pitch: -0.3 } });
+    expect(player.yaw).toBe(1.1);
+    expect(player.pitch).toBe(-0.3);
+    run(60, { p1: { moveY: 1, moveX: 1, jump: true, drop: true } });
+    const expected = seatWorld(rig.vehicle.body, 3);
+    expect(player.pos.x).toBeCloseTo(expected.x, 6);
+    expect(player.pos.y).toBeCloseTo(expected.y, 6);
+    expect(player.pos.z).toBeCloseTo(expected.z, 6);
+    expect(player.walk).toEqual({ x: 0, z: 0 });
+    expect(player.vy).toBe(0);
+    expect(player.seat).toBe('seat3');
+  });
+
+  test('leaving a seat puts the player at the given point, grounded and at rest', () => {
+    const { players, run } = harness();
+    const player = players.add('p1');
+    players.setSeat('p1', 'driver');
+    players.setSeat('p1', null, vec3(-3, 0.02, 2));
+    expect(player.seat).toBeNull();
+    expect(player.grounded).toBe(true);
+    expect(player.pos).toEqual(vec3(-3, 0.02, 2));
+    expect(player.walk).toEqual({ x: 0, z: 0 });
+    run(30);
+    expect(player.pos.x).toBeCloseTo(-3, 3);
+    expect(player.pos.z).toBeCloseTo(2, 3);
+  });
+
+  test('a capsule under a wheel ray while seated elsewhere does not move the chassis', () => {
+    const { rig, players, run } = harness();
+    const settled = rig.vehicle.body.translation().y;
+    players.add('p1');
+    players.setSeat('p1', 'driver');
+    let worst = 0;
+    for (let i = 0; i < 30; i++) {
+      run(1);
+      worst = Math.max(worst, Math.abs(rig.vehicle.body.translation().y - settled));
+    }
+    expect(worst).toBeLessThan(0.02);
+  });
+});
+
+describe('exit points', () => {
+  const wallAt = (p: Vec3) => ({ center: vec3(p.x, 1, p.z), halfExtents: vec3(0.3, 1, 0.3), rot: IDENTITY });
+
+  test('findExit gives the seat\'s own-side exit point, on the ground', () => {
+    const { rig, players } = harness();
+    const body = rig.vehicle.body.translation();
+    const exit = players.findExit(LODGY.seats[0]!)!;
+    expect(exit.x).toBeCloseTo(body.x - (LODGY.halfExtents.x + SEAT_EXIT_DISTANCE), 2);
+    expect(exit.z).toBeCloseTo(body.z - 0.7, 2);
+    expect(exit.y).toBeCloseTo(0, 1);
+    const right = players.findExit(LODGY.seats[1]!)!;
+    expect(right.x).toBeCloseTo(body.x + LODGY.halfExtents.x + SEAT_EXIT_DISTANCE, 2);
+  });
+
+  test('E1: a blocked own side gives the other side, and both blocked give null', () => {
+    const probe = harness();
+    const body = probe.rig.vehicle.body.translation();
+    const own = vec3(body.x - 1.78, 0, body.z - 0.7);
+    const other = vec3(body.x + 1.78, 0, body.z - 0.7);
+
+    const one = harness(withBoxes(testGround, { walls: [wallAt(own)] }));
+    expect(one.players.findExit(LODGY.seats[0]!)!.x).toBeCloseTo(1.78, 2);
+
+    const both = harness(withBoxes(testGround, { walls: [wallAt(own), wallAt(other)] }));
+    expect(both.players.findExit(LODGY.seats[0]!)).toBeNull();
+  });
+
+  test('other players do not block an exit', () => {
+    const { rig, players } = harness();
+    const body = rig.vehicle.body.translation();
+    players.add('p1');
+    players.add('p2');
+    players.teleport('p2', vec3(body.x - 1.78, 0.02, body.z - 0.7));
+    expect(players.findExit(LODGY.seats[0]!)!.x).toBeCloseTo(body.x - 1.78, 2);
+  });
+
+  test('a rolled vehicle does not tip the exit point', () => {
+    const rolled: Pose = { pos: vec3(0, 0.98, 0), rot: quatFromAxisAngle(vec3(0, 0, 1), Math.PI / 2) };
+    const { players } = harness(testGround, rolled);
+    const exit = players.findExit(LODGY.seats[0]!)!;
+    expect(exit.y).toBeCloseTo(0, 1);
+    expect(Number.isFinite(exit.x + exit.z)).toBe(true);
+  });
+});
+
+describe('a player on the roof during a suspension bounce', () => {
+  test('is not shoved off the roof when the chassis rises into the falling capsule', () => {
+    const { rig, players, tick, run, vehicleRun } = harness();
+    const body = rig.vehicle.body;
+    const player = players.add('p1');
+    const at = body.translation();
+    players.teleport('p1', vec3(at.x, at.y + LODGY.halfExtents.y + 0.1, at.z));
+    run(30);
+    const takeoff = { ...player.ground!.localPos };
+    let bounced = false;
+    // The chassis rises 0.08 m into the falling player's feet, as a hard suspension rebound could.
+    vehicleRun.beforePhysics = () => {
+      const gap = player.pos.y - (body.translation().y + LODGY.halfExtents.y);
+      if (bounced || player.ground !== null || player.vy >= 0 || gap > 0.17) return;
+      const t = body.translation();
+      body.setTranslation({ x: t.x, y: t.y + gap + 0.08, z: t.z }, true);
+      bounced = true;
+    };
+    tick({ p1: { jump: true } });
+    for (let i = 0; i < 120; i++) tick({});
+    expect(bounced).toBe(true);
+    expect(player.ground?.bodyId).toBe('vehicle');
+    expect(Math.abs(player.ground!.localPos.x - takeoff.x)).toBeLessThan(0.3);
+    expect(Math.abs(player.ground!.localPos.z - takeoff.z)).toBeLessThan(0.3);
   });
 });

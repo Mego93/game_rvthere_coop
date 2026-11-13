@@ -2,8 +2,10 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, expect, test } from 'vitest';
 import type { ReferenceSlope } from './constants';
 import { slopePose } from './courses/testGround';
+import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
 import { createRig } from './testRig';
 import type { VehicleId } from './vehicles';
+import { createWorld } from './world';
 
 beforeAll(async () => {
   await RAPIER.init();
@@ -47,4 +49,26 @@ test.each(['lodgy', 'rv'] as const)('the %s creeps less than 0.1 m/s on the stee
   rig.run(5, { brake: true });
   const after = rig.vehicle.state().pos;
   expect(Math.hypot(after.y - before.y, after.z - before.z) / 5).toBeLessThan(0.1);
+});
+
+const input = (fields: Partial<PlayerInput>): PlayerInput => ({ ...NEUTRAL_INPUT, seq: 0, ...fields });
+
+test('two players board, and the driver drives the Lodgy 100 m down the course in under 40 s', () => {
+  const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+  world.addPlayer('p1');
+  world.addPlayer('p2');
+  for (let i = 0; i < 30; i++) world.step(new Map());
+  world.step(new Map([['p1', input({ interact: true })]]));
+  world.step(new Map([['p2', input({ interact: true })]]));
+  const seats = world.snapshot().players.map((player) => player.seat);
+  expect(seats).toEqual(['driver', 'seat1']);
+
+  let ticks = 0;
+  while (world.snapshot().vehicle.pos.z > -100 && ticks < 40 * 60) {
+    world.step(new Map([['p1', input({ moveY: 1 })]]));
+    ticks += 1;
+  }
+  expect(world.snapshot().vehicle.pos.z).toBeLessThanOrEqual(-100);
+  expect(ticks).toBeLessThan(40 * 60);
+  expect(world.snapshot().players.map((player) => player.seat)).toEqual(['driver', 'seat1']);
 });

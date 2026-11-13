@@ -54,7 +54,7 @@ export interface RoomConfig {
 
 export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number): Room {
   const world = createWorld(rapier, { courseId: config.courseId, vehicleId: config.vehicleId });
-  // Kept in the order players joined: the first is the driver until seats exist (step 3).
+  // Kept in the order players joined.
   const players: RoomPlayer[] = [];
   let nextPlayerNumber = 1;
   let adminId: string | null = null;

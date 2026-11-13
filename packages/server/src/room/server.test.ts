@@ -310,13 +310,13 @@ test('a player who joins mid-run gets a full snapshot that includes the players'
   expect(first.players.map((player) => player.playerId)).toEqual(['p1', 'p2']);
 });
 
-test('the first player drives; the others do not', () => {
+test('the player in the driver seat drives; the others do not', () => {
   const { host, guest, advance } = setup();
   const { client: amal, room } = host();
   const badr = guest(room, 2);
   advance(1);
   let seq = 0;
-  // One input per tick for two seconds: Badr holds full throttle, Amal steers nothing and stays off the pedal.
+  // One input per tick for two seconds: Badr holds full throttle from his own spot, Amal has not boarded.
   for (let i = 0; i < 2 * TICK_RATE; i++) {
     seq += 1;
     badr.send(input(seq, { moveY: 1 }));
@@ -324,9 +324,17 @@ test('the first player drives; the others do not', () => {
   }
   expect(amal.last('snapshot').vehicle.pos.z).toBeCloseTo(0, 1);
 
+  // Amal stands at slot 0, at the driver door, and boards.
+  amal.send(input(1, { interact: true }));
+  advance(0.2);
+  const seats = amal.last('snapshot').players.map((player) => player.seat);
+  expect(seats).toEqual(['driver', null]);
+
+  seq = 1;
   for (let i = 0; i < 2 * TICK_RATE; i++) {
     seq += 1;
     amal.send(input(seq, { moveY: 1 }));
+    badr.send(input(seq + 1000, { moveY: -1 }));
     advance(1 / TICK_RATE);
   }
   const { vehicle } = badr.last('snapshot');
@@ -334,16 +342,38 @@ test('the first player drives; the others do not', () => {
   expect(vehicle.throttle).toBe(1);
 });
 
-test('when the driver leaves, the next player drives', () => {
-  const { host, guest, advance } = setup();
-  const { client: amal, room } = host();
-  const badr = guest(room, 2);
-  amal.close();
-  for (let seq = 1; seq <= 2 * TICK_RATE; seq++) {
-    badr.send(input(seq, { moveY: 1 }));
-    advance(1 / TICK_RATE);
-  }
-  expect(badr.last('snapshot').vehicle.pos.z).toBeLessThan(-2);
+test('when the driver leaves, the vehicle coasts until someone boards', () => {
+  const { host, advance } = setup();
+  const { client: amal } = host();
+  amal.send(input(1, { interact: true }));
+  advance(0.1);
+  let seq = 1;
+  const hold = (seconds: number, fields: Partial<PlayerInput>) => {
+    for (let i = 0; i < seconds * TICK_RATE; i++) {
+      seq += 1;
+      amal.send(input(seq, fields));
+      advance(1 / TICK_RATE);
+    }
+  };
+  hold(0.4, { moveY: 1 });
+  expect(amal.last('snapshot').vehicle.throttle).toBe(1);
+
+  // Leaving by pressing interact: the vehicle keeps rolling with the pedal released, whatever the player now holds.
+  hold(1 / TICK_RATE, { interact: true });
+  hold(0.3, { moveY: 1 });
+  const afterLeaving = amal.last('snapshot');
+  expect(afterLeaving.players[0]!.seat).toBeNull();
+  expect(afterLeaving.vehicle.throttle).toBe(0);
+  expect(afterLeaving.vehicle.linvel.z).toBeLessThan(-0.5);
+  const z = afterLeaving.vehicle.pos.z;
+  hold(0.3, {});
+  expect(amal.last('snapshot').vehicle.pos.z).toBeLessThan(z - 0.2);
+
+  // Boarding again, from the exit point at the driver door, gives the pedal back.
+  hold(1 / TICK_RATE, { interact: true });
+  hold(0.2, { moveY: 1 });
+  expect(amal.last('snapshot').players[0]!.seat).toBe('driver');
+  expect(amal.last('snapshot').vehicle.throttle).toBe(1);
 });
 
 test('each client is told the last of its own inputs that was consumed', () => {
@@ -366,14 +396,30 @@ test('input from a connection that is not in a room is ignored', () => {
   expect(client.received).toEqual([]);
 });
 
-test('a silent driver stops pressing the pedal after the neutral-input delay', () => {
+test('a silent seated driver stops pressing the pedal after the neutral-input delay', () => {
   const { host, advance } = setup();
   const { client } = host();
-  client.send(input(1, { moveY: 1 }));
+  client.send(input(1, { interact: true }));
   advance(0.1);
+  client.send(input(2, { moveY: 1 }));
+  advance(0.1);
+  expect(client.last('snapshot').players[0]!.seat).toBe('driver');
   expect(client.last('snapshot').vehicle.throttle).toBe(1);
   advance(0.5);
   expect(client.last('snapshot').vehicle.throttle).toBe(0);
+});
+
+test('a tap of interact that is consumed together with the next input still boards', () => {
+  const { host, advance } = setup();
+  const { client } = host();
+  // More than INPUT_QUEUE_FAST_ABOVE inputs waiting: the first tick consumes the first two, the press and its release.
+  client.send(input(1, { interact: true }));
+  client.send(input(2));
+  client.send(input(3));
+  client.send(input(4));
+  client.send(input(5));
+  advance(0.2);
+  expect(client.last('snapshot').players[0]!.seat).toBe('driver');
 });
 
 test('after a stall the room runs only the catch-up limit and drops the rest', () => {

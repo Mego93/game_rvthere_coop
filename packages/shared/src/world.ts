@@ -2,9 +2,11 @@ import { GRAVITY, PLAYER_KILL_RESPAWN_DELAY, TICK_DT, type Surface } from './con
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import type { Vec3 } from './math';
+import { resolveInteract } from './interact';
 import { createPlayers, type StepInputs } from './player';
 import { NEUTRAL_INPUT, type InputFields, type PlayerSnapshot } from './protocol';
 import type { Rapier } from './rapier';
+import { chooseSeat } from './seats';
 import { buildStatics } from './statics';
 import { createVehicle, type VehicleState } from './vehicle';
 import { getVehicleConfig, type VehicleConfig } from './vehicles';
@@ -96,6 +98,26 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     return result;
   };
 
+  // Rules I1 and V3: in join order, so of two players pressing for one seat the earlier gets it.
+  const resolveInteracts = (onFoot: ReadonlyMap<string, StepInputs>) => {
+    for (const player of players.all()) {
+      if (!onFoot.get(player.id)?.pressed.interact) continue;
+      const taken = new Set<string>();
+      for (const other of players.all()) if (other.seat !== null) taken.add(other.seat);
+      const seatChoice =
+        player.seat === null
+          ? chooseSeat(vehicleConfig, vehicle.body.translation(), vehicle.body.rotation(), player.pos, taken)
+          : null;
+      const action = resolveInteract({ seat: player.seat, seatChoice });
+      if (action?.kind === 'board') {
+        players.setSeat(player.id, action.seatId);
+      } else if (action?.kind === 'exitSeat') {
+        const seat = vehicleConfig.seats.find((candidate) => candidate.id === player.seat);
+        players.setSeat(player.id, null, (seat && players.findExit(seat)) ?? players.findSpawn(player.id));
+      }
+    }
+  };
+
   const killPlane = (events: WorldEvent[]) => {
     for (const player of players.all()) {
       if (player.seat !== null) continue;
@@ -115,14 +137,15 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     course,
     vehicleConfig,
     step(inputs) {
-      // Until seats exist (step 3), the first input in the map drives the vehicle.
-      const driver = inputs.values().next().value;
-      vehicle.step({
-        throttle: finite(driver?.moveY),
-        steer: finite(driver?.moveX),
-        brake: driver?.jump ?? false,
-      });
       const onFoot = stepInputsFor(inputs);
+      resolveInteracts(onFoot);
+      const driver = players.all().find((player) => player.seat === 'driver');
+      const controls = driver ? onFoot.get(driver.id)?.fields : undefined;
+      vehicle.step({
+        throttle: controls?.moveY ?? 0,
+        steer: controls?.moveX ?? 0,
+        brake: controls?.jump ?? false,
+      });
       physics.step();
       tick += 1;
       players.stepOnFoot(onFoot);

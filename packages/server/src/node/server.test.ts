@@ -145,7 +145,7 @@ test('knows the content types the client needs', () => {
   expect(contentType('x.unknown')).toBe('application/octet-stream');
 });
 
-test('two clients share a room, and the first one drives the vehicle both see', async () => {
+test('two clients share a room, and the one who boards the driver seat drives the vehicle both see', async () => {
   const amal = await connect();
   amal.send({ type: 'create', name: 'Amal', token: 'integration-token-amal' });
   const { room } = await amal.waitFor((message): message is Welcome => isWelcome(message));
@@ -155,8 +155,15 @@ test('two clients share a room, and the first one drives the vehicle both see', 
   const welcome = await badr.waitFor((message): message is Welcome => isWelcome(message));
   expect(welcome).toEqual({ type: 'welcome', playerId: 'p2', room });
 
+  // Amal starts at the driver door: she presses interact to board, and drives once the snapshots show her seated.
+  amal.send({ type: 'input', ...NEUTRAL_INPUT, interact: true, seq: 1 });
+  await amal.waitFor(
+    (message): message is Snapshot =>
+      isSnapshot(message) && message.players.some((player) => player.playerId === 'p1' && player.seat === 'driver'),
+  );
+
   // Amal holds the throttle, one input per tick, as the browser client does.
-  let seq = 0;
+  let seq = 1;
   const driving = setInterval(() => {
     seq += 1;
     amal.send({ type: 'input', ...NEUTRAL_INPUT, moveY: 1, seq });

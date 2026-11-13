@@ -20,6 +20,7 @@ import {
 import type { BuiltCourse } from './course';
 import { GROUP_GROUND, GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, sub, vec3, yawOf, type Quat, type Vec3 } from './math';
+import { exitPoints } from './seats';
 import { NEUTRAL_INPUT, type InputFields } from './protocol';
 import type { Rapier, RapierWorld } from './rapier';
 import type { Vehicle } from './vehicle';
@@ -63,7 +64,7 @@ export interface Players {
   all(): PlayerState[];
   // One tick for every player, in join order, after the physics step. Players with no entry get neutral input.
   stepOnFoot(inputs: ReadonlyMap<string, StepInputs>): void;
-  // Leaving a seat puts the player at `pos`, grounded, at rest.
+  // Seating puts the player at the seat (`pos` is ignored); leaving puts them at `pos`, grounded, at rest.
   setSeat(id: string, seatId: string | null, pos?: Vec3): void;
   // Clears velocity, seat, ground and respawnIn; grounded false.
   teleport(id: string, pos: Vec3): void;
@@ -162,21 +163,35 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     return hit ? fromY - hit.timeOfImpact : null;
   };
 
+  // The feet for a spot on the ground under (x, z): found as in rule S1, or null if there is none or the capsule would overlap.
+  const standingSpot = (x: number, z: number): Vec3 | null => {
+    const groundY = groundBelow(x, z, vehicle.body.translation().y + SPAWN_RAY_HEIGHT);
+    if (groundY === null) return null;
+    const feet = vec3(x, groundY + PLAYER_CONTROLLER_OFFSET, z);
+    return overlapsAnything(feet) ? null : feet;
+  };
+
   const findSpawn = (forId: string | null): Vec3 => {
     const body = vehicle.body.translation();
     const turn = quatFromAxisAngle(AXIS_Y, yawOf(vehicle.body.rotation()));
     const others = [...entries.values()].filter(({ state }) => state.id !== forId && state.seat === null);
     for (const slot of vehicle.config.spawnSlots) {
       const at = add(body, rotate(turn, vec3(slot.x, 0, slot.z)));
-      const groundY = groundBelow(at.x, at.z, body.y + SPAWN_RAY_HEIGHT);
-      if (groundY === null) continue;
-      const feet = vec3(at.x, groundY + PLAYER_CONTROLLER_OFFSET, at.z);
-      if (overlapsAnything(feet)) continue;
+      const feet = standingSpot(at.x, at.z);
+      if (feet === null) continue;
       if (others.some(({ state }) => Math.hypot(state.pos.x - feet.x, state.pos.z - feet.z) < 2 * PLAYER_RADIUS)) continue;
       return feet;
     }
     const fallback = course.checkpoints[0]?.spawn.pos ?? vec3(0, 0, 0);
     return vec3(fallback.x, fallback.y, fallback.z);
+  };
+
+  const findExit = (seat: SeatConfig): Vec3 | null => {
+    for (const point of exitPoints(vehicle.config, seat, vehicle.body.translation(), vehicle.body.rotation())) {
+      const feet = standingSpot(point.x, point.z);
+      if (feet !== null) return feet;
+    }
+    return null;
   };
 
   const restAt = (state: PlayerState, pos: Vec3) => {
@@ -210,8 +225,21 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
   const toVehicleFrame = (world: Vec3): Vec3 =>
     rotate(conjugate(vehicle.body.rotation()), sub(world, vehicle.body.translation()));
 
+  // A player whose feet sank a little into the roof (the chassis rose into them) is lifted onto it, not shoved off it.
+  const liftOntoRoof = (state: PlayerState): boolean => {
+    if (rotate(vehicle.body.rotation(), vec3(0, 1, 0)).y < MIN_UP_NORMAL) return false;
+    const half = vehicle.config.halfExtents;
+    const local = toVehicleFrame(state.pos);
+    if (Math.abs(local.x) > half.x || Math.abs(local.z) > half.z || local.y < half.y - PLAYER_STEP_HEIGHT) return false;
+    state.ground = { bodyId: 'vehicle', localPos: vec3(local.x, half.y + PLAYER_CONTROLLER_OFFSET, local.z) };
+    state.pos = fromVehicleFrame(state.ground.localPos);
+    state.grounded = true;
+    return true;
+  };
+
   const shoveOut = (state: PlayerState) => {
     if (!touching(state.pos).vehicle) return;
+    if (liftOntoRoof(state)) return;
     const centre = vehicle.body.translation();
     let dx = state.pos.x - centre.x;
     let dz = state.pos.z - centre.z;
@@ -235,6 +263,22 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     state.vy = 0;
     state.walk = { x: 0, z: 0 };
     state.carry = { x: 0, z: 0 };
+  };
+
+  const seatConfig = (seatId: string): SeatConfig | undefined => vehicle.config.seats.find((seat) => seat.id === seatId);
+
+  // Rule B5: the seat's world position, less half the player's height.
+  const placeSeated = (state: PlayerState) => {
+    const seat = state.seat === null ? undefined : seatConfig(state.seat);
+    if (!seat) return;
+    const at = fromVehicleFrame(seat.pos);
+    state.pos = vec3(at.x, at.y - PLAYER_HEIGHT / 2, at.z);
+    state.walk = { x: 0, z: 0 };
+    state.carry = { x: 0, z: 0 };
+    state.vy = 0;
+    state.ground = null;
+    state.grounded = false;
+    placeCollider(state.id);
   };
 
   const move = (state: PlayerState, step: StepInputs) => {
@@ -315,8 +359,10 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         const step = inputs.get(state.id) ?? NEUTRAL_STEP;
         state.yaw = finite(step.fields.yaw);
         state.pitch = finite(step.fields.pitch);
-        // Seated placement comes with the seat rules.
-        if (state.seat !== null) continue;
+        if (state.seat !== null) {
+          placeSeated(state);
+          continue;
+        }
         if (state.ground) {
           state.pos = fromVehicleFrame(state.ground.localPos);
           placeCollider(state.id);
@@ -330,14 +376,17 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     setSeat(id, seatId, pos) {
       const state = entries.get(id)?.state;
       if (!state) return;
-      state.seat = seatId;
       if (seatId === null) {
+        state.seat = null;
         restAt(state, pos ?? state.pos);
         state.grounded = true;
-      } else if (pos) {
-        state.pos = vec3(pos.x, pos.y, pos.z);
+        placeCollider(id);
+        return;
       }
-      placeCollider(id);
+      if (!seatConfig(seatId)) return;
+      state.seat = seatId;
+      state.respawnIn = null;
+      placeSeated(state);
     },
     teleport(id, pos) {
       const state = entries.get(id)?.state;
@@ -348,7 +397,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       placeCollider(id);
     },
     findSpawn,
-    findExit: () => null,
+    findExit,
     dispose() {
       for (const { collider } of entries.values()) physics.removeCollider(collider, false);
       entries.clear();
