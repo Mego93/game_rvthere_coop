@@ -212,3 +212,18 @@ test('(10) the RV from rest on the sand patch, hook on anchor-3, reel in and ful
   expect(run.finished).toBe(true);
   expect(run.end.z).toBeLessThan(-45);
 });
+
+describe.each([
+  ['lodgy', 240],
+  ['rv', 160],
+] as const)('(8) the %s tank', (id, seconds) => {
+  test(`lasts ${seconds} s at full throttle while circling`, () => {
+    const rig = createRig(RAPIER, id, { pos: vec3(0, 0, 0), rot: IDENTITY });
+    let ticks = 0;
+    while (rig.vehicle.fuel() > 0 && ticks < 300 * TICK_RATE) {
+      rig.run(1 / TICK_RATE, { throttle: 1, steer: 1 });
+      ticks += 1;
+    }
+    expect(Math.abs(ticks / TICK_RATE - seconds)).toBeLessThan(2);
+  });
+});

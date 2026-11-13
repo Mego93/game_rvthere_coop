@@ -33,6 +33,8 @@ function blend(a: VehicleState, b: VehicleState, t: number): VehicleState {
     linvel: lerp(a.linvel, b.linvel, t),
     throttle: b.throttle,
     steer: b.steer,
+    fuel: b.fuel,
+    health: b.health,
   };
 }
 
@@ -54,7 +56,7 @@ function copyPlayer(p: PlayerSnapshot): PlayerSnapshot {
 }
 
 function copyVehicle(v: VehicleState): VehicleState {
-  return { pos: copyVec(v.pos), rot: { ...v.rot }, linvel: copyVec(v.linvel), throttle: v.throttle, steer: v.steer };
+  return { pos: copyVec(v.pos), rot: { ...v.rot }, linvel: copyVec(v.linvel), throttle: v.throttle, steer: v.steer, fuel: v.fuel, health: v.health };
 }
 
 const copyProp = (p: PropSnapshot): PropSnapshot => ({ id: p.id, kind: p.kind, pos: copyVec(p.pos), rot: { ...p.rot } });

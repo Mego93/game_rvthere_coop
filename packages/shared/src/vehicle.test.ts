@@ -1,9 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { DRIVER_DOOR_RANGE, GRAVITY, SURFACES } from './constants';
+import { DRIVER_DOOR_RANGE, GRAVITY, SURFACES, TICK_RATE, VEHICLE_UPSIDE_DOWN_DRAIN } from './constants';
+import { testGround } from './courses/testGround';
 import { SAND_PATCH_CENTER } from './courses/testGround';
-import { IDENTITY, vec3, yawOf, type Pose } from './math';
-import { createRig } from './testRig';
+import { IDENTITY, quatFromAxisAngle, vec3, yawOf, type Pose } from './math';
+import { createRig, withBoxes } from './testRig';
 import { VEHICLES, getVehicleConfig, type VehicleId } from './vehicles';
 
 beforeAll(async () => {
@@ -180,5 +181,113 @@ describe.each(['lodgy', 'rv'] as const)('%s seats and spawn slots', (id) => {
     expect(() => {
       (config.spawnSlots[0] as { x: number }).x = 0;
     }).toThrow(TypeError);
+  });
+});
+
+describe.each(['lodgy', 'rv'] as const)('%s fuel and health', (id) => {
+  const config = VEHICLES[id];
+
+  test('(1) fuel drains at fuelBurn times the throttle magnitude, in reverse too, and not at zero throttle', () => {
+    const full = settled(id);
+    full.run(10, { throttle: 1 });
+    expect(full.vehicle.fuel()).toBeCloseTo(1 - 10 * config.fuelBurn, 4);
+    const half = settled(id);
+    half.run(10, { throttle: 0.5 });
+    expect(half.vehicle.fuel()).toBeCloseTo(1 - 5 * config.fuelBurn, 4);
+    const reverse = settled(id);
+    reverse.run(10, { throttle: -1 });
+    expect(reverse.vehicle.fuel()).toBeCloseTo(1 - 10 * config.fuelBurn, 4);
+    const idle = settled(id);
+    idle.run(10);
+    expect(idle.vehicle.fuel()).toBe(1);
+    expect(full.vehicle.state().fuel).toBe(full.vehicle.fuel());
+  });
+
+  test('(2) with an empty tank full throttle does not move it, and braking and steering still work while coasting', () => {
+    const rig = settled(id);
+    rig.vehicle.addFuel(-1);
+    expect(rig.vehicle.fuel()).toBe(0);
+    rig.run(3, { throttle: 1 });
+    expect(Math.hypot(rig.vehicle.state().pos.x, rig.vehicle.state().pos.z)).toBeLessThan(0.05);
+    expect(rig.vehicle.fuel()).toBe(0);
+
+    const coasting = settled(id);
+    coasting.run(4, { throttle: 1 });
+    coasting.vehicle.addFuel(-1);
+    const v0 = coasting.vehicle.forwardSpeed();
+    coasting.run(1, { throttle: 1, steer: 1 });
+    expect(coasting.vehicle.forwardSpeed()).toBeLessThan(v0);
+    expect(coasting.vehicle.state().steer).toBe(1);
+    expect(yawOf(coasting.vehicle.state().rot)).toBeLessThan(0);
+    coasting.run(5, { brake: true });
+    expect(Math.abs(coasting.vehicle.forwardSpeed())).toBeLessThan(0.01);
+  });
+
+  test('(3) addFuel and repair clamp to [0, 1]', () => {
+    const rig = settled(id);
+    rig.vehicle.addFuel(0.5);
+    expect(rig.vehicle.fuel()).toBe(1);
+    rig.vehicle.addFuel(-0.25);
+    expect(rig.vehicle.fuel()).toBeCloseTo(0.75, 10);
+    rig.vehicle.addFuel(-5);
+    expect(rig.vehicle.fuel()).toBe(0);
+    rig.vehicle.repair(0.5);
+    expect(rig.vehicle.health()).toBe(1);
+    rig.vehicle.repair(-5);
+    expect(rig.vehicle.health()).toBe(0);
+    rig.vehicle.repair(0.5);
+    expect(rig.vehicle.health()).toBe(0.5);
+    expect(rig.vehicle.state().health).toBe(0.5);
+  });
+
+  test('(4) health stays 1 at rest for 10 s, and over a 100 m drive and a full stop', () => {
+    const rest = createRig(RAPIER, id, ORIGIN);
+    rest.run(10);
+    expect(rest.vehicle.health()).toBe(1);
+
+    const drive = settled(id);
+    while (drive.vehicle.state().pos.z > -100) drive.run(0.1, { throttle: 1 });
+    drive.run(10, { brake: true });
+    expect(Math.abs(drive.vehicle.forwardSpeed())).toBeLessThan(0.01);
+    expect(drive.vehicle.health()).toBe(1);
+  });
+
+  test('(6) upside down at rest for 10 s loses 10 times the drain', () => {
+    const flipped = quatFromAxisAngle(vec3(0, 0, 1), Math.PI);
+    const rig = createRig(RAPIER, id, { pos: vec3(0, config.halfExtents.y + config.rideHeight, 0), rot: flipped });
+    rig.run(10);
+    expect(rig.vehicle.health()).toBeCloseTo(1 - 10 * VEHICLE_UPSIDE_DOWN_DRAIN, 2);
+  });
+
+  test('(7) health never goes below 0', () => {
+    const flipped = quatFromAxisAngle(vec3(0, 0, 1), Math.PI);
+    const rig = createRig(RAPIER, id, { pos: vec3(0, config.halfExtents.y + config.rideHeight, 0), rot: flipped });
+    rig.vehicle.repair(-0.95);
+    rig.run(10);
+    expect(rig.vehicle.health()).toBe(0);
+  });
+});
+
+describe('the lodgy against a wall', () => {
+  // The bumper reaches the wall's face after about `distance` metres.
+  const wallRun = (distance: number, throttle: number, speed?: number) => {
+    const half = VEHICLES.lodgy.halfExtents.z;
+    const course = withBoxes(testGround, {
+      walls: [{ center: vec3(0, 3, -(distance + half + 0.5)), halfExtents: vec3(8, 3, 0.5), rot: IDENTITY }],
+    });
+    const rig = createRig(RAPIER, 'lodgy', ORIGIN, course);
+    rig.run(1);
+    if (speed !== undefined) rig.vehicle.body.setLinvel({ x: 0, y: 0, z: -speed }, true);
+    rig.run(Math.max(6, (distance / 5) * 2), { throttle });
+    return rig.vehicle.health();
+  };
+
+  test('(5) full throttle from 30 m costs 0.2 to 0.35, from 60 m costs more, a 2 m/s roll costs nothing', () => {
+    const near = wallRun(30, 1);
+    const far = wallRun(60, 1);
+    expect(near).toBeGreaterThan(1 - 0.35);
+    expect(near).toBeLessThan(1 - 0.2);
+    expect(far).toBeLessThan(near);
+    expect(wallRun(5, 0, 2)).toBe(1);
   });
 });

@@ -4,7 +4,11 @@ import {
   MAX_SUSPENSION_FORCE_PER_WEIGHT,
   SURFACES,
   TICK_DT,
+  VEHICLE_IMPACT_DAMAGE,
+  VEHICLE_IMPACT_SPEED,
+  VEHICLE_JOLT_FLOOR,
   VEHICLE_STOPPED_SPEED,
+  VEHICLE_UPSIDE_DOWN_DRAIN,
   type Surface,
 } from './constants';
 import { GROUP_WORLD, groups } from './groups';
@@ -26,6 +30,9 @@ export interface VehicleState {
   linvel: Vec3;
   throttle: number;
   steer: number;
+  // Fractions of a full tank and of full health.
+  fuel: number;
+  health: number;
 }
 
 export interface Vehicle {
@@ -39,6 +46,12 @@ export interface Vehicle {
   forwardSpeed(): number;
   // The surface under each wheel (front-left, front-right, rear-left, rear-right), or null if airborne.
   wheelSurfaces(): (Surface | null)[];
+  fuel(): number;
+  health(): number;
+  addFuel(amount: number): void;
+  repair(amount: number): void;
+  // Impact and upside-down damage. Call once per tick, after the physics world steps.
+  afterPhysics(): void;
 }
 
 const WHEEL_COUNT = 4;
@@ -105,6 +118,10 @@ export function createVehicle(
 
   let throttle = 0;
   let steer = 0;
+  let fuel = 1;
+  let health = 1;
+  let previousVelocity: Vec3 = { ...body.linvel() };
+  let impact = 0;
 
   const forwardSpeed = () => dot(body.linvel(), rotate(body.rotation(), FORWARD));
 
@@ -125,7 +142,8 @@ export function createVehicle(
       steer = clamp(controls.steer, -1, 1);
       const speed = forwardSpeed();
       const fade = throttle >= 0 ? 1 - speed / config.maxSpeed : 1 + speed / config.reverseSpeed;
-      const drive = throttle * config.engineForce * clamp(fade, 0, 1);
+      const drive = fuel > 0 ? throttle * config.engineForce * clamp(fade, 0, 1) : 0;
+      fuel = Math.max(0, fuel - Math.abs(throttle) * config.fuelBurn * TICK_DT);
       const moving = Math.abs(speed) > VEHICLE_STOPPED_SPEED;
       const surfaces = wheelSurfaces();
       for (let i = 0; i < WHEEL_COUNT; i++) {
@@ -145,6 +163,26 @@ export function createVehicle(
       // Wheel rays ignore players.
       controller.updateVehicle(TICK_DT, undefined, groups(GROUP_WORLD, GROUP_WORLD));
     },
+    fuel: () => fuel,
+    health: () => health,
+    addFuel(amount) {
+      fuel = clamp(fuel + amount, 0, 1);
+    },
+    repair(amount) {
+      health = clamp(health + amount, 0, 1);
+    },
+    afterPhysics() {
+      const v = body.linvel();
+      const jolt = Math.hypot(v.x - previousVelocity.x, v.y - previousVelocity.y + GRAVITY * TICK_DT, v.z - previousVelocity.z);
+      previousVelocity = { x: v.x, y: v.y, z: v.z };
+      if (jolt > VEHICLE_JOLT_FLOOR) impact += jolt;
+      else {
+        if (impact > VEHICLE_IMPACT_SPEED) health -= (impact - VEHICLE_IMPACT_SPEED) * VEHICLE_IMPACT_DAMAGE;
+        impact = 0;
+      }
+      if (rotate(body.rotation(), AXIS_Y).y < 0) health -= VEHICLE_UPSIDE_DOWN_DRAIN * TICK_DT;
+      health = clamp(health, 0, 1);
+    },
     state() {
       const t = body.translation();
       const r = body.rotation();
@@ -155,6 +193,8 @@ export function createVehicle(
         linvel: { x: v.x, y: v.y, z: v.z },
         throttle,
         steer,
+        fuel,
+        health,
       };
     },
   };

@@ -34,6 +34,8 @@ const vehicle: VehicleState = {
   linvel: vec3(0, 0, -10),
   throttle: 1,
   steer: -0.5,
+  fuel: 1,
+  health: 1,
 };
 
 const stowed: CableSnapshot = { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 0, 0), length: 0, reel: 0 };

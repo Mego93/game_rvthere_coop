@@ -30,6 +30,8 @@ const snapshot = (
     linvel: vec3(0, 0, -tick),
     throttle: tick,
     steer: 0,
+    fuel: 1,
+    health: 1,
   },
   players,
   props,

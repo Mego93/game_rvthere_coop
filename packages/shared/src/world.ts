@@ -258,6 +258,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       physics.step();
       tick += 1;
       players.stepOnFoot(onFoot);
+      vehicle.afterPhysics();
       const pulled = winch.afterCharacters((id) => players.holdPose(id));
       if (pulled !== null) players.setHands(pulled, null);
       const events: WorldEvent[] = [];

@@ -127,6 +127,8 @@ const vehicle = {
   linvel: { x: 0, y: 0, z: -4 },
   throttle: 1,
   steer: 0,
+  fuel: 1,
+  health: 1,
 };
 const onFoot = {
   playerId: 'p1',

@@ -28,6 +28,7 @@ export function createRig(rapier: Rapier, vehicleId: VehicleId, spawn: Pose, cou
       for (let i = 0; i < Math.round(seconds * TICK_RATE); i++) {
         vehicle.step({ throttle: 0, steer: 0, brake: false, ...controls });
         world.step();
+        vehicle.afterPhysics();
       }
     },
   };

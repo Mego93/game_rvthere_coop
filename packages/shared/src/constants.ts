@@ -153,3 +153,34 @@ export const THROW_SPEED = 7;
 export const THROW_HEAD_CLEARANCE = 0.05;
 // m or quaternion component; a smaller change is not sent.
 export const PROP_MOVED_EPSILON = 1e-4;
+
+// Fuel, health and items.
+// m/s per tick; a smaller jolt is not part of an impact.
+export const VEHICLE_JOLT_FLOOR = 0.5;
+// m/s; impacts up to this cost nothing.
+export const VEHICLE_IMPACT_SPEED = 4;
+// Health per m/s above the threshold.
+export const VEHICLE_IMPACT_DAMAGE = 0.04;
+// Health per second while upside down.
+export const VEHICLE_UPSIDE_DOWN_DRAIN = 0.02;
+// s
+export const HOLD_DURATION = 3;
+// m, feet to the nearest point of the vehicle's box.
+export const USE_RANGE = 2;
+// Fuel added by a jerrycan.
+export const ITEM_REFUEL = 0.5;
+// Health added by a toolbox.
+export const ITEM_REPAIR = 0.5;
+// m above the feet where a dropped item appears.
+export const DROP_HEIGHT = 0.3;
+export interface ItemKindConfig {
+  halfExtents: Vec3;
+  mass: number;
+  friction: number;
+}
+
+export const ITEM_KINDS = deepFreeze({
+  jerrycan: { halfExtents: vec3(0.12, 0.25, 0.2), mass: 20, friction: 0.8 },
+  toolbox: { halfExtents: vec3(0.25, 0.12, 0.12), mass: 10, friction: 0.8 },
+} satisfies Record<string, ItemKindConfig>);
+export type ItemKind = keyof typeof ITEM_KINDS;
