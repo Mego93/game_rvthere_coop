@@ -7,7 +7,7 @@ Single source of truth for where the project stands. Update it in the same commi
 
 ## Current state
 
-**Current step:** step 2 is done. Next action: write the plan for step 3.
+**Current step:** step 3 is planned. Next action: implement the step 3 plan on the branch `step-3-players-on-foot`.
 
 **Runnable today:** `npm run dev` starts the game server and the page. Create a room on the home page and share its address; everyone who opens it sees the same vehicle on the test ground, driven by the first player in the room. There are no characters on foot yet.
 
@@ -19,7 +19,7 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 |---|---|---|---|---|---|
 | 1 | Workspace scaffold, Rapier passed into `shared`, test ground, both vehicle configs as boxes, drivable in one tab, keyboard input, text overlay, force-based cable experiment | done | step-1-scaffold-and-drivable-vehicle | [plan](docs/superpowers/plans/step-1-scaffold-and-drivable-vehicle.md) | Automated tests |
 | 2 | Server (`room` layer and `node` adapter), validation, rate limit, liveness, home page, create and join by noun, snapshots, interpolation, Playwright test begins | done | step-2-server-rooms-snapshots | [plan](docs/superpowers/plans/step-2-server-rooms-snapshots.md) | Automated tests |
-| 3 | Server-side players on foot: movement, moving bodies, shove-out, spawn slots, seats, kill-plane respawn; shoulder camera and crosshair; iPhone load check | todo | | | Automated tests |
+| 3 | Server-side players on foot: movement, moving bodies, shove-out, spawn slots, seats, kill-plane respawn; shoulder camera and crosshair; iPhone load check | planned | step-3-players-on-foot | [plan](docs/superpowers/plans/step-3-players-on-foot.md) | Automated tests |
 | 4 | Client prediction of walking and jumping | todo | | | Automated tests |
 | 5 | Push, hands, light debris, heavy obstacles, prop kill plane | todo | | | Automated tests |
 | 6 | Winch | todo | | | Automated tests |
