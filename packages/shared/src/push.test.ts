@@ -47,6 +47,14 @@ describe('contactPoint', () => {
     expect(point.y).toBeCloseTo(0.5, 9);
     expect(point.z).toBeCloseTo(1, 9);
   });
+
+  test('a box turned 45 degrees: a wrong rotation sign lands on the other side', () => {
+    const rot = quatFromAxisAngle(AXIS_Y, Math.PI / 4);
+    const point = contactPoint(vec3(3, 0.5, 0), vec3(0, 0.5, 0), rot, half);
+    expect(point.x).toBeCloseTo((Math.SQRT2 / 2) * 1.4, 9);
+    expect(point.y).toBeCloseTo(0.5, 9);
+    expect(point.z).toBeCloseTo(-(Math.SQRT2 / 2) * 0.6, 9);
+  });
 });
 
 describe('pushForce', () => {
@@ -153,7 +161,7 @@ describe('pushing the vehicle', () => {
       const before = body.z;
       const inputs: Record<string, InputFields> = {};
       ids.forEach((id, i) => {
-        world.teleportPlayer(id, vec3(body.x + (spots[i] ?? 0), 0.1, body.z + 2.25 + 0.5));
+        world.teleportPlayer(id, vec3(body.x + (spots[i] ?? 0), 0.1, body.z + world.vehicleConfig.halfExtents.z + 0.5));
         inputs[id] = FORWARD;
       });
       run(world, 60, inputs);

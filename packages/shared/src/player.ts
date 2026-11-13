@@ -8,6 +8,7 @@ import {
   PLAYER_STEP_HEIGHT,
   PLAYER_WALK_SPEED,
   PUSH_HEIGHT,
+  PUSH_TIPPED_DEG,
   SHOVE_MAX_DISTANCE,
   SHOVE_STEP,
 } from './constants';
@@ -106,7 +107,7 @@ const CAPSULE_HALF_SEGMENT = PLAYER_HEIGHT / 2 - PLAYER_RADIUS;
 const SPAWN_RAY_HEIGHT = 3;
 const SPAWN_RAY_LENGTH = 6;
 const MIN_UP_NORMAL = Math.cos(degToRad(PLAYER_MAX_SLOPE_DEG));
-const TIPPED_UP = Math.cos(degToRad(45));
+const TIPPED_UP = Math.cos(degToRad(PUSH_TIPPED_DEG));
 const conjugate = (q: Quat): Quat => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
 
 export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Vehicle, props: Props, course: BuiltCourse): Players {

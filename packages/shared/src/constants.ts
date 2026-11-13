@@ -127,6 +127,8 @@ export type PropKind = keyof typeof PROP_KINDS;
 export const PUSH_FORCE = 1500;
 // N per player on a vehicle tipped more than 45 degrees.
 export const PUSH_FORCE_TIPPED = 4000;
+// Degrees from world up beyond which a vehicle counts as tipped.
+export const PUSH_TIPPED_DEG = 45;
 // m/s^2; caps the force on light things at mass times this.
 export const PUSH_MAX_ACCEL = 10;
 // m above the feet, where a player pushes.
