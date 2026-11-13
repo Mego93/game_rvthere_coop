@@ -1,4 +1,4 @@
-import { ANCHOR_HEIGHT, type Box, type BuiltCourse, type Surface } from '@lodgy/shared';
+import { ANCHOR_HEIGHT, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type BuiltCourse, type Surface } from '@lodgy/shared';
 import * as THREE from 'three';
 
 const SKY = 0xcfe6f5;
@@ -49,12 +49,12 @@ export function createScene(course: BuiltCourse): THREE.Scene {
 
   for (const stop of course.stops) {
     scene.add(boxMesh(stop.zone, ghost(stop.kind === 'fuel' ? 0xf97316 : 0x3b82f6)));
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.4, 0.3), solid(stop.kind === 'fuel' ? 0xf97316 : 0x3b82f6));
-    post.position.set(stop.operatePoint.x, stop.operatePoint.y + 0.7, stop.operatePoint.z);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, STOP_POST_HEIGHT, 0.3), solid(stop.kind === 'fuel' ? 0xf97316 : 0x3b82f6));
+    post.position.set(stop.operatePoint.x, stop.operatePoint.y + STOP_POST_HEIGHT / 2, stop.operatePoint.z);
     scene.add(post);
     if (stop.shopCounter) {
-      const counter = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1, 0.6), solid(0xf97316));
-      counter.position.set(stop.shopCounter.x, stop.shopCounter.y + 0.5, stop.shopCounter.z);
+      const counter = new THREE.Mesh(new THREE.BoxGeometry(SHOP_COUNTER_HALF.x * 2, SHOP_COUNTER_HALF.y * 2, SHOP_COUNTER_HALF.z * 2), solid(0xf97316));
+      counter.position.set(stop.shopCounter.x, stop.shopCounter.y + SHOP_COUNTER_HALF.y, stop.shopCounter.z);
       scene.add(counter);
     }
   }

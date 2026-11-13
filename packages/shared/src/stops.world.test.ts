@@ -1,9 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
-import { HOLD_DURATION, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, STOP_OPERATE_RANGE, TICK_DT } from './constants';
+import { HOLD_DURATION, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, SHOP_COUNTER_HALF, SHOP_PRICES, SHOP_RANGE, STOP_OPERATE_RANGE, TICK_DT } from './constants';
+import { distanceToBox } from './seats';
 import { IDENTITY } from './math';
 import { testGround } from './courses/testGround';
-import { interactCandidates, splitCandidates, resolveInteract } from './interact';
+import { counterCentre, interactCandidates, splitCandidates, resolveInteract } from './interact';
 import { stopUsable } from './stops';
 import { coinTouched } from './coins';
 import { vec3, type Vec3 } from './math';
@@ -519,5 +520,274 @@ describe('S13: determinism with an operate hold', () => {
       return JSON.stringify([snapshotMid, world.snapshot(), events]);
     };
     expect(play()).toBe(play());
+  });
+});
+
+const atCounter = (world: World, id: string, dx = 0, dz = -1) => {
+  const at = stopOf(world, 'stop-fuel').shopCounter!;
+  world.teleportPlayer(id, vec3(at.x + dx, 0.02, at.z + dz));
+  run(world, 3);
+};
+const earn = (world: World, id: string, coins: number) => {
+  for (const coinId of ['coin-1', 'coin-2', 'coin-3', 'coin-4'].slice(0, coins)) touch(world, id, coinId);
+  expect(world.snapshot().wallet).toBe(coins);
+};
+
+describe('S11: shop', () => {
+  test('with 3 coins at the counter buy is ok, takes the price, fills the first free slot, and the buy event comes first from the next step', () => {
+    const world = make('p1');
+    earn(world, 'p1', 3);
+    atCounter(world, 'p1');
+    world.debugSetInventory('p1', [null, 'toolbox', null]);
+    const tickAtCall = world.snapshot().tick;
+    expect(world.buy('p1', 'jerrycan')).toBe('ok');
+    expect(world.snapshot().wallet).toBe(0);
+    expect(player(world, 'p1').inventory).toEqual(['jerrycan', 'toolbox', null]);
+    expect(world.snapshot().coinsCollected).toBe(3);
+    const events = world.step(new Map());
+    expect(events[0]).toEqual({ kind: 'buy', tick: world.snapshot().tick, playerId: 'p1', pos: stopOf(world, 'stop-fuel').shopCounter });
+    expect(events[0]!.tick).toBe(tickAtCall + 1);
+    expect(kinds(events, 'buy')).toHaveLength(1);
+    expect(kinds(world.step(new Map()), 'buy')).toHaveLength(0);
+  });
+
+  test('a cheaper item leaves the change', () => {
+    const world = make('p1');
+    earn(world, 'p1', 3);
+    atCounter(world, 'p1');
+    expect(world.buy('p1', 'healthKit')).toBe('ok');
+    expect(world.snapshot().wallet).toBe(3 - SHOP_PRICES.healthKit);
+  });
+
+  test('the counter is a box: standing beside it, within SHOP_RANGE of the box, works', () => {
+    const world = make('p1');
+    earn(world, 'p1', 3);
+    atCounter(world, 'p1', SHOP_COUNTER_HALF.x + SHOP_RANGE - 0.2, 0);
+    expect(world.buy('p1', 'jerrycan')).toBe('ok');
+  });
+
+  // Each refusal returns cannot_buy and leaves the wallet, the inventory and the next step's events alone.
+  const refused = (world: World, id: string, item: 'jerrycan' | 'toolbox' | 'healthKit' = 'jerrycan') => {
+    const before = JSON.stringify([world.snapshot().wallet, player(world, id).inventory]);
+    expect(world.buy(id, item)).toBe('cannot_buy');
+    expect(JSON.stringify([world.snapshot().wallet, player(world, id).inventory])).toBe(before);
+    expect(kinds(world.step(new Map()), 'buy')).toHaveLength(0);
+  };
+
+  test('too few coins', () => {
+    const world = make('p1');
+    earn(world, 'p1', 2);
+    atCounter(world, 'p1');
+    refused(world, 'p1');
+    expect(world.buy('p1', 'healthKit')).toBe('ok');
+  });
+
+  test('a full inventory', () => {
+    const world = make('p1');
+    earn(world, 'p1', 3);
+    atCounter(world, 'p1');
+    world.debugSetInventory('p1', ['toolbox', 'toolbox', 'healthKit']);
+    refused(world, 'p1');
+  });
+
+  test('out of range', () => {
+    const world = make('p1');
+    earn(world, 'p1', 3);
+    atCounter(world, 'p1', 0, SHOP_COUNTER_HALF.z + SHOP_RANGE + 0.3);
+    refused(world, 'p1');
+  });
+
+  test('an unknown player', () => {
+    const world = make('p1');
+    earn(world, 'p1', 3);
+    expect(world.buy('nobody', 'jerrycan')).toBe('cannot_buy');
+    expect(world.snapshot().wallet).toBe(3);
+  });
+
+  test('seated', () => {
+    const world = make('p1', 'p2');
+    world.teleportPlayer('p2', vec3(40, 0.02, 40));
+    world.step(new Map([['p1', input({ interact: true })]]));
+    world.step(new Map());
+    expect(player(world, 'p1').seat).not.toBeNull();
+    // The wallet is shared, so the unseated p2 fills it.
+    for (const coinId of ['coin-1', 'coin-2', 'coin-3']) touch(world, 'p2', coinId);
+    expect(world.snapshot().wallet).toBe(3);
+    const at = stopOf(world, 'stop-fuel').shopCounter!;
+    world.teleportPlayer('p2', vec3(40, 0.02, 40));
+    world.debugBody('vehicle')!.setTranslation({ x: at.x, y: 0.95, z: at.z }, true);
+    run(world, 3);
+    expect(distanceToBox(player(world, 'p1').pos, SHOP_COUNTER_HALF, counterCentre(at), IDENTITY)).toBeLessThanOrEqual(SHOP_RANGE);
+    expect(player(world, 'p1').seat).not.toBeNull();
+    refused(world, 'p1');
+  });
+
+  test('downed', () => {
+    const world = make('p1', 'p2');
+    world.teleportPlayer('p2', vec3(40, 0.02, 40));
+    earn(world, 'p1', 3);
+    atCounter(world, 'p1');
+    world.debugHurt('p1', 100);
+    run(world, 2);
+    expect(player(world, 'p1').downed).not.toBeNull();
+    refused(world, 'p1');
+  });
+
+  test('won', () => {
+    const world = make('p1');
+    earn(world, 'p1', 3);
+    world.debugBody('vehicle')!.setTranslation({ x: 0, y: 1, z: -100 }, true);
+    world.step(new Map());
+    expect(world.snapshot().won).toBe(true);
+    atCounter(world, 'p1');
+    refused(world, 'p1');
+  });
+
+  test('a garage has no counter', () => {
+    const world = make('p1');
+    earn(world, 'p1', 3);
+    const at = stopOf(world, 'stop-garage').operatePoint;
+    world.teleportPlayer('p1', vec3(at.x, 0.02, at.z - 2));
+    run(world, 3);
+    refused(world, 'p1');
+  });
+});
+
+describe('M13: aiming at the drawn post', () => {
+  const candidatesAt = (world: World, feet: Vec3, yaw: number) => {
+    const snap = world.snapshot();
+    return interactCandidates({
+      config: world.vehicleConfig,
+      vehiclePos: snap.vehicle.pos,
+      vehicleRot: snap.vehicle.rot,
+      feet,
+      yaw,
+      pitch: 0,
+      seat: null,
+      hands: null,
+      takenSeats: new Set(),
+      props: [],
+      items: [],
+      freeSlot: true,
+      heldProps: new Set(),
+      cable: snap.cable,
+      anchors: [],
+      stops: world.course.stops.map((s) => ({ ...s, usable: true })),
+    });
+  };
+  const resolved = (found: ReturnType<typeof candidatesAt>) => resolveInteract({ seat: null, hands: null, holdsHook: false, ...splitCandidates(found) });
+  // Level yaw from `from` toward `to` (yaw 0 faces -z).
+  const yawToward = (from: Vec3, to: Vec3) => Math.atan2(-(to.x - from.x), -(to.z - from.z));
+
+  test('a player 0.6 m from the operate point aiming level at the post gets operate; aiming level at the counter gets shop', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel');
+    world.debugVehicle().addFuel(-0.7);
+    const stop = stopOf(world, 'stop-fuel');
+    // Aiming level at the post here: the angle to the ground-level point would be 71 deg, to the counter 64, and to the post's middle 58.
+    const feet = vec3(stop.operatePoint.x + 0.55, 0.02, stop.operatePoint.z + 0.15);
+    world.teleportPlayer('p1', feet);
+    run(world, 3);
+    const atPost = candidatesAt(world, feet, yawToward(feet, stop.operatePoint));
+    expect(resolved(atPost)).toEqual({ kind: 'operate', stopId: stop.id });
+    const angle = (list: typeof atPost, kind: string) => list.find((c) => c.action.kind === kind)!.angle;
+    expect(angle(atPost, 'operate')).toBeLessThan(angle(atPost, 'shop'));
+    // Beside the pump, away from the counter's line, aiming level at the counter gives shop.
+    const side = vec3(stop.operatePoint.x - 1, 0.02, stop.operatePoint.z);
+    const atCounterAim = candidatesAt(world, side, yawToward(side, stop.shopCounter!));
+    expect(resolved(atCounterAim)).toEqual({ kind: 'shop', stopId: stop.id });
+    expect(angle(atCounterAim, 'shop')).toBeLessThan(angle(atCounterAim, 'operate'));
+  });
+
+  test('in the world the same player aiming level at the post starts the hold; aiming level at the counter does nothing', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel');
+    world.debugVehicle().addFuel(-0.7);
+    const stop = stopOf(world, 'stop-fuel');
+    // Aiming level at the post here: the angle to the ground-level point would be 71 deg, to the counter 64, and to the post's middle 58.
+    const feet = vec3(stop.operatePoint.x + 0.55, 0.02, stop.operatePoint.z + 0.15);
+    world.teleportPlayer('p1', feet);
+    run(world, 3);
+    holdInteract(world, 'p1', 1, { pitch: 0, yaw: yawToward(feet, stop.operatePoint) });
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'operate', targetId: stop.id });
+    run(world, 1);
+    expect(player(world, 'p1').hold).toBeNull();
+    const side = vec3(stop.operatePoint.x - 1, 0.02, stop.operatePoint.z);
+    world.teleportPlayer('p1', side);
+    run(world, 3);
+    holdInteract(world, 'p1', 1, { pitch: 0, yaw: yawToward(side, stop.shopCounter!) });
+    expect(player(world, 'p1').hold).toBeNull();
+    expect(player(world, 'p1').seat).toBeNull();
+  });
+
+  test('at the zone\'s outer edge board is nearer than operate when aiming level at the post, and operate still wins', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel', 2.4);
+    world.debugVehicle().addFuel(-0.7);
+    const stop = stopOf(world, 'stop-fuel');
+    const feet = vec3(stop.operatePoint.x + 1, 0.02, stop.operatePoint.z);
+    world.teleportPlayer('p1', feet);
+    run(world, 3);
+    const found = candidatesAt(world, feet, yawToward(feet, stop.operatePoint));
+    const angle = (kind: string) => found.find((c) => c.action.kind === kind)!.angle;
+    expect(angle('board')).toBeLessThan(angle('operate'));
+    expect(angle('operate')).toBeLessThan(angle('shop'));
+    expect(resolved(found)).toEqual({ kind: 'operate', stopId: stop.id });
+    // Smallest angle overall would have boarded.
+    const overall = found.reduce((best, c) => (c.angle < best.angle ? c : best));
+    expect(overall.action.kind).toBe('board');
+    holdInteract(world, 'p1', 1, { pitch: 0, yaw: yawToward(feet, stop.operatePoint) });
+    expect(player(world, 'p1').seat).toBeNull();
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'operate', targetId: stop.id });
+  });
+});
+
+describe('S10: more operate cases', () => {
+  test('an operate press and a use press on the same tick: operate wins and no item hold starts', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel');
+    world.debugVehicle().addFuel(-0.7);
+    world.debugSetInventory('p1', ['jerrycan', null, null]);
+    standAt(world, 'p1', 'stop-fuel');
+    holdInteract(world, 'p1', 1, { use: true });
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'operate', targetId: 'stop-fuel' });
+    holdInteract(world, 'p1', HOLD_TICKS - 1, { use: true });
+    expect(world.snapshot().vehicle.fuel).toBe(1);
+    expect(player(world, 'p1').inventory[0]).toBe('jerrycan');
+  });
+
+  test('two players on one pump: the first completes, the second\'s hold ends with no event and no extra refill', () => {
+    const world = make('p1', 'p2');
+    park(world, 'stop-fuel');
+    world.debugVehicle().addFuel(-0.7);
+    const at = stopOf(world, 'stop-fuel').operatePoint;
+    world.teleportPlayer('p1', vec3(at.x, 0.02, at.z));
+    world.teleportPlayer('p2', vec3(at.x, 0.02, at.z + 0.5));
+    run(world, 3);
+    const both = (ticks: number, p2Interact = true): WorldEvent[] => {
+      const events: WorldEvent[] = [];
+      for (let i = 0; i < ticks; i++) {
+        events.push(...world.step(new Map([
+          ['p1', input({ interact: true, pitch: AIM_AT_PUMP })],
+          ['p2', input({ interact: p2Interact, pitch: AIM_AT_PUMP })],
+        ])));
+      }
+      return events;
+    };
+    // p1 presses first and p2 five ticks later, so both holds run when p1 completes.
+    holdInteract(world, 'p1', 5);
+    const early = both(HOLD_TICKS - 6);
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'operate' });
+    expect(player(world, 'p2').hold).toMatchObject({ action: 'operate' });
+    expect(kinds(early, 'use')).toHaveLength(0);
+    expect(world.snapshot().vehicle.fuel).toBeCloseTo(0.3, 6);
+    const events = both(1);
+    expect(world.snapshot().vehicle.fuel).toBe(1);
+    expect(kinds(events, 'use')).toEqual([{ kind: 'use', tick: world.snapshot().tick, playerId: 'p1', pos: at }]);
+    expect(player(world, 'p1').hold).toBeNull();
+    expect(player(world, 'p2').hold).toBeNull();
+    // The tank is full, so p2 gets no new hold and no event while holding on.
+    expect(kinds(both(HOLD_TICKS), 'use')).toHaveLength(0);
+    expect(player(world, 'p2').hold).toBeNull();
   });
 });

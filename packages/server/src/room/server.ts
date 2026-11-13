@@ -147,6 +147,10 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
         session.room.pushInput(session.player, input);
         return;
       }
+      case 'buy':
+        if (!session.room || !session.player) return refuse(session, 'cannot_buy');
+        if (session.room.buy(session.player, message.item) === 'cannot_buy') refuse(session, 'cannot_buy');
+        return;
       case 'create':
         if (session.room) return refuse(session, 'bad_message');
         return create(session, message);

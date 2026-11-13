@@ -1,13 +1,14 @@
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DROP_HEIGHT, GRAVITY, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
+import { DROP_HEIGHT, GRAVITY, SHOP_COUNTER_HALF, SHOP_PRICES, SHOP_RANGE, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
 import { holdTargetValid, pressTarget, stepHold, stepOperateHold, type UseContext } from './holds';
-import { AXIS_Y, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
+import { AXIS_Y, IDENTITY, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
-import { interactCandidates, resolveInteract, splitCandidates } from './interact';
+import { counterCentre, interactCandidates, resolveInteract, splitCandidates } from './interact';
+import { distanceToBox } from './seats';
 import type { ItemKind } from './constants';
 import { aimRay, createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
 import { elapsedAfter, finalTime, reachedFinish, vehicleLost } from './rules';
@@ -84,6 +85,8 @@ export interface World {
   addPlayer(id: string): void;
   removePlayer(id: string): void;
   teleportPlayer(id: string, pos: Vec3): void;
+  // Applies at once; the buy event is returned by the next step.
+  buy(playerId: string, item: ItemKind): 'ok' | 'cannot_buy';
   status(): WorldStatus;
   // Restarts at the last checkpoint on the next step; does nothing once the run is won.
   restartCheckpoint(): void;
@@ -131,6 +134,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const usePressed = new Set<string>();
   // Players whose interact press this tick resolved to operate, with the stop.
   const operatePressed = new Map<string, string>();
+  // Events raised between steps; the next step returns them first.
+  const queuedEvents: WorldEvent[] = [];
   let tick = 0;
   let runTicks = 0;
   let won = false;
@@ -560,7 +565,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       for (const player of players.all()) player.slot = slotOf(onFoot.get(player.id)?.fields.slot ?? 0) ?? player.slot;
       resolveInteracts(onFoot);
       for (const player of players.all()) if (player.seat === null && onFoot.get(player.id)?.pressed.drop) dropSelected(player);
-      const events: WorldEvent[] = [];
+      const events: WorldEvent[] = queuedEvents.splice(0);
       stepHolds(onFoot, events);
       const taut = winch.tautObstacle();
       applyPushes(taut);
@@ -668,6 +673,22 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       previous.delete(id);
     },
     teleportPlayer: (id, pos) => players.teleport(id, pos),
+    buy(playerId, item) {
+      const player = players.get(playerId);
+      if (!player || player.seat !== null || player.downed !== null || player.respawnIn !== null || won) return 'cannot_buy';
+      const stop = course.stops.find(
+        (candidate) =>
+          candidate.shopCounter !== null &&
+          distanceToBox(player.pos, SHOP_COUNTER_HALF, counterCentre(candidate.shopCounter), IDENTITY) <= SHOP_RANGE,
+      );
+      const free = player.inventory.indexOf(null);
+      if (!stop?.shopCounter || wallet < SHOP_PRICES[item] || free < 0) return 'cannot_buy';
+      wallet -= SHOP_PRICES[item];
+      player.inventory[free] = item;
+      // Stamped with the tick the next step produces, like every other event.
+      queuedEvents.push({ kind: 'buy', tick: tick + 1, playerId, pos: { ...stop.shopCounter } });
+      return 'ok';
+    },
     debug: () => ({ forwardSpeed: vehicle.forwardSpeed(), wheelSurfaces: vehicle.wheelSurfaces(), cableTension }),
     debugBody: (id) => (id === 'vehicle' ? vehicle.body : props.get(id)?.body ?? items.get(id)?.body),
     debugWinch: () => winch,

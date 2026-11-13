@@ -740,3 +740,53 @@ test('stop frees every room', () => {
   server.stop();
   expect(server.roomCount()).toBe(0);
 });
+
+// --- shop ---
+
+test('S15: a buy sent before join gets cannot_buy', () => {
+  const { connect } = setup();
+  const client = connect();
+  client.send({ type: 'buy', item: 'jerrycan' });
+  expect(reasons(client)).toEqual(['cannot_buy']);
+});
+
+test('S15: a refused buy sends cannot_buy to that client only', () => {
+  const { host, guest, advance } = setup();
+  const { client: amal, room } = host();
+  const badr = guest(room, 2);
+  advance(0.2);
+  amal.send({ type: 'buy', item: 'jerrycan' });
+  expect(reasons(amal)).toEqual(['cannot_buy']);
+  expect(reasons(badr)).toEqual([]);
+  expect(amal.closedByServer).toBe(false);
+});
+
+test('S15: an accepted buy sends no error and puts the item in the inventory', () => {
+  const { host, advance } = setup();
+  const { client: amal } = host();
+  let seq = 0;
+  const me = () => amal.last('snapshot').players.find((player) => player.playerId === 'p1')!;
+  // Walks toward a point on the ground, steering from the latest snapshot, until within `reach` of it.
+  const walkTo = (x: number, z: number, reach: number) => {
+    for (let i = 0; i < 20 * TICK_RATE; i++) {
+      const { pos } = me();
+      if (Math.hypot(x - pos.x, z - pos.z) <= reach) return;
+      seq += 1;
+      amal.send(input(seq, { moveY: 1, yaw: Math.atan2(-(x - pos.x), -(z - pos.z)) }));
+      advance(1 / TICK_RATE);
+    }
+    throw new Error(`Never reached ${x}, ${z}`);
+  };
+  advance(0.2);
+  // The test ground's coin-1 to coin-3, then the fuel station's counter.
+  walkTo(3, -12, 0.5);
+  walkTo(-3, -28, 0.5);
+  walkTo(6, -36, 0.5);
+  expect(amal.last('snapshot').wallet).toBe(3);
+  walkTo(11.5, -23, 0.5);
+  amal.send({ type: 'buy', item: 'jerrycan' });
+  expect(reasons(amal)).toEqual([]);
+  advance(0.2);
+  expect(amal.last('snapshot').wallet).toBe(0);
+  expect(me().inventory).toContain('jerrycan');
+});

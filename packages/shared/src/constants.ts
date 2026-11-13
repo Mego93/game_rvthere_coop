@@ -328,6 +328,8 @@ export const FINAL_RESPAWN_PENALTY = 30;
 export const FINAL_COIN_BONUS = 5;
 // m, feet to the operate point (3D).
 export const STOP_OPERATE_RANGE = 2;
+// m, the height of the drawn pump or workbench post; the operate angle is measured to its middle.
+export const STOP_POST_HEIGHT = 1.4;
 // m, feet to the counter's box (3D).
 export const SHOP_RANGE = 2;
 // Coins per item.

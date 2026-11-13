@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { PLAYER_COLOURS, PLAYER_COLOUR_PATTERN } from './constants';
+import { ITEM_KINDS, PLAYER_COLOURS, PLAYER_COLOUR_PATTERN } from './constants';
 import {
   ERROR_REASONS,
   NEUTRAL_INPUT,
@@ -37,6 +37,22 @@ test('accepts a join message and lower-cases the room', () => {
 
 test('accepts pong', () => {
   expect(parseClientMessage('{"type":"pong"}')).toEqual({ type: 'pong' });
+});
+
+test('S14: accepts a buy message for each item kind', () => {
+  for (const item of Object.keys(ITEM_KINDS)) {
+    expect(parseClientMessage(JSON.stringify({ type: 'buy', item }))).toEqual({ type: 'buy', item });
+  }
+});
+
+test.each([
+  ['an unknown item', { type: 'buy', item: 'sword' }],
+  ['an inherited key as the item', { type: 'buy', item: 'toString' }],
+  ['__proto__ as the item', { type: 'buy', item: '__proto__' }],
+  ['a missing item', { type: 'buy' }],
+  ['a number as the item', { type: 'buy', item: 1 }],
+])('S14: rejects a buy message with %s', (_label, message) => {
+  expect(parseClientMessage(JSON.stringify(message))).toBeNull();
 });
 
 test.each([
@@ -254,6 +270,10 @@ test('parseServerMessage accepts every error reason the server can send', () => 
   for (const reason of ERROR_REASONS) {
     expect(parseServerMessage(JSON.stringify({ type: 'error', reason }))).toEqual({ type: 'error', reason });
   }
+});
+
+test('S14: cannot_buy is an error reason the page can receive', () => {
+  expect(parseServerMessage('{"type":"error","reason":"cannot_buy"}')).toEqual({ type: 'error', reason: 'cannot_buy' });
 });
 
 test('parseServerMessage shows a reason it does not know as a general refusal', () => {

@@ -1,4 +1,4 @@
-import { NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, type ItemKind } from './constants';
+import { ITEM_KINDS, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, type ItemKind } from './constants';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
 import type { PropSnapshot } from './props';
 import type { VehicleState } from './vehicle';
@@ -47,12 +47,13 @@ export type ClientMessage =
   | { type: 'create'; name: string; token: string }
   | { type: 'join'; room: string; name: string; token: string }
   | ({ type: 'input' } & PlayerInput)
+  | { type: 'buy'; item: ItemKind }
   | { type: 'pong' };
 
 export type Phase = 'lobby' | 'playing' | 'results';
 
 // The type comes from the list, so a reason cannot be added to one and forgotten in the other.
-export const ERROR_REASONS = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full'] as const;
+export const ERROR_REASONS = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full', 'cannot_buy'] as const;
 export type ErrorReason = (typeof ERROR_REASONS)[number];
 
 export interface LobbyPlayer {
@@ -192,6 +193,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const input = parseInput(fields);
       return input ? { type: 'input', ...input } : null;
     }
+    case 'buy':
+      return typeof fields.item === 'string' && Object.hasOwn(ITEM_KINDS, fields.item) ? { type: 'buy', item: fields.item as ItemKind } : null;
     case 'pong':
       return { type: 'pong' };
     default:

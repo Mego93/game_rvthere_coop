@@ -6,6 +6,7 @@ const ERROR_TEXT: Record<ErrorReason, string> = {
   name_taken: 'Someone in that room already has that name.',
   bad_message: 'The server did not understand the request.',
   server_full: 'The server has no space for another room. Try again later.',
+  cannot_buy: 'You cannot buy that here.',
 };
 
 export const errorText = (reason: ErrorReason): string => ERROR_TEXT[reason];

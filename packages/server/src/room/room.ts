@@ -7,6 +7,7 @@ import {
   TICK_RATE,
   createWorld,
   type InputFields,
+  type ItemKind,
   type LobbyMessage,
   type PlayerInput,
   type BuiltCourse,
@@ -42,6 +43,8 @@ export interface Room {
   // Sends the lobby message to every player.
   announce(): void;
   pushInput(player: RoomPlayer, input: PlayerInput): void;
+  // Spends the crew's coins on an item at a fuel station's counter; applies at once.
+  buy(player: RoomPlayer, item: ItemKind): 'ok' | 'cannot_buy';
   // Runs the simulation ticks that are due at `now` and broadcasts snapshots.
   update(now: number): void;
   // When the last player left, or null while anyone is connected.
@@ -182,6 +185,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     },
     announce: broadcastLobby,
     pushInput: (player, input) => player.queue.push(input),
+    buy: (player, item) => world.buy(player.playerId, item),
     update(now) {
       if (players.length === 0) {
         // An empty room is paused: the world keeps its state and no time is owed when someone returns.

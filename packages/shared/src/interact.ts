@@ -1,4 +1,4 @@
-import { ANCHOR_HEIGHT, HANDS_RANGE, HOOK_RANGE, ITEM_KINDS, PROP_KINDS, PUSH_HEIGHT, SHOP_COUNTER_HALF, SHOP_RANGE, STOP_OPERATE_RANGE, WINCH_MAX_LENGTH } from './constants';
+import { ANCHOR_HEIGHT, HANDS_RANGE, HOOK_RANGE, ITEM_KINDS, PROP_KINDS, PUSH_HEIGHT, SHOP_COUNTER_HALF, SHOP_RANGE, STOP_OPERATE_RANGE, STOP_POST_HEIGHT, WINCH_MAX_LENGTH } from './constants';
 import type { Placed } from './course';
 import { IDENTITY, add, length, rotate, sub, vec3, type Quat, type Vec3 } from './math';
 import { aimRay } from './player';
@@ -59,7 +59,7 @@ export interface StopContext {
 }
 
 // The counter box stands on its point.
-const counterCentre = (counter: Vec3): Vec3 => add(counter, vec3(0, SHOP_COUNTER_HALF.y, 0));
+export const counterCentre = (counter: Vec3): Vec3 => add(counter, vec3(0, SHOP_COUNTER_HALF.y, 0));
 
 const ZERO_HALF = vec3(0, 0, 0);
 
@@ -99,7 +99,7 @@ export function interactCandidates(ctx: {
   // Rules V5 and V5a: the stop tier is offered whatever is in the hands; in course order, operate before shop.
   for (const stop of ctx.stops) {
     if (stop.usable && length(sub(stop.operatePoint, ctx.feet)) <= STOP_OPERATE_RANGE) {
-      found.push({ action: { kind: 'operate', stopId: stop.id }, angle: angleTo(stop.operatePoint) });
+      found.push({ action: { kind: 'operate', stopId: stop.id }, angle: angleTo(add(stop.operatePoint, vec3(0, STOP_POST_HEIGHT / 2, 0))) });
     }
     if (stop.kind === 'fuel' && stop.shopCounter !== null) {
       const centre = counterCentre(stop.shopCounter);
