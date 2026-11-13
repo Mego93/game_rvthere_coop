@@ -1,5 +1,6 @@
 import { NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN } from './constants';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
+import type { PropSnapshot } from './props';
 import type { VehicleState } from './vehicle';
 import type { WorldSnapshot } from './world';
 
@@ -89,6 +90,8 @@ export interface PlayerSnapshot {
 
 export interface SnapshotMessage extends WorldSnapshot {
   type: 'snapshot';
+  // The props that moved since the last one sent to this room's clients, or every prop when `full`.
+  props: PropSnapshot[];
   // The last input sequence number the server consumed for the receiving client; 0 before any.
   ackSeq: number;
   full: boolean;
@@ -209,11 +212,14 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   isVec3(value.pos) &&
   finite(value.yaw) &&
   (value.seat === null || isText(value.seat)) &&
+  (value.hands === null || isText(value.hands)) &&
   (value.ground === null || (isRecord(value.ground) && isText(value.ground.bodyId) && isVec3(value.ground.localPos))) &&
   isVec2(value.walk) &&
   isVec2(value.carry) &&
   finite(value.vy) &&
   typeof value.grounded === 'boolean';
+const isPropSnapshot = (value: unknown): value is PropSnapshot =>
+  isRecord(value) && isText(value.id) && isText(value.kind) && isVec3(value.pos) && isQuat(value.rot);
 const isLobbyPlayer = (value: unknown): value is LobbyPlayer =>
   isRecord(value) &&
   isText(value.playerId) &&
@@ -260,7 +266,9 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         typeof data.full === 'boolean' &&
         isVehicleState(data.vehicle) &&
         Array.isArray(data.players) &&
-        data.players.every(isPlayerSnapshot)
+        data.players.every(isPlayerSnapshot) &&
+        Array.isArray(data.props) &&
+        data.props.every(isPropSnapshot)
         ? message
         : null;
     default:

@@ -1,6 +1,7 @@
 import {
   PLAYER_COLOURS,
   SERVER_MAX_CATCHUP_STEPS,
+  PROP_MOVED_EPSILON,
   SNAPSHOT_EVERY_TICKS,
   TICK_DT,
   TICK_RATE,
@@ -8,6 +9,8 @@ import {
   type InputFields,
   type LobbyMessage,
   type PlayerInput,
+  type BuiltCourse,
+  type PropSnapshot,
   type Rapier,
   type SnapshotMessage,
 } from '@lodgy/shared';
@@ -50,10 +53,21 @@ export interface RoomConfig {
   noun: string;
   courseId: string;
   vehicleId: string;
+  // Tests only: a course to use instead of the id's.
+  course?: BuiltCourse;
 }
 
+const movedSince = (a: PropSnapshot, b: PropSnapshot) =>
+  Math.abs(a.pos.x - b.pos.x) > PROP_MOVED_EPSILON ||
+  Math.abs(a.pos.y - b.pos.y) > PROP_MOVED_EPSILON ||
+  Math.abs(a.pos.z - b.pos.z) > PROP_MOVED_EPSILON ||
+  Math.abs(a.rot.x - b.rot.x) > PROP_MOVED_EPSILON ||
+  Math.abs(a.rot.y - b.rot.y) > PROP_MOVED_EPSILON ||
+  Math.abs(a.rot.z - b.rot.z) > PROP_MOVED_EPSILON ||
+  Math.abs(a.rot.w - b.rot.w) > PROP_MOVED_EPSILON;
+
 export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number): Room {
-  const world = createWorld(rapier, { courseId: config.courseId, vehicleId: config.vehicleId });
+  const world = createWorld(rapier, { courseId: config.courseId, vehicleId: config.vehicleId }, config.course);
   // Kept in the order players joined.
   const players: RoomPlayer[] = [];
   let nextPlayerNumber = 1;
@@ -77,12 +91,21 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     for (const player of players) player.connection.send(data);
   };
 
+  // The pose last sent for each prop, whoever was sent it; the room's one record of what clients have been told.
+  const lastSent = new Map<string, PropSnapshot>();
+
   const broadcastSnapshot = () => {
     const snapshot = world.snapshot();
+    const moved = snapshot.props.filter((prop) => {
+      const sent = lastSent.get(prop.id);
+      return !sent || movedSince(sent, prop);
+    });
+    for (const prop of moved) lastSent.set(prop.id, prop);
     for (const player of players) {
       const message: SnapshotMessage = {
         type: 'snapshot',
         ...snapshot,
+        props: player.sentFull ? moved : snapshot.props,
         ackSeq: player.queue.ackSeq(),
         full: !player.sentFull,
       };

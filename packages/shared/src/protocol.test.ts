@@ -142,7 +142,8 @@ const onFoot = {
 };
 const seated = { ...onFoot, playerId: 'p2', seat: 'driver' };
 const onVehicle = { ...onFoot, playerId: 'p3', ground: { bodyId: 'vehicle', localPos: { x: 0, y: 1, z: 0 } } };
-const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle, players: [onFoot] };
+const crate = { id: 'crate-1', kind: 'crate', pos: { x: 1, y: 0.3, z: 2 }, rot: { x: 0, y: 0, z: 0, w: 1 } };
+const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle, players: [onFoot], props: [crate] };
 const lobby = {
   type: 'lobby',
   room: 'camel',
@@ -210,7 +211,7 @@ test('parseServerMessage keeps fields it does not know, so a newer server can ad
 });
 
 test('parseServerMessage accepts players on foot, seated and on the vehicle, and keeps their unknown fields', () => {
-  const message = { ...snapshot, players: [onFoot, seated, onVehicle, { ...onFoot, playerId: 'p4', hands: [] }] };
+  const message = { ...snapshot, players: [onFoot, seated, onVehicle, { ...onFoot, playerId: 'p4', hands: 'crate-1' }] };
   expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
   expect(parseServerMessage(JSON.stringify({ ...snapshot, players: [] }))).not.toBeNull();
 });
@@ -237,6 +238,17 @@ test.each([
   ['a player without a seat field', withPlayer({ seat: undefined })],
   ['a player whose seat is a number', withPlayer({ seat: 0 })],
   ['a player whose seat is a boolean', withPlayer({ seat: false })],
+  ['a player without a hands field', withPlayer({ hands: undefined })],
+  ['a player whose hands is a number', withPlayer({ hands: 3 })],
+  ['a player whose hands is an array', withPlayer({ hands: [] })],
+  ['no props', JSON.stringify({ ...snapshot, props: undefined })],
+  ['props that are not a list', JSON.stringify({ ...snapshot, props: { crate } })],
+  ['a prop that is null', JSON.stringify({ ...snapshot, props: [null] })],
+  ['a prop without an id', JSON.stringify({ ...snapshot, props: [{ ...crate, id: undefined }] })],
+  ['a prop whose kind is a number', JSON.stringify({ ...snapshot, props: [{ ...crate, kind: 1 }] })],
+  ['a prop whose position lacks z', JSON.stringify({ ...snapshot, props: [{ ...crate, pos: { x: 0, y: 0 } }] })],
+  ['a prop whose rotation lacks w', JSON.stringify({ ...snapshot, props: [{ ...crate, rot: { x: 0, y: 0, z: 0 } }] })],
+  ['one bad prop among good ones', JSON.stringify({ ...snapshot, props: [crate, { ...crate, id: 5 }] })],
   ['a player without a ground field', withPlayer({ ground: undefined })],
   ['a player whose ground is text', withPlayer({ ground: 'vehicle' })],
   ['a player whose ground is an array', withPlayer({ ground: [] })],
@@ -418,4 +430,10 @@ test('parseClientMessage gives the sanitised fields of the raw input', () => {
 test('parseServerMessage keeps unknown fields on a player entry', () => {
   const raw = JSON.stringify({ ...snapshot, players: [{ ...onFoot, extra: 5 }] });
   expect(parseServerMessage(raw)).toEqual({ ...snapshot, players: [{ ...onFoot, extra: 5 }] });
+});
+
+test('parseServerMessage keeps unknown fields on a prop entry and accepts an empty list', () => {
+  const message = { ...snapshot, props: [{ ...crate, spin: 2 }] };
+  expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
+  expect(parseServerMessage(JSON.stringify({ ...snapshot, props: [] }))).not.toBeNull();
 });

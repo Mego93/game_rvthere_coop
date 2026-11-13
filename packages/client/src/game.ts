@@ -162,8 +162,7 @@ export function createGame(
       predicted: drawnPosition,
       server: latestLocal?.pos ?? null,
       aim: { yaw: mouse.yaw(), pitch: mouse.pitch() },
-      // The sample carries no props yet.
-      propPoses: [],
+      propPoses: sampled?.props ?? [],
     });
     renderer.render(scene, camera);
     frameRequest = requestAnimationFrame(frame);

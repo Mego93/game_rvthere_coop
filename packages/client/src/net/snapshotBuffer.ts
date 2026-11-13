@@ -6,17 +6,21 @@ import {
   lerp,
   nlerp,
   type PlayerSnapshot,
+  type PropSnapshot,
+  type SnapshotMessage,
   type VehicleState,
   type WorldSnapshot,
 } from '@lodgy/shared';
 
 export interface SnapshotBuffer {
   // Stores a snapshot received at local time `receivedAt` (seconds). Snapshots older than the newest are ignored.
-  push(snapshot: WorldSnapshot, receivedAt: number): void;
+  push(snapshot: SnapshotMessage, receivedAt: number): void;
   // The world as it was INTERPOLATION_DELAY before local time `now`, or null before any snapshot.
-  sample(now: number): { vehicle: VehicleState; players: PlayerSnapshot[] } | null;
+  sample(now: number): { vehicle: VehicleState; players: PlayerSnapshot[]; props: PropSnapshot[] } | null;
   // The tick of the newest snapshot, or 0 before any.
   latestTick(): number;
+  // Every prop as of the newest snapshot, partial snapshots merged in.
+  latestProps(): PropSnapshot[];
 }
 
 function blend(a: VehicleState, b: VehicleState, t: number): VehicleState {
@@ -50,7 +54,21 @@ function copyVehicle(v: VehicleState): VehicleState {
   return { pos: copyVec(v.pos), rot: { ...v.rot }, linvel: copyVec(v.linvel), throttle: v.throttle, steer: v.steer };
 }
 
-const copyWorld = (w: WorldSnapshot) => ({ vehicle: copyVehicle(w.vehicle), players: w.players.map(copyPlayer) });
+const copyProp = (p: PropSnapshot): PropSnapshot => ({ id: p.id, kind: p.kind, pos: copyVec(p.pos), rot: { ...p.rot } });
+
+const copyWorld = (w: WorldSnapshot) => ({
+  vehicle: copyVehicle(w.vehicle),
+  players: w.players.map(copyPlayer),
+  props: w.props.map(copyProp),
+});
+
+function blendProps(from: readonly PropSnapshot[], to: readonly PropSnapshot[], t: number): PropSnapshot[] {
+  const before = new Map(from.map((p) => [p.id, p]));
+  return to.map((p) => {
+    const a = before.get(p.id);
+    return a ? { ...copyProp(p), pos: lerp(a.pos, p.pos, t), rot: nlerp(a.rot, p.rot, t) } : copyProp(p);
+  });
+}
 
 function blendPlayer(a: PlayerSnapshot | undefined, b: PlayerSnapshot, t: number): PlayerSnapshot {
   if (!a) return copyPlayer(b);
@@ -66,17 +84,21 @@ export function createSnapshotBuffer(): SnapshotBuffer {
   const entries: { time: number; snapshot: WorldSnapshot }[] = [];
   // Server clock minus local clock, as estimated from arrival times.
   let offset: number | null = null;
+  // Every prop as last told: a full snapshot replaces it, a partial one updates the props it lists.
+  let propMap = new Map<string, PropSnapshot>();
 
   return {
     push(snapshot, receivedAt) {
       const time = snapshot.tick * TICK_DT;
       const newest = entries[entries.length - 1];
       if (newest && time <= newest.time) return;
+      if (snapshot.full) propMap = new Map();
+      for (const prop of snapshot.props) propMap.set(prop.id, copyProp(prop));
       const measured = time - receivedAt;
       // A snapshot that arrives early shows the true offset at once; late ones only nudge it,
       // so one delayed packet does not move the clock but a lasting change is followed.
       offset = offset === null || measured > offset ? measured : offset + (measured - offset) * CLOCK_OFFSET_SMOOTHING;
-      entries.push({ time, snapshot });
+      entries.push({ time, snapshot: { ...snapshot, props: [...propMap.values()].map(copyProp) } });
       if (entries.length > SNAPSHOT_BUFFER_SIZE) entries.shift();
     },
     sample(now) {
@@ -96,8 +118,10 @@ export function createSnapshotBuffer(): SnapshotBuffer {
       return {
         vehicle: blend(from.snapshot.vehicle, to.snapshot.vehicle, t),
         players: to.snapshot.players.map((p) => blendPlayer(before.get(p.playerId), p, t)),
+        props: blendProps(from.snapshot.props, to.snapshot.props, t),
       };
     },
     latestTick: () => entries[entries.length - 1]?.snapshot.tick ?? 0,
+    latestProps: () => (entries[entries.length - 1]?.snapshot.props ?? []).map(copyProp),
   };
 }

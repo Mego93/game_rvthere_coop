@@ -7,13 +7,22 @@ import {
   vec3,
   yawOf,
   type PlayerSnapshot,
-  type WorldSnapshot,
+  type PropSnapshot,
+  type SnapshotMessage,
 } from '@lodgy/shared';
 import { expect, test } from 'vitest';
 import { createSnapshotBuffer } from './snapshotBuffer';
 
 // A snapshot at `tick` whose vehicle sits at z = -tick, has yaw tick / 100 and throttle tick.
-const snapshot = (tick: number, players: PlayerSnapshot[] = []): WorldSnapshot => ({
+const snapshot = (
+  tick: number,
+  players: PlayerSnapshot[] = [],
+  props: PropSnapshot[] = [],
+  full = false,
+): SnapshotMessage => ({
+  type: 'snapshot',
+  ackSeq: 0,
+  full,
   tick,
   vehicle: {
     pos: vec3(0, 1, -tick),
@@ -23,7 +32,7 @@ const snapshot = (tick: number, players: PlayerSnapshot[] = []): WorldSnapshot =
     steer: 0,
   },
   players,
-  props: [],
+  props,
 });
 
 // Snapshots every 3 ticks, each arriving exactly when the server's clock reads its tick time plus `latency`.
@@ -240,4 +249,46 @@ test('player yaw stays in (-pi, pi] after blending', () => {
     expect(yaw).toBeGreaterThan(-Math.PI);
     expect(yaw).toBeLessThanOrEqual(Math.PI);
   }
+});
+
+const prop = (id: string, x: number): PropSnapshot => ({ id, kind: 'crate', pos: vec3(x, 0.3, 0), rot: quatFromAxisAngle(AXIS_Y, 0) });
+
+test('a partial snapshot is merged into the props already known', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(snapshot(3, [], [prop('a', 1), prop('b', 2)], true), 3 * TICK_DT);
+  buffer.push(snapshot(6, [], [prop('b', 5)]), 6 * TICK_DT);
+  const props = buffer.sample(100)!.props;
+  expect(props.map((p) => [p.id, p.pos.x])).toEqual([['a', 1], ['b', 5]]);
+  expect(buffer.latestProps().map((p) => [p.id, p.pos.x])).toEqual([['a', 1], ['b', 5]]);
+});
+
+test('a prop is blended between its two positions', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(snapshot(3, [], [prop('a', 0)], true), 3 * TICK_DT);
+  buffer.push(snapshot(6, [], [prop('a', 6)]), 6 * TICK_DT);
+  // The view is at tick 4.5, halfway between the two.
+  const props = buffer.sample(10.5 * TICK_DT)!.props;
+  expect(props).toHaveLength(1);
+  expect(props[0]!.pos.x).toBeCloseTo(3, 6);
+});
+
+test('a prop that did not move is drawn where it was told', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(snapshot(3, [], [prop('a', 1), prop('b', 2)], true), 3 * TICK_DT);
+  buffer.push(snapshot(6, [], [prop('b', 4)]), 6 * TICK_DT);
+  const props = buffer.sample(10.5 * TICK_DT)!.props;
+  expect(props.find((p) => p.id === 'a')!.pos.x).toBe(1);
+  expect(props.find((p) => p.id === 'b')!.pos.x).toBeCloseTo(3, 6);
+});
+
+test('a full snapshot replaces the props: one missing from it is gone', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(snapshot(3, [], [prop('a', 1), prop('b', 2)], true), 3 * TICK_DT);
+  buffer.push(snapshot(6, [], [prop('b', 3)], true), 6 * TICK_DT);
+  expect(buffer.latestProps().map((p) => p.id)).toEqual(['b']);
+  expect(buffer.sample(100)!.props.map((p) => p.id)).toEqual(['b']);
+});
+
+test('before any snapshot there are no props', () => {
+  expect(createSnapshotBuffer().latestProps()).toEqual([]);
 });
