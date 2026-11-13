@@ -79,9 +79,9 @@ describe('createPredictor', () => {
       me.tick(fields);
       before = input.jump;
       const server = world.snapshot().players[0]!;
-      expect(Math.abs(server.pos.x - me.state.pos.x)).toBeLessThan(1e-6);
-      expect(Math.abs(server.pos.y - me.state.pos.y)).toBeLessThan(1e-6);
-      expect(Math.abs(server.pos.z - me.state.pos.z)).toBeLessThan(1e-6);
+      expect(Math.abs(server.pos.x - me.state.pos.x)).toBeLessThan(1e-12);
+      expect(Math.abs(server.pos.y - me.state.pos.y)).toBeLessThan(1e-12);
+      expect(Math.abs(server.pos.z - me.state.pos.z)).toBeLessThan(1e-12);
     }
     expect(before).toBe(false);
     expect(Math.hypot(me.state.pos.x - FAR.x, me.state.pos.z - FAR.z)).toBeGreaterThan(1);
@@ -105,7 +105,7 @@ describe('createPredictor', () => {
     const gap = me.state.pos.z - (FAR.z - 2.5);
     expect(gap).toBeGreaterThanOrEqual(PLAYER_RADIUS - 1e-3);
     expect(gap).toBeLessThanOrEqual(PLAYER_RADIUS + 0.05);
-    expect(Math.abs(server.pos.z - me.state.pos.z)).toBeLessThan(1e-6);
+    expect(Math.abs(server.pos.z - me.state.pos.z)).toBeLessThan(1e-12);
     predictor.dispose();
     world.dispose();
   });
@@ -184,9 +184,9 @@ describe('createPredictor', () => {
         before = input.jump;
         const server = world.snapshot().players[0]!;
         top = Math.max(top, me.state.pos.y);
-        expect(Math.abs(server.pos.x - me.state.pos.x)).toBeLessThan(1e-6);
-        expect(Math.abs(server.pos.y - me.state.pos.y)).toBeLessThan(1e-6);
-        expect(Math.abs(server.pos.z - me.state.pos.z)).toBeLessThan(1e-6);
+        expect(Math.abs(server.pos.x - me.state.pos.x)).toBeLessThan(1e-12);
+        expect(Math.abs(server.pos.y - me.state.pos.y)).toBeLessThan(1e-12);
+        expect(Math.abs(server.pos.z - me.state.pos.z)).toBeLessThan(1e-12);
       }
       expect(before).toBe(false);
       expect(me.state.pos.y).toBeLessThan(roof - 0.5);
@@ -212,8 +212,8 @@ describe('createPredictor', () => {
 
   test('sanitises the input like the server', () => {
     const predictor = createPredictor(RAPIER, testGround, lodgy);
-    const a = predictor.stepPlayer(rest(FAR), { ...NEUTRAL_INPUT, moveY: 50 }, false);
-    const b = predictor.stepPlayer(rest(FAR), { ...NEUTRAL_INPUT, moveY: 1 }, false);
+    const a = predictor.stepPlayer(rest(FAR), { ...NEUTRAL_INPUT, moveX: 50, moveY: 1 }, false);
+    const b = predictor.stepPlayer(rest(FAR), { ...NEUTRAL_INPUT, moveX: 1, moveY: 1 }, false);
     expect(a).toEqual(b);
     predictor.dispose();
   });
