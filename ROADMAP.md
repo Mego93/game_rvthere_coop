@@ -31,7 +31,7 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | 12 | HUD: mock-up pass, then compass, minimap, gauges, slots, prompts and downed markers | todo | | | Owner, visual check |
 | 13 | Conditions: rain grip, time-of-day and weather visuals | todo | | | Owner, visual check |
 | 14 | Touch input, floating joystick, touch UI, landscape layout, web app manifest | todo | | | Owner, on a real iPhone |
-| 15 | Segment system: six segment builders and the course builder | todo | | | Automated tests |
+| 15 | Segment system: six segment builders and the course builder | planned (runs in parallel with 7–14, owner's permission) | claude/tender-carson-9525v1 | [plan](docs/superpowers/plans/step-15-segments.md) | Automated tests |
 | 16 | Course design pass, then course 1 (to the airport); measure snapshot size | todo | | | Owner, by playing it |
 | 17 | The RV: mesh and handling pass over course 1 | todo | | | Owner, by playing it |
 | 18 | Sound effects | todo | | | Owner |
@@ -112,10 +112,12 @@ Findings from reviews that belong to a later step. Each step's plan must cover i
 | 7 | A vehicle at rest reports a vertical speed of about −0.06 m/s; impact thresholds and "at rest" checks must allow for it |
 | 8 | Test the test ground's ramp, finish and trigger boxes when checkpoints first use them |
 | 16 | Every sand segment must give the RV a run-up: it cannot start from rest on sand, and a stop on sand (a service stop, a checkpoint restart) would trap it. The spec's rule that the RV completes every segment includes this |
+| 10 | Service stops adopt the `STOP_*` constants and the pad layout of the step-15 plan (T7), or change both together |
+| 10 | Exit and spawn-slot validity should include a ray from the player's pivot to the point against walls (moved from step 15: stop pads sit beside fences) |
+| 11 | `COURSE` (step 15) is replaced by the lobby's course choice |
 | 11 | `lobby` gains `timeOfDay` and `weather`; held slots replace the immediate removal of a disconnected player; the admin's choice replaces `VEHICLE` |
 | 11 | Names are only trimmed and length-checked: control and invisible characters and look-alike letters pass, and a newline in a name forges lines in the debug overlay on other players' pages. A throw in the page's `lobby` handler leaves the page blank |
 | 14 | The home form on a real iPhone: no zoom when a field is focused, and the form scrolls with the keyboard open in landscape (its shadow is clipped when it overflows). Checked so far in Chromium and WebKit only |
-| 15 | Exit and spawn-slot validity should include a ray from the player's pivot to the point against walls (a thin wall lets a slot on the far side count as valid) |
 | 19 | The page does not reconnect by itself after the socket closes; it returns to the name form |
 | 19 | The server caps rooms (50) but not connections: add a cap on connections in total and per address when the server is exposed through the tunnel (behind it, the address is in the `CF-Connecting-IP` header), and stop sending to a socket whose send buffer keeps growing |
 | 19 | Room exhaustion: 50 connections that each create a room and leave hold the server at `server_full` for 60 s. Limit `create` per address, or give a room nobody else joined a short timeout |
@@ -217,3 +219,5 @@ Decisions made during the design and afterwards. Change the spec too when a deci
 | 2026-11-13 | Test-ground anchors: one on the steep slope 39 m up, one 10 m beyond the sand patch (W10) | The climb and sand scenarios need anchors in reach |
 | 2026-11-13 | The board candidate's aim angle is measured to the chosen seat, not to the vehicle's box (W11) | Aiming at the bumper otherwise boarded instead of taking the hook |
 | 2026-11-13 | The world owns the hook in a player's hands: it stows or drops the hook before seating, respawn and removal (V6) | The winch is created after the players and must stay consistent with their hands |
+| 2026-11-13 | Step 15 (segments) runs in parallel with steps 7–14 in a separate worktree | Owner allowed independent work in parallel; segments add modules and touch little else |
+| 2026-11-13 | Segments are built in their own frame (entry at the origin facing −Z) and chained by translation and yaw; ground is boxes; overlap only at yaw changes; checkpoint at every segment start; ids `s<i>-<kind>-<n>`; stops only on flat straight roads; sand starts with 50 m of road; `COURSE` selects a course until the lobby (step-15 plan S1–S12, T1–T17) | Planned with the review's fixes so later steps (8, 10, 11, 16) can rely on them |
