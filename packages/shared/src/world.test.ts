@@ -304,6 +304,23 @@ test('holding jump from the first tick is one press', () => {
   expect(airborneEpisodes(world, 6 * TICK_RATE, () => ({ jump: true }))).toBe(1);
 });
 
+test('a snapshot player entry carries walk, carry, vy and grounded', () => {
+  const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+  world.addPlayer('p1');
+  run(world, 30, new Map());
+  const rest = world.snapshot().players[0]!;
+  expect(rest.grounded).toBe(true);
+  for (const value of [rest.walk.x, rest.walk.z, rest.carry.x, rest.carry.z, rest.vy]) expect(Number.isFinite(value)).toBe(true);
+  run(world, 30, walking('p1', { moveY: 1 }));
+  const moving = world.snapshot().players[0]!;
+  expect(Math.hypot(moving.walk.x, moving.walk.z)).toBeGreaterThan(1);
+  world.step(walking('p1', { jump: true }));
+  const jumping = world.snapshot().players[0]!;
+  expect(jumping.vy).toBeGreaterThan(0);
+  expect(jumping.grounded).toBe(false);
+  expect(jumping.walk).not.toBe(world.snapshot().players[0]!.walk);
+});
+
 test('a player below the kill plane respawns at a slot after the delay, with one event', () => {
   const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
   world.addPlayer('p2');

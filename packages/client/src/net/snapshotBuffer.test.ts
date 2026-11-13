@@ -105,6 +105,10 @@ const player = (playerId: string, x: number, yaw: number): PlayerSnapshot => ({
   yaw,
   seat: null,
   ground: null,
+  walk: { x: 0, z: 0 },
+  carry: { x: 0, z: 0 },
+  vy: 0,
+  grounded: true,
 });
 
 // Two snapshots (ticks 6 and 12) that arrive on time; sampled at `tick` the view is that tick minus the delay.
@@ -152,6 +156,19 @@ test('seat and ground come from the newer snapshot', () => {
   const view = pair([seated], [standing]).sample((9 + DELAY_TICKS) * TICK_DT)!;
   expect(view.players[0]!.seat).toBeNull();
   expect(view.players[0]!.ground).toEqual({ bodyId: 'vehicle', localPos: vec3(1, 2, 3) });
+});
+
+test('walk, carry, vy and grounded come from the newer snapshot, as new objects', () => {
+  const newer = { ...player('a', 10, 0), walk: { x: 1, z: 2 }, carry: { x: 3, z: 4 }, vy: 5, grounded: false };
+  const buffer = pair([player('a', 0, 0)], [newer]);
+  for (const now of [100, 0, (9 + DELAY_TICKS) * TICK_DT]) {
+    const view = buffer.sample(now)!.players[0]!;
+    if (now === 0) continue;
+    expect(view).toMatchObject({ walk: { x: 1, z: 2 }, carry: { x: 3, z: 4 }, vy: 5, grounded: false });
+    view.walk.x = 999;
+    view.carry.z = 999;
+    expect(buffer.sample(now)!.players[0]).toMatchObject({ walk: { x: 1, z: 2 }, carry: { x: 3, z: 4 } });
+  }
 });
 
 test('the result does not alias stored snapshots', () => {

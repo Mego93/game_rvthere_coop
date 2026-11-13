@@ -72,6 +72,17 @@ test('substitutes a neutral input after the silent-tick limit, keeping the aim a
   expect(queue.next()).toEqual({ input: { ...NEUTRAL_INPUT, yaw: 1.5, pitch: 0.2, slot: 1 }, fresh: false });
 });
 
+test('ackSeq is unchanged through the neutral substitute', () => {
+  const queue = createInputQueue();
+  queue.push(input(1, { moveY: 1 }));
+  queue.push(input(2, { moveY: 1 }));
+  queue.next();
+  queue.next();
+  for (let i = 0; i <= NEUTRAL_AFTER_TICKS + 2; i++) queue.next();
+  expect(queue.next().input).toMatchObject({ moveY: 0 });
+  expect(queue.ackSeq()).toBe(2);
+});
+
 test('a new input after the neutral substitute is used again', () => {
   const queue = createInputQueue();
   queue.push(input(1, { moveY: 1 }));

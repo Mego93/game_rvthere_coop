@@ -38,6 +38,10 @@ function copyPlayer(p: PlayerSnapshot): PlayerSnapshot {
     yaw: p.yaw,
     seat: p.seat,
     ground: p.ground && { bodyId: p.ground.bodyId, localPos: copyVec(p.ground.localPos) },
+    walk: { x: p.walk.x, z: p.walk.z },
+    carry: { x: p.carry.x, z: p.carry.z },
+    vy: p.vy,
+    grounded: p.grounded,
   };
 }
 

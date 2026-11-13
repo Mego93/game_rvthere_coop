@@ -38,6 +38,10 @@ const player = (playerId: string, x: number, z: number, seat: string | null = nu
   yaw: 0,
   seat,
   ground: null,
+  walk: { x: 0, z: 0 },
+  carry: { x: 0, z: 0 },
+  vy: 0,
+  grounded: true,
 });
 // The RV's driver door is at x = 1.25 - 1.15, z = -30.04 - 2.2.
 const nearDoor = player('p1', -1.1, -32.24);

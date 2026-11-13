@@ -9,6 +9,7 @@ import {
   neutralInput,
   parseClientMessage,
   parseServerMessage,
+  sanitiseInput,
   type PlayerInput,
   type ServerMessage,
 } from './protocol';
@@ -127,7 +128,17 @@ const vehicle = {
   throttle: 1,
   steer: 0,
 };
-const onFoot = { playerId: 'p1', pos: { x: 1, y: 0, z: 2 }, yaw: 0.5, seat: null, ground: null };
+const onFoot = {
+  playerId: 'p1',
+  pos: { x: 1, y: 0, z: 2 },
+  yaw: 0.5,
+  seat: null,
+  ground: null,
+  walk: { x: 1, z: -2 },
+  carry: { x: 0, z: 0 },
+  vy: 0,
+  grounded: true,
+};
 const seated = { ...onFoot, playerId: 'p2', seat: 'driver' };
 const onVehicle = { ...onFoot, playerId: 'p3', ground: { bodyId: 'vehicle', localPos: { x: 0, y: 1, z: 0 } } };
 const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle, players: [onFoot] };
@@ -233,6 +244,20 @@ test.each([
   ['a player whose ground lacks a local position', withPlayer({ ground: { bodyId: 'vehicle' } })],
   ['a player whose ground position lacks y', withPlayer({ ground: { bodyId: 'vehicle', localPos: { x: 0, z: 0 } } })],
   ['a player whose ground position is null', withPlayer({ ground: { bodyId: 'vehicle', localPos: null } })],
+  ['a player without walk', withPlayer({ walk: undefined })],
+  ['a player whose walk lacks z', withPlayer({ walk: { x: 1 } })],
+  ['a player whose walk is text', withPlayer({ walk: '1' })],
+  ['a player whose walk x is too large to be finite', withPlayer({}).replace('"walk":{"x":1', '"walk":{"x":1e999')],
+  ['a player without carry', withPlayer({ carry: undefined })],
+  ['a player whose carry lacks x', withPlayer({ carry: { z: 0 } })],
+  ['a player whose carry is null', withPlayer({ carry: null })],
+  ['a player whose carry z is too large to be finite', withPlayer({}).replace('"carry":{"x":0,"z":0}', '"carry":{"x":0,"z":1e999}')],
+  ['a player without vy', withPlayer({ vy: undefined })],
+  ['a player whose vy is text', withPlayer({ vy: '1' })],
+  ['a player whose vy is too large to be finite', withPlayer({}).replace('"vy":0', '"vy":1e999')],
+  ['a player without grounded', withPlayer({ grounded: undefined })],
+  ['a player whose grounded is a number', withPlayer({ grounded: 1 })],
+  ['a player whose grounded is text', withPlayer({ grounded: 'true' })],
 ])('parseServerMessage rejects a snapshot with %s', (_label, raw) => {
   expect(parseServerMessage(raw)).toBeNull();
 });
@@ -367,4 +392,29 @@ test('a __proto__ or constructor field does not reach the parsed message or Obje
 
 test('every colour the server hands out passes the colour check', () => {
   expect(PLAYER_COLOURS.every((colour) => PLAYER_COLOUR_PATTERN.test(colour))).toBe(true);
+});
+
+test('sanitiseInput clamps the axes and pitch and wraps the yaw, leaving the other fields', () => {
+  const result = sanitiseInput({ ...NEUTRAL_INPUT, moveX: 3, moveY: -9, pitch: 5, yaw: 3 * Math.PI + 0.5, jump: true, slot: 2 });
+  expect(result).toEqual({ ...NEUTRAL_INPUT, moveX: 1, moveY: -1, pitch: Math.PI / 2, yaw: expect.closeTo(-Math.PI + 0.5, 9), jump: true, slot: 2 });
+  expect(sanitiseInput({ ...NEUTRAL_INPUT, pitch: -5 }).pitch).toBe(-Math.PI / 2);
+  expect(sanitiseInput({ ...NEUTRAL_INPUT, yaw: -Math.PI }).yaw).toBeCloseTo(Math.PI, 12);
+  expect(sanitiseInput({ ...NEUTRAL_INPUT, yaw: Math.PI }).yaw).toBe(Math.PI);
+});
+
+test('sanitiseInput does not change its argument', () => {
+  const raw = { ...NEUTRAL_INPUT, moveX: 3 };
+  sanitiseInput(raw);
+  expect(raw.moveX).toBe(3);
+});
+
+test('parseClientMessage gives the sanitised fields of the raw input', () => {
+  const fields = { ...NEUTRAL_INPUT, moveX: 2, moveY: -2, yaw: 7, pitch: -4, reel: 1 as const };
+  const { type, seq, ...parsed } = parseClientMessage(input(fields)) as PlayerInput & { type: string };
+  expect(parsed).toEqual(sanitiseInput(fields));
+});
+
+test('parseServerMessage keeps unknown fields on a player entry', () => {
+  const raw = JSON.stringify({ ...snapshot, players: [{ ...onFoot, extra: 5 }] });
+  expect(parseServerMessage(raw)).toEqual({ ...snapshot, players: [{ ...onFoot, extra: 5 }] });
 });

@@ -78,6 +78,11 @@ export interface PlayerSnapshot {
   yaw: number;
   seat: string | null;
   ground: { bodyId: string; localPos: Vec3 } | null;
+  // The state the local client's predictor resets to.
+  walk: { x: number; z: number };
+  carry: { x: number; z: number };
+  vy: number;
+  grounded: boolean;
 }
 
 export interface SnapshotMessage extends WorldSnapshot {
@@ -125,6 +130,17 @@ function wrapAngle(angle: number): number {
   return wrapped;
 }
 
+// Clamps the axes and pitch and wraps the yaw; the server and the predictor use the same.
+export function sanitiseInput(fields: InputFields): InputFields {
+  return {
+    ...fields,
+    moveX: clamp(fields.moveX, -1, 1),
+    moveY: clamp(fields.moveY, -1, 1),
+    yaw: wrapAngle(fields.yaw),
+    pitch: clamp(fields.pitch, -Math.PI / 2, Math.PI / 2),
+  };
+}
+
 function parseInput(data: Record<string, unknown>): PlayerInput | null {
   const { seq, moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop } = data;
   if (!Number.isSafeInteger(seq) || (seq as number) < 1) return null;
@@ -133,19 +149,7 @@ function parseInput(data: Record<string, unknown>): PlayerInput | null {
   if (typeof use !== 'boolean' || typeof drop !== 'boolean') return null;
   if (reel !== -1 && reel !== 0 && reel !== 1) return null;
   if (slot !== 0 && slot !== 1 && slot !== 2) return null;
-  return {
-    seq: seq as number,
-    moveX: clamp(moveX, -1, 1),
-    moveY: clamp(moveY, -1, 1),
-    yaw: wrapAngle(yaw),
-    pitch: clamp(pitch, -Math.PI / 2, Math.PI / 2),
-    jump,
-    interact,
-    use,
-    reel,
-    slot,
-    drop,
-  };
+  return { seq: seq as number, ...sanitiseInput({ moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop }) };
 }
 
 // Validates one message from a client. Returns null for anything malformed.
@@ -188,6 +192,8 @@ const isCount = (value: unknown): value is number => Number.isSafeInteger(value)
 const isVec3 = (value: unknown): value is Vec3 =>
   isRecord(value) && finite(value.x) && finite(value.y) && finite(value.z);
 const isQuat = (value: unknown): value is Quat => isRecord(value) && finite(value.w) && isVec3(value);
+const isVec2 = (value: unknown): value is { x: number; z: number } =>
+  isRecord(value) && finite(value.x) && finite(value.z);
 const isVehicleState = (value: unknown): value is VehicleState =>
   isRecord(value) &&
   isVec3(value.pos) &&
@@ -201,7 +207,11 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   isVec3(value.pos) &&
   finite(value.yaw) &&
   (value.seat === null || isText(value.seat)) &&
-  (value.ground === null || (isRecord(value.ground) && isText(value.ground.bodyId) && isVec3(value.ground.localPos)));
+  (value.ground === null || (isRecord(value.ground) && isText(value.ground.bodyId) && isVec3(value.ground.localPos))) &&
+  isVec2(value.walk) &&
+  isVec2(value.carry) &&
+  finite(value.vy) &&
+  typeof value.grounded === 'boolean';
 const isLobbyPlayer = (value: unknown): value is LobbyPlayer =>
   isRecord(value) &&
   isText(value.playerId) &&
