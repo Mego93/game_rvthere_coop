@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { HANDS_RANGE } from './constants';
-import { AXIS_Y, IDENTITY, add, quatFromAxisAngle, rotate, vec3, type Vec3 } from './math';
+import { AXIS_Y, IDENTITY, add, quatFromAxisAngle, rotate, sub, vec3, type Vec3 } from './math';
 import { aimAngleToBox, interactCandidates, resolveInteract, splitCandidates, type InteractCandidate } from './interact';
 import { getVehicleConfig } from './vehicles';
 import type { CableSnapshot } from './winch';
 import type { Placed } from './course';
-import { ANCHOR_HEIGHT, HOOK_RANGE } from './constants';
+import { ANCHOR_HEIGHT, HOOK_RANGE, PLAYER_EYE_HEIGHT, PUSH_HEIGHT } from './constants';
 
 const resolve = (ctx: { seat: string | null; hands: string | null; candidates: readonly InteractCandidate[] }) =>
   resolveInteract({ holdsHook: ctx.hands === 'hook', attachCandidates: [], ...ctx });
@@ -175,7 +175,7 @@ describe('interactCandidates and the hook', () => {
     cable: cable('stowed'),
   };
   // Feet such that the chest is 1 m in front of the winch box (the mount faces -z).
-  const nearBox = vec3(mount.x, mount.y - 1.0 - 1, mount.z - 1);
+  const nearBox = vec3(mount.x, mount.y - PUSH_HEIGHT, mount.z - 1);
   const kinds = (found: InteractCandidate[]) => found.map((c) => c.action.kind);
   const post = (id: string, x: number, z: number): Placed => ({ id, kind: 'anchor', pose: { pos: vec3(x, 0, z), rot: IDENTITY } });
 
@@ -201,6 +201,23 @@ describe('interactCandidates and the hook', () => {
     const att = cable('attached', point, 'a');
     expect(kinds(interactCandidates({ ...base, cable: att, feet: vec3(20, 0, 21) }))).toEqual(['detachHook']);
     expect(kinds(interactCandidates({ ...base, cable: att, feet: nearBox }))).toContain('releaseHook');
+  });
+
+  test('W11: aiming at the bumper picks the hook, aiming at the seat boards', () => {
+    // Eye level with the bumper: the box's nearest point is then the bumper itself, so a box angle would tie with the hook.
+    const feet = vec3(mount.x, mount.y - PLAYER_EYE_HEIGHT, mount.z - 1.1);
+    const aimFrom = (target: Vec3) => {
+      const d = sub(target, add(feet, vec3(0, PLAYER_EYE_HEIGHT, 0)));
+      return { yaw: Math.atan2(-d.x, -d.z), pitch: Math.asin(d.y / Math.hypot(d.x, d.y, d.z)) };
+    };
+    const seatWorld = add(vehiclePos, rotate(IDENTITY, config.seats[0]!.pos));
+    const pick = (target: Vec3) => {
+      const found = interactCandidates({ ...base, feet, ...aimFrom(target) });
+      return resolveInteract({ seat: null, hands: null, holdsHook: false, ...splitCandidates(found) })?.kind;
+    };
+    expect(kinds(interactCandidates({ ...base, feet }))).toEqual(expect.arrayContaining(['board', 'takeHook']));
+    expect(pick(mount)).toBe('takeHook');
+    expect(pick(seatWorld)).toBe('board');
   });
 
   test('a hook held by another player offers nothing', () => {
@@ -238,10 +255,10 @@ describe('interactCandidates and the hook', () => {
 
   test('the attach point of a static anchor is ANCHOR_HEIGHT above its pose', () => {
     const anchors = [post('a1', 3, -2)];
-    // The chest is 1 m up: standing at height ANCHOR_HEIGHT - 1 puts the chest at the attach point, so only a tight range matters.
-    const feet = vec3(3, ANCHOR_HEIGHT - 1 - HOOK_RANGE + 0.01, -2);
+    // Standing at height ANCHOR_HEIGHT - PUSH_HEIGHT puts the chest at the attach point, so only a tight range matters.
+    const feet = vec3(3, ANCHOR_HEIGHT - PUSH_HEIGHT - HOOK_RANGE + 0.01, -2);
     expect(kinds(interactCandidates({ ...base, hands: 'hook', feet, anchors }))).toEqual(['attachHook']);
-    expect(kinds(interactCandidates({ ...base, hands: 'hook', feet: vec3(3, ANCHOR_HEIGHT - 1 - HOOK_RANGE - 0.01, -2), anchors }))).toEqual([]);
+    expect(kinds(interactCandidates({ ...base, hands: 'hook', feet: vec3(3, ANCHOR_HEIGHT - PUSH_HEIGHT - HOOK_RANGE - 0.01, -2), anchors }))).toEqual([]);
   });
 
   test('holding a prop: no candidates', () => {

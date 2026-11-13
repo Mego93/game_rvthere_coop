@@ -149,6 +149,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         ...splitCandidates(found),
       });
       if (action?.kind === 'board') {
+        // Unreachable with the hook in the hands (interact drops it first); kept so a seat never holds it.
         releaseHook(player.id, 'stow');
         players.setSeat(player.id, action.seatId);
       } else if (action?.kind === 'exitSeat') {

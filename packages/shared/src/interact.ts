@@ -45,7 +45,9 @@ export function aimAngleToBox(origin: Vec3, dir: Vec3, centre: Vec3, rot: Quat, 
 
 const ZERO_HALF = vec3(0, 0, 0);
 
-// Rule K1; pure over poses so the server and the client's hint agree. Seated players have no candidates (they leave the seat).
+const seatPos = (config: VehicleConfig, seatId: string): Vec3 => config.seats.find((seat) => seat.id === seatId)?.pos ?? vec3(0, 0, 0);
+
+// Rule K1 with W11: the boarding angle is to the chosen seat, not to the vehicle's box. Pure over poses so the server and the client's hint agree. Seated players have no candidates (they leave the seat).
 // Holding the hook: the anchors in range. Holding a prop: none. Empty hands: the hook, then boarding, props in the given order.
 // The order of the list is the tie order (V8): board, takeHook, detachHook, releaseHook, then props; attach: static anchors, then props.
 export function interactCandidates(ctx: {
@@ -91,7 +93,7 @@ export function interactCandidates(ctx: {
   if (seatId !== null) {
     found.push({
       action: { kind: 'board', seatId },
-      angle: aimAngleToBox(origin, dir, ctx.vehiclePos, ctx.vehicleRot, ctx.config.halfExtents),
+      angle: angleTo(add(ctx.vehiclePos, rotate(ctx.vehicleRot, seatPos(ctx.config, seatId)))),
     });
   }
   const { cable } = ctx;

@@ -509,14 +509,23 @@ describe('the hook in the hands (world)', () => {
     world.dispose();
   });
 
-  test('a respawn stows the hook and empties the hands; removing the player drops it at their feet', () => {
-    const { world } = setup();
+  test('a respawn stows the hook and empties the hands', () => {
+    const lowPlane: BuiltCourse = deepFreeze({ ...testGround, killPlaneY: -0.5 });
+    const { world } = setup(lowPlane);
     takeAtBumper(world);
-    world.teleportPlayer('p1', vec3(30, world.course.killPlaneY - 1, -10));
-    run(world, Math.round((PLAYER_KILL_RESPAWN_DELAY + 0.5) * TICK_RATE));
+    const mount = mountOf(world);
+    world.teleportPlayer('p1', vec3(mount.x, -1, mount.z - 3));
+    run(world, Math.round(PLAYER_KILL_RESPAWN_DELAY * TICK_RATE) - 5);
+    expect(me(world).hands).toBe('hook');
+    expect(world.snapshot().cable.state).toBe('held');
+    run(world, 10);
     expect(world.snapshot().cable.state).toBe('stowed');
     expect(me(world).hands).toBeNull();
+    world.dispose();
+  });
 
+  test('removing a player drops the hook at their feet', () => {
+    const { world } = setup();
     takeAtBumper(world);
     const feet = me(world).pos;
     world.removePlayer('p1');
@@ -535,6 +544,30 @@ describe('the hook in the hands (world)', () => {
     press(world, 'p1');
     expect(me(world).seat).toBeNull();
     expect(world.snapshot().cable.state).toBe('ground');
+    world.dispose();
+
+    const bare = setup();
+    press(bare.world, 'p1');
+    expect(me(bare.world).seat).not.toBeNull();
+    bare.world.dispose();
+  });
+
+  test('two players pressing interact beside the bumper in one tick: the earlier joiner gets the hook', () => {
+    const { world } = setup();
+    world.addPlayer('p2');
+    const mount = mountOf(world);
+    world.teleportPlayer('p1', vec3(mount.x - 0.3, 0.02, mount.z - 1.1));
+    world.teleportPlayer('p2', vec3(mount.x + 0.3, 0.02, mount.z - 1.1));
+    run(world, 20);
+    world.step(
+      new Map([
+        ['p1', input({ interact: true, ...aimAt(world, mount, 'p1') })],
+        ['p2', input({ interact: true, ...aimAt(world, mount, 'p2') })],
+      ]),
+    );
+    expect(me(world, 'p1').hands).toBe('hook');
+    expect(me(world, 'p2').hands).toBeNull();
+    expect(world.snapshot().cable.holderId).toBe('p1');
     world.dispose();
   });
 
