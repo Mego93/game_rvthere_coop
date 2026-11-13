@@ -8,18 +8,34 @@ async function overlayNumber(page: Page, pattern: RegExp): Promise<number> {
 }
 const tick = (page: Page) => overlayNumber(page, /tick\s+(\d+)/);
 const vehicleZ = (page: Page) => overlayNumber(page, /pos\s+\S+\s+\S+\s+(\S+)/);
+// The whole list of players as the overlay shows it, for example "Amal (drives), Badr".
+async function players(page: Page): Promise<string> {
+  const text = (await page.locator('#overlay').textContent()) ?? '';
+  return /^players\s+(.*)$/m.exec(text)?.[1] ?? '';
+}
+
+// Uncaught errors in any page of the running test. A page can look right and still have failed, for example in WebGL.
+const pageErrors: string[] = [];
+const watch = (page: Page) => page.on('pageerror', (error) => pageErrors.push(error.message));
 
 // A page in its own browser context, so it has its own session storage: a separate player.
 const contexts: BrowserContext[] = [];
 async function newPlayerPage(browser: Browser): Promise<Page> {
   const context = await browser.newContext();
   contexts.push(context);
-  return context.newPage();
+  const page = await context.newPage();
+  watch(page);
+  return page;
 }
+
+test.beforeEach(({ page }) => {
+  watch(page);
+});
 
 // Contexts made by hand are not closed by the test runner; left open, their pages keep drawing and slow later tests.
 test.afterEach(async () => {
   for (const context of contexts.splice(0)) await context.close();
+  expect(pageErrors.splice(0)).toEqual([]);
 });
 
 // Opens the home page, creates a room as `name` and returns the room's noun.
@@ -52,11 +68,12 @@ test('two players share a room and see the same vehicle, driven by the first', a
     await expect.poll(() => tick(page)).toBeGreaterThan(before);
   }
 
-  // Badr's throttle does nothing: only the first player drives.
+  // Badr's throttle does nothing: only the first player drives. Two seconds of throttle would move the vehicle several metres.
   await badr.keyboard.down('KeyW');
-  await badr.waitForTimeout(700);
-  await badr.keyboard.up('KeyW');
+  await badr.waitForTimeout(2000);
   expect(await vehicleZ(amal)).toBeGreaterThan(-0.5);
+  expect(await vehicleZ(badr)).toBeGreaterThan(-0.5);
+  await badr.keyboard.up('KeyW');
 
   // Amal drives forward, and both pages see the vehicle move.
   await amal.keyboard.down('KeyW');
@@ -70,6 +87,14 @@ test('two players share a room and see the same vehicle, driven by the first', a
     expect(size[0]).toBeGreaterThan(0);
     expect(size[1]).toBeGreaterThan(0);
   }
+
+  // When Amal leaves, Badr drives. This also shows that Badr's keys do reach the server, so the check above meant something.
+  await amal.close();
+  await expect.poll(() => players(badr)).toBe('Badr (drives)');
+  const before = await vehicleZ(badr);
+  await badr.keyboard.down('KeyW');
+  await expect.poll(() => vehicleZ(badr), { timeout: 10_000 }).toBeLessThan(before - 3);
+  await badr.keyboard.up('KeyW');
 });
 
 test('a room can be joined from the home page by typing its name', async ({ browser }) => {
@@ -119,13 +144,16 @@ test('the name is remembered, and a reload keeps the player in the room', async 
   await page.locator('#home-primary').click();
   await expect(page.locator('#home')).toBeHidden();
   // The same tab took its old place: one player, not two, and no "name taken".
-  await expect(page.locator('#overlay')).toContainText('players  Amal (drives)\n');
+  await expect.poll(() => players(page)).toBe('Amal (drives)');
 });
 
 test('an empty name is refused on the page, before anything is sent', async ({ page }) => {
+  let sockets = 0;
+  page.on('websocket', () => (sockets += 1));
   await page.goto('/');
   await page.locator('#home-name').fill('   ');
   await page.locator('#home-primary').click();
   await expect(page.locator('#home-error')).toHaveText('Enter a name of 1 to 16 characters.');
   await expect(page).toHaveURL(/\/$/);
+  expect(sockets).toBe(0);
 });
