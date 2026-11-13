@@ -7,7 +7,7 @@ Single source of truth for where the project stands. Update it in the same commi
 
 ## Current state
 
-**Current step:** step 3 is done (branch `claude/busy-brown-wkdjue`, merge to `main` pending). Next action: write the plan for step 4. The owner still has to check the rendering, the feel and the iPhone load (see "Working notes").
+**Current step:** step 4 is in progress (branch `claude/busy-brown-wkdjue`, plan in `docs/superpowers/plans/step-4-client-prediction.md`). The owner still has to check the rendering, the feel and the iPhone load (see "Working notes").
 
 **Runnable today:** `npm run dev` starts the game server and the page. Create a room on the home page and share its address; everyone who opens it appears as a character beside the same vehicle on the test ground. Players walk (WASD) and jump (Space), board with E at the nearest free seat (the driver's seat if standing at its door), drive from the driver seat, and leave with E. After clicking the canvas, the mouse looks around from a shoulder camera with a crosshair; while seated the camera follows the vehicle.
 
@@ -20,7 +20,7 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | 1 | Workspace scaffold, Rapier passed into `shared`, test ground, both vehicle configs as boxes, drivable in one tab, keyboard input, text overlay, force-based cable experiment | done | step-1-scaffold-and-drivable-vehicle | [plan](docs/superpowers/plans/step-1-scaffold-and-drivable-vehicle.md) | Automated tests |
 | 2 | Server (`room` layer and `node` adapter), validation, rate limit, liveness, home page, create and join by noun, snapshots, interpolation, Playwright test begins | done | step-2-server-rooms-snapshots | [plan](docs/superpowers/plans/step-2-server-rooms-snapshots.md) | Automated tests |
 | 3 | Server-side players on foot: movement, moving bodies, shove-out, spawn slots, seats, kill-plane respawn; shoulder camera and crosshair; iPhone load check | done | claude/busy-brown-wkdjue | [plan](docs/superpowers/plans/step-3-players-on-foot.md) | Automated tests |
-| 4 | Client prediction of walking and jumping | todo | | | Automated tests |
+| 4 | Client prediction of walking and jumping | in progress | claude/busy-brown-wkdjue | [plan](docs/superpowers/plans/step-4-client-prediction.md) | Automated tests |
 | 5 | Push, hands, light debris, heavy obstacles, prop kill plane | todo | | | Automated tests |
 | 6 | Winch | todo | | | Automated tests |
 | 7 | Vehicle fuel, health and damage; inventory; jerrycans and toolboxes; hold actions | todo | | | Automated tests |

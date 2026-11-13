@@ -1,21 +1,14 @@
 import {
-  GRAVITY,
-  PLAYER_AIR_ACCEL,
   PLAYER_CONTROLLER_OFFSET,
   PLAYER_EYE_HEIGHT,
-  PLAYER_GROUND_ACCEL,
   PLAYER_HEIGHT,
-  PLAYER_JUMP_SPEED,
   PLAYER_MAX_SLOPE_DEG,
   PLAYER_OVERLAP_LIFT,
   PLAYER_RADIUS,
-  PLAYER_SLIDE_SLOPE_DEG,
-  PLAYER_SNAP_DISTANCE,
   PLAYER_STEP_HEIGHT,
   PLAYER_WALK_SPEED,
   SHOVE_MAX_DISTANCE,
   SHOVE_STEP,
-  TICK_DT,
 } from './constants';
 import type { BuiltCourse } from './course';
 import { GROUP_GROUND, GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
@@ -24,6 +17,7 @@ import { exitPoints } from './seats';
 import { NEUTRAL_INPUT, type InputFields } from './protocol';
 import type { Rapier, RapierWorld } from './rapier';
 import type { Vehicle } from './vehicle';
+import { createWalkController, stepWalk } from './walk';
 import type { SeatConfig } from './vehicles';
 
 export interface GroundRef {
@@ -111,13 +105,7 @@ const conjugate = (q: Quat): Quat => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
 export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Vehicle, course: BuiltCourse): Players {
   const worldGroups = groups(GROUP_WORLD, GROUP_WORLD);
   const capsule = new rapier.Capsule(CAPSULE_HALF_SEGMENT, PLAYER_RADIUS);
-  const controller = physics.createCharacterController(PLAYER_CONTROLLER_OFFSET);
-  controller.setUp({ x: 0, y: 1, z: 0 });
-  controller.enableAutostep(PLAYER_STEP_HEIGHT, PLAYER_RADIUS, false);
-  controller.enableSnapToGround(PLAYER_SNAP_DISTANCE);
-  controller.setMaxSlopeClimbAngle(degToRad(PLAYER_MAX_SLOPE_DEG));
-  controller.setMinSlopeSlideAngle(degToRad(PLAYER_SLIDE_SLOPE_DEG));
-  controller.setApplyImpulsesToDynamicBodies(false);
+  const controller = createWalkController(rapier, physics);
 
   const entries = new Map<string, { state: PlayerState; collider: ReturnType<RapierWorld['createCollider']> }>();
 
@@ -211,14 +199,6 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     return { x: v.x + w.y * r.z - w.z * r.y, z: v.z + w.x * r.y - w.y * r.x };
   };
 
-  const standsOnVehicle = (): boolean => {
-    for (let i = 0; i < controller.numComputedCollisions(); i++) {
-      const hit = controller.computedCollision(i);
-      if (hit?.collider?.handle === vehicle.chassisHandle && hit.normal1.y >= MIN_UP_NORMAL) return true;
-    }
-    return false;
-  };
-
   const fromVehicleFrame = (local: Vec3): Vec3 =>
     add(vehicle.body.translation(), rotate(vehicle.body.rotation(), local));
 
@@ -285,39 +265,20 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     const { fields, pressed } = step;
     const wish = wishVelocity(state.yaw, finite(fields.moveX), finite(fields.moveY));
     const wasOnVehicle = state.ground !== null;
-    if (pressed.jump && state.grounded) {
-      state.vy = PLAYER_JUMP_SPEED;
-    }
-    state.vy -= GRAVITY * TICK_DT;
-
-    const maxChange = (state.grounded ? PLAYER_GROUND_ACCEL : PLAYER_AIR_ACCEL) * TICK_DT;
-    const dx = wish.x - state.walk.x;
-    const dz = wish.z - state.walk.z;
-    const gap = Math.hypot(dx, dz);
-    if (gap <= maxChange) {
-      state.walk = { x: wish.x, z: wish.z };
-    } else {
-      state.walk = { x: state.walk.x + (dx / gap) * maxChange, z: state.walk.z + (dz / gap) * maxChange };
-    }
-
     const entry = entries.get(state.id)!;
-    const desired = {
-      x: (state.walk.x + state.carry.x) * TICK_DT,
-      y: state.vy * TICK_DT,
-      z: (state.walk.z + state.carry.z) * TICK_DT,
-    };
-    controller.computeColliderMovement(entry.collider, desired, undefined, worldGroups);
-    const moved = controller.computedMovement();
-    state.pos = vec3(state.pos.x + moved.x, state.pos.y + moved.y, state.pos.z + moved.z);
-    state.grounded = controller.computedGrounded();
-    state.ground = state.grounded && standsOnVehicle() ? { bodyId: 'vehicle', localPos: toVehicleFrame(state.pos) } : null;
-    if (state.grounded) {
-      state.vy = 0;
-      state.carry = { x: 0, z: 0 };
-    } else if (wasOnVehicle) {
+    const { collisions } = stepWalk(
+      { controller, collider: entry.collider, groups: worldGroups },
+      state,
+      pressed.jump,
+      wish,
+    );
+    const standsOnVehicle = collisions.some(
+      (hit) => hit.handle === vehicle.chassisHandle && hit.normalY >= MIN_UP_NORMAL,
+    );
+    state.ground = state.grounded && standsOnVehicle ? { bodyId: 'vehicle', localPos: toVehicleFrame(state.pos) } : null;
+    if (!state.grounded && wasOnVehicle) {
       state.carry = vehicleVelocityAt(state.pos);
     }
-    placeCollider(state.id);
   };
 
   return {
