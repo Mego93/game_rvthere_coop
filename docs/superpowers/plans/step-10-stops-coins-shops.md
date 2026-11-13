@@ -380,3 +380,14 @@ M12 (documents and the owner's checks).
 - The decisions-log line for V11 says that `COURSE=segment-demo` already places stops beside fences, so the demo course is exposed to the wall-ray issue until step 16.
 - The operate angle is measured to a point at ground level, while the drawn pump is 1.4 m tall. Add this to the owner's hand checks.
 - Task 5 adds the coin check's place in the tick order to the spec.
+
+M13 (found in task 2: aiming at the pump). With the operate angle measured to the ground-level operate point, a player standing at the pump and aiming ahead resolves to the fuel counter's `shop` candidate, which does nothing on the server. They have to look straight down to refuel.
+
+The fix is to aim at what is drawn:
+- New constant `STOP_POST_HEIGHT = 1.4`, in m. It is the height of the drawn pump or workbench post, and `scene.ts` draws the post from it.
+- The `operate` candidate's angle is measured to `operatePoint + (0, STOP_POST_HEIGHT / 2, 0)`.
+- The `shop` candidate's angle stays measured to the counter box's centre.
+- Range checks are unchanged: they stay feet to point, and feet to box.
+- Test: a player at the operate point, aiming level toward the post, gets `operate`; the same player aiming level at the counter gets `shop`.
+
+This is done in task 3. The world tests that use `pitch = −π/2` may keep it, but one test aims level.
