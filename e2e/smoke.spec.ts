@@ -8,6 +8,8 @@ async function overlayNumber(page: Page, pattern: RegExp): Promise<number> {
 }
 const tick = (page: Page) => overlayNumber(page, /tick\s+(\d+)/);
 const vehicleZ = (page: Page) => overlayNumber(page, /pos\s+\S+\s+\S+\s+(\S+)/);
+// The throttle the server applied to the vehicle, from 0 to 1. It shows whose keys the server obeys without depending on speed.
+const throttle = (page: Page) => overlayNumber(page, /throttle\s+(\S+)/);
 // The whole list of players as the overlay shows it, for example "Amal (drives), Badr".
 async function players(page: Page): Promise<string> {
   const text = (await page.locator('#overlay').textContent()) ?? '';
@@ -71,15 +73,19 @@ test('two players share a room and see the same vehicle, driven by the first', a
   // Badr's throttle does nothing: only the first player drives. Two seconds of throttle would move the vehicle several metres.
   await badr.keyboard.down('KeyW');
   await badr.waitForTimeout(2000);
-  expect(await vehicleZ(amal)).toBeGreaterThan(-0.5);
-  expect(await vehicleZ(badr)).toBeGreaterThan(-0.5);
+  for (const page of [amal, badr]) {
+    expect(await throttle(page)).toBe(0);
+    expect(await vehicleZ(page)).toBeGreaterThan(-0.5);
+  }
   await badr.keyboard.up('KeyW');
 
-  // Amal drives forward, and both pages see the vehicle move.
+  // Amal drives forward, and both pages see the throttle applied and the vehicle move.
   await amal.keyboard.down('KeyW');
+  await expect.poll(() => throttle(badr)).toBeGreaterThan(0.9);
   await expect.poll(() => vehicleZ(amal), { timeout: 10_000 }).toBeLessThan(-3);
   await expect.poll(() => vehicleZ(badr), { timeout: 10_000 }).toBeLessThan(-3);
   await amal.keyboard.up('KeyW');
+  await expect.poll(() => throttle(badr)).toBe(0);
 
   // The game canvas has been given its drawing size.
   for (const page of [amal, badr]) {
@@ -89,11 +95,12 @@ test('two players share a room and see the same vehicle, driven by the first', a
   }
 
   // When Amal leaves, Badr drives. This also shows that Badr's keys do reach the server, so the check above meant something.
+  // The vehicle is still rolling, so the throttle is the proof, not the distance.
   await amal.close();
   await expect.poll(() => players(badr)).toBe('Badr (drives)');
-  const before = await vehicleZ(badr);
+  expect(await throttle(badr)).toBe(0);
   await badr.keyboard.down('KeyW');
-  await expect.poll(() => vehicleZ(badr), { timeout: 10_000 }).toBeLessThan(before - 3);
+  await expect.poll(() => throttle(badr)).toBeGreaterThan(0.9);
   await badr.keyboard.up('KeyW');
 });
 
