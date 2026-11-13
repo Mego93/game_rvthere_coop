@@ -205,3 +205,10 @@ test('shows how many props are in the sample', () => {
   expect(text).toContain('props    3');
   expect(call([])).toContain('props    0');
 });
+
+test('shows the cable state and length to one decimal, and nothing before the first snapshot', () => {
+  const attached = { ...stowed, state: 'attached' as const, length: 12.34 };
+  expect(overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [], localId: 'p1', predicted: null, server: null, ...noAim, cable: attached })).toContain('cable    attached 12.3 m');
+  expect(overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [], localId: 'p1', predicted: null, server: null, ...noAim, cable: stowed })).toContain('cable    stowed 0.0 m');
+  expect(overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [], localId: 'p1', predicted: null, server: null, ...noAim, cable: null })).not.toContain('cable');
+});

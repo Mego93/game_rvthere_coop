@@ -143,7 +143,8 @@ const onFoot = {
 const seated = { ...onFoot, playerId: 'p2', seat: 'driver' };
 const onVehicle = { ...onFoot, playerId: 'p3', ground: { bodyId: 'vehicle', localPos: { x: 0, y: 1, z: 0 } } };
 const crate = { id: 'crate-1', kind: 'crate', pos: { x: 1, y: 0.3, z: 2 }, rot: { x: 0, y: 0, z: 0, w: 1 } };
-const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle, players: [onFoot], props: [crate] };
+const cable = { state: 'attached', holderId: null, anchorId: 'anchor-1', hookPos: { x: 1, y: 0.5, z: -20 }, length: 12.5, reel: 1 };
+const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle, players: [onFoot], props: [crate], cable };
 const lobby = {
   type: 'lobby',
   room: 'camel',
@@ -185,6 +186,16 @@ test.each([
   ['a snapshot whose tick is negative', JSON.stringify({ ...snapshot, tick: -1 })],
   ['a snapshot whose tick is not whole', JSON.stringify({ ...snapshot, tick: 1.5 })],
   ['a snapshot whose tick is too large to be finite', JSON.stringify(snapshot).replace('"tick":30', '"tick":1e999')],
+  ['a snapshot without a cable', JSON.stringify({ ...snapshot, cable: undefined })],
+  ['a snapshot whose cable is null', JSON.stringify({ ...snapshot, cable: null })],
+  ['a cable with an unknown state', JSON.stringify({ ...snapshot, cable: { ...cable, state: 'tangled' } })],
+  ['a cable whose holderId is a number', JSON.stringify({ ...snapshot, cable: { ...cable, holderId: 3 } })],
+  ['a cable whose holderId is missing', JSON.stringify({ ...snapshot, cable: { ...cable, holderId: undefined } })],
+  ['a cable whose anchorId is a number', JSON.stringify({ ...snapshot, cable: { ...cable, anchorId: 3 } })],
+  ['a cable whose hookPos lacks z', JSON.stringify({ ...snapshot, cable: { ...cable, hookPos: { x: 1, y: 2 } } })],
+  ['a cable whose length is text', JSON.stringify({ ...snapshot, cable: { ...cable, length: '12' } })],
+  ['a cable whose length is not finite', JSON.stringify(snapshot).replace('"length":12.5', '"length":1e999')],
+  ['a cable whose reel is 2', JSON.stringify({ ...snapshot, cable: { ...cable, reel: 2 } })],
   ['a snapshot whose ackSeq is missing', JSON.stringify({ ...snapshot, ackSeq: undefined })],
   ['a snapshot whose full is not a boolean', JSON.stringify({ ...snapshot, full: 1 })],
   ['a snapshot whose position lacks z', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, pos: { x: 1, y: 2 } } })],
@@ -214,6 +225,13 @@ test('parseServerMessage accepts players on foot, seated and on the vehicle, and
   const message = { ...snapshot, players: [onFoot, seated, onVehicle, { ...onFoot, playerId: 'p4', hands: 'crate-1' }] };
   expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
   expect(parseServerMessage(JSON.stringify({ ...snapshot, players: [] }))).not.toBeNull();
+});
+
+test('parseServerMessage accepts every cable state with null or text ids', () => {
+  for (const state of ['stowed', 'held', 'ground', 'attached']) {
+    const message = { ...snapshot, cable: { ...cable, state, holderId: 'p1', anchorId: null, reel: -1 } };
+    expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
+  }
 });
 
 const withPlayer = (changes: Record<string, unknown>) => JSON.stringify({ ...snapshot, players: [{ ...onFoot, ...changes }] });

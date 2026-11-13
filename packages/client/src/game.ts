@@ -1,5 +1,7 @@
 import {
   PLAYER_EYE_HEIGHT,
+  add,
+  rotate,
   createPredictor,
   getCourse,
   getVehicleConfig,
@@ -25,6 +27,7 @@ import { createPlayerMesh, disposePlayerMesh, placePlayerMesh } from './render/p
 import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMesh';
 import { createScene } from './render/scene';
 import { cameraPlacement } from './render/shoulderCamera';
+import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
 import { overlayText } from './ui/overlay';
 
@@ -62,6 +65,9 @@ export function createGame(
   const vehicleMesh = createVehicleMesh(vehicleConfig);
   vehicleMesh.visible = false;
   scene.add(vehicleMesh);
+  const winchMesh = createWinchMesh();
+  winchMesh.visible = false;
+  scene.add(winchMesh);
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
   camera.position.set(0, 6, 14);
 
@@ -173,6 +179,14 @@ export function createGame(
       placeVehicleMesh(vehicleMesh, vehicle);
     }
     syncPlayerMeshes(players);
+    const cable = sampled?.cable;
+    winchMesh.visible = vehicle !== null && cable !== undefined;
+    if (vehicle && cable) {
+      const mount = add(vehicle.pos, rotate(vehicle.rot, vehicleConfig.winchMount));
+      const holder = cable.state === 'held' ? players.find((player) => player.playerId === cable.holderId) : undefined;
+      const hook = cable.state === 'stowed' ? mount : holder ? holdPoseAt(holder.pos, holder.yaw).pos : cable.hookPos;
+      placeWinchMesh(winchMesh, mount, hook, cable.state !== 'stowed');
+    }
     syncPropMeshes(sampled?.props ?? [], players);
 
     const local = players.find((player) => player.playerId === playerId);
@@ -230,6 +244,8 @@ export function createGame(
       playerMeshes.clear();
       for (const entry of propMeshes.values()) disposePropMesh(entry.mesh);
       propMeshes.clear();
+      scene.remove(winchMesh);
+      disposeWinchMesh(winchMesh);
     },
   };
 }

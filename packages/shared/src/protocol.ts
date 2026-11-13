@@ -2,6 +2,7 @@ import { NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN } from './constants';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
 import type { PropSnapshot } from './props';
 import type { VehicleState } from './vehicle';
+import type { CableSnapshot } from './winch';
 import type { WorldSnapshot } from './world';
 
 export interface PlayerInput {
@@ -220,6 +221,14 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   typeof value.grounded === 'boolean';
 const isPropSnapshot = (value: unknown): value is PropSnapshot =>
   isRecord(value) && isText(value.id) && isText(value.kind) && isVec3(value.pos) && isQuat(value.rot);
+const isCableSnapshot = (value: unknown): value is CableSnapshot =>
+  isRecord(value) &&
+  (value.state === 'stowed' || value.state === 'held' || value.state === 'ground' || value.state === 'attached') &&
+  (value.holderId === null || isText(value.holderId)) &&
+  (value.anchorId === null || isText(value.anchorId)) &&
+  isVec3(value.hookPos) &&
+  finite(value.length) &&
+  (value.reel === -1 || value.reel === 0 || value.reel === 1);
 const isLobbyPlayer = (value: unknown): value is LobbyPlayer =>
   isRecord(value) &&
   isText(value.playerId) &&
@@ -268,7 +277,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         Array.isArray(data.players) &&
         data.players.every(isPlayerSnapshot) &&
         Array.isArray(data.props) &&
-        data.props.every(isPropSnapshot)
+        data.props.every(isPropSnapshot) &&
+        isCableSnapshot(data.cable)
         ? message
         : null;
     default:

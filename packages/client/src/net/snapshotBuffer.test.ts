@@ -50,6 +50,26 @@ test('copies the cable into the sample and the latest', () => {
   expect(createSnapshotBuffer().latestCable()).toBeNull();
 });
 
+test('blends the hook and the length within one state, and takes the newer across a change', () => {
+  const at = (tick: number, state: SnapshotMessage['cable']['state'], length: number): SnapshotMessage => ({
+    ...snapshot(tick),
+    cable: { state, holderId: null, anchorId: null, hookPos: vec3(0, 1, -tick), length, reel: 0 },
+  });
+  const same = createSnapshotBuffer();
+  same.push(at(3, 'ground', 2), 3 * TICK_DT);
+  same.push(at(9, 'ground', 8), 9 * TICK_DT);
+  const mid = same.sample(6 * TICK_DT + INTERPOLATION_DELAY)!.cable;
+  expect(mid.hookPos.z).toBeCloseTo(-6, 6);
+  expect(mid.length).toBeCloseTo(5, 6);
+  const changed = createSnapshotBuffer();
+  changed.push(at(3, 'held', 2), 3 * TICK_DT);
+  changed.push(at(9, 'ground', 8), 9 * TICK_DT);
+  const jump = changed.sample(6 * TICK_DT + INTERPOLATION_DELAY)!.cable;
+  expect(jump.state).toBe('ground');
+  expect(jump.hookPos.z).toBe(-9);
+  expect(jump.length).toBe(8);
+});
+
 test('gives nothing before the first snapshot', () => {
   const buffer = createSnapshotBuffer();
   expect(buffer.sample(1)).toBeNull();

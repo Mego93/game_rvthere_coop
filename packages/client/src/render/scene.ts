@@ -1,4 +1,4 @@
-import type { Box, BuiltCourse, Surface } from '@lodgy/shared';
+import { ANCHOR_HEIGHT, type Box, type BuiltCourse, type Surface } from '@lodgy/shared';
 import * as THREE from 'three';
 
 const SKY = 0xcfe6f5;
@@ -40,6 +40,9 @@ export function createScene(course: BuiltCourse): THREE.Scene {
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.2, 0.4), solid(0xf59e0b));
     post.position.set(anchor.pose.pos.x, anchor.pose.pos.y + 0.6, anchor.pose.pos.z);
     scene.add(post);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.1, 0.44), solid(0xf2f2f2));
+    band.position.set(anchor.pose.pos.x, anchor.pose.pos.y + ANCHOR_HEIGHT, anchor.pose.pos.z);
+    scene.add(band);
   }
   return scene;
 }

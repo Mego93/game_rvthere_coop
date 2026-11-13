@@ -68,6 +68,12 @@ const copyCable = (c: CableSnapshot): CableSnapshot => ({
   reel: c.reel,
 });
 
+// Across a state change the hook jumps (a stow, a drop), so the newer one is taken whole.
+function blendCable(a: CableSnapshot, b: CableSnapshot, t: number): CableSnapshot {
+  if (a.state !== b.state) return copyCable(b);
+  return { ...copyCable(b), hookPos: lerp(a.hookPos, b.hookPos, t), length: a.length + (b.length - a.length) * t };
+}
+
 const copyWorld = (w: WorldSnapshot) => ({
   vehicle: copyVehicle(w.vehicle),
   players: w.players.map(copyPlayer),
@@ -132,8 +138,7 @@ export function createSnapshotBuffer(): SnapshotBuffer {
         vehicle: blend(from.snapshot.vehicle, to.snapshot.vehicle, t),
         players: to.snapshot.players.map((p) => blendPlayer(before.get(p.playerId), p, t)),
         props: blendProps(from.snapshot.props, to.snapshot.props, t),
-        // Interpolated in Task 4 of step 6; until then the newer one.
-        cable: copyCable(to.snapshot.cable),
+        cable: blendCable(from.snapshot.cable, to.snapshot.cable, t),
       };
     },
     latestTick: () => entries[entries.length - 1]?.snapshot.tick ?? 0,
