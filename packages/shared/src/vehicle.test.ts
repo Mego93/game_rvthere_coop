@@ -139,7 +139,7 @@ describe.each(['lodgy', 'rv'] as const)('%s seats and spawn slots', (id) => {
   test('has six distinct spawn slots at least 1 m outside the chassis box', () => {
     expect(config.spawnSlots).toHaveLength(6);
     for (const slot of config.spawnSlots) {
-      expect(Math.abs(slot.x) - h.x >= 1 || Math.abs(slot.z) - h.z >= 1).toBe(true);
+      expect(Math.abs(slot.x) - h.x).toBeGreaterThanOrEqual(1);
     }
     expect(new Set(config.spawnSlots.map((s) => `${s.x},${s.z}`)).size).toBe(6);
   });
