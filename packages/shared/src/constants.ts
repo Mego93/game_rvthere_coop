@@ -55,6 +55,8 @@ export const RATE_LIMIT_STRIKE_WINDOW = 8;
 export const STALL_GRACE = 1;
 // Seconds between failure reports from one source.
 export const REPORT_INTERVAL = 10;
+// Seconds the server waits for a peer to answer a close frame before dropping the socket.
+export const SOCKET_CLOSE_TIMEOUT = 1;
 
 export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel';
 

@@ -2,7 +2,7 @@ import { createServer, type IncomingHttpHeaders } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { MAX_CONNECTIONS, MAX_CONNECTIONS_PER_ADDRESS, MAX_SEND_BUFFER, SOCKET_PATH } from '@lodgy/shared';
+import { MAX_CONNECTIONS, MAX_CONNECTIONS_PER_ADDRESS, MAX_SEND_BUFFER, SOCKET_CLOSE_TIMEOUT, SOCKET_PATH } from '@lodgy/shared';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { createReporter } from '../room/report';
 import { createRoomServer } from '../room/server';
@@ -117,7 +117,13 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     }
     serveStatic(options.clientDir, request, response, report).catch(() => response.destroy());
   });
-  const sockets = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
+  const sockets = new WebSocketServer({
+    noServer: true,
+    maxPayload: MAX_MESSAGE_BYTES,
+    // A peer that never answers the close frame must not hold its connection slot for ws's default 30 s.
+    // Spread because @types/ws 8.18 does not declare closeTimeout yet.
+    ...{ closeTimeout: SOCKET_CLOSE_TIMEOUT * 1000 },
+  });
   // ws repeats errors here, and an error event nobody listens to is thrown.
   sockets.on('error', () => {});
 
@@ -177,7 +183,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     rooms.stop();
     throw error;
   }
-  http.on('error', (error) => report('upgrade', error));
+  http.on('error', (error) => report('http', error));
 
   return {
     port: (http.address() as AddressInfo).port,

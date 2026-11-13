@@ -21,7 +21,6 @@ try {
 }
 
 const clientDir = fileURLToPath(new URL('../../../client/dist', import.meta.url));
-// VEHICLE=rv runs every room with the RV until the lobby (step 11) lets the admin choose.
 // Optional overrides of the connection and create limits; the end-to-end run raises them.
 const positiveInteger = (name: string): number | undefined => {
   const raw = process.env[name];
@@ -39,6 +38,7 @@ const limits = {
 };
 // TRUST_PROXY=1 behind the Cloudflare Tunnel: the client address then comes from CF-Connecting-IP.
 const trustProxy = process.env.TRUST_PROXY === '1';
+// VEHICLE=rv runs every room with the RV until the lobby (step 11) lets the admin choose.
 const server = await startServer({ port, clientDir, vehicleId: process.env.VEHICLE, courseId, trustProxy, limits });
 console.log(`Proxy trust is ${trustProxy ? 'on (CF-Connecting-IP decides the client address)' : 'off'}.`);
 

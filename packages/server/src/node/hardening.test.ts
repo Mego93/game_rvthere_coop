@@ -1,9 +1,9 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer, request as httpRequest } from 'node:http';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { SOCKET_PATH } from '@lodgy/shared';
+import { SOCKET_CLOSE_TIMEOUT, SOCKET_PATH } from '@lodgy/shared';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import WebSocket from 'ws';
 import { clientAddress, sendOrDrop, startServer, type RunningServer, type ServerOptions } from './listen';
@@ -196,4 +196,62 @@ test('a socket whose queue is over the cap after a send is terminated', () => {
   const closed = make(1000, 3);
   sendOrDrop(closed.socket, 'x', 100);
   expect(closed.calls).toEqual({ sent: 0, terminated: 0 });
+});
+
+// --- dead peers ---
+
+// Completes the upgrade by hand, then ignores every frame, so the server's close frame is never answered.
+async function deadPeer(port: number, token: string) {
+  const client = net.connect(port, 'localhost');
+  client.on('error', () => {});
+  await new Promise<void>((resolve) => client.once('connect', () => resolve()));
+  client.write(
+    `GET ${SOCKET_PATH} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n` +
+      'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n',
+  );
+  await new Promise<void>((resolve) => client.once('data', () => resolve()));
+  const payload = Buffer.from(JSON.stringify({ type: 'create', name: 'Dead', token }));
+  const mask = Buffer.from([1, 2, 3, 4]);
+  const masked = payload.map((byte, index) => byte ^ mask[index % 4]!);
+  client.write(Buffer.concat([Buffer.from([0x81, 0x80 | payload.length]), mask, masked]));
+  return client;
+}
+
+test('a peer that never answers the close frame frees its connection slot within the close timeout', async () => {
+  const server = await start({ limits: { perAddress: 2, total: 100 } });
+  const token = 'dead-peer-token-abcdefghij';
+  const dead = await deadPeer(server.port, token);
+  const room = await new Promise<string>((resolve) => {
+    dead.on('data', (chunk: Buffer) => {
+      const match = /"room":"([^"]+)"/.exec(chunk.toString());
+      if (match) resolve(match[1]!);
+    });
+  });
+  // The same token joining takes the slot over, which closes the dead peer's connection.
+  const joiner = opened(await open(server.port));
+  joiner.send(JSON.stringify({ type: 'join', room, name: 'Dead', token }));
+  await new Promise((resolve) => joiner.once('message', resolve));
+  // Both slots are in use until the close times out.
+  expect(await open(server.port)).toEqual({ status: 503 });
+  const deadline = Date.now() + (SOCKET_CLOSE_TIMEOUT + 1) * 1000;
+  let freed = false;
+  while (!freed && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    freed = 'socket' in (await open(server.port));
+  }
+  dead.destroy();
+  expect(freed).toBe(true);
+});
+
+// --- static failure through startServer ---
+
+test('a static failure reaches the shared reporter with source static', async () => {
+  const reports: string[] = [];
+  const looping = path.join(root, 'looping');
+  await mkdir(looping, { recursive: true });
+  // A symlink to itself makes stat fail with ELOOP, which is neither not-found nor a missing client.
+  await symlink(path.join(looping, 'index.html'), path.join(looping, 'index.html'));
+  const server = await start({ onError: (_error, source) => reports.push(source) }, looping);
+  expect((await rawRequest(server.port, 'GET', '/')).status).toBe(500);
+  expect(reports).toEqual(['static']);
 });
