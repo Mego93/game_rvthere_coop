@@ -5,6 +5,7 @@ import {
   TICK_DT,
   lerp,
   nlerp,
+  type PlayerSnapshot,
   type VehicleState,
   type WorldSnapshot,
 } from '@lodgy/shared';
@@ -12,8 +13,8 @@ import {
 export interface SnapshotBuffer {
   // Stores a snapshot received at local time `receivedAt` (seconds). Snapshots older than the newest are ignored.
   push(snapshot: WorldSnapshot, receivedAt: number): void;
-  // The vehicle as it was INTERPOLATION_DELAY before local time `now`, or null before any snapshot.
-  sample(now: number): VehicleState | null;
+  // The world as it was INTERPOLATION_DELAY before local time `now`, or null before any snapshot.
+  sample(now: number): { vehicle: VehicleState; players: PlayerSnapshot[] } | null;
   // The tick of the newest snapshot, or 0 before any.
   latestTick(): number;
 }
@@ -26,6 +27,31 @@ function blend(a: VehicleState, b: VehicleState, t: number): VehicleState {
     throttle: b.throttle,
     steer: b.steer,
   };
+}
+
+const copyVec = (v: { x: number; y: number; z: number }) => ({ x: v.x, y: v.y, z: v.z });
+
+function copyPlayer(p: PlayerSnapshot): PlayerSnapshot {
+  return {
+    playerId: p.playerId,
+    pos: copyVec(p.pos),
+    yaw: p.yaw,
+    seat: p.seat,
+    ground: p.ground && { bodyId: p.ground.bodyId, localPos: copyVec(p.ground.localPos) },
+  };
+}
+
+function copyVehicle(v: VehicleState): VehicleState {
+  return { pos: copyVec(v.pos), rot: { ...v.rot }, linvel: copyVec(v.linvel), throttle: v.throttle, steer: v.steer };
+}
+
+const copyWorld = (w: WorldSnapshot) => ({ vehicle: copyVehicle(w.vehicle), players: w.players.map(copyPlayer) });
+
+function blendPlayer(a: PlayerSnapshot | undefined, b: PlayerSnapshot, t: number): PlayerSnapshot {
+  if (!a) return copyPlayer(b);
+  // The shorter way round, so a turn across +-pi does not spin the long way.
+  const turn = Math.atan2(Math.sin(b.yaw - a.yaw), Math.cos(b.yaw - a.yaw));
+  return { ...copyPlayer(b), pos: lerp(a.pos, b.pos, t), yaw: a.yaw + turn * t };
 }
 
 export function createSnapshotBuffer(): SnapshotBuffer {
@@ -51,14 +77,19 @@ export function createSnapshotBuffer(): SnapshotBuffer {
       const last = entries[entries.length - 1];
       if (!first || !last || offset === null) return null;
       const time = now + offset - INTERPOLATION_DELAY;
-      if (time <= first.time) return first.snapshot.vehicle;
+      if (time <= first.time) return copyWorld(first.snapshot);
       // Past the newest snapshot there is nothing to blend toward; it is shown as it is, with no guessing ahead.
-      if (time >= last.time) return last.snapshot.vehicle;
+      if (time >= last.time) return copyWorld(last.snapshot);
       let index = entries.length - 2;
       while (entries[index]!.time > time) index -= 1;
       const from = entries[index]!;
       const to = entries[index + 1]!;
-      return blend(from.snapshot.vehicle, to.snapshot.vehicle, (time - from.time) / (to.time - from.time));
+      const t = (time - from.time) / (to.time - from.time);
+      const before = new Map(from.snapshot.players.map((p) => [p.playerId, p]));
+      return {
+        vehicle: blend(from.snapshot.vehicle, to.snapshot.vehicle, t),
+        players: to.snapshot.players.map((p) => blendPlayer(before.get(p.playerId), p, t)),
+      };
     },
     latestTick: () => entries[entries.length - 1]?.snapshot.tick ?? 0,
   };

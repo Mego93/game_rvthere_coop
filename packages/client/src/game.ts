@@ -1,7 +1,7 @@
 import { getCourse, getVehicleConfig, type ClientMessage, type LobbyMessage, type WorldSnapshot } from '@lodgy/shared';
 import * as THREE from 'three';
 import { createKeyboardSource } from './input/keyboard';
-import { createFixedStepper } from './loop';
+import { createFixedStepper, createFrameClock } from './loop';
 import { createSnapshotBuffer } from './net/snapshotBuffer';
 import { updateFollowCamera } from './render/followCamera';
 import { createScene } from './render/scene';
@@ -50,15 +50,14 @@ export function createGame(view: GameView, firstLobby: LobbyMessage, send: (mess
     send({ type: 'input', ...keyboard.sample(), seq });
   });
 
-  let last = performance.now();
+  const frameClock = createFrameClock(MAX_FRAME_SECONDS);
   let fps = 60;
   let frameRequest = requestAnimationFrame(function frame(now: number) {
-    const frameSeconds = Math.min((now - last) / 1000, MAX_FRAME_SECONDS);
-    last = now;
+    const frameSeconds = frameClock(now);
     stepper.advance(frameSeconds);
     if (frameSeconds > 0) fps += (1 / frameSeconds - fps) * 0.05;
 
-    const vehicle = buffer.sample(now / 1000);
+    const vehicle = buffer.sample(now / 1000)?.vehicle ?? null;
     if (vehicle) {
       vehicleMesh.visible = true;
       placeVehicleMesh(vehicleMesh, vehicle);

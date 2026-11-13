@@ -24,3 +24,14 @@ export function createFixedStepper(tick: () => void): FixedStepper {
     },
   };
 }
+
+// Seconds since the previous call, from timestamps in milliseconds. The first call gives 0 and the result is never negative,
+// because the first animation-frame timestamp can be earlier than a clock read just before it.
+export function createFrameClock(maxSeconds: number): (nowMs: number) => number {
+  let previous: number | null = null;
+  return (nowMs) => {
+    const seconds = previous === null ? 0 : Math.min(Math.max((nowMs - previous) / 1000, 0), maxSeconds);
+    previous = nowMs;
+    return seconds;
+  };
+}
