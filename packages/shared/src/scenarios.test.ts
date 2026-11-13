@@ -10,6 +10,8 @@ import {
   type ReferenceSlope,
 } from './constants';
 import type { BuiltCourse } from './course';
+import { segmentDemo } from './courses/demo';
+import { getCourse } from './courses/index';
 import { SAND_PATCH_CENTER, slopePose, testGround } from './courses/testGround';
 import { AXIS_X, IDENTITY, add, degToRad, dot, length, quatFromAxisAngle, rotate, sub, vec3, type Pose } from './math';
 import { createProps } from './props';
@@ -225,5 +227,25 @@ describe.each([
       ticks += 1;
     }
     expect(Math.abs(ticks / TICK_RATE - seconds)).toBeLessThan(2);
+  });
+});
+
+describe.each(['lodgy', 'rv'] as const)('the %s in the demo ford', (id) => {
+  test('at full throttle from the ford checkpoint crosses it losing no health (measured 0 lost), and stays above 0.9', () => {
+    const course = getCourse('segment-demo');
+    const cp = course.checkpoints[segmentDemo.segments.findIndex((segment) => segment.type === 'ford')]!;
+    const bed = course.ground.find((box) => box.surface === 'riverbed')!;
+    const forward = rotate(bed.rot, vec3(0, 0, -1));
+    const rig = createRig(RAPIER, id, cp.spawn, course);
+    let crossed = false;
+    for (let second = 1; second <= 30 && !crossed; second++) {
+      rig.run(1, { throttle: 1 });
+      const pos = rig.vehicle.state().pos;
+      crossed = (pos.x - bed.center.x) * forward.x + (pos.z - bed.center.z) * forward.z > bed.halfExtents.z;
+    }
+    const health = rig.vehicle.health();
+    rig.world.free();
+    expect(crossed).toBe(true);
+    expect(health).toBeGreaterThan(0.9);
   });
 });
