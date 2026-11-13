@@ -151,3 +151,16 @@ Fuel feel, crash damage amounts, item meshes, the hold timing.
 - I3 on ramps and kerbs: a landing must not cost health unless hard; the floor and threshold are starting values (feel is the owner's).
 - Removing an item's body while a snapshot refers to it; the full-snapshot rule.
 - Collision groups: no existing collider may change behaviour (every earlier test is the check).
+
+## Plan check (the review agent stopped before reporting; its probe was run by the main session)
+
+Measured with the probe left in the scratchpad (`step7-review/zz_probe.ts`), I3 as planned (floor 0.5, threshold 4, 0.04 per m/s):
+- At rest, full-throttle driving, full braking, reverse, steering at speed, crossing the sand patch's edges: largest jolt 0.29 m/s per tick, no impact, no damage, both vehicles.
+- Wall, Lodgy coasting at 1–4 m/s: no damage; 5 m/s: 0.04; 6: 0.11; 8: 0.17; 10: 0.24; 15: 0.48 (one-tick impacts, monotonic). Full throttle into a wall from 30 m (10.7 m/s): 0.27; from 60 m (13.5 m/s): 0.39. RV: 3.8 m/s none, 5.2 m/s 0.05, 6.9 m/s 0.15.
+- Over the 12° ramp: the Lodgy from a long run-up loses up to 0.022 on landing; the RV nothing. Accepted as a starting value (feel is the owner's); noted as a known issue.
+- Collision groups: wheel rays filter `GROUP_WORLD`, the controller and `touching` query `GROUP_WORLD`, spawn and hook rays query `GROUP_GROUND`; items (membership `GROUP_ITEM` only) are invisible to all of them. Props' filter is `GROUP_WORLD`, so props and items do not collide.
+
+Amendments (binding):
+P1. Task 1 tests (5) use the measured cases: full throttle into a wall (via `withBoxes`) from 30 m costs between 0.2 and 0.35, from 60 m more than from 30 m; coasting into it at 2 m/s (set with `setLinvel`) costs nothing.
+P2. Implementers grep and update every `VehicleState` and `PlayerSnapshot` literal and every `interactCandidates` / `interactHint` caller the new fields break, and list them in their report.
+P3. The prop and item snapshot list keeps props first, then items; the predictor skips items because their kinds are not in `PROP_KINDS` (no change needed there; add a test that an item in `setProps` is skipped).
