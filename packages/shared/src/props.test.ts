@@ -8,6 +8,7 @@ import { createProps, propCentre } from './props';
 import { withProps } from './testRig';
 import { buildStatics } from './statics';
 import { NEUTRAL_INPUT } from './protocol';
+import { getVehicleConfig } from './vehicles';
 import { createWorld, type World } from './world';
 
 beforeAll(async () => {
@@ -179,6 +180,11 @@ describe('props in the world', () => {
     expect(dist(pos(world, 'crate-3'), vec3(10, 0.3, 11))).toBeLessThan(0.01);
   });
 
+  test('createProps rejects a prop whose id is vehicle', () => {
+    const course = withProps({ ...testGround, props: [] }, [{ id: 'vehicle', kind: 'crate', pose: { pos: vec3(0, 0, 0), rot: IDENTITY } }]);
+    expect(() => rig(course)).toThrow(/vehicle/);
+  });
+
   test('debugBody finds the vehicle and props, and nothing else', () => {
     const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
     expect(world.debugBody('vehicle')).toBeDefined();
@@ -187,7 +193,7 @@ describe('props in the world', () => {
   });
 
   test('a locked barrier driven into by the Lodgy at full throttle does not move (J2)', () => {
-    const lodgyHalfZ = 2.25;
+    const lodgyHalfZ = getVehicleConfig('lodgy').halfExtents.z;
     // The barrier's near (+Z) face is 8 m from the Lodgy's front (-Z) face at the spawn on x = 0.
     const barrierZ = -(lodgyHalfZ + 8 + PROP_KINDS.barrier.halfExtents.z);
     const course = withProps({ ...testGround, props: [] }, [
@@ -212,5 +218,6 @@ describe('props in the world', () => {
     // The vehicle did reach the barrier.
     expect(world.snapshot().vehicle.pos.z).toBeLessThan(barrierZ + PROP_KINDS.barrier.halfExtents.z + lodgyHalfZ + 0.5);
     expect(closest).toBeLessThan(0.5);
+    world.dispose();
   });
 });
