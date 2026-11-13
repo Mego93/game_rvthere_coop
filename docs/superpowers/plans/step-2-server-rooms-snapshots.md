@@ -5089,6 +5089,62 @@ git commit -m "feat(client): play through the server, with a home page
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
+- [ ] **Step 7: Stop the form zooming and clipping on a phone**
+
+The review of this task found that the form's fields inherited 14px text from their labels. iOS Safari zooms the page when a focused field's text is smaller than 16px, and the zoom can stay once the game starts. The same change lets the form scroll when the keyboard leaves less height than the form needs. This is a styles-only change, so it has no test; the smoke test of Task 9 still has to pass with it, and how it looks on a real iPhone is the owner's check at step 14.
+
+Apply this change to `packages/client/index.html`. The main session provides it as a patch file for `git apply`.
+
+```diff
+diff --git a/packages/client/index.html b/packages/client/index.html
+index 9f45cc2..ca32ab9 100644
+--- a/packages/client/index.html
++++ b/packages/client/index.html
+@@ -39,7 +39,8 @@
+         position: fixed;
+         inset: 0;
+         display: grid;
+-        place-items: center;
++        /* With the keyboard open on a phone in landscape the form is taller than the screen, so it must scroll. */
++        overflow-y: auto;
+         background: #cfe6f5;
+       }
+       #home[hidden],
+@@ -50,6 +51,8 @@
+         display: grid;
+         gap: 12px;
+         width: min(320px, 90vw);
++        /* Centres the form, and unlike centring on the container keeps its top reachable when it overflows. */
++        margin: auto;
+         padding: 24px;
+         background: #fff;
+         border-radius: 8px;
+@@ -68,6 +71,8 @@
+       #home-form button {
+         padding: 10px;
+         font: inherit;
++        /* iOS Safari zooms the page when a focused field's text is smaller than 16px. */
++        font-size: 16px;
+         border: 1px solid #9ab;
+         border-radius: 6px;
+       }
+```
+
+Run: `npm test`
+Expected: 21 files, 231 tests passing.
+
+Run: `npm run build`
+Expected: ends with `✓ built in …`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add packages/client/index.html
+git commit -m "fix(client): keep the home form from zooming or clipping on a phone
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
 ---
 
 ### Task 9: Browser smoke test
