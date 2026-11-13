@@ -303,3 +303,133 @@ The downed pose, how damage feels (thresholds and amounts), the revive and heal 
 - Shove-out happens before `move`; a body found in both (a) and (b) in one tick counts once, which the cooldown ensures.
 - A player standing on the roof of a vehicle that brakes hard: the roof is their `ground`, so it does not hit them. Check that `ground` excludes the vehicle too, not only props.
 - A landing on a moving vehicle's roof uses world `vy`. A vehicle bouncing on its suspension must not cause fall damage: the threshold is far above suspension speeds.
+
+## Amendments after the plan review (binding; where they differ from the text above, they win)
+
+Numbers below were measured by a probe against the real world on the test ground with the Lodgy.
+
+J1 (H12, tick order). `stepHolds` stays where it is, before the physics step, and revive and heal completions happen there.
+
+After `players.stepOnFoot`, `vehicle.afterPhysics()` and `winch.afterCharacters(...)`, and immediately before the existing `killPlane(events)`, the world runs these four steps in order:
+1. The pending damage from `players.takeDamage()`, in join order, with a player's hits before their fall. A player downed here first has the hook dropped via `releaseHook(id, 'drop')`, then `players.setDowned(id)`.
+2. The downed timers (H6). "A live hold" means `player.hold` as `stepHolds` left it this tick.
+3. The everyone-downed rule (H7).
+4. The existing kill plane.
+
+A player downed on this tick does not count down on this tick, so a player downed at tick T respawns at tick T + 1800.
+
+J2 (H4, what is not a hit). A contact is not a hit when any of these holds:
+- (i) its body is the player's `ground` at the start of the tick, or after the move (the vehicle included);
+- (ii) it is a computed collision with `normalY ≥ cos(PLAYER_MAX_SLOPE_DEG)` (the player is on top; H3 covers landings);
+- (iii) `liftOntoTop` handled the overlap.
+
+The player's velocity is `walk + carry` horizontally and `vy` vertically. When the player had a `ground` at the start of the tick, add that body's full 3D velocity at the feet (linear + angular × (feet − worldCom)).
+
+`v_body(centre) = linvel + angvel × (centre − worldCom)`, where the centre is `feet + (0, PLAYER_HEIGHT/2, 0)`.
+
+J3 (H4, speed of a hit). The speed of a hit is the closing speed `max(0, (v_body(centre) − v_player) · n)`. `n` is the unit normal from the body to the player:
+- in case (b), the computed collision's `normal1`;
+- in case (a), the shove direction (horizontal, from the body's centre to the feet).
+
+So walking or jumping into a resting vehicle or prop costs nothing; the spec says a prop hurts when it is *moving*. Measured: a Lodgy driven into a standing player at 10 m/s gives 9.93 and 39.5 damage, and a thrown crate gives 7.07 and 5.4. P2 becomes `relativeSpeed(..., n)` and tests the normal: a body sliding past at 10 m/s (n perpendicular) gives 0.
+
+J4 (H4, one contact, one hit). While a body still touches the player (case a or b), its cooldown entry is reset to `HIT_COOLDOWN` each tick. So a vehicle bulldozing a player hurts once until contact has been broken for 0.5 s. This is a starting rule for the owner. Without it, a 10 m/s vehicle shoving a player along (64 of 90 ticks in the probe) downs them in about a second.
+
+J5 (H3, landing speed). `WalkResult` gains `moveVy: number`: the vy the move used, after the jump and gravity. "Starting airborne" means `state.grounded === false` immediately before `stepWalk`, that is, after the ground follow, shove-out and `liftOntoTop`. The landing speed is `max(0, −moveVy)`.
+
+H3's exclusions follow from this with no extra flag: teleport, respawn and the shove-out move set vy to 0, and `liftOntoTop` sets `grounded` before the move.
+
+J6 (H9 context).
+- `eye` and `aim` are `aimRay(feet, yaw, pitch)`'s origin and direction.
+- `ctx.players` entries are `{ id, feet, health, downed, seated }`. The centre is `feet + (0, PLAYER_HEIGHT/2, 0)`. The caller leaves self out.
+
+J7 (H10, holds).
+- `Hold.action` widens to `'useItem' | 'revive'`.
+- `stepHold`'s target parameter becomes `{ id: Target; revive: boolean } | null`. A new hold takes `action: target.revive ? 'revive' : 'useItem'`.
+- `holdTargetValid` treats a `revive` hold as valid only while its target is downed and in `HEAL_RANGE`. It treats a `useItem` hold on a teammate as valid only while that teammate is not downed, has `health < 100` and is in range.
+- The crosshair is checked only at the press, because the spec allows moving within range.
+- H6's pause counts only holds with `action === 'revive'` whose `targetId` is the downed player.
+
+J8 (H5, neutral input). In `stepInputsFor`, a downed player's fields become `neutralInput({...NEUTRAL_INPUT, yaw: player.yaw, pitch: player.pitch, slot: player.slot})`, with every press false and no `usePressed`. `previous` still records the raw input, so a button held through the downed time is not a press on revival. `reelInput` skips downed players.
+
+Delete "Other players' interact never targets a downed player". The hook drop is "winch rule W2".
+
+J9 (H1, H6–H8, cooldowns).
+- A downed player's hits are not detected and get no cooldown entries.
+- Cooldowns count down at the start of `stepOnFoot`, for every player.
+- Every respawn (H6, H7, H8) and every restart clears `hitCooldown`.
+- In H7, a downed player with `respawnIn` set counts as downed.
+
+J10 (H14). `healthKit-1` is at `(-1, 0, 14)`, after `toolbox-1` in `pickups`. At (−2, 0, 14) it overlapped `toolbox-1`.
+
+J11 (events). Events `hurt`, `downed`, `revive` and `respawn` are returned from `World.step` only. The room still sends no `event` message; that arrives with the HUD and sound at steps 12 and 18. Task 5 replaces decision D7's "until step 9" with this and logs it.
+
+J12 (debug). `World.debugHurt(id: string, amount: number): void` is for tests only. It queues `{ source: 'debug', amount }` into that player's pending damage, which is applied at the J1 point of the next `step`, so its events come out of `step`.
+
+J13 (task split, so every task typechecks).
+- Task 1 also covers:
+  - `client/src/net/snapshotBuffer.ts` copies `health` and `downed` (+ a test that both survive `sample()`);
+  - the `PlayerSnapshot` literals in `predictor.test.ts`, `overlay.test.ts`, `snapshotBuffer.test.ts` and `protocol.test.ts` gain `health: 100, downed: null`;
+  - `client/src/render/propMesh.ts` `ITEM_COLOURS` gains `healthKit` with a colour distinct from the jerrycan's (white, `0xf5f5f5`); its final mesh comes in task 4.
+- Task 3 also covers: `client/src/ui/overlay.ts`'s `useTarget` call adopts the new context. The hint text changes stay in task 4.
+
+J14 (existing tests that change, in addition to the list above).
+- **`items.test.ts`:** the pickup id lists (around lines 35–37, 51, 62) and the last-prop assertion (around 307).
+- **`courses/testGround.test.ts`:** the pickup id list (around 71).
+- **`checkpoints.test.ts`:**
+  - the `recordState` players gain `health` (around 122);
+  - the recorded items become `['jerrycan-2', 'toolbox-1', 'healthKit-1']` (around 495);
+  - add `['healthKit-1', 'healthKit']` (around 508–511).
+- **`predictor.test.ts`:** the player literal (around 314).
+- **`player.test.ts`:** the `Hold` literal (around 838).
+- **`holds.test.ts`:** every `useTarget` and `stepHold` call.
+- **`e2e/smoke.spec.ts`:** the props case title becomes "four props and four pickups", and it expects `props    8`.
+
+The players line is not changed. H15's "players line shows health" is dropped, so the smoke cases that read it stay as they are.
+
+J15 (H15 formats).
+- The health lines go in the overlay's `if (local)` block, directly after `slots`:
+  - `health   N`;
+  - then `DOWNED   Ns` while downed, with the seconds rounded up.
+- The hints follow the existing style:
+  - `Hold F to revive <name>`;
+  - `Hold F to heal <name>`;
+  - `Hold F to heal yourself`.
+- C4 matches `/^health   100$/m`. The vehicle line already contains `health 100%`.
+
+J16 (tests pinned).
+- **C2:**
+  - `downed` 30 → `DOWNED   30s`;
+  - 29.5 → `30s`;
+  - 29.01 → `30s`;
+  - 29 → `29s`;
+  - 0.01 → `1s`.
+- **W1:**
+  - Feet teleported to (5, 8.02, 20): health becomes 65 (damage 34.3 ± 0.5; impact vy 12.43 m/s).
+  - Feet at (5, 4.22, 20) (8.99 m/s): no damage.
+  - Feet at (5, 5.02, 20): damage 8.1 ± 0.5.
+  - A jump in place: none.
+  - Walking off the top edge of the 12° ramp at (8, 1.24, −65.7) toward −Z, a 1.24 m drop: none.
+- **W2:**
+  - The Lodgy is at rest at its spawn, with p2 at (0, 0.02, −7); `debugBody('vehicle').setLinvel((0, 0, −10))`.
+  - p2 is hit once at about tick 26, with damage 39.5 ± 1.5.
+  - While the vehicle keeps shoving p2 there is no further damage (J4).
+  - Separately, a player walking at full speed into the parked Lodgy, and jumping into it, takes nothing (J3).
+- **W3:**
+  - p1, holding a crate at (0, 0.02, 20) with yaw 0 and pitch 0, throws at p2 at (0, 0.02, 18): damage 5.4 ± 1 (more than 0).
+  - A crate placed with its centre at (0, 1.0, 16.5) and linvel (0, 0, 12) toward p2 at (0, 0.02, 18): damage 30 ± 2. If the measured value differs, report it rather than change the threshold.
+- **W4:** down the player with `debugHurt(id, 100)`, or by a fall from (5, 20.02, 20) (107.8 damage).
+- **W5, W9 and W10:** each has a second player who is not downed.
+- **W9 additions:**
+  - p1 downed at tick T and p2 at T+5 both respawn at T+5, `respawns` +2;
+  - with p1 downed and p2 removed, p1 respawns on the next step.
+- **W11:**
+  - a player who joined after the record and was hurt to 40 has 100 after the restart;
+  - a crate hit at tick T, a restart at T+1, and a second 12 m/s crate at T+5 hurts.
+- **W2's seated case** stays, but it is trivially true.
+
+J17 (H13). The health shown is rounded down, so a player with health between 0 and 1 shows 0 while not downed. This is accepted. `health` is parsed as a finite number in 0..100, not as an integer.
+
+J18 (constants comment). `FALL_DAMAGE_SPEED`: a jump lands at about 4.8 m/s, a fall from the RV's roof (2.9 m) at about 7.5, and from the Lodgy's (1.5 m) at about 5.4.
+
+J19 (carried row). Step 11 gains the spec's held-slot health rules: a rejoin keeps health, and a downed rejoin counts as a respawn. Until then, "every connected player" means the world's players. Task 5 adds the row.
