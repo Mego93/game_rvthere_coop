@@ -15,9 +15,11 @@
     "dev": "node scripts/dev.mjs",
     "build": "npm run build -w @lodgy/client",
     "start": "npm run build && npm run start -w @lodgy/server",
+    "e2e": "playwright test",
     "experiment:cable": "vitest run --config experiments/vitest.config.ts --reporter=verbose"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.0",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vitest": "5.1.0"
