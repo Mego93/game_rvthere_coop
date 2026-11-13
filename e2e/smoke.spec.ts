@@ -238,3 +238,16 @@ test('fuel and slots are shown: a full tank, three empty slots, and the page has
   const before = await tick(page);
   await expect.poll(() => tick(page)).toBeGreaterThan(before);
 });
+
+test('the timer runs: the clock rises and the checkpoint shows the first of two', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  const overlay = page.locator('#overlay');
+  await expect(overlay).toContainText(/time\s+\d+:\d\d\.\d\s+cp 1\/2\s+restarts 0\s+respawns 0/);
+  const seconds = async () => {
+    const text = (await overlay.textContent()) ?? '';
+    const match = /time\s+(\d+):(\d\d\.\d)/.exec(text);
+    return match ? Number(match[1]) * 60 + Number(match[2]) : Number.NaN;
+  };
+  const first = await seconds();
+  await expect.poll(seconds).toBeGreaterThan(first);
+});
