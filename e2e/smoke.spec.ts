@@ -230,3 +230,11 @@ test('the winch cable is shown, stowed at the start, and the page has no errors'
   const before = await tick(page);
   await expect.poll(() => tick(page)).toBeGreaterThan(before);
 });
+
+test('fuel and slots are shown: a full tank, three empty slots, and the page has no errors', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await expect(page.locator('#overlay')).toContainText(/fuel\s+100%/);
+  await expect(page.locator('#overlay')).toContainText(/slots\s+\[-\] - -/);
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
+});
