@@ -87,7 +87,7 @@ These are decisions, not omissions. Do not "fix" them.
 - When the server consumes two queued inputs in one tick, only the second is simulated.
 - Interpolation covers the vehicle only.
 - The client no longer imports Rapier, so the page is small. `@dimforge/rapier3d-compat` stays in `packages/client/package.json`; step 4 uses it again.
-- The Playwright "phone" project runs in Chromium with an iPhone viewport and touch, not in WebKit.
+- The Playwright "phone" project runs in WebKit, the engine of Safari, with an iPhone 14 viewport and touch (changed at the owner's request during the step; see Task 9, steps 7 and 8). It is not Safari on a real iPhone.
 - A room with nobody connected is paused, then deleted after 60 s.
 
 ---
@@ -5155,7 +5155,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `npm start`, and the element ids listed in Task 8.
-- Produces: `npm run e2e`. It builds the client, starts the real server on port 3100, and runs six tests in two projects: `desktop` (1280×720) and `phone` (an iPhone 14 landscape viewport with touch, in Chromium).
+- Produces: `npm run e2e`. It builds the client, starts the real server on port 3100, and runs six tests in two projects: `desktop` (1280×720) and `phone` (an iPhone 14 landscape viewport with touch; in Chromium as first built, in WebKit after steps 7 and 8).
 
 - [ ] **Step 1: Add Playwright**
 
@@ -5384,6 +5384,42 @@ git commit -m "test(e2e): add the browser smoke test
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
+- [ ] **Step 7: Run the phone project in WebKit**
+
+The owner asked during the step for the smoke test to cover Safari where possible. Playwright's WebKit is the engine of Safari, so the `phone` project now runs in it. The main session ran the six tests in WebKit three times beforehand; all passed.
+
+Run: `npx playwright install webkit`
+Expected: it downloads WebKit (about 80 MB, into the user's cache folder), or reports that it is already installed.
+
+In `playwright.config.ts`, replace
+
+```ts
+    // An iPhone-sized touch viewport. It runs in Chromium so that only one browser has to be installed.
+    { name: 'phone', use: { ...devices['iPhone 14 landscape'], browserName: 'chromium' } },
+```
+
+with
+
+```ts
+    // An iPhone in landscape, in WebKit, the engine of Safari. It is not Safari on a real iPhone, which is the owner's check.
+    { name: 'phone', use: { ...devices['iPhone 14 landscape'] } },
+```
+
+Run: `npm run e2e`
+Expected: `12 passed`, the six `[phone]` tests among them, in about 20 to 40 seconds.
+
+Run: `npm run typecheck`
+Expected: exits 0.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add playwright.config.ts
+git commit -m "test(e2e): run the phone project in WebKit
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
 ---
 
 ### Task 10: Record the step in the roadmap and the spec
@@ -5424,7 +5460,7 @@ Requires Node 22.12 or later. Node 23 and 25 work but print an `EBADENGINE` warn
 | Command | What it does |
 |---|---|
 | `npm install` | Installs every package in the workspace |
-| `npx playwright install chromium` | Downloads the browser the smoke test uses; needed once |
+| `npx playwright install chromium webkit` | Downloads the two browsers the smoke test uses; needed once |
 | `npm run dev` | Starts the game server on port 3000 and the page with live reload. Open the address Vite prints, normally `http://localhost:5173/`; it also prints the address for other devices on the same Wi-Fi |
 | `npm start` | Builds the page and serves everything on one port, `http://localhost:3000/`. This is the mode for play sessions and for the tunnel |
 | `npm test` | Runs all unit, scenario and server integration tests once |
@@ -5467,7 +5503,7 @@ Append these rows to the decisions log:
 | 2026-11-12 | Shared course, vehicle and constant objects are frozen at run time | One server process runs many rooms from the same objects |
 | 2026-11-12 | A room with nobody connected is paused | Saves the cost of simulating an empty room and avoids a burst of catch-up ticks on return |
 | 2026-11-12 | `VEHICLE=rv` selects the RV for every room until the lobby exists | Keeps the RV drivable for handling work before step 11 |
-| 2026-11-12 | The smoke test's phone project runs in Chromium with an iPhone viewport and touch | One browser download instead of two; real iPhone behaviour is the owner's check at step 14 |
+| 2026-11-13 | The smoke test's phone project runs in WebKit, the engine of Safari, with an iPhone 14 viewport and touch | Asked for by the owner during step 2. It is not Safari on a real iPhone, which stays the owner's check at step 14 |
 | 2026-11-12 | The server holds at most 50 rooms and refuses `create` beyond that with `server_full` | Found in review: each room is a physics world, and nothing bounded how many one visitor could create |
 | 2026-11-12 | A connection that throws is dropped and a room whose simulation throws is closed; both are reported and the other rooms carry on | Found in review: one error inside the tick stopped every room |
 | 2026-11-12 | The Node adapter contains every failure it can: file read errors, server errors, and exceptions in socket and timer callbacks are reported and the process carries on | Found in review: any one of them ended the process, and every room with it |
