@@ -7,7 +7,7 @@ Single source of truth for where the project stands. Update it in the same commi
 
 ## Current state
 
-**Current step:** step 5 is done (branch `claude/tender-carson-9525v1`, plan in `docs/superpowers/plans/step-5-push-hands-props.md`); step 6 (winch) is done on the same branch; step 7 (fuel, health, inventory) is next. The owner still has to check rendering and feel for steps 3 to 5 and the iPhone load (see "Working notes"). Commits since step 3 are not pushed: pushing waits for the owner.
+**Current step:** steps 5 and 6 are done and merged to the local `main` (branch `claude/tender-carson-9525v1`; whole-branch reviews clean); step 7 (fuel, health, inventory) is planned and under review. The owner still has to check rendering and feel for steps 3 to 6 and the iPhone load (see "Working notes"). The branch is pushed; `main` is merged locally only.
 
 **Runnable today:** `npm run dev` starts the game server and the page. Create a room on the home page and share its address; everyone who opens it appears as a character beside the same vehicle on the test ground. Players walk (WASD) and jump (Space), board with E at the nearest free seat (the driver's seat if standing at its door), drive from the driver seat, and leave with E. After clicking the canvas, the mouse looks around from a shoulder camera with a crosshair; while seated the camera follows the vehicle. The local player's walking and jumping are predicted on the page and corrected on each snapshot; the debug overlay shows the predicted position (`you`) and the server's (`server`) while prediction is active. Behind the start stand three crates and a heavy barrier: walking into the vehicle or a prop pushes it, E beside a crate picks it up and E again throws it along the aim, players can stand on props, and the barrier slides only while enough players push it (1 with one player, 2 with 2–3, 3 with 4–6). Four players can roll a Lodgy lying on its side back onto its wheels. The hook rests on the front bumper: E there (aiming at the bumper) takes it, E at an anchor (the orange posts) attaches it, E with no anchor near drops it; Q reels in and R reels out, from the driver seat or standing at the bumper. The barrier has an anchor on its top.
 
@@ -82,7 +82,7 @@ What step 2 cost and what changed because of it. Estimates are rough, plus or mi
 - **Step 4 is unverified by hand:** prediction feel (smoothing, snap) is for the owner to judge on a real connection, since localhost has no latency. Automated tests pass, and the smoke test's desktop project ran in the system Chrome (Playwright's browser download was blocked); the WebKit phone project was not run.
 - **Step 5 is unverified by hand:** how pushing feels (strength, the stronger push on a tipped vehicle), throwing distance, the barrier's slide, crates tumbling when pushed (accepted: the push acts at their top edge), climbing onto the roof from a crate or the barrier, and the prop meshes (colours chosen without design). Automated tests pass and the smoke test's desktop project passed in the preinstalled Chromium; WebKit was not run.
 - **Step 6 is unverified by hand:** how winching feels, the rope and hook's look, reaching the bumper and anchors with the aim, and dragging the barrier. Automated tests and the desktop smoke test pass.
-- **Session of 2026-11-13 (cloud):** `git push` is refused by this environment's permission rules, which matches the rule that pushing waits for the owner; every commit since step 3 is local to the branch and to a local `main`.
+- **Session of 2026-11-13 (cloud):** the owner allowed pushing the branch; `main` is merged locally and not pushed.
 - **Six-player cost (measured):** about 0.28 ms per tick; a snapshot is about 1.1 KB (about 150 bytes per player), roughly 134 KB/s per room to six clients at 20 Hz. Step 4's four new snapshot fields add roughly 90 bytes per player to that; measure again at step 16.
 
 ## Known issues
@@ -95,6 +95,8 @@ What step 2 cost and what changed because of it. Estimates are rough, plus or mi
 - After the server discards a backlog of inputs, the view holds the newest snapshot until the clock offset converges (5% per snapshot).
 - The roof is reached from a crate or the barrier (D11); nobody has checked it by hand, and no test covers it.
 - A prop reset by the kill plane returns to its spawn even if something now stands there; the overlap can push bodies apart hard. Checkpoint restarts at step 8 must handle it (the spec already sends a prop that would overlap the vehicle to its own spawn).
+- A hook dropped by a player standing on the barrier falls through to the ground under it: the drop ray finds ground colliders only (W2).
+- Boarding while holding the hook stows it, but interact always drops the hook first, so that path is a guard with no test.
 - A fifth pusher on the vehicle adds a little over four: the controller's contact flickers, and the cap counts the first four players pushing on each tick.
 - Shove-out runs at a fixed height, so shoving uphill on a slope can overlap the ground and send the player to a spawn slot.
 - A vehicle faster than about 22 m/s can lift a jumping player onto its roof (roof guard, D12).
