@@ -335,3 +335,13 @@ describe('C2: health kit hints', () => {
     expect(aimed([kit({ health: 0, downed: 20 }), mate({ health: 40 })]).some((line) => line.includes('Hold F'))).toBe(false);
   });
 });
+
+test('L6: the control line is the keyboard wording by default', () => {
+  expect(call([nearDoor]).endsWith('WASD move   Space jump (brake when driving)   E board or leave   click to look')).toBe(true);
+});
+
+test('L6: the control line has the touch wording on touch devices', () => {
+  const text = overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [nearDoor], localId: 'p1', predicted: null, server: null, ...noAim, touch: true });
+  expect(text.endsWith('joystick move   drag right half to look   buttons act')).toBe(true);
+  expect(text).not.toContain('WASD');
+});

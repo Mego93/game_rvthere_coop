@@ -18,6 +18,8 @@ export default defineConfig({
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 } } },
     // An iPhone in landscape, in WebKit, the engine of Safari. It is not Safari on a real iPhone, which is the owner's check.
-    { name: 'phone', use: { ...devices['iPhone 14 landscape'] } },
+    { name: 'phone', use: { ...devices['iPhone 14 landscape'] }, grepInvert: /@keyboard/ },
+    // The same phone profile in Chromium, for machines without WebKit.
+    { name: 'phone-chromium', use: { ...devices['iPhone 14 landscape'], browserName: 'chromium' }, grepInvert: /@keyboard/ },
   ],
 });

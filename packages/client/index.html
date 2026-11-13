@@ -4,7 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Lodgy Co-op</title>
-    <link rel="icon" href="data:," />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <style>
       html,
       body {
@@ -13,11 +17,16 @@
         overflow: hidden;
         background: #cfe6f5;
         font: 16px/1.4 system-ui, sans-serif;
+        overscroll-behavior: none;
       }
       #game {
         display: block;
         width: 100%;
         height: 100%;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
       }
       #overlay {
         position: fixed;

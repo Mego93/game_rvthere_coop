@@ -66,7 +66,7 @@ async function tap(page: Page, key: string) {
   await page.keyboard.up(key);
 }
 
-test('two players share a room, board the vehicle, and only the driver drives', async ({ browser }) => {
+test('two players share a room, board the vehicle, and only the driver drives @keyboard', async ({ browser }) => {
   test.slow();
   const amal = await newPlayerPage(browser);
   const badr = await newPlayerPage(browser);
@@ -130,7 +130,7 @@ test('two players share a room, board the vehicle, and only the driver drives', 
   await amal.keyboard.up('KeyW');
 });
 
-test('the local player walks at once and the prediction agrees with the server', async ({ page }) => {
+test('the local player walks at once and the prediction agrees with the server @keyboard', async ({ page }) => {
   await createRoom(page, 'Amal');
   await expect.poll(() => overlayPosition(page, 'you')).not.toBeNull();
   const start = (await overlayPosition(page, 'you'))!;
@@ -147,7 +147,7 @@ test('the local player walks at once and the prediction agrees with the server',
   expect(distance(you, server)).toBeLessThan(0.3);
 });
 
-test('a seated player is not predicted: the overlay has no you line', async ({ page }) => {
+test('a seated player is not predicted: the overlay has no you line @keyboard', async ({ page }) => {
   await createRoom(page, 'Amal');
   await expect(page.locator('#overlay')).toContainText('hint     E to board');
   expect(await overlayPosition(page, 'you')).not.toBeNull();

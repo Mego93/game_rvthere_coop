@@ -16,9 +16,8 @@ import {
   type SnapshotMessage,
 } from '@lodgy/shared';
 import * as THREE from 'three';
-import { createInputSource } from './input/combined';
-import { createKeyboardSource } from './input/keyboard';
-import { createMouseLook } from './input/mouse';
+import type { GameInput } from './input/source';
+import { hasJoystick } from './input/touch';
 import { createFixedStepper, createFrameClock } from './loop';
 import { createSnapshotBuffer } from './net/snapshotBuffer';
 import { predictionActive } from './prediction/gate';
@@ -31,6 +30,8 @@ import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
 import { overlayText } from './ui/overlay';
+import type { TouchUi } from './ui/touchUi';
+import { touchView } from './ui/touchView';
 
 // A frame longer than this (a background tab, a debugger pause) is treated as this long.
 const MAX_FRAME_SECONDS = 0.25;
@@ -48,6 +49,10 @@ export interface GameView {
   crosshair: HTMLElement;
   // The initialised Rapier module.
   rapier: Rapier;
+  // Makes the run's input source; chosen once at load by the page.
+  input: () => GameInput;
+  // The touch buttons, or null on a device without touch.
+  touchUi: TouchUi | null;
 }
 
 // Draws one run: sends an input every tick and shows the vehicle and the players from the server's snapshots.
@@ -83,8 +88,7 @@ export function createGame(
   resize();
 
   const buffer = createSnapshotBuffer();
-  const mouse = createMouseLook(renderer.domElement, document);
-  const input = createInputSource(createKeyboardSource(window), mouse);
+  const input = view.input();
   const playerMeshes = new Map<string, { mesh: THREE.Group; name: string; colour: string }>();
   const propMeshes = new Map<string, { mesh: THREE.Mesh; kind: string }>();
   // The local player's entry in the newest snapshot, not interpolated.
@@ -163,6 +167,7 @@ export function createGame(
     stepper.advance(frameSeconds);
     if (frameSeconds > 0) fps += (1 / frameSeconds - fps) * 0.05;
 
+    const aim = input.aim();
     const sampled = buffer.sample(now / 1000);
     const vehicle = sampled?.vehicle ?? null;
     const interpolated = sampled?.players ?? [];
@@ -170,7 +175,7 @@ export function createGame(
     let players = interpolated;
     if (drawnPosition && latestLocal) {
       // Seat and ground come from the newest snapshot so leaving a seat switches the view at once.
-      const drawn = { ...latestLocal, pos: drawnPosition, yaw: mouse.yaw(), seat: null, ground: null };
+      const drawn = { ...latestLocal, pos: drawnPosition, yaw: aim.yaw, seat: null, ground: null };
       players = interpolated.some((player) => player.playerId === playerId)
         ? interpolated.map((player) => (player.playerId === playerId ? drawn : player))
         : [...interpolated, drawn];
@@ -195,12 +200,13 @@ export function createGame(
     crosshair.hidden = !onFoot;
     if (local && onFoot) {
       const head = vec3(local.pos.x, local.pos.y + PLAYER_EYE_HEIGHT, local.pos.z);
-      const placement = cameraPlacement(head, mouse.yaw(), mouse.pitch(), cameraBoxes);
+      const placement = cameraPlacement(head, aim.yaw, aim.pitch, cameraBoxes);
       camera.position.set(placement.position.x, placement.position.y, placement.position.z);
       camera.lookAt(placement.target.x, placement.target.y, placement.target.z);
     } else if (vehicle) {
       updateFollowCamera(camera, vehicle, frameSeconds);
     }
+    const latestCable = buffer.latestCable();
     overlay.textContent = overlayText({
       lobby,
       config: vehicleConfig,
@@ -211,12 +217,17 @@ export function createGame(
       localId: playerId,
       predicted: drawnPosition,
       server: latestLocal?.pos ?? null,
-      aim: { yaw: mouse.yaw(), pitch: mouse.pitch() },
+      aim,
       propPoses: sampled?.props ?? [],
-      cable: buffer.latestCable(),
+      cable: latestCable,
       anchors: course.anchors,
       status: buffer.latestStatus(),
+      touch: view.touchUi !== null,
     });
+    if (view.touchUi) {
+      view.touchUi.update(touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable }));
+      view.touchUi.setJoystick(hasJoystick(input) ? input.joystick() : null);
+    }
     renderer.render(scene, camera);
     frameRequest = requestAnimationFrame(frame);
   });
