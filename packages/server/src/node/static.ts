@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
+import { pipeline } from 'node:stream';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -78,5 +79,6 @@ export async function serveStatic(root: string, request: IncomingMessage, respon
     response.end();
     return;
   }
-  createReadStream(file).pipe(response);
+  // pipeline closes the file if the client goes away, and a read error ends the response, not the process.
+  pipeline(createReadStream(file), response, () => {});
 }
