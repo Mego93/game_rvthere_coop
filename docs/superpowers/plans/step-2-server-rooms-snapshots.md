@@ -5420,6 +5420,124 @@ git commit -m "test(e2e): run the phone project in WebKit
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
+- [ ] **Step 9: Make the smoke test prove what its titles say**
+
+The review of this task found that the check "Badr's throttle does nothing" could pass even if Badr's input were applied: 700 ms of throttle moves the vehicle about half a metre, which is the threshold, and nothing showed that Badr's keys reached the server at all. Three smaller points are fixed with it.
+
+- Badr now holds the throttle for 2 s, and both pages must still show the vehicle at rest. At the end Amal leaves, Badr becomes the driver and drives, which shows that Badr's keys do reach the server.
+- The reload test reads the exact list of players. Its trailing newline was ignored by `toContainText`, so it could not tell one player from two.
+- Every page is watched for uncaught errors, and a test fails if there is one.
+- The empty-name test counts WebSockets and expects none.
+
+Apply this change to `e2e/smoke.spec.ts`. The main session provides it as a patch file for `git apply`; it ran the result three times beforehand, 12 passed each time.
+
+```diff
+diff --git a/e2e/smoke.spec.ts b/e2e/smoke.spec.ts
+index 8287486..16cec6e 100644
+--- a/e2e/smoke.spec.ts
++++ b/e2e/smoke.spec.ts
+@@ -8,18 +8,34 @@ async function overlayNumber(page: Page, pattern: RegExp): Promise<number> {
+ }
+ const tick = (page: Page) => overlayNumber(page, /tick\s+(\d+)/);
+ const vehicleZ = (page: Page) => overlayNumber(page, /pos\s+\S+\s+\S+\s+(\S+)/);
++// The whole list of players as the overlay shows it, for example "Amal (drives), Badr".
++async function players(page: Page): Promise<string> {
++  const text = (await page.locator('#overlay').textContent()) ?? '';
++  return /^players\s+(.*)$/m.exec(text)?.[1] ?? '';
++}
++
++// Uncaught errors in any page of the running test. A page can look right and still have failed, for example in WebGL.
++const pageErrors: string[] = [];
++const watch = (page: Page) => page.on('pageerror', (error) => pageErrors.push(error.message));
+ 
+ // A page in its own browser context, so it has its own session storage: a separate player.
+ const contexts: BrowserContext[] = [];
+ async function newPlayerPage(browser: Browser): Promise<Page> {
+   const context = await browser.newContext();
+   contexts.push(context);
+-  return context.newPage();
++  const page = await context.newPage();
++  watch(page);
++  return page;
+ }
+ 
++test.beforeEach(({ page }) => {
++  watch(page);
++});
++
+ // Contexts made by hand are not closed by the test runner; left open, their pages keep drawing and slow later tests.
+ test.afterEach(async () => {
+   for (const context of contexts.splice(0)) await context.close();
++  expect(pageErrors.splice(0)).toEqual([]);
+ });
+ 
+ // Opens the home page, creates a room as `name` and returns the room's noun.
+@@ -52,11 +68,12 @@ test('two players share a room and see the same vehicle, driven by the first', a
+     await expect.poll(() => tick(page)).toBeGreaterThan(before);
+   }
+ 
+-  // Badr's throttle does nothing: only the first player drives.
++  // Badr's throttle does nothing: only the first player drives. Two seconds of throttle would move the vehicle several metres.
+   await badr.keyboard.down('KeyW');
+-  await badr.waitForTimeout(700);
+-  await badr.keyboard.up('KeyW');
++  await badr.waitForTimeout(2000);
+   expect(await vehicleZ(amal)).toBeGreaterThan(-0.5);
++  expect(await vehicleZ(badr)).toBeGreaterThan(-0.5);
++  await badr.keyboard.up('KeyW');
+ 
+   // Amal drives forward, and both pages see the vehicle move.
+   await amal.keyboard.down('KeyW');
+@@ -70,6 +87,14 @@ test('two players share a room and see the same vehicle, driven by the first', a
+     expect(size[0]).toBeGreaterThan(0);
+     expect(size[1]).toBeGreaterThan(0);
+   }
++
++  // When Amal leaves, Badr drives. This also shows that Badr's keys do reach the server, so the check above meant something.
++  await amal.close();
++  await expect.poll(() => players(badr)).toBe('Badr (drives)');
++  const before = await vehicleZ(badr);
++  await badr.keyboard.down('KeyW');
++  await expect.poll(() => vehicleZ(badr), { timeout: 10_000 }).toBeLessThan(before - 3);
++  await badr.keyboard.up('KeyW');
+ });
+ 
+ test('a room can be joined from the home page by typing its name', async ({ browser }) => {
+@@ -119,13 +144,16 @@ test('the name is remembered, and a reload keeps the player in the room', async
+   await page.locator('#home-primary').click();
+   await expect(page.locator('#home')).toBeHidden();
+   // The same tab took its old place: one player, not two, and no "name taken".
+-  await expect(page.locator('#overlay')).toContainText('players  Amal (drives)\n');
++  await expect.poll(() => players(page)).toBe('Amal (drives)');
+ });
+ 
+ test('an empty name is refused on the page, before anything is sent', async ({ page }) => {
++  let sockets = 0;
++  page.on('websocket', () => (sockets += 1));
+   await page.goto('/');
+   await page.locator('#home-name').fill('   ');
+   await page.locator('#home-primary').click();
+   await expect(page.locator('#home-error')).toHaveText('Enter a name of 1 to 16 characters.');
+   await expect(page).toHaveURL(/\/$/);
++  expect(sockets).toBe(0);
+ });
+```
+
+Run: `npm run e2e`
+Expected: `12 passed`, in about 25 to 45 seconds.
+
+Run: `npm run typecheck`
+Expected: exits 0.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add e2e/smoke.spec.ts
+git commit -m "test(e2e): prove that only the driver's keys move the vehicle
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
 ---
 
 ### Task 10: Record the step in the roadmap and the spec
