@@ -1,7 +1,7 @@
-import { GRAVITY, PLAYER_KILL_RESPAWN_DELAY, PUSH_MAX_PUSHERS_VEHICLE, TICK_DT, type Surface } from './constants';
+import { GRAVITY, HOOK_RANGE, PLAYER_KILL_RESPAWN_DELAY, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
-import type { Vec3 } from './math';
+import { add, length, rotate, sub, vec3, type Vec3 } from './math';
 import { interactCandidates, resolveInteract, splitCandidates } from './interact';
 import { createPlayers, type StepInputs } from './player';
 import { requiredPushers, type PushIntent } from './push';
@@ -38,6 +38,8 @@ export interface WorldSnapshot {
 export interface WorldDebug {
   forwardSpeed: number;
   wheelSurfaces: (Surface | null)[];
+  // Cable tension of the last tick in newtons; 0 unless attached.
+  cableTension: number;
 }
 
 export interface World {
@@ -176,9 +178,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   };
 
   let resetLastTick = new Set<string>();
+  let cableTension = 0;
 
   // Rule H4 with R10: the pushes found last tick, minus those whose body or player has changed since.
-  const applyPushes = () => {
+  const applyPushes = (taut: string | null) => {
     const live = players.takePushIntents().filter((intent) => {
       const player = players.get(intent.playerId);
       if (!player || player.seat !== null) return false;
@@ -194,12 +197,28 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     for (const prop of props.all()) {
       const own = live.filter((intent) => intent.bodyId === prop.id);
       if (prop.config.class === 'heavy') {
-        const unlocked = new Set(own.map((intent) => intent.playerId)).size >= needed;
+        const unlocked = prop.id === taut || new Set(own.map((intent) => intent.playerId)).size >= needed;
         if (unlocked === prop.locked) props.setLocked(prop.id, !unlocked);
         if (!unlocked) continue;
       }
       for (const intent of own) apply(intent, prop.body);
     }
+  };
+
+  // Rule W5: the driver's reel wins, else the first player on foot at the winch box.
+  const reelInput = (onFoot: ReadonlyMap<string, StepInputs>): -1 | 0 | 1 => {
+    const driver = players.all().find((player) => player.seat === 'driver');
+    const driverReel = driver ? onFoot.get(driver.id)?.fields.reel : 0;
+    if (driverReel === 1 || driverReel === -1) return driverReel;
+    const body = vehicle.body;
+    const mount = add(body.translation(), rotate(body.rotation(), vehicleConfig.winchMount));
+    for (const player of players.all()) {
+      if (player.seat !== null) continue;
+      const reel = onFoot.get(player.id)?.fields.reel;
+      if ((reel !== 1 && reel !== -1) || length(sub(mount, add(player.pos, vec3(0, PUSH_HEIGHT, 0)))) > HOOK_RANGE) continue;
+      return reel;
+    }
+    return 0;
   };
 
   const killPlane = (events: WorldEvent[]) => {
@@ -225,7 +244,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     step(inputs) {
       const onFoot = stepInputsFor(inputs);
       resolveInteracts(onFoot);
-      applyPushes();
+      const taut = winch.tautObstacle();
+      applyPushes(taut);
+      const cable = winch.applyForces(reelInput(onFoot));
+      cableTension = cable.tension;
       const driver = players.all().find((player) => player.seat === 'driver');
       const controls = driver ? onFoot.get(driver.id)?.fields : undefined;
       vehicle.step({
@@ -269,7 +291,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       previous.delete(id);
     },
     teleportPlayer: (id, pos) => players.teleport(id, pos),
-    debug: () => ({ forwardSpeed: vehicle.forwardSpeed(), wheelSurfaces: vehicle.wheelSurfaces() }),
+    debug: () => ({ forwardSpeed: vehicle.forwardSpeed(), wheelSurfaces: vehicle.wheelSurfaces(), cableTension }),
     debugBody: (id) => (id === 'vehicle' ? vehicle.body : props.get(id)?.body),
     debugWinch: () => winch,
     dispose() {

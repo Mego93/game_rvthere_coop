@@ -586,3 +586,165 @@ describe('the hook in the hands (world)', () => {
     world.dispose();
   });
 });
+
+describe('the reel and obstacles (world)', () => {
+  const input = (fields: Partial<PlayerInput> = {}): PlayerInput => ({ ...NEUTRAL_INPUT, seq: 0, ...fields });
+  const run = (world: World, ticks: number, inputs: ReadonlyMap<string, PlayerInput> = new Map()) => {
+    for (let i = 0; i < ticks; i++) world.step(inputs);
+  };
+  const cable = (world: World) => world.snapshot().cable;
+  const HOOK_RANGE_FAR = 6;
+  const mountOf = (world: World) => {
+    const body = world.debugBody('vehicle')!;
+    return add(body.translation(), rotate(body.rotation(), world.vehicleConfig.winchMount));
+  };
+  // The Lodgy 10 m from anchor-1's attach point, so the cable is about 10 m.
+  const tenAhead: BuiltCourse = deepFreeze({
+    ...testGround,
+    checkpoints: [{ ...testGround.checkpoints[0]!, spawn: { pos: vec3(-40, 0, -56.7), rot: IDENTITY } }, ...testGround.checkpoints.slice(1)],
+  });
+
+  // Players p1..pN are added; the first `seated` of them board, in order (driver, seat1, ...).
+  function setup(players: number, seated: number, course: BuiltCourse = testGround) {
+    const world = createWorld(RAPIER, { courseId: course.id, vehicleId: 'lodgy' }, course);
+    const ids = Array.from({ length: players }, (_, i) => `p${i + 1}`);
+    for (const id of ids) world.addPlayer(id);
+    run(world, 30);
+    for (const id of ids.slice(0, seated)) {
+      world.step(new Map([[id, input({ interact: true })]]));
+      world.step(new Map([[id, input()]]));
+    }
+    return { world, ids };
+  }
+  const attach = (world: World, anchorId: string) => {
+    world.debugWinch().take('p1');
+    expect(world.debugWinch().attach(anchorId)).toBe(true);
+  };
+  const standAtBox = (world: World, id: string, dz = 1.1) => {
+    const mount = mountOf(world);
+    world.teleportPlayer(id, vec3(mount.x, 0.02, mount.z - dz));
+  };
+
+  test('the driver reels in', () => {
+    const { world } = setup(1, 1, tenAhead);
+    attach(world, 'anchor-1');
+    const before = cable(world).length;
+    run(world, 30, new Map([['p1', input({ reel: 1 })]]));
+    expect(cable(world).length).toBeCloseTo(before - 0.5, 2);
+    expect(cable(world).reel).toBe(1);
+    world.dispose();
+  });
+
+  test('a player on foot at the winch box reels when no driver does; out of range does nothing', () => {
+    const { world } = setup(1, 0, tenAhead);
+    attach(world, 'anchor-1');
+    const before = cable(world).length;
+    standAtBox(world, 'p1', HOOK_RANGE_FAR);
+    run(world, 30, new Map([['p1', input({ reel: 1 })]]));
+    expect(cable(world).length).toBe(before);
+    standAtBox(world, 'p1');
+    run(world, 30, new Map([['p1', input({ reel: 1 })]]));
+    expect(cable(world).length).toBeCloseTo(before - 0.5, 1);
+    world.dispose();
+  });
+
+  test('the driver wins over a player at the box, but the box player reels when the driver does not', () => {
+    const { world } = setup(2, 1, tenAhead);
+    attach(world, 'anchor-1');
+    standAtBox(world, 'p2');
+    run(world, 20);
+    const before = cable(world).length;
+    run(world, 30, new Map([['p1', input({ reel: -1 })], ['p2', input({ reel: 1 })]]));
+    expect(cable(world).length).toBeCloseTo(before + 0.5, 1);
+    const out = cable(world).length;
+    run(world, 30, new Map([['p2', input({ reel: 1 })]]));
+    expect(cable(world).length).toBeLessThan(out);
+    world.dispose();
+  });
+
+  test('a seated passenger reeling does nothing', () => {
+    const { world } = setup(2, 2, tenAhead);
+    expect(world.snapshot().players.map((player) => player.seat)).toEqual(['driver', 'seat1']);
+    attach(world, 'anchor-1');
+    const before = cable(world).length;
+    run(world, 30, new Map([['p2', input({ reel: 1 })]]));
+    expect(cable(world).length).toBe(before);
+    expect(cable(world).reel).toBe(0);
+    world.dispose();
+  });
+
+  test('reeling in with the hook on the ground stows it', () => {
+    const { world } = setup(1, 0);
+    world.debugWinch().take('p1');
+    standAtBox(world, 'p1');
+    world.debugWinch().drop(add(mountOf(world), vec3(0, 0, -1)));
+    expect(cable(world).state).toBe('ground');
+    run(world, 2, new Map([['p1', input({ reel: 1 })]]));
+    expect(cable(world).state).toBe('stowed');
+    world.dispose();
+  });
+
+  test('a barrier reeled in by a braked vehicle is dragged toward it; with the cable slack it stays locked', () => {
+    const { world } = setup(1, 1);
+    const barrier = world.debugBody('barrier-1')!;
+    attach(world, 'barrier-1');
+    const start = barrier.translation();
+    const before = length(sub(start, mountOf(world)));
+    run(world, 3 * TICK_RATE, new Map([['p1', input({ jump: true, reel: -1 })]]));
+    const slack = barrier.translation();
+    expect(length(sub(slack, start))).toBeLessThan(1e-3);
+    run(world, 10 * TICK_RATE, new Map([['p1', input({ jump: true, reel: 1 })]]));
+    const dragged = length(sub(start, barrier.translation()));
+    expect(dragged).toBeGreaterThan(1);
+    expect(length(sub(barrier.translation(), mountOf(world)))).toBeLessThan(before);
+    world.dispose();
+  });
+
+  test('a barrier reset by the kill plane while the hook is on it stows the hook', () => {
+    const { world } = setup(1, 1);
+    attach(world, 'barrier-1');
+    world.debugBody('barrier-1')!.setTranslation(vec3(-10, world.course.killPlaneY - 5, 10), true);
+    run(world, 2);
+    expect(cable(world).state).toBe('stowed');
+    world.dispose();
+  });
+
+  test('V4: at the cap the cable does not shorten, and a braked vehicle creeps less than 0.15 m in 2 s', () => {
+    const { world } = setup(1, 1, tenAhead);
+    attach(world, 'anchor-1');
+    const cap = WINCH_FORCE_PER_WEIGHT * world.vehicleConfig.mass * GRAVITY;
+    const start = cable(world).length;
+    let previous = start;
+    let cappedTicks = 0;
+    for (let i = 0; i < 2 * TICK_RATE; i++) {
+      world.step(new Map([['p1', input({ jump: true, reel: 1 })]]));
+      const now = cable(world).length;
+      if (Math.abs(world.debug().cableTension - cap) < 1e-6) {
+        cappedTicks += 1;
+        expect(now).toBe(previous);
+      }
+      previous = now;
+    }
+    expect(cappedTicks).toBeGreaterThan(60);
+    expect(start - previous).toBeLessThan(0.15);
+    world.dispose();
+  });
+
+  test('V2: a barrier is unlocked on the tick the cable pulls it, so the first impulse moves it', () => {
+    const { world } = setup(1, 1);
+    attach(world, 'barrier-1');
+    const barrier = world.debugBody('barrier-1')!;
+    const start = barrier.translation();
+    const input1 = new Map([['p1', input({ jump: true, reel: 1 })]]);
+    let ticks = 0;
+    while (world.debug().cableTension === 0 && ticks < 120) {
+      world.step(input1);
+      ticks += 1;
+    }
+    expect(ticks).toBeLessThan(10);
+    run(world, 5, input1);
+    expect(length(sub(barrier.translation(), start))).toBeGreaterThan(1e-4);
+    world.dispose();
+  });
+});
+
