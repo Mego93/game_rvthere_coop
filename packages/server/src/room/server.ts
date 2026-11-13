@@ -1,9 +1,12 @@
 import {
+  CREATE_PER_MINUTE,
   EMPTY_ROOM_TIMEOUT,
   MAX_PLAYERS,
   MAX_ROOMS,
   PING_INTERVAL,
   SILENCE_TIMEOUT,
+  SOLO_ROOM_TIMEOUT,
+  STALL_GRACE,
   TICK_DT,
   getCourse,
   getVehicleConfig,
@@ -17,8 +20,12 @@ import { createRateLimiter, type RateLimiter } from './rateLimit';
 import { createRoom, type Room, type RoomPlayer } from './room';
 import type { Connection, ConnectionHandle, RoomDeps, RoomServer, RoomServerOptions } from './types';
 
+// The window in which an address's creates are counted, in seconds.
+const CREATE_WINDOW = 60;
+
 interface Session {
   connection: Connection;
+  address: string;
   limiter: RateLimiter;
   lastHeard: number;
   lastPing: number;
@@ -37,20 +44,33 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
 
   const rooms = new Map<string, Room>();
   const sessions = new Set<Session>();
+  // The session each connected player is on, so that a takeover finds it without scanning every session.
+  const sessionOf = new Map<RoomPlayer, Session>();
+  // When each address last created rooms, within CREATE_WINDOW; an address with none is not kept.
+  const creates = new Map<string, number[]>();
+  const createPerMinute = options.createPerMinute ?? CREATE_PER_MINUTE;
+  let lastTick = deps.clock();
 
   const send = (connection: Connection, message: ServerMessage) => connection.send(JSON.stringify(message));
   const refuse = (session: Session, reason: ErrorReason) => send(session.connection, { type: 'error', reason });
 
+  // Failures are reported with the room they belong to, if any; the adapter rate-limits per source.
+  const report = (error: unknown, room: Room | null) => deps.onError?.(error, room ? `room:${room.noun}` : 'connection', 0);
+
   // Forgets a session whose connection is gone, and takes its player out of the room.
   const forget = (session: Session) => {
     if (!sessions.delete(session)) return;
-    if (session.room && session.player) session.room.remove(session.player, deps.clock());
+    if (session.room && session.player) {
+      if (sessionOf.get(session.player) === session) sessionOf.delete(session.player);
+      session.room.remove(session.player, deps.clock());
+    }
   };
 
   // Puts a session in a room: welcome goes to the newcomer first, then the lobby message to everyone.
   const admit = (session: Session, room: Room, player: RoomPlayer) => {
     session.room = room;
     session.player = player;
+    sessionOf.set(player, session);
     send(session.connection, { type: 'welcome', playerId: player.playerId, room: room.noun });
     room.announce();
   };
@@ -61,11 +81,23 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     session.connection.close();
   };
 
+  // The times of an address's creates that still count; drops the address from the map when none do.
+  const recentCreates = (address: string, now: number) => {
+    const times = (creates.get(address) ?? []).filter((time) => now - time < CREATE_WINDOW);
+    if (times.length === 0) creates.delete(address);
+    else creates.set(address, times);
+    return times;
+  };
+
   const create = (session: Session, message: Extract<ClientMessage, { type: 'create' }>) => {
     if (rooms.size >= MAX_ROOMS) return refuse(session, 'server_full');
+    const now = deps.clock();
+    const times = recentCreates(session.address, now);
+    if (times.length >= createPerMinute) return refuse(session, 'server_full');
     const noun = pickNoun(deps.random, (candidate) => rooms.has(candidate));
-    const room = createRoom(deps.rapier, { noun, courseId, vehicleId }, deps.clock());
+    const room = createRoom(deps.rapier, { noun, courseId, vehicleId }, now);
     rooms.set(noun, room);
+    creates.set(session.address, [...times, now]);
     admit(session, room, room.add(message.name, message.token, session.connection));
   };
 
@@ -76,12 +108,12 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     const existing = room.findByToken(message.token);
     if (existing) {
       // The same tab has come back while its old connection still looks alive (a socket that dropped without closing): it takes its slot over at once.
-      for (const other of sessions) {
-        if (other.player === existing) {
-          other.room = null;
-          other.player = null;
-          sessions.delete(other);
-        }
+      const other = sessionOf.get(existing);
+      if (other) {
+        other.room = null;
+        other.player = null;
+        sessions.delete(other);
+        sessionOf.delete(existing);
       }
       room.replaceConnection(existing, session.connection).close();
       admit(session, room, existing);
@@ -128,7 +160,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     try {
       room.dispose();
     } catch (error) {
-      deps.onError?.(error);
+      report(error, room);
     }
   };
 
@@ -138,6 +170,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     for (const session of [...sessions]) {
       if (session.room !== room) continue;
       sessions.delete(session);
+      if (session.player) sessionOf.delete(session.player);
       session.connection.close();
     }
     free(room);
@@ -145,6 +178,15 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
 
   const tick = () => {
     const now = deps.clock();
+    // After a stall, sessions silent since before the previous run are credited the excess, so that the stall alone never drops anyone.
+    const excess = now - lastTick - STALL_GRACE;
+    if (excess > 0) {
+      for (const session of sessions) {
+        if (session.lastHeard <= lastTick) session.lastHeard = Math.min(now, session.lastHeard + excess);
+      }
+    }
+    lastTick = now;
+    for (const address of [...creates.keys()]) recentCreates(address, now);
     for (const session of [...sessions]) {
       if (session.failed || now - session.lastHeard >= SILENCE_TIMEOUT) {
         drop(session);
@@ -158,12 +200,14 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
         room.update(now);
       } catch (error) {
         // A room whose simulation fails is closed, so that it cannot stop the other rooms.
-        deps.onError?.(error);
+        report(error, room);
         discard(noun, room);
         continue;
       }
       const emptySince = room.emptySince();
-      if (emptySince !== null && now - emptySince >= EMPTY_ROOM_TIMEOUT) {
+      // A room nobody but its creator joined is not worth keeping for long.
+      const timeout = room.everJoinedByOthers() ? EMPTY_ROOM_TIMEOUT : SOLO_ROOM_TIMEOUT;
+      if (emptySince !== null && now - emptySince >= timeout) {
         rooms.delete(noun);
         free(room);
       }
@@ -173,9 +217,10 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
   const stopTimer = deps.timer.every(TICK_DT / 2, tick);
 
   return {
-    connect(connection): ConnectionHandle {
+    connect(connection, address): ConnectionHandle {
       const now = deps.clock();
       const session: Session = {
+        address,
         // Sends happen in the middle of a tick or of another player's join, so a throw is recorded and handled at the next tick.
         connection: {
           send(data) {
@@ -184,14 +229,14 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
               connection.send(data);
             } catch (error) {
               session.failed = true;
-              deps.onError?.(error);
+              report(error, session.room);
             }
           },
           close() {
             try {
               connection.close();
             } catch (error) {
-              deps.onError?.(error);
+              report(error, session.room);
             }
           },
         },
@@ -214,6 +259,8 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
       const remaining = [...rooms.values()];
       rooms.clear();
       sessions.clear();
+      sessionOf.clear();
+      creates.clear();
       for (const room of remaining) free(room);
     },
   };

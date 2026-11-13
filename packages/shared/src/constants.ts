@@ -37,6 +37,25 @@ export const EMPTY_ROOM_TIMEOUT = 60;
 // Rooms the server holds at once; each one is a physics world.
 export const MAX_ROOMS = 50;
 
+// Server hardening
+// WebSocket connections in total; leaves room for players still on the home page and for takeovers.
+export const MAX_CONNECTIONS = 360;
+// Per client address (two families at most behind one address).
+export const MAX_CONNECTIONS_PER_ADDRESS = 12;
+// Bytes queued to one socket before it is dropped as a reader that cannot keep up.
+export const MAX_SEND_BUFFER = 1048576;
+// `create` messages one address may send in any 60 s.
+export const CREATE_PER_MINUTE = 5;
+// Seconds an empty room survives when nobody but its creator ever joined (the owner's call).
+export const SOLO_ROOM_TIMEOUT = 30;
+// A connection with this many over-limit seconds within the window is closed.
+export const RATE_LIMIT_STRIKES = 4;
+export const RATE_LIMIT_STRIKE_WINDOW = 8;
+// Seconds between timer runs before the excess counts as a stall.
+export const STALL_GRACE = 1;
+// Seconds between failure reports from one source.
+export const REPORT_INTERVAL = 10;
+
 export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel';
 
 // grip multiplies the vehicle's tyre grip; rolling is resistance as a fraction of the vehicle's weight.

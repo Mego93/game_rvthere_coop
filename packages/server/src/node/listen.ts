@@ -17,7 +17,7 @@ export interface ServerOptions {
   vehicleId?: string;
   courseId?: string;
   // Told about every failure the server survives. The default prints it.
-  onError?: (error: unknown) => void;
+  onError?: (error: unknown, source: string, suppressed: number) => void;
 }
 
 export interface RunningServer {
@@ -30,11 +30,11 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   await RAPIER.init();
   const report = options.onError ?? ((error: unknown) => console.error(error));
   // An exception thrown inside a socket or timer callback would end the process, and every room with it.
-  const contain = (fn: () => void, onFailure?: () => void) => {
+  const contain = (source: string, fn: () => void, onFailure?: () => void) => {
     try {
       fn();
     } catch (error) {
-      report(error);
+      report(error, source, 0);
       onFailure?.();
     }
   };
@@ -46,7 +46,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
       onError: report,
       timer: {
         every(seconds, fn) {
-          const id = setInterval(() => contain(fn), seconds * 1000);
+          const id = setInterval(() => contain('timer', fn), seconds * 1000);
           return () => clearInterval(id);
         },
       },
@@ -60,19 +60,22 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   const sockets = new WebSocketServer({ server: http, path: SOCKET_PATH, maxPayload: MAX_MESSAGE_BYTES });
   // ws repeats the HTTP server's errors here, and an error event nobody listens to is thrown. They are handled on `http`.
   sockets.on('error', () => {});
-  sockets.on('connection', (socket) => {
-    const handle = rooms.connect({
-      send(data) {
-        if (socket.readyState === socket.OPEN) socket.send(data);
+  sockets.on('connection', (socket, request) => {
+    const handle = rooms.connect(
+      {
+        send(data) {
+          if (socket.readyState === socket.OPEN) socket.send(data);
+        },
+        close: () => socket.close(),
       },
-      close: () => socket.close(),
-    });
+      request.socket.remoteAddress ?? 'unknown',
+    );
     socket.on('message', (data, isBinary) => {
       // The protocol is JSON text; a binary frame is not part of it.
       if (isBinary) socket.close();
-      else contain(() => handle.message(data.toString()), () => socket.terminate());
+      else contain('socket:message', () => handle.message(data.toString()), () => socket.terminate());
     });
-    socket.on('close', () => contain(() => handle.closed()));
+    socket.on('close', () => contain('socket:close', () => handle.closed()));
     // An oversized or malformed frame raises an error; the socket is then dropped.
     socket.on('error', () => socket.terminate());
   });
@@ -90,7 +93,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     rooms.stop();
     throw error;
   }
-  http.on('error', report);
+  http.on('error', (error) => report(error, 'http', 0));
 
   return {
     port: (http.address() as AddressInfo).port,

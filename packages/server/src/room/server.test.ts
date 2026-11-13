@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import {
+  CREATE_PER_MINUTE,
   EMPTY_ROOM_TIMEOUT,
   MAX_PLAYERS,
   MAX_ROOMS,
@@ -8,8 +9,11 @@ import {
   PLAYER_COLOURS,
   RATE_LIMIT_CLOSE_AFTER,
   RATE_LIMIT_PER_SECOND,
+  RATE_LIMIT_STRIKES,
   SERVER_MAX_CATCHUP_STEPS,
   SILENCE_TIMEOUT,
+  SOLO_ROOM_TIMEOUT,
+  STALL_GRACE,
   SNAPSHOT_EVERY_TICKS,
   TICK_RATE,
   type ClientMessage,
@@ -38,7 +42,7 @@ function setup(options?: RoomServerOptions) {
   // Everything the server reports through onError, oldest first.
   const errors: unknown[] = [];
   const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) }, options);
-  const connect = () => connectFakeClient(server);
+  const connect = (address?: string) => connectFakeClient(server, address);
   // Connects a client and creates a room with it.
   const host = (name = 'Amal') => {
     const client = connect();
@@ -195,20 +199,24 @@ test('when everyone has left, the next player to join becomes admin', () => {
 test('an empty room is deleted after the timeout, and not before', () => {
   const { host, guest, advance, server } = setup();
   const { client, room } = host();
+  // Someone else joined, so this is not a solo room and the long timeout applies.
+  const badr = guest(room, 2);
   client.close();
+  badr.close();
   advance(EMPTY_ROOM_TIMEOUT - 1);
   expect(server.roomCount()).toBe(1);
   advance(1);
   expect(server.roomCount()).toBe(0);
-  expect(reasons(guest(room, 2))).toEqual(['unknown_room']);
+  expect(reasons(guest(room, 3))).toEqual(['unknown_room']);
 });
 
 test('a room that someone rejoins is not deleted', () => {
   const { host, guest, advance, server } = setup();
   const { client, room } = host();
+  guest(room, 2).close();
   client.close();
   advance(EMPTY_ROOM_TIMEOUT - 1);
-  const badr = guest(room, 2);
+  const badr = guest(room, 3);
   advance(5);
   expect(server.roomCount()).toBe(1);
   // The timeout starts again from the moment the room next empties.
@@ -241,6 +249,75 @@ test('a join with the token of a connected player takes that player over', () =>
   expect(second.last('lobby').players).toHaveLength(1);
   expect(second.last('snapshot').ackSeq).toBe(1);
   expect(second.ofType('snapshot')[0]!.full).toBe(true);
+});
+
+test('a takeover finds the session by player, whatever the order of sessions', () => {
+  const { host, guest, connect } = setup();
+  const { client: amal, room } = host('Amal');
+  const badr = guest(room, 2, 'Badr');
+  const chadi = guest(room, 3, 'Chadi');
+  const badrAgain = connect();
+  badrAgain.send({ type: 'join', room, name: 'Badr', token: token(2) });
+  expect(badr.closedByServer).toBe(true);
+  expect(amal.closedByServer).toBe(false);
+  expect(chadi.closedByServer).toBe(false);
+  expect(badrAgain.received[0]).toEqual({ type: 'welcome', playerId: 'p2', room });
+  expect(badrAgain.last('lobby').players.map((player) => player.name)).toEqual(['Amal', 'Badr', 'Chadi']);
+  // The old connection's late close does not remove the player.
+  badr.close();
+  expect(amal.last('lobby').players).toHaveLength(3);
+});
+
+// --- room creation per address and solo rooms ---
+
+test('the sixth create from one address within 60 s is refused; another address can create; after 60 s the first can again', () => {
+  const { connect, advance, server } = setup();
+  const create = (address: string, n: number) => {
+    const client = connect(address);
+    client.send({ type: 'create', name: 'Amal', token: token(n) });
+    return client;
+  };
+  for (let n = 0; n < CREATE_PER_MINUTE; n++) {
+    expect(reasons(create('one', n))).toEqual([]);
+    advance(1);
+  }
+  const refused = create('one', 10);
+  expect(reasons(refused)).toEqual(['server_full']);
+  expect(reasons(create('two', 11))).toEqual([]);
+  // The refused create did not count; the first create ages out at 60 s, not before.
+  advance(60 - CREATE_PER_MINUTE - 1);
+  expect(reasons(create('one', 12))).toEqual(['server_full']);
+  advance(1);
+  expect(reasons(create('one', 13))).toEqual([]);
+  expect(server.roomCount()).toBeGreaterThan(0);
+});
+
+test('a room nobody else joined is deleted after the solo timeout, and one someone joined lasts the full timeout', () => {
+  const { host, guest, advance, server } = setup();
+  const { client } = host('Amal');
+  client.close();
+  advance(SOLO_ROOM_TIMEOUT - 1);
+  expect(server.roomCount()).toBe(1);
+  advance(1);
+  expect(server.roomCount()).toBe(0);
+
+  const { client: amal, room } = host('Amal');
+  const badr = guest(room, 2);
+  amal.close();
+  badr.close();
+  advance(SOLO_ROOM_TIMEOUT);
+  expect(server.roomCount()).toBe(1);
+  advance(EMPTY_ROOM_TIMEOUT - SOLO_ROOM_TIMEOUT);
+  expect(server.roomCount()).toBe(0);
+});
+
+test('the creator rejoining with its own token does not make a room more than solo', () => {
+  const { host, guest, advance, server } = setup();
+  const { client, room } = host('Amal');
+  client.close();
+  guest(room, 1, 'Amal').close();
+  advance(SOLO_ROOM_TIMEOUT);
+  expect(server.roomCount()).toBe(0);
 });
 
 // --- simulation and snapshots ---
@@ -476,6 +553,47 @@ test('a connection that keeps answering stays; one that goes silent is dropped f
   expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
 });
 
+test('silence of exactly the timeout drops a connection and a hair less does not', () => {
+  const { connect, advance } = setup();
+  const client = connect();
+  advance(SILENCE_TIMEOUT - 0.05);
+  expect(client.closedByServer).toBe(false);
+  advance(0.1);
+  expect(client.closedByServer).toBe(true);
+});
+
+test('a stall with every client silent during it drops nobody', () => {
+  const { connect, advance, stall } = setup();
+  const client = connect();
+  advance(1);
+  stall(STALL_GRACE + 3);
+  advance(0.1);
+  expect(client.closedByServer).toBe(false);
+});
+
+test('a client silent for the full timeout of non-stalled time is still dropped after a stall', () => {
+  const { connect, advance, stall } = setup();
+  const client = connect();
+  stall(STALL_GRACE + 3);
+  // The stall's excess (3 s) is forgiven, so the client is dropped at 3 + SILENCE_TIMEOUT s, not before.
+  advance(3 + SILENCE_TIMEOUT - (STALL_GRACE + 3) - 0.5);
+  expect(client.closedByServer).toBe(false);
+  advance(1);
+  expect(client.closedByServer).toBe(true);
+});
+
+test('a message after a stall, before the next timer run, is not extended: the client is dropped the timeout after it', () => {
+  const { connect, advance, stall } = setup();
+  const client = connect();
+  advance(1);
+  stall(STALL_GRACE + 3);
+  client.send({ type: 'pong' });
+  advance(SILENCE_TIMEOUT - 0.1);
+  expect(client.closedByServer).toBe(false);
+  advance(0.2);
+  expect(client.closedByServer).toBe(true);
+});
+
 test('messages beyond the rate limit within a second are dropped', () => {
   const { connect } = setup();
   const client = connect();
@@ -497,10 +615,21 @@ test('a connection that stays over the rate limit is closed and removed', () => 
   expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
 });
 
+test('a connection that floods in alternate seconds is closed on the strike count', () => {
+  const { connect, advance } = setup();
+  const client = connect();
+  for (let n = 0; n < RATE_LIMIT_STRIKES * 2 && !client.closedByServer; n++) {
+    if (n % 2 === 0) for (let i = 0; i < RATE_LIMIT_PER_SECOND + 10; i++) client.send({ type: 'pong' });
+    else client.send({ type: 'pong' });
+    advance(1);
+  }
+  expect(client.closedByServer).toBe(true);
+});
+
 test('create is refused once the server holds the most rooms it allows, until one is deleted', () => {
   const { connect, advance, server } = setup();
   const hosts = Array.from({ length: MAX_ROOMS }, (_, n) => {
-    const client = connect();
+    const client = connect(`address-${n}`);
     client.send({ type: 'create', name: 'Amal', token: token(n) });
     return client;
   });
@@ -539,7 +668,7 @@ test('a connection whose send throws is reported and dropped, and the others car
     close() {
       closed = true;
     },
-  });
+  }, 'test');
   handle.message(JSON.stringify({ type: 'join', room, name: 'Badr', token: token(2) }));
   expect(amal.last('lobby').players).toHaveLength(2);
 
@@ -561,7 +690,7 @@ test('a connection that has failed can no longer create a room', () => {
       throw new Error('socket failed');
     },
     close() {},
-  });
+  }, 'test');
   // The reply to this malformed message cannot be sent, which marks the connection as failed.
   handle.message('not json');
   expect(errors).toHaveLength(1);
@@ -580,7 +709,7 @@ test('a connection whose close throws is still removed from its room', () => {
     close() {
       throw new Error('close failed');
     },
-  });
+  }, 'test');
   handle.message(JSON.stringify({ type: 'join', room, name: 'Badr', token: token(2) }));
   expect(amal.last('lobby').players).toHaveLength(2);
 
