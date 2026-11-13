@@ -17,6 +17,14 @@ This file is self-contained on purpose: cloud sessions see only the repo, not th
 - Tick plan checkboxes as tasks land. Update `ROADMAP.md` in the commit that finishes a step.
 - Steps marked for owner sign-off in `ROADMAP.md` end at `needs sign-off`, never `done`, until the owner confirms.
 - If implementation forces a design change, update the spec and add a line to the decisions log in `ROADMAP.md`.
+- The order for a step: write the plan, have it reviewed, wait for the owner's go-ahead, implement task by task with a review after each task, review the whole branch, fix what that review requires, run every check afresh, merge to `main`. Push only when the owner says so.
+- If a usage limit or an agent failure interrupts the work, resume it once the limit resets, from where it stopped, without waiting to be asked. Resume a failed subagent; do not start a new one for the same work.
+
+## Plans
+
+- A plan fixes file paths, exported names and signatures, constants, numbered behaviour rules and numbered test cases. It does not contain finished code: the implementers write the tests and the code, tests first. (Steps 1 and 2 used plans with finished code; from step 3 on they do not, to lower cost.)
+- Check a plan's numbers against the constants, the vehicle configs and the course geometry before it is reviewed. Every fix round in step 2 came from a gap in the plan.
+- A plan names every existing test that a task must change.
 
 ## When something is not specified
 
@@ -31,6 +39,9 @@ Implementers do not guess and do not redesign.
 
 - Design and planning (specs, plans, roadmap decisions): the main session, on Fable.
 - Implementation: subagents on Sonnet 5.5 (`model: "sonnet"`), one task at a time from the plan.
+- Review after each task, and re-review of a fix: subagents on Sonnet 5.5.
+- Review of a plan before it is implemented, and of the whole branch before it is merged: a subagent on Opus at medium effort (`model: "opus"`, `effort: "medium"`).
+- No subagent runs on Fable. Always name the model when starting a subagent: one started without a model inherits the main session's.
 
 ## Stack
 
