@@ -161,9 +161,8 @@ test('seat and ground come from the newer snapshot', () => {
 test('walk, carry, vy and grounded come from the newer snapshot, as new objects', () => {
   const newer = { ...player('a', 10, 0), walk: { x: 1, z: 2 }, carry: { x: 3, z: 4 }, vy: 5, grounded: false };
   const buffer = pair([player('a', 0, 0)], [newer]);
-  for (const now of [100, 0, (9 + DELAY_TICKS) * TICK_DT]) {
+  for (const now of [100, (9 + DELAY_TICKS) * TICK_DT]) {
     const view = buffer.sample(now)!.players[0]!;
-    if (now === 0) continue;
     expect(view).toMatchObject({ walk: { x: 1, z: 2 }, carry: { x: 3, z: 4 }, vy: 5, grounded: false });
     view.walk.x = 999;
     view.carry.z = 999;
