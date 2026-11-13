@@ -60,6 +60,7 @@ export function createItems(rapier: Rapier, physics: RapierWorld, course: BuiltC
 
   for (const placed of course.pickups) {
     if (placed.id === 'vehicle' || placed.id === 'hook') throw new Error(`Pickup id ${placed.id} is reserved`);
+    if (/^item-\d+$/.test(placed.id)) throw new Error(`Pickup id ${placed.id} is reserved for dropped items`);
     if (course.props.some((prop) => prop.id === placed.id) || course.anchors.some((anchor) => anchor.id === placed.id)) {
       throw new Error(`Pickup id ${placed.id} is also a prop or anchor id`);
     }

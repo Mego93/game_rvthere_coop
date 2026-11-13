@@ -84,6 +84,7 @@ describe('createItems', () => {
     const physics = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
     expect(() => createItems(RAPIER, physics, courseWith([placed('x', 'sofa', 0, 0)]))).toThrow('Unknown item kind: sofa');
     expect(() => createItems(RAPIER, physics, courseWith([placed('crate-1', 'jerrycan', 0, 0)]))).toThrow('also a prop');
+    expect(() => createItems(RAPIER, physics, courseWith([placed('item-3', 'jerrycan', 0, 0)]))).toThrow('reserved');
     physics.free();
   });
 });
@@ -186,6 +187,15 @@ describe('items in the world', () => {
     expect(playerOf(world, 'p').slot).toBe(2);
     world.step(new Map([['p', input({ slot: 1 })]]));
     expect(playerOf(world, 'p').slot).toBe(1);
+    world.dispose();
+  });
+
+  test('3: a player with no entry in the inputs keeps their slot', () => {
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' }, PLAIN);
+    world.addPlayer('p');
+    world.step(new Map([['p', input({ slot: 2 })]]));
+    world.step(new Map());
+    expect(playerOf(world, 'p').slot).toBe(2);
     world.dispose();
   });
 

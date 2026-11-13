@@ -95,8 +95,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const stepInputsFor = (inputs: ReadonlyMap<string, InputFields>): Map<string, StepInputs> => {
     const result = new Map<string, StepInputs>();
     usePressed.clear();
-    for (const { id } of players.all()) {
-      const raw = inputs.get(id) ?? NEUTRAL_INPUT;
+    for (const { id, slot } of players.all()) {
+      const raw = inputs.get(id) ?? { ...NEUTRAL_INPUT, slot };
       const before = previous.get(id) ?? NEUTRAL_INPUT;
       const fields: InputFields = {
         ...raw,
@@ -183,8 +183,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         players.pickUp(player.id, action.propId);
       } else if (action?.kind === 'pickUpItem') {
         const free = player.inventory.indexOf(null);
-        const kind = items.take(action.itemId);
-        if (kind !== null && free >= 0) player.inventory[free] = kind;
+        if (free >= 0) {
+          const kind = items.take(action.itemId);
+          if (kind !== null) player.inventory[free] = kind;
+        }
       } else if (action?.kind === 'attachHook') {
         if (winch.attach(action.anchorId)) players.setHands(player.id, null);
       } else if (action?.kind === 'dropHook') {
