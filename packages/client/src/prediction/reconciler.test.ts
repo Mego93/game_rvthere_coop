@@ -176,13 +176,23 @@ describe('X6 cap', () => {
     expect(r.view(0, 1)!.snapped).toBe(false);
   });
 
-  test('a correct whose inputs were dropped snaps', () => {
+  test('a correct whose inputs were dropped snaps, even for a small correction', () => {
     const r = active();
     recordMany(r, 1, PREDICTION_MAX_PENDING + 1);
-    r.correct(at(-0.5), 0); // seq 1 was dropped; predicted 121 -> 119.5
+    r.correct(at(0.5), 0); // seq 1 was dropped; predicted 121 -> 120.5, 0.5 m is below the teleport distance
     const v = r.view(0, 1)!;
     expect(v.snapped).toBe(true);
-    expect(v.pos.x).toBe(119.5);
+    expect(v.pos.x).toBe(120.5);
+    expect(r.view(0, 1)!.snapped).toBe(false);
+  });
+
+  test('a dropped input that held jump seeds the replay, so the kept one does not re-jump', () => {
+    const r = active();
+    r.record(1, step(0, true));
+    r.record(2, step(0, true));
+    for (let seq = 3; seq <= PREDICTION_MAX_PENDING + 1; seq++) r.record(seq, step(0, false));
+    r.correct(at(0, 5), 1); // seq 1 dropped by the cap, nothing left to discard
+    expect(r.record(PREDICTION_MAX_PENDING + 2, step(0, false))?.vy).toBe(5);
   });
 });
 
