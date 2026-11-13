@@ -73,12 +73,12 @@ export function createGame(
     send({ type: 'input', ...input.sample(), seq });
   });
 
-  // Seated players are not drawn; meshes are remade when a player's name or colour changes, and dropped when they leave.
+  // Seated players are hidden, not removed; meshes are remade when a player's name or colour changes, and dropped when they leave.
   const syncPlayerMeshes = (players: PlayerSnapshot[]) => {
     const present = new Set<string>();
     for (const player of players) {
       const info = lobby.players.find((candidate) => candidate.playerId === player.playerId);
-      if (!info || player.seat !== null) continue;
+      if (!info) continue;
       present.add(player.playerId);
       let entry = playerMeshes.get(player.playerId);
       if (entry && (entry.name !== info.name || entry.colour !== info.colour)) {
@@ -91,6 +91,7 @@ export function createGame(
         playerMeshes.set(player.playerId, entry);
         scene.add(entry.mesh);
       }
+      entry.mesh.visible = player.seat === null;
       placePlayerMesh(entry.mesh, player);
     }
     for (const [id, entry] of playerMeshes) {
@@ -142,6 +143,7 @@ export function createGame(
       cancelAnimationFrame(frameRequest);
       window.removeEventListener('resize', resize);
       input.dispose();
+      if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
       crosshair.hidden = true;
       for (const entry of playerMeshes.values()) disposePlayerMesh(entry.mesh);
       playerMeshes.clear();

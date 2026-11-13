@@ -33,10 +33,25 @@ test('a wall in front of the head does not pull the camera in', () => {
   expect(distance(position)).toBeCloseTo(Math.hypot(CAMERA_DISTANCE, 0.6), 5);
 });
 
-test('a rotated box is hit too', () => {
-  const tilted: Box = { center: vec3(0, 1.6, 2), halfExtents: vec3(20, 5, 0.5), rot: { x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 } };
-  const { position } = cameraPlacement(head, 0, 0, [tilted]);
+test('a box containing the head is ignored', () => {
+  const around: Box = { center: vec3(0, 1.6, 2), halfExtents: vec3(20, 5, 0.5), rot: { x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 } };
+  const { position } = cameraPlacement(head, 0, 0, [around]);
   expect(distance(position)).toBeCloseTo(Math.hypot(CAMERA_DISTANCE, 0.6), 5);
+});
+
+test('a wall turned 30 degrees about Y pulls the camera in along its slanted face', () => {
+  const half = (30 * Math.PI) / 180 / 2;
+  const turned = (sign: number): Box => ({
+    center: vec3(0, 1.6, 1.5),
+    halfExtents: vec3(20, 5, 0.1),
+    rot: { x: 0, y: sign * Math.sin(half), z: 0, w: Math.cos(half) },
+  });
+  const plain = distance(cameraPlacement(head, 0, 0, [wallAt(1.5, 0.1)]).position);
+  const hit = distance(cameraPlacement(head, 0, 0, [turned(1)]).position);
+  const mirrored = distance(cameraPlacement(head, 0, 0, [turned(-1)]).position);
+  expect(hit).toBeCloseTo(1.071, 2);
+  expect(Math.abs(hit - plain)).toBeGreaterThan(0.1);
+  expect(Math.abs(hit - mirrored)).toBeGreaterThan(0.1);
 });
 
 test('the camera is to the right of the aim at yaw 0 and at yaw pi/2', () => {
