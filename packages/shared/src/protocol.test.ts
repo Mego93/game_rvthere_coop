@@ -126,7 +126,10 @@ const vehicle = {
   throttle: 1,
   steer: 0,
 };
-const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle };
+const onFoot = { playerId: 'p1', pos: { x: 1, y: 0, z: 2 }, yaw: 0.5, seat: null, ground: null };
+const seated = { ...onFoot, playerId: 'p2', seat: 'driver' };
+const onVehicle = { ...onFoot, playerId: 'p3', ground: { bodyId: 'vehicle', localPos: { x: 0, y: 1, z: 0 } } };
+const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle, players: [onFoot] };
 const lobby = {
   type: 'lobby',
   room: 'camel',
@@ -189,6 +192,174 @@ test('parseServerMessage shows a reason it does not know as a general refusal', 
 });
 
 test('parseServerMessage keeps fields it does not know, so a newer server can add to a message', () => {
-  const newer = { ...snapshot, players: [{ playerId: 'p1' }] };
+  const newer = { ...snapshot, extra: 1, players: [{ ...onFoot, health: 3 }] };
   expect(parseServerMessage(JSON.stringify(newer))).toEqual(newer);
+});
+
+test('parseServerMessage accepts players on foot, seated and on the vehicle, and keeps their unknown fields', () => {
+  const message = { ...snapshot, players: [onFoot, seated, onVehicle, { ...onFoot, playerId: 'p4', hands: [] }] };
+  expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
+  expect(parseServerMessage(JSON.stringify({ ...snapshot, players: [] }))).not.toBeNull();
+});
+
+const withPlayer = (changes: Record<string, unknown>) => JSON.stringify({ ...snapshot, players: [{ ...onFoot, ...changes }] });
+
+test.each([
+  ['no players', JSON.stringify({ ...snapshot, players: undefined })],
+  ['players that are not a list', JSON.stringify({ ...snapshot, players: { p1: onFoot } })],
+  ['players that are null', JSON.stringify({ ...snapshot, players: null })],
+  ['a player that is not an object', JSON.stringify({ ...snapshot, players: ['p1'] })],
+  ['a player that is null', JSON.stringify({ ...snapshot, players: [null] })],
+  ['a player that is an array', JSON.stringify({ ...snapshot, players: [[]] })],
+  ['one bad player among good ones', JSON.stringify({ ...snapshot, players: [onFoot, { ...seated, yaw: 'x' }] })],
+  ['a player without an id', withPlayer({ playerId: undefined })],
+  ['a player whose id is a number', withPlayer({ playerId: 1 })],
+  ['a player without a position', withPlayer({ pos: undefined })],
+  ['a player whose position lacks z', withPlayer({ pos: { x: 1, y: 0 } })],
+  ['a player whose position is too large to be finite', withPlayer({}).replace('"x":1,"y":0', '"x":1e999,"y":0')],
+  ['a player whose position is null', withPlayer({ pos: null })],
+  ['a player without a yaw', withPlayer({ yaw: undefined })],
+  ['a player whose yaw is text', withPlayer({ yaw: '0.5' })],
+  ['a player whose yaw is too large to be finite', withPlayer({}).replace('"yaw":0.5', '"yaw":1e999')],
+  ['a player without a seat field', withPlayer({ seat: undefined })],
+  ['a player whose seat is a number', withPlayer({ seat: 0 })],
+  ['a player whose seat is a boolean', withPlayer({ seat: false })],
+  ['a player without a ground field', withPlayer({ ground: undefined })],
+  ['a player whose ground is text', withPlayer({ ground: 'vehicle' })],
+  ['a player whose ground is an array', withPlayer({ ground: [] })],
+  ['a player whose ground lacks a body id', withPlayer({ ground: { localPos: { x: 0, y: 0, z: 0 } } })],
+  ['a player whose ground body id is a number', withPlayer({ ground: { bodyId: 1, localPos: { x: 0, y: 0, z: 0 } } })],
+  ['a player whose ground lacks a local position', withPlayer({ ground: { bodyId: 'vehicle' } })],
+  ['a player whose ground position lacks y', withPlayer({ ground: { bodyId: 'vehicle', localPos: { x: 0, z: 0 } } })],
+  ['a player whose ground position is null', withPlayer({ ground: { bodyId: 'vehicle', localPos: null } })],
+])('parseServerMessage rejects a snapshot with %s', (_label, raw) => {
+  expect(parseServerMessage(raw)).toBeNull();
+});
+
+test.each(['#a05cdc', '#e4572e', '#000000'])('parseServerMessage accepts the lobby colour %s', (colour) => {
+  const message = { ...lobby, players: [{ ...lobby.players[0], colour }] };
+  expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
+});
+
+test.each(['red', '#fff', '#GGGGGG', '#A05CDC', 'url(x)', '', '#a05cdc;', ' #a05cdc', '#a05cdc00', 5])(
+  'parseServerMessage rejects the lobby colour %j',
+  (colour) => {
+    const message = { ...lobby, players: [{ ...lobby.players[0], colour }] };
+    expect(parseServerMessage(JSON.stringify(message))).toBeNull();
+  },
+);
+
+test.each([
+  ['playerId', 5],
+  ['name', 5],
+  ['colour', 5],
+  ['ready', 'yes'],
+  ['connected', 1],
+  ['playerId', null],
+  ['name', null],
+  ['ready', null],
+  ['connected', null],
+])('parseServerMessage rejects a lobby player whose %s is %j', (field, value) => {
+  const message = { ...lobby, players: [{ ...lobby.players[0], [field]: value }] };
+  expect(parseServerMessage(JSON.stringify(message))).toBeNull();
+});
+
+test.each([
+  ['room', 5],
+  ['phase', 5],
+  ['adminId', 5],
+  ['courseId', 5],
+  ['vehicleId', 5],
+  ['players', null],
+  ['room', undefined],
+  ['courseId', undefined],
+  ['vehicleId', undefined],
+  ['phase', undefined],
+  ['players', undefined],
+])('parseServerMessage rejects a lobby whose %s is %j', (field, value) => {
+  expect(parseServerMessage(JSON.stringify({ ...lobby, [field]: value }))).toBeNull();
+});
+
+test.each(['moveX', 'moveY', 'yaw', 'pitch'])('rejects an input whose %s is too large to be finite', (field) => {
+  expect(parseClientMessage(input({}).replace(`"${field}":0`, `"${field}":1e999`))).toBeNull();
+  expect(parseClientMessage(input({}).replace(`"${field}":0`, `"${field}":-1e999`))).toBeNull();
+});
+
+test('rejects an input whose seq is too large to be finite', () => {
+  expect(parseClientMessage(input({}).replace('"seq":1', '"seq":1e999'))).toBeNull();
+});
+
+test.each(['moveX', 'moveY', 'yaw', 'pitch', 'seq', 'reel', 'slot'])('rejects an input whose %s is text', (field) => {
+  expect(parseClientMessage(input({ [field]: '0' }))).toBeNull();
+  expect(parseClientMessage(input({ [field]: '' }))).toBeNull();
+});
+
+test.each([
+  ['reel', -2],
+  ['reel', 2],
+  ['reel', 0.5],
+  ['slot', -1],
+  ['slot', 3],
+  ['slot', 1.5],
+])('rejects an input whose %s is %j', (field, value) => {
+  expect(parseClientMessage(input({ [field]: value }))).toBeNull();
+});
+
+test('clamps the axes and the pitch beyond their limits and leaves the limits themselves alone', () => {
+  expect(parseClientMessage(input({ moveX: 1.0001, moveY: -1.0001 }))).toMatchObject({ moveX: 1, moveY: -1 });
+  expect(parseClientMessage(input({ moveX: 1, moveY: -1, pitch: Math.PI / 2 }))).toMatchObject({
+    moveX: 1,
+    moveY: -1,
+    pitch: Math.PI / 2,
+  });
+  expect(parseClientMessage(input({ pitch: -Math.PI / 2 }))).toMatchObject({ pitch: -Math.PI / 2 });
+  expect(parseClientMessage(input({ pitch: -100 }))).toMatchObject({ pitch: -Math.PI / 2 });
+});
+
+test('wraps the yaw into (-PI, PI] and keeps PI itself', () => {
+  expect(parseClientMessage(input({ yaw: Math.PI }))).toMatchObject({ yaw: Math.PI });
+  expect((parseClientMessage(input({ yaw: -Math.PI })) as PlayerInput).yaw).toBeCloseTo(Math.PI, 9);
+  expect((parseClientMessage(input({ yaw: -3 * Math.PI })) as PlayerInput).yaw).toBeCloseTo(Math.PI, 9);
+  expect((parseClientMessage(input({ yaw: 2 * Math.PI + 0.25 })) as PlayerInput).yaw).toBeCloseTo(0.25, 9);
+  expect((parseClientMessage(input({ yaw: -0.25 })) as PlayerInput).yaw).toBe(-0.25);
+});
+
+test('accepts the largest values of reel and slot and the smallest of both', () => {
+  expect(parseClientMessage(input({ reel: -1, slot: 0 }))).toMatchObject({ reel: -1, slot: 0 });
+  expect(parseClientMessage(input({ reel: 1, slot: 2 }))).toMatchObject({ reel: 1, slot: 2 });
+});
+
+test('accepts names of 1 and 16 characters and rejects 0, 17 and only spaces', () => {
+  const create = (name: string) => parseClientMessage(JSON.stringify({ type: 'create', name, token: TOKEN }));
+  expect(create('a')).toMatchObject({ name: 'a' });
+  expect(create('a'.repeat(16))).toMatchObject({ name: 'a'.repeat(16) });
+  expect(create('')).toBeNull();
+  expect(create('a'.repeat(17))).toBeNull();
+  expect(create('                ')).toBeNull();
+  expect(cleanName('   ')).toBeNull();
+});
+
+test('accepts a room noun of 24 characters and rejects 25', () => {
+  const join = (room: string) => parseClientMessage(JSON.stringify({ type: 'join', room, name: 'Amal', token: TOKEN }));
+  expect(join('a'.repeat(24))).toMatchObject({ room: 'a'.repeat(24) });
+  expect(join('a'.repeat(25))).toBeNull();
+  expect(cleanRoom('a'.repeat(24))).toBe('a'.repeat(24));
+  expect(cleanRoom('a'.repeat(25))).toBeNull();
+});
+
+test('a __proto__ or constructor field does not reach the parsed message or Object.prototype', () => {
+  const raws = [
+    '{"type":"input","seq":1,"moveX":0,"moveY":0,"yaw":0,"pitch":0,"jump":false,"interact":false,"use":false,"reel":0,"slot":0,"drop":false,"__proto__":{"polluted":true},"constructor":{"polluted":true}}',
+    `{"type":"create","name":"Amal","token":"${TOKEN}","__proto__":{"polluted":true},"constructor":"x"}`,
+    `{"type":"join","room":"camel","name":"Amal","token":"${TOKEN}","__proto__":{"polluted":true},"constructor":"x"}`,
+  ];
+  for (const raw of raws) {
+    const message = parseClientMessage(raw);
+    expect(message).not.toBeNull();
+    expect(Object.keys(message as object)).not.toContain('__proto__');
+    expect(Object.keys(message as object)).not.toContain('constructor');
+    expect(Object.getPrototypeOf(message)).toBe(Object.prototype);
+    expect((message as Record<string, unknown>).polluted).toBeUndefined();
+  }
+  expect(({} as Record<string, unknown>).polluted).toBeUndefined();
 });

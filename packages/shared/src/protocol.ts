@@ -1,4 +1,4 @@
-import { NAME_MAX_LENGTH } from './constants';
+import { NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN } from './constants';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
 import type { VehicleState } from './vehicle';
 import type { WorldSnapshot } from './world';
@@ -195,11 +195,19 @@ const isVehicleState = (value: unknown): value is VehicleState =>
   isVec3(value.linvel) &&
   finite(value.throttle) &&
   finite(value.steer);
+const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
+  isRecord(value) &&
+  isText(value.playerId) &&
+  isVec3(value.pos) &&
+  finite(value.yaw) &&
+  (value.seat === null || isText(value.seat)) &&
+  (value.ground === null || (isRecord(value.ground) && isText(value.ground.bodyId) && isVec3(value.ground.localPos)));
 const isLobbyPlayer = (value: unknown): value is LobbyPlayer =>
   isRecord(value) &&
   isText(value.playerId) &&
   isText(value.name) &&
   isText(value.colour) &&
+  PLAYER_COLOUR_PATTERN.test(value.colour) &&
   typeof value.ready === 'boolean' &&
   typeof value.connected === 'boolean';
 
@@ -235,7 +243,12 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         ? message
         : null;
     case 'snapshot':
-      return isCount(data.tick) && isCount(data.ackSeq) && typeof data.full === 'boolean' && isVehicleState(data.vehicle)
+      return isCount(data.tick) &&
+        isCount(data.ackSeq) &&
+        typeof data.full === 'boolean' &&
+        isVehicleState(data.vehicle) &&
+        Array.isArray(data.players) &&
+        data.players.every(isPlayerSnapshot)
         ? message
         : null;
     default:
