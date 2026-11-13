@@ -74,3 +74,78 @@ Each task: tests first; then a Sonnet review. Run `npm test` and `npm run typech
 ## Known risks to watch in review
 - `noServer` upgrades must still serve the same path and payload limit; the existing server tests are the check.
 - A6 must not let a genuinely silent client live longer than 6 s of non-stalled time.
+
+## Amendments after the plan review (these override the body above)
+
+B1 (A5, T1, constants). `RATE_LIMIT_STRIKES` = 4, `RATE_LIMIT_STRIKE_WINDOW` = 8. A strike is the first over-limit message of a limiter window, recorded at that window's start time. The connection is closed when the number of strikes with time > now − `RATE_LIMIT_STRIKE_WINDOW` reaches `RATE_LIMIT_STRIKES`. The spec's 3 s rule stays. T1 becomes:
+- exactly 120 messages in a window pass, and the 121st drops;
+- a continuous flood closes on the first over-limit message of the 4th consecutive over-limit window, and not before;
+- floods in alternate windows (0, 2, 4, 6 s) close on the 4th flood;
+- floods 3 s apart (0, 3, 6, 9 s) never close.
+
+The two existing tests in `room/rateLimit.test.ts`, "a second within the limit forgives earlier bursts" and "a silent second forgives earlier bursts", are rewritten so that the gap between the two bursts is at least 9 s (bursts at 0–1 s and 9–10 s). They still show that the 3 s rule forgives, and they no longer trip the strikes.
+
+B2 (A4, tests). `room/testing.ts`: `connectFakeClient(server, address = 'test')`. These existing tests in `room/server.test.ts` change:
+- "create is refused once the server holds the most rooms…": each host gets a distinct address.
+- "an empty room is deleted after the timeout, and not before" and "a room that someone rejoins is not deleted": a guest with a different token joins before the room empties, so the 60 s timeout still applies.
+
+B3 (A2, A4, e2e). `ServerOptions` gains `limits?: { createPerMinute?: number; perAddress?: number; total?: number }`. This replaces T7's `caps`. `main.ts` reads optional overrides from `CREATE_PER_MINUTE` and `MAX_CONNECTIONS_PER_ADDRESS`. `playwright.config.ts` `webServer.env` sets both to `1000`, and the change also covers `e2e.local.config.ts`, which inherits the setting. Task 2 runs `npx playwright test -c e2e.local.config.ts --trace off` and every smoke case must pass.
+
+B4 (A7, T5).
+- The signature is `onError(error: unknown, source: string, suppressed: number)` for both `RoomDeps.onError` and `ServerOptions.onError`. `suppressed` counts the reports from that source dropped since its last report. If no later report from the source arrives, that count is never sent; this is accepted.
+- There is one reporter. `startServer` creates it with `createReporter(options.onError, clock)` around the server's `onError`. `contain`, the static server and the room layer all use it, and the room layer gets it as `deps.onError(error, source)`.
+- The room layer passes sources through and does not rate-limit again.
+- `listen.ts` uses distinct sources: `socket:message`, `socket:close`, `timer`, `static` and `upgrade`. `node/failure.test.ts` keeps passing because message and close failures have different sources; if it needs any edit, list it.
+- T5 is a unit test of `createReporter` with a fake clock.
+- The room layer's own sources are `room:<noun>`.
+
+B5 (A6, T2).
+- The excess is gap − `STALL_GRACE`.
+- It is added only to sessions whose `lastHeard` ≤ the previous timer run's time, and the result is capped at now.
+- T2 gains a case: after a `stall()`, a message arrives before the next timer run, then the client is silent. It is dropped 6 s after that message, not later.
+
+B6 (T10, routing).
+- A non-upgrade request to `SOCKET_PATH` gets 426.
+- An upgrade to any other path gets `HTTP/1.1 400 Bad Request`, and the socket is destroyed. With `noServer`, the upgrade handler checks the path itself.
+- T10 drops "whatever ws answers" and asserts 426 and 400.
+- T10 also covers the two answers `static.ts` already gives: an undecodable path gets 400, and an unbuilt client gets 503.
+
+B7 (A8, static).
+- The seam is `serveStatic(root, request, response, report, open = defaultOpen)`. `open(path)` resolves to a readable stream once its `open` event has fired, or rejects.
+- `writeHead(200)` happens only after `open` resolves.
+- `ENOENT` and `ENOTDIR` (from `stat` or `open`) mean not-found and get 404. Any other error is reported with source `static` and answered with 500.
+- T10 injects the failure with an `open` that rejects with an `EIO` error. Do not use chmod: the tests run as root.
+
+B8 (T11). The test opens a raw `net` socket and sends a partial request, `GET / HTTP/1.1\r\n` with no blank line, so the connection is not idle. `close()` must still resolve; only `closeAllConnections` ends that connection.
+
+B9 (A2, A3, upgrade details).
+- **Counting.** Caps are checked in the `upgrade` handler. The count goes up in the `handleUpgrade` callback and down on that socket's `close`.
+- **Refusal.** Write `HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`, then destroy the socket. Before writing anything, attach `socket.on('error', () => {})` to the raw socket.
+- **Payload limit.** The `noServer` `WebSocketServer` keeps the existing `maxPayload`.
+- **`sendOrDrop`.** It takes `socket: { readyState: number; OPEN: number; bufferedAmount: number; send(data: string): void; terminate(): void }`.
+
+B10 (I7). The address is not added to `Connection`. Instead `RoomServer.connect(connection, address: string)` takes it, and it is kept on the server's session. `room.ts` never sees it. This touches only the callers of `connect` (`node/listen.ts` and `room/testing.ts`). `onError` fakes need no change.
+
+B11 (A4 details).
+- `everJoinedByOthers()` becomes true on an `add` whose token differs from the creator's token.
+- `SOLO_ROOM_TIMEOUT` = 30. Ten seconds would delete a room while its creator is in Messages sharing the link. The value is the owner's call and is logged as such.
+- Only creates that succeed count toward the limit.
+- An entry expires when now − its time ≥ 60.
+- An address with no live entries is removed from the map.
+
+B12 (A1).
+- `CF-Connecting-IP` is trusted only when `TRUST_PROXY=1` and the socket's remote address is loopback (`127.0.0.1` or `::1`).
+- Addresses are normalised by stripping a leading `::ffff:`.
+- `main.ts` logs whether proxy trust is on at start.
+- T8 adds a case: with trust on, a header from a non-loopback address is ignored. The test cannot make a non-loopback socket, so this is a unit test of an exported `clientAddress(remote, headers, trustProxy)`.
+- Per-address caps on IPv6 are not grouped by /64; this is a known limit.
+
+B13 (constants).
+- `MAX_CONNECTIONS` = 360, which leaves room for players still on the home page and for takeovers.
+- The block goes directly under `MAX_ROOMS` in `constants.ts`, not at the end of the file, to avoid conflicts with the steps running in parallel.
+
+B14 (Task 3 additions).
+- Spec "Rooms" (the 60 s deletion; solo rooms), "Room limit" (create limit per address) and "Failures" (one report per source per 10 s, with the suppressed count) are also amended.
+- ROADMAP notes that step 19's one-command start must set `TRUST_PROXY=1`.
+
+B15 (merge order). 19a merges to `main` before step 11 starts. Step 11 rewrites the join and takeover code in `room/server.ts` and `room.ts`.
