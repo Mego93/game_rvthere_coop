@@ -173,6 +173,15 @@ describe('createPredictor', () => {
       expect(me.state.pos.z).toBeLessThan(BARRIER.z - 1);
       predictor.dispose();
     });
+
+    test('Y5: an item is skipped, so the player walks through it', () => {
+      const predictor = createPredictor(RAPIER, testGround, lodgy);
+      predictor.setProps([barrier(BARRIER.z, 'jerrycan-1', 'jerrycan'), barrier(BARRIER.z, 'toolbox-1', 'toolbox')]);
+      const me = driver(predictor, rest(START));
+      me.run(240, { moveY: 1 });
+      expect(me.state.pos.z).toBeLessThan(BARRIER.z - 1);
+      predictor.dispose();
+    });
   });
 
   describe('vehicle stand-in', () => {
@@ -313,6 +322,8 @@ describe('createPredictor', () => {
       carry: { x: 3, z: 4 },
       vy: 5,
       grounded: true,
+      inventory: [null, null, null],
+      slot: 0,
     };
     const copy = predictedFrom(snapshot);
     expect(copy).toEqual({ pos: { x: 1, y: 2, z: 3 }, walk: { x: 1, z: 2 }, carry: { x: 3, z: 4 }, vy: 5, grounded: true });

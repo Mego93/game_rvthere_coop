@@ -150,6 +150,8 @@ const player = (playerId: string, x: number, yaw: number): PlayerSnapshot => ({
   carry: { x: 0, z: 0 },
   vy: 0,
   grounded: true,
+  inventory: [null, null, null],
+  slot: 0,
 });
 
 // Two snapshots (ticks 6 and 12) that arrive on time; sampled at `tick` the view is that tick minus the delay.

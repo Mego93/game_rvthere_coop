@@ -5,7 +5,8 @@ import { aimAngleToBox, interactCandidates, resolveInteract, splitCandidates, ty
 import { getVehicleConfig } from './vehicles';
 import type { CableSnapshot } from './winch';
 import type { Placed } from './course';
-import { ANCHOR_HEIGHT, HOOK_RANGE, PLAYER_EYE_HEIGHT, PUSH_HEIGHT } from './constants';
+import type { PropSnapshot } from './props';
+import { ANCHOR_HEIGHT, HOOK_RANGE, ITEM_KINDS, PLAYER_EYE_HEIGHT, PUSH_HEIGHT } from './constants';
 
 const resolve = (ctx: { seat: string | null; hands: string | null; candidates: readonly InteractCandidate[] }) =>
   resolveInteract({ holdsHook: ctx.hands === 'hook', attachCandidates: [], ...ctx });
@@ -111,6 +112,8 @@ describe('interactCandidates', () => {
     hands: null as string | null,
     cable: { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 0, 0), length: 0, reel: 0 } as CableSnapshot,
     anchors: [] as Placed[],
+    items: [] as PropSnapshot[],
+    freeSlot: true,
   };
   const crateAt = (id: string, x: number, z: number) => ({ id, kind: 'crate', pos: vec3(x, 0.3, z), rot: IDENTITY });
 
@@ -131,6 +134,29 @@ describe('interactCandidates', () => {
       heldProps: new Set(['held']),
     });
     expect(found.filter((c) => c.action.kind === 'pickUp').map((c) => (c.action as { propId: string }).propId)).toEqual(['free']);
+  });
+
+  const itemAt = (id: string, kind: string, x: number, z: number) => ({ id, kind, pos: vec3(x, ITEM_KINDS.jerrycan.halfExtents.y, z), rot: IDENTITY });
+
+  test('lists unheld items within HANDS_RANGE after the props, in the order given, only with a free slot', () => {
+    const items = [itemAt('far', 'jerrycan', 2.5 + HANDS_RANGE + 0.5 + 0.2, 0), itemAt('item-a', 'jerrycan', 3.2, 0), itemAt('item-b', 'toolbox', 2.5, -1)];
+    const feet = vec3(2.5, 0, 0);
+    const found = interactCandidates({ ...base, feet, props: [crateAt('a', 3.2, 0.5)], items });
+    expect(found.map((c) => c.action)).toEqual([
+      { kind: 'board', seatId: expect.any(String) },
+      { kind: 'pickUp', propId: 'a' },
+      { kind: 'pickUpItem', itemId: 'item-a' },
+      { kind: 'pickUpItem', itemId: 'item-b' },
+    ]);
+    const full = interactCandidates({ ...base, feet, props: [], items, freeSlot: false });
+    expect(full.map((c) => c.action.kind)).toEqual(['board']);
+  });
+
+  test('items are not candidates with a prop or the hook in the hands, and an unknown kind is skipped', () => {
+    const items = [itemAt('item-a', 'jerrycan', 3.2, 0), itemAt('m', 'mystery', 3.2, 0.2)];
+    expect(interactCandidates({ ...base, feet: vec3(2.5, 0, 0), hands: 'crate-1', props: [], items })).toEqual([]);
+    const found = interactCandidates({ ...base, feet: vec3(2.5, 0, 0), props: [], items });
+    expect(found.filter((c) => c.action.kind === 'pickUpItem')).toHaveLength(1);
   });
 
   test('has no boarding candidate when every seat is taken or the vehicle is out of reach', () => {
@@ -173,6 +199,8 @@ describe('interactCandidates and the hook', () => {
     props: [] as { id: string; kind: string; pos: Vec3; rot: typeof IDENTITY }[],
     anchors: [] as Placed[],
     cable: cable('stowed'),
+    items: [] as PropSnapshot[],
+    freeSlot: true,
   };
   // Feet such that the chest is 1 m in front of the winch box (the mount faces -z).
   const nearBox = vec3(mount.x, mount.y - PUSH_HEIGHT, mount.z - 1);

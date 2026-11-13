@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, expect, test } from 'vitest';
-import { ANCHOR_HEIGHT, GRAVITY, PROP_KINDS, REFERENCE_SLOPES_DEG, type ReferenceSlope } from '../constants';
+import { ANCHOR_HEIGHT, GRAVITY, ITEM_KINDS, PROP_KINDS, REFERENCE_SLOPES_DEG, type ReferenceSlope } from '../constants';
 import { degToRad } from '../math';
 import { buildStatics } from '../statics';
 import { getCourse } from './index';
@@ -68,8 +68,18 @@ test('props are known kinds with unique ids and rest on ground', () => {
   }
 });
 
-test('ids are unique across anchors and props', () => {
-  const ids = [...testGround.anchors, ...testGround.props].map((placed) => placed.id);
+test('pickups are item kinds and rest on ground', () => {
+  expect(testGround.pickups.map((pickup) => pickup.id)).toEqual(['jerrycan-1', 'jerrycan-2', 'toolbox-1']);
+  for (const pickup of testGround.pickups) {
+    expect(Object.hasOwn(ITEM_KINDS, pickup.kind), pickup.id).toBe(true);
+    const hit = probe(pickup.pose.pos.x, pickup.pose.pos.y, pickup.pose.pos.z);
+    expect(hit, pickup.id).not.toBeNull();
+    expect(hit!.distance, pickup.id).toBeCloseTo(1, 2);
+  }
+});
+
+test('ids are unique across anchors, props and pickups', () => {
+  const ids = [...testGround.anchors, ...testGround.props, ...testGround.pickups].map((placed) => placed.id);
   expect(new Set(ids).size).toBe(ids.length);
 });
 

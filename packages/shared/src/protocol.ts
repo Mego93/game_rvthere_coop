@@ -1,4 +1,4 @@
-import { NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN } from './constants';
+import { NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, type ItemKind } from './constants';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
 import type { PropSnapshot } from './props';
 import type { VehicleState } from './vehicle';
@@ -87,6 +87,8 @@ export interface PlayerSnapshot {
   carry: { x: number; z: number };
   vy: number;
   grounded: boolean;
+  inventory: [ItemKind | null, ItemKind | null, ItemKind | null];
+  slot: 0 | 1 | 2;
 }
 
 export interface SnapshotMessage extends WorldSnapshot {

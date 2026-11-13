@@ -52,6 +52,8 @@ function copyPlayer(p: PlayerSnapshot): PlayerSnapshot {
     carry: { x: p.carry.x, z: p.carry.z },
     vy: p.vy,
     grounded: p.grounded,
+    inventory: [p.inventory[0], p.inventory[1], p.inventory[2]],
+    slot: p.slot,
   };
 }
 

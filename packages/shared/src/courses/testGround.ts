@@ -44,7 +44,11 @@ export const testGround: BuiltCourse = deepFreeze({
     { id: 'crate-3', kind: 'crate', pose: { pos: vec3(10, 0, 11), rot: IDENTITY } },
     { id: 'barrier-1', kind: 'barrier', pose: { pos: vec3(-10, 0, 10), rot: IDENTITY } },
   ],
-  pickups: [],
+  pickups: [
+    { id: 'jerrycan-1', kind: 'jerrycan', pose: { pos: vec3(-4, 0, 14), rot: IDENTITY } },
+    { id: 'jerrycan-2', kind: 'jerrycan', pose: { pos: vec3(-3, 0, 14), rot: IDENTITY } },
+    { id: 'toolbox-1', kind: 'toolbox', pose: { pos: vec3(-2, 0, 14), rot: IDENTITY } },
+  ],
   anchors: [
     { id: 'anchor-1', kind: 'milestone', pose: { pos: vec3(-40, 0, -70), rot: IDENTITY } },
     { id: 'anchor-2', kind: 'milestone', pose: { pos: slopePose('steep', 39).pos, rot: IDENTITY } },

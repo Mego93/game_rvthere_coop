@@ -1,4 +1,4 @@
-import { ANCHOR_HEIGHT, HANDS_RANGE, HOOK_RANGE, PROP_KINDS, PUSH_HEIGHT, WINCH_MAX_LENGTH } from './constants';
+import { ANCHOR_HEIGHT, HANDS_RANGE, HOOK_RANGE, ITEM_KINDS, PROP_KINDS, PUSH_HEIGHT, WINCH_MAX_LENGTH } from './constants';
 import type { Placed } from './course';
 import { IDENTITY, add, length, rotate, sub, vec3, type Quat, type Vec3 } from './math';
 import { aimRay } from './player';
@@ -13,6 +13,7 @@ export type InteractAction =
   | { kind: 'throw' }
   | { kind: 'board'; seatId: string }
   | { kind: 'pickUp'; propId: string }
+  | { kind: 'pickUpItem'; itemId: string }
   | { kind: 'attachHook'; anchorId: string }
   | { kind: 'dropHook' }
   | { kind: 'takeHook' }
@@ -23,6 +24,7 @@ export interface InteractCandidate {
   action:
     | { kind: 'board'; seatId: string }
     | { kind: 'pickUp'; propId: string }
+    | { kind: 'pickUpItem'; itemId: string }
     | { kind: 'attachHook'; anchorId: string }
     | { kind: 'takeHook' }
     | { kind: 'detachHook' }
@@ -49,7 +51,7 @@ const seatPos = (config: VehicleConfig, seatId: string): Vec3 => config.seats.fi
 
 // Rule K1 with W11: the boarding angle is to the chosen seat, not to the vehicle's box. Pure over poses so the server and the client's hint agree. Seated players have no candidates (they leave the seat).
 // Holding the hook: the anchors in range. Holding a prop: none. Empty hands: the hook, then boarding, props in the given order.
-// The order of the list is the tie order (V8): board, takeHook, detachHook, releaseHook, then props; attach: static anchors, then props.
+// The order of the list is the tie order (V8): board, takeHook, detachHook, releaseHook, then props, then items; attach: static anchors, then props.
 export function interactCandidates(ctx: {
   config: VehicleConfig;
   vehiclePos: Vec3;
@@ -61,6 +63,10 @@ export function interactCandidates(ctx: {
   hands: string | null;
   takenSeats: ReadonlySet<string>;
   props: readonly PropSnapshot[];
+  // Item kinds only, in id order; the caller filters.
+  items: readonly PropSnapshot[];
+  // False when the inventory is full: items are then not candidates.
+  freeSlot: boolean;
   heldProps: ReadonlySet<string>;
   cable: CableSnapshot;
   anchors: readonly Placed[];
@@ -112,6 +118,14 @@ export function interactCandidates(ctx: {
       action: { kind: 'pickUp', propId: prop.id },
       angle: aimAngleToBox(origin, dir, prop.pos, prop.rot, config.halfExtents),
     });
+  }
+  if (ctx.freeSlot) {
+    for (const item of ctx.items) {
+      if (!Object.hasOwn(ITEM_KINDS, item.kind)) continue;
+      const half = ITEM_KINDS[item.kind as keyof typeof ITEM_KINDS].halfExtents;
+      if (distanceToBox(ctx.feet, half, item.pos, item.rot) > HANDS_RANGE) continue;
+      found.push({ action: { kind: 'pickUpItem', itemId: item.id }, angle: aimAngleToBox(origin, dir, item.pos, item.rot, half) });
+    }
   }
   return found;
 }

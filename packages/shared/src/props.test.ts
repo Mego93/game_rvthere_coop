@@ -154,11 +154,11 @@ describe('createProps', () => {
 });
 
 describe('props in the world', () => {
-  test('the snapshot lists every prop in course order with finite poses', () => {
+  test('the snapshot lists every prop in course order, then the items, with finite poses', () => {
     const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
     for (let i = 0; i < 30; i++) world.step(new Map());
     const { props } = world.snapshot();
-    expect(props.map((prop) => prop.id)).toEqual(['crate-1', 'crate-2', 'crate-3', 'barrier-1']);
+    expect(props.map((prop) => prop.id)).toEqual(['crate-1', 'crate-2', 'crate-3', 'barrier-1', 'jerrycan-1', 'jerrycan-2', 'toolbox-1']);
     for (const prop of props) {
       for (const n of [prop.pos.x, prop.pos.y, prop.pos.z, prop.rot.x, prop.rot.y, prop.rot.z, prop.rot.w]) {
         expect(Number.isFinite(n)).toBe(true);

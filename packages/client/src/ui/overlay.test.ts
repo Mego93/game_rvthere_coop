@@ -52,6 +52,8 @@ const player = (playerId: string, x: number, z: number, seat: string | null = nu
   carry: { x: 0, z: 0 },
   vy: 0,
   grounded: true,
+  inventory: [null, null, null],
+  slot: 0,
 });
 // The RV's driver door is at x = 1.25 - 1.15, z = -30.04 - 2.2.
 const nearDoor = player('p1', -1.1, -32.24);
@@ -153,6 +155,14 @@ test('interactHint: the hook hints', () => {
   expect(interactHint(rv, vehicle, standing, [standing], 0, 0, [], attached, [])).toBe('E to unhook');
   expect(interactHint(rv, vehicle, atBumper, [atBumper], 0, 0, [], attached, [])).toBe('E to release the hook');
   expect(interactHint(rv, vehicle, standing, [standing], 0, 0, [], null, [])).toBeNull();
+});
+
+test('interactHint: an item in reach says pick up the kind, unless the inventory is full', () => {
+  const item = (kind: string) => ({ id: 'item-1', kind, pos: vec3(10, 0.25, 8.6), rot: IDENTITY });
+  expect(interactHint(rv, vehicle, standing, [standing], 0, 0, [item('jerrycan')], stowed, [])).toBe('E to pick up the jerrycan');
+  expect(interactHint(rv, vehicle, standing, [standing], 0, 0, [item('toolbox')], stowed, [])).toBe('E to pick up the toolbox');
+  const full = { ...standing, inventory: ['jerrycan', 'jerrycan', 'toolbox'] as PlayerSnapshot['inventory'] };
+  expect(interactHint(rv, vehicle, full, [full], 0, 0, [item('jerrycan')], stowed, [])).toBeNull();
 });
 
 test('shows the speed along the vehicle, the position and the controls', () => {

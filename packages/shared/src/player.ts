@@ -14,6 +14,7 @@ import {
   SHOVE_STEP,
   THROW_HEAD_CLEARANCE,
   THROW_SPEED,
+  type ItemKind,
 } from './constants';
 import type { BuiltCourse } from './course';
 import { GROUP_GROUND, GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
@@ -52,6 +53,8 @@ export interface PlayerState {
   hands: 'hook' | string | null;
   // Seconds left below the kill plane.
   respawnIn: number | null;
+  inventory: [ItemKind | null, ItemKind | null, ItemKind | null];
+  slot: 0 | 1 | 2;
 }
 
 export interface StepInputs {
@@ -419,6 +422,8 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         seat: null,
         hands: null,
         respawnIn: null,
+        inventory: [null, null, null],
+        slot: 0,
       };
       const collider = physics.createCollider(
         rapier.ColliderDesc.capsule(CAPSULE_HALF_SEGMENT, PLAYER_RADIUS)

@@ -24,7 +24,8 @@ function course(lift: number, extra: BuiltCourse['props'] = []): BuiltCourse {
   const props = base.props.map((prop) =>
     prop.id === 'crate-1' ? { ...prop, pose: { ...prop.pose, pos: vec3(prop.pose.pos.x, prop.pose.pos.y + lift, prop.pose.pos.z) } } : prop,
   );
-  return { ...base, props: [...props, ...extra] };
+  // The test ground's pickups are left out: these tests are about props.
+  return { ...base, props: [...props, ...extra], pickups: [] };
 }
 
 function setup(testCourse: BuiltCourse) {

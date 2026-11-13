@@ -1,9 +1,10 @@
-import { GRAVITY, HOOK_RANGE, PLAYER_KILL_RESPAWN_DELAY, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, TICK_DT, type Surface } from './constants';
+import { DROP_HEIGHT, GRAVITY, HOOK_RANGE, PLAYER_KILL_RESPAWN_DELAY, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { add, length, rotate, sub, vec3, type Vec3 } from './math';
+import { createItems } from './items';
 import { interactCandidates, resolveInteract, splitCandidates } from './interact';
-import { createPlayers, type StepInputs } from './player';
+import { createPlayers, type PlayerState, type StepInputs } from './player';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
 import { NEUTRAL_INPUT, type InputFields, type PlayerSnapshot } from './protocol';
@@ -30,7 +31,7 @@ export interface WorldSnapshot {
   vehicle: VehicleState;
   // In join order.
   players: PlayerSnapshot[];
-  // Every prop, course order; pos is the box centre.
+  // Every prop in course order, then every item; pos is the box centre.
   props: PropSnapshot[];
   cable: CableSnapshot;
 }
@@ -81,6 +82,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   physics.timestep = TICK_DT;
 
   const props = createProps(rapier, physics, course);
+  const items = createItems(rapier, physics, course);
   const players = createPlayers(rapier, physics, vehicle, props, course);
   const winch = createWinch(rapier, physics, vehicle, props, course);
   const previous = new Map<string, InputFields>();
@@ -120,6 +122,16 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     players.setHands(id, null);
   };
 
+  const slotOf = (value: number): 0 | 1 | 2 | null => (value === 0 || value === 1 || value === 2 ? value : null);
+
+  // Rule I10: the selected item appears at the feet, at rest.
+  const dropSelected = (player: PlayerState) => {
+    const kind = player.inventory[player.slot];
+    if (kind === null || kind === undefined) return;
+    player.inventory[player.slot] = null;
+    items.drop(kind, vec3(player.pos.x, player.pos.y + DROP_HEIGHT, player.pos.z));
+  };
+
   // Rules I1, V3, K1 and K2: in join order, so of two players pressing for one seat or crate the earlier gets it.
   // The aim is this tick's input (R6), not the yaw the player ended the last tick with.
   const resolveInteracts = (onFoot: ReadonlyMap<string, StepInputs>) => {
@@ -140,6 +152,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         hands: player.hands,
         takenSeats: taken,
         props: props.snapshot(),
+        items: items.snapshot(),
+        freeSlot: player.inventory.includes(null),
         heldProps,
         cable: winch.state(),
         anchors: course.anchors,
@@ -161,6 +175,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         players.throwHeld(player.id, step.fields.yaw, step.fields.pitch);
       } else if (action?.kind === 'pickUp') {
         players.pickUp(player.id, action.propId);
+      } else if (action?.kind === 'pickUpItem') {
+        const free = player.inventory.indexOf(null);
+        const kind = items.take(action.itemId);
+        if (kind !== null && free >= 0) player.inventory[free] = kind;
       } else if (action?.kind === 'attachHook') {
         if (winch.attach(action.anchorId)) players.setHands(player.id, null);
       } else if (action?.kind === 'dropHook') {
@@ -243,7 +261,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     vehicleConfig,
     step(inputs) {
       const onFoot = stepInputsFor(inputs);
+      for (const player of players.all()) player.slot = slotOf(onFoot.get(player.id)?.fields.slot ?? 0) ?? player.slot;
       resolveInteracts(onFoot);
+      for (const player of players.all()) if (player.seat === null && onFoot.get(player.id)?.pressed.drop) dropSelected(player);
       const taut = winch.tautObstacle();
       applyPushes(taut);
       const cable = winch.applyForces(reelInput(onFoot));
@@ -264,6 +284,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       const events: WorldEvent[] = [];
       killPlane(events);
       resetLastTick = new Set(props.killPlane(course.killPlaneY));
+      items.killPlane(course.killPlaneY);
       for (const id of resetLastTick) winch.onPropReset(id);
       return events;
     },
@@ -281,23 +302,37 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         carry: { ...player.carry },
         vy: player.vy,
         grounded: player.grounded,
+        inventory: [...player.inventory],
+        slot: player.slot,
       })),
-      props: props.snapshot(),
+      props: [...props.snapshot(), ...items.snapshot()],
       cable: winch.state(),
     }),
     addPlayer: (id) => void players.add(id),
     removePlayer(id) {
       releaseHook(id, 'drop');
+      const leaving = players.get(id);
+      if (leaving) {
+        // Rule I11: at the first valid spawn slot, stacked upward.
+        const spot = players.findSpawn(id);
+        let level = 1;
+        for (const kind of leaving.inventory) {
+          if (kind === null) continue;
+          items.drop(kind, vec3(spot.x, spot.y + level * DROP_HEIGHT, spot.z));
+          level += 1;
+        }
+      }
       players.remove(id);
       previous.delete(id);
     },
     teleportPlayer: (id, pos) => players.teleport(id, pos),
     debug: () => ({ forwardSpeed: vehicle.forwardSpeed(), wheelSurfaces: vehicle.wheelSurfaces(), cableTension }),
-    debugBody: (id) => (id === 'vehicle' ? vehicle.body : props.get(id)?.body),
+    debugBody: (id) => (id === 'vehicle' ? vehicle.body : props.get(id)?.body ?? items.get(id)?.body),
     debugWinch: () => winch,
     dispose() {
       players.dispose();
       props.dispose();
+      items.dispose();
       physics.free();
     },
   };

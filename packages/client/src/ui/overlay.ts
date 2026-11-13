@@ -1,6 +1,7 @@
 import {
   dot,
   interactCandidates,
+  ITEM_KINDS,
   resolveInteract,
   rotate,
   splitCandidates,
@@ -72,6 +73,8 @@ export function interactHint(
     hands: local.hands,
     takenSeats,
     props,
+    items: props.filter((prop) => Object.hasOwn(ITEM_KINDS, prop.kind)),
+    freeSlot: local.inventory.includes(null),
     heldProps,
     cable: cable ?? STOWED,
     anchors,
@@ -81,6 +84,10 @@ export function interactHint(
   if (action?.kind === 'throw') return 'E to throw';
   if (action?.kind === 'board') return 'E to board';
   if (action?.kind === 'pickUp') return 'E to pick up';
+  if (action?.kind === 'pickUpItem') {
+    const kind = props.find((prop) => prop.id === action.itemId)?.kind;
+    return `E to pick up the ${kind ?? 'item'}`;
+  }
   if (action?.kind === 'attachHook') return 'E to attach the hook';
   if (action?.kind === 'dropHook') return 'E to drop the hook';
   if (action?.kind === 'takeHook') return 'E to take the hook';
