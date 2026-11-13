@@ -1,7 +1,7 @@
 import { PROP_KINDS, type PropKind, type PropSnapshot } from '@lodgy/shared';
 import * as THREE from 'three';
 
-const COLOURS: Record<PropKind, number> = { crate: 0xb5833f, barrier: 0xc0392b };
+const COLOURS: Record<PropKind, number> = { crate: 0xb5833f, barrier: 0xc0392b, cart: 0x8b5a2b, scooter: 0x8e1b1b };
 const UNKNOWN_HALF = 0.25;
 
 const material = (color: number) => new THREE.MeshLambertMaterial({ color, flatShading: true });

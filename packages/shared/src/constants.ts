@@ -128,6 +128,8 @@ export interface PropKindConfig {
 export const PROP_KINDS = deepFreeze({
   crate: { class: 'light', halfExtents: vec3(0.3, 0.3, 0.3), mass: 15, friction: 0.6, anchor: null },
   barrier: { class: 'heavy', halfExtents: vec3(1.0, 0.5, 0.4), mass: 150, friction: 0.5, anchor: vec3(0, 0.5, 0) },
+  cart: { class: 'light', halfExtents: vec3(0.5, 0.4, 0.8), mass: 40, friction: 0.6, anchor: null },
+  scooter: { class: 'light', halfExtents: vec3(0.3, 0.45, 0.6), mass: 30, friction: 0.6, anchor: null },
 } satisfies Record<string, PropKindConfig>);
 export type PropKind = keyof typeof PROP_KINDS;
 

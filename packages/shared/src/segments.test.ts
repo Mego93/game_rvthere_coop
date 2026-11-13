@@ -1,7 +1,33 @@
 import { describe, expect, test } from 'vitest';
-import { COIN_HEIGHT, ROAD_JOINT_OVERLAP, ROAD_WIDTH, SEGMENT_MIN_LENGTH, STOP_PAD, STOP_ZONE } from './constants';
+import {
+  ALLEY_CLUTTER_SPACING,
+  ALLEY_WALL_HEIGHT,
+  ALLEY_WIDTH,
+  BANK_APPROACH,
+  BANK_TOP,
+  COIN_HEIGHT,
+  FENCE_HEIGHT,
+  FORD_ROCK,
+  PLAYER_HEIGHT,
+  PLAYER_OVERLAP_LIFT,
+  PLAYER_RADIUS,
+  PROP_KINDS,
+  ROADWORKS_ROW_SPACING,
+  ROAD_JOINT_OVERLAP,
+  ROAD_PIECE_LENGTH,
+  ROAD_WIDTH,
+  SAND_APRON,
+  SEGMENT_MIN_LENGTH,
+  STOP_PAD,
+  STOP_ZONE,
+  WALL_THICKNESS,
+} from './constants';
+import { buildCourse } from './courses/build';
+import type { BuiltCourse, GroundBox } from './course';
+import { distanceToBox } from './seats';
+import { VEHICLES } from './vehicles';
 import { groundHeightAt } from './groundProbe';
-import { degToRad, vec3 } from './math';
+import { add, degToRad, rotate, vec3, type Vec3 } from './math';
 import { buildSegment, offsetFrom, type LocalSegment, type SegmentDef } from './segments';
 
 const LATERALS = [-1, -0.5, 0, 0.5, 1].map((f) => f * (ROAD_WIDTH / 2 - 0.5));
@@ -117,7 +143,7 @@ describe('B2 and B3 within a road', () => {
     for (const box of seg.ground) {
       expect(box.surface).toBe('road');
       expect(box.halfExtents.x).toBe(ROAD_WIDTH / 2);
-      expect(box.halfExtents.z * 2).toBeLessThanOrEqual(10 + 2 * ROAD_JOINT_OVERLAP + 1e-9);
+      expect(box.halfExtents.z * 2).toBeLessThanOrEqual(ROAD_PIECE_LENGTH + 2 * ROAD_JOINT_OVERLAP + 1e-9);
     }
   });
 });
@@ -217,6 +243,12 @@ describe('extras', () => {
     expect(stop.operatePoint.x).toBeLessThan(0);
   });
 
+  test('a stop whose pad would leave the segment throws', () => {
+    expect(() => buildSegment(road(40, { stop: { kind: 'fuel', side: 1, along: STOP_PAD.z - 0.1 } }))).toThrow(/pad/);
+    expect(() => buildSegment(road(40, { stop: { kind: 'fuel', side: 1, along: 40 - STOP_PAD.z + 0.1 } }))).toThrow(/pad/);
+    expect(() => buildSegment(road(40, { stop: { kind: 'fuel', side: 1, along: STOP_PAD.z } }))).not.toThrow();
+  });
+
   test('a stop on a curved or sloped road throws', () => {
     const stop = { kind: 'fuel', side: 1, along: 20 } as const;
     expect(() => buildSegment(road(90, { curve: Math.PI / 4, stop }))).toThrow(/flat/);
@@ -238,8 +270,382 @@ describe('validation', () => {
   test('a non-positive length throws', () => {
     expect(() => buildSegment(road(0))).toThrow();
   });
+});
 
-  test('segment types that Task 2 adds are not built yet', () => {
-    expect(() => buildSegment({ type: 'alley', length: 30, clutter: 0.5 })).toThrow(/not built yet/);
+const alley = (length: number, clutter: number): SegmentDef => ({ type: 'alley', length, clutter });
+const sand = (length: number, palms: number): SegmentDef => ({ type: 'sand', length, palms });
+const ford = (width: number, rocks: number): SegmentDef => ({ type: 'ford', width, rocks });
+const bank = (height: number, gradient: number, anchors: number): SegmentDef => ({ type: 'bank', height, gradient, anchors });
+const roadworks = (length: number, obstacles: number): SegmentDef => ({ type: 'roadworks', length, obstacles });
+
+const NEW_CASES: [string, SegmentDef][] = [
+  ['alley, typical', alley(50, 0.6)],
+  ['alley, no clutter', alley(30, 0)],
+  ['alley, full clutter', alley(60, 1)],
+  ['sand, typical', sand(30, 4)],
+  ['sand, no palms', sand(20, 0)],
+  ['ford, typical', ford(20, 6)],
+  ['ford, no rocks', ford(15, 0)],
+  ['bank, typical', bank(3, 15, 2)],
+  ['bank, 25 degrees', bank(3, 25, 0)],
+  ['bank, tall and gentle', bank(6, 10, 3)],
+  ['roadworks, one full row', roadworks(24, 3)],
+  ['roadworks, partial row', roadworks(40, 4)],
+  ['roadworks, two full rows', roadworks(40, 6)],
+  ['roadworks, empty', roadworks(30, 0)],
+];
+
+// Where the surface is expected to be for the segment: the route's centre line and its height.
+function ceilingOf(def: SegmentDef): number {
+  return def.type === 'bank' ? def.height : 0;
+}
+
+describe('B1 exit pose of the other types', () => {
+  test.each([
+    ['alley', alley(50, 0.6), 50, 0],
+    ['sand', sand(30, 4), SAND_APRON + 30, 0],
+    ['ford', ford(20, 6), 20, 0],
+    ['roadworks', roadworks(40, 5), 40, 0],
+  ] as const)('%s exits straight ahead at yaw 0', (_name, def, z, y) => {
+    const seg = buildSegment(def);
+    expect(seg.exit.pos.x).toBeCloseTo(0, 9);
+    expect(seg.exit.pos.y).toBeCloseTo(y, 9);
+    expect(seg.exit.pos.z).toBeCloseTo(-z, 9);
+    expect(seg.exit.yaw).toBe(0);
+  });
+
+  test.each([
+    [3, 15],
+    [3, 25],
+    [6, 10],
+  ])('a bank of %d m at %d degrees exits at its height after approach, ramp and top', (height, gradient) => {
+    const seg = buildSegment(bank(height, gradient, 0));
+    expect(seg.exit.pos.y).toBeCloseTo(height, 9);
+    expect(seg.exit.pos.z).toBeCloseTo(-(BANK_APPROACH + height / Math.tan(degToRad(gradient)) + BANK_TOP), 9);
+    expect(seg.exit.yaw).toBe(0);
+  });
+
+  test('alley and sand report their widths for the checkpoint', () => {
+    expect(buildSegment(alley(30, 0)).width).toBe(ALLEY_WIDTH);
+    expect(buildSegment(sand(30, 0)).width).toBe(ROAD_WIDTH);
+  });
+});
+
+describe('B2 and B3 within the other types', () => {
+  test.each(NEW_CASES)('%s: ground under the whole route, no steps', (_name, def) => {
+    const seg = buildSegment(def);
+    const total = routeLength(seg);
+    const half = (seg.width / 2 - 0.5);
+    const maxPitch = def.type === 'bank' ? degToRad(def.gradient) : 0;
+    const tolerance = ROAD_JOINT_OVERLAP * Math.sin(maxPitch) + 0.02;
+    for (let along = 0; along <= total + 1e-9; along += 1) {
+      const s = seg.surfaceAt(Math.min(along, total));
+      for (const f of [-1, -0.5, 0, 0.5, 1]) {
+        const p = offsetFrom(s, f * half);
+        const h = groundHeightAt(seg.ground, p.x, p.z);
+        expect(h, `no ground at along ${along}`).not.toBeNull();
+        expect(Math.abs(h! - s.pos.y)).toBeLessThanOrEqual(tolerance);
+      }
+    }
+    const limit = 0.02 + 0.05 * Math.tan(maxPitch);
+    for (const lateral of [-half, 0, half]) {
+      let previous: number | null = null;
+      for (let along = 0; along <= total + 1e-9; along += 0.05) {
+        const p = offsetFrom(seg.surfaceAt(Math.min(along, total)), lateral);
+        const h = groundHeightAt(seg.ground, p.x, p.z);
+        expect(h, `no ground at along ${along}`).not.toBeNull();
+        if (previous !== null) expect(Math.abs(h! - previous)).toBeLessThanOrEqual(limit);
+        previous = h;
+      }
+    }
+  });
+
+  test.each(NEW_CASES)('%s: the exit rests on the last piece of ground', (_name, def) => {
+    const seg = buildSegment(def);
+    expect(seg.exit.pos.y).toBeCloseTo(ceilingOf(def), 9);
+    const h = groundHeightAt(seg.ground, seg.exit.pos.x, seg.exit.pos.z + 0.01);
+    expect(h).not.toBeNull();
+    expect(Math.abs(h! - seg.exit.pos.y)).toBeLessThanOrEqual(0.02);
+  });
+
+  test('no ground piece is longer than the limit, apart from one sand box and one riverbed', () => {
+    for (const def of [alley(50, 0.5), bank(3, 15, 0), roadworks(40, 4)]) {
+      for (const box of buildSegment(def).ground) expect(box.halfExtents.z * 2).toBeLessThanOrEqual(ROAD_PIECE_LENGTH + 1e-9);
+    }
+    const s = buildSegment(sand(30, 0));
+    expect(s.ground.filter((b) => b.surface === 'sand')).toHaveLength(1);
+    expect(buildSegment(ford(20, 0)).ground).toHaveLength(1);
+  });
+});
+
+// The surface of the ground box that is highest at a point.
+function surfaceNameAt(ground: readonly GroundBox[], x: number, z: number): string | null {
+  let best: { h: number; surface: string } | null = null;
+  for (const box of ground) {
+    const h = groundHeightAt([box], x, z);
+    if (h !== null && (best === null || h > best.h + 1e-9)) best = { h, surface: box.surface };
+  }
+  return best?.surface ?? null;
+}
+
+describe('surfaces', () => {
+  test('sand lies only on the sand part, after the apron', () => {
+    const seg = buildSegment(sand(30, 0));
+    for (let along = 0.7; along < SAND_APRON + 30; along += 0.5) {
+      const p = seg.surfaceAt(Math.min(along, SAND_APRON + 30)).pos;
+      if (Math.abs(along - SAND_APRON) < ROAD_JOINT_OVERLAP) continue;
+      expect(surfaceNameAt(seg.ground, p.x + 3, p.z), `along ${along}`).toBe(along < SAND_APRON ? 'road' : 'sand');
+    }
+  });
+
+  test('the spawn of a sand segment is on road (S6)', () => {
+    const seg = buildSegment(sand(30, 0));
+    const spawn = seg.surfaceAt(8).pos;
+    expect(SAND_APRON).toBeGreaterThan(8);
+    expect(surfaceNameAt(seg.ground, spawn.x, spawn.z)).toBe('road');
+  });
+
+  test('the ford is all riverbed', () => {
+    const seg = buildSegment(ford(20, 0));
+    for (let along = 0.5; along < 20; along += 1) expect(surfaceNameAt(seg.ground, 0, -along)).toBe('riverbed');
+  });
+
+  test('the bank has road, then gravel on the ramp only, then road', () => {
+    const seg = buildSegment(bank(3, 15, 0));
+    const rampEnd = BANK_APPROACH + 3 / Math.tan(degToRad(15));
+    for (let along = 0.5; along < rampEnd + BANK_TOP; along += 0.5) {
+      // Exactly at a join two boxes tie.
+      if (Math.abs(along - BANK_APPROACH) < 0.05 || Math.abs(along - rampEnd) < 0.05) continue;
+      const p = seg.surfaceAt(along).pos;
+      const want = along < BANK_APPROACH ? 'road' : along < rampEnd ? 'gravel' : 'road';
+      expect(surfaceNameAt(seg.ground, p.x, p.z), `along ${along}`).toBe(want);
+    }
+  });
+});
+
+describe('alley', () => {
+  test('walls stand on both sides with inner faces at half the alley width', () => {
+    const seg = buildSegment(alley(50, 0));
+    expect(seg.walls).toHaveLength(2);
+    const xs = seg.walls.map((w) => w.center.x).sort((a, b) => a - b);
+    expect(xs[0]).toBeCloseTo(-(ALLEY_WIDTH / 2 + WALL_THICKNESS / 2), 9);
+    expect(xs[1]).toBeCloseTo(ALLEY_WIDTH / 2 + WALL_THICKNESS / 2, 9);
+    for (const w of seg.walls) {
+      expect(w.center.y + w.halfExtents.y).toBeCloseTo(ALLEY_WALL_HEIGHT, 9);
+      expect(w.center.y - w.halfExtents.y).toBeCloseTo(0, 9);
+      expect(w.halfExtents.z * 2).toBeCloseTo(50, 9);
+    }
+  });
+
+  test('clutter count is floor(clutter * length / spacing)', () => {
+    expect(buildSegment(alley(50, 0)).props).toHaveLength(0);
+    expect(buildSegment(alley(60, 1)).props).toHaveLength(60 / ALLEY_CLUTTER_SPACING);
+    expect(buildSegment(alley(50, 0.6)).props).toHaveLength(Math.floor((0.6 * 50) / ALLEY_CLUTTER_SPACING));
+  });
+
+  test('clutter cycles crate, cart, scooter, alternates sides and rests against the wall', () => {
+    const seg = buildSegment(alley(60, 1));
+    expect(seg.props.map((p) => p.kind).slice(0, 4)).toEqual(['crate', 'cart', 'scooter', 'crate']);
+    expect(seg.props.map((p) => p.id).slice(0, 4)).toEqual(['crate-1', 'cart-1', 'scooter-1', 'crate-2']);
+    const alongs = new Set<number>();
+    seg.props.forEach((p, i) => {
+      const half = PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents;
+      const side = i % 2 === 0 ? -1 : 1;
+      expect(p.pose.pos.x).toBeCloseTo(side * (ALLEY_WIDTH / 2 - half.x - 0.1), 9);
+      expect(p.pose.pos.z).toBeCloseTo(-((i + 0.5) / seg.props.length) * 60, 9);
+      expect(p.pose.pos.y).toBe(0);
+      alongs.add(p.pose.pos.z);
+    });
+    expect(alongs.size).toBe(seg.props.length);
+  });
+
+  test('a clutter density outside 0..1 throws', () => {
+    expect(() => buildSegment(alley(30, 1.5))).toThrow();
+    expect(() => buildSegment(alley(30, -0.1))).toThrow();
+  });
+});
+
+describe('sand', () => {
+  test('palms are anchors outside the road edge, alternating, with no collision', () => {
+    const seg = buildSegment(sand(30, 4));
+    expect(seg.anchors.map((a) => a.id)).toEqual(['palm-1', 'palm-2', 'palm-3', 'palm-4']);
+    expect(seg.anchors.every((a) => a.kind === 'palm')).toBe(true);
+    seg.anchors.forEach((a, i) => {
+      expect(Math.abs(a.pose.pos.x)).toBeCloseTo(ROAD_WIDTH / 2 + 0.5, 9);
+      expect(Math.sign(a.pose.pos.x)).toBe(i % 2 === 0 ? -1 : 1);
+      expect(a.pose.pos.z).toBeCloseTo(-((i + 0.5) / 4) * (SAND_APRON + 30), 9);
+    });
+    expect(seg.walls).toHaveLength(0);
+  });
+
+  test('no palms and no props at palms 0', () => {
+    const seg = buildSegment(sand(20, 0));
+    expect(seg.anchors).toHaveLength(0);
+    expect(seg.props).toHaveLength(0);
+  });
+});
+
+describe('ford', () => {
+  test('the water decor covers the riverbed at its surface', () => {
+    const seg = buildSegment(ford(20, 0));
+    expect(seg.decor).toHaveLength(1);
+    expect(seg.decor[0]).toMatchObject({ id: 'water-1', kind: 'water' });
+    expect(seg.decor[0]!.pose.pos).toEqual(vec3(0, 0, -10));
+    expect(seg.decor[0]!.size).toEqual(vec3(ROAD_WIDTH / 2, 0.05, 10));
+  });
+
+  test('rocks are walls in the wheel tracks, alternating, resting on the riverbed', () => {
+    const seg = buildSegment(ford(20, 6));
+    expect(seg.walls).toHaveLength(6);
+    seg.walls.forEach((w, i) => {
+      expect(w.halfExtents).toEqual(FORD_ROCK);
+      expect(w.center.x).toBeCloseTo(i % 2 === 0 ? -1 : 1, 9);
+      expect(w.center.y - w.halfExtents.y).toBeCloseTo(0, 9);
+      expect(w.center.z).toBeCloseTo(-((i + 0.5) / 6) * 20, 9);
+    });
+    expect(seg.props).toHaveLength(0);
+  });
+
+  test('a ford shorter than the minimum route throws', () => {
+    expect(() => buildSegment(ford(SEGMENT_MIN_LENGTH - 1, 0))).toThrow(/at least/);
+  });
+});
+
+describe('bank', () => {
+  test('the ramp rises height at the gradient and its surface is as long as height / sin(gradient)', () => {
+    const seg = buildSegment(bank(3, 15, 0));
+    const ramp = seg.ground.filter((b) => b.surface === 'gravel');
+    const total = ramp.reduce((sum, b) => sum + b.halfExtents.z * 2, 0);
+    expect(total).toBeCloseTo(3 / Math.sin(degToRad(15)), 9);
+    const top = seg.surfaceAt(BANK_APPROACH + 3 / Math.tan(degToRad(15)) + 1);
+    expect(top.pos.y).toBeCloseTo(3, 9);
+    expect(top.pitch).toBe(0);
+    expect(seg.surfaceAt(BANK_APPROACH + 1).pos.y).toBeGreaterThan(0);
+    expect(seg.surfaceAt(BANK_APPROACH + 1).pitch).toBeCloseTo(degToRad(15), 12);
+  });
+
+  test('boulders alternate sides near the road edge, 3 m into the top, at the top height', () => {
+    const seg = buildSegment(bank(3, 15, 2));
+    const topStart = BANK_APPROACH + 3 / Math.tan(degToRad(15));
+    expect(seg.anchors.map((a) => [a.id, a.kind])).toEqual([['boulder-1', 'boulder'], ['boulder-2', 'boulder']]);
+    expect(seg.anchors[0]!.pose.pos.x).toBeCloseTo(-(ROAD_WIDTH / 2 - 1), 9);
+    expect(seg.anchors[1]!.pose.pos.x).toBeCloseTo(ROAD_WIDTH / 2 - 1, 9);
+    for (const a of seg.anchors) {
+      expect(a.pose.pos.z).toBeCloseTo(-(topStart + 3), 9);
+      expect(a.pose.pos.y).toBeCloseTo(3, 9);
+    }
+  });
+
+  test('more boulders than fit the top throw', () => {
+    expect(() => buildSegment(bank(3, 15, 20))).toThrow(/boulders/);
+  });
+
+  test('a bad height or gradient throws', () => {
+    expect(() => buildSegment(bank(0, 15, 0))).toThrow();
+    expect(() => buildSegment(bank(3, 0, 0))).toThrow();
+    expect(() => buildSegment(bank(3, 90, 0))).toThrow();
+  });
+});
+
+describe('roadworks', () => {
+  test('fences stand on both road edges', () => {
+    const seg = buildSegment(roadworks(40, 3));
+    expect(seg.walls).toHaveLength(2);
+    const xs = seg.walls.map((w) => w.center.x).sort((a, b) => a - b);
+    expect(xs[0]).toBeCloseTo(-(ROAD_WIDTH / 2 + WALL_THICKNESS / 2), 9);
+    expect(xs[1]).toBeCloseTo(ROAD_WIDTH / 2 + WALL_THICKNESS / 2, 9);
+    for (const w of seg.walls) expect(w.center.y + w.halfExtents.y).toBeCloseTo(FENCE_HEIGHT, 9);
+  });
+
+  test('barriers carry the barrier kind and sit on the road in rows at -3, 0, 3 from 16 m on', () => {
+    const seg = buildSegment(roadworks(40, 6));
+    expect(seg.props.map((p) => p.kind)).toEqual(Array(6).fill('barrier'));
+    expect(seg.props.map((p) => p.id)).toEqual(['barrier-1', 'barrier-2', 'barrier-3', 'barrier-4', 'barrier-5', 'barrier-6']);
+    expect(seg.props.map((p) => p.pose.pos.x)).toEqual([-3, 0, 3, -3, 0, 3]);
+    expect(seg.props.map((p) => p.pose.pos.z)).toEqual([-16, -16, -16, -16 - ROADWORKS_ROW_SPACING, -16 - ROADWORKS_ROW_SPACING, -16 - ROADWORKS_ROW_SPACING]);
+    for (const p of seg.props) {
+      expect(p.pose.pos.y).toBe(0);
+      expect(groundHeightAt(seg.ground, p.pose.pos.x, p.pose.pos.z)).toBeCloseTo(0, 9);
+    }
+  });
+
+  test('a partial row fills from the left', () => {
+    const seg = buildSegment(roadworks(40, 4));
+    expect(seg.props.map((p) => p.pose.pos.x)).toEqual([-3, 0, 3, -3]);
+  });
+
+  test('exactly one full row fits at 16 + 8 m; a shorter road throws', () => {
+    expect(() => buildSegment(roadworks(24, 3))).not.toThrow();
+    expect(() => buildSegment(roadworks(23.9, 3))).toThrow(/fit/);
+    expect(() => buildSegment(roadworks(35.9, 4))).toThrow(/fit/);
+    expect(() => buildSegment(roadworks(36, 4))).not.toThrow();
+  });
+});
+
+describe('B4 the lane stays clear', () => {
+  const LANE_HALF = 1.15 + 0.5;
+  const cases = NEW_CASES.filter(([, def]) => def.type !== 'roadworks' && def.type !== 'ford');
+
+  test.each(cases)('%s: no wall or prop inside the lane around the centre line', (_name, def) => {
+    const seg = buildSegment(def);
+    const edges = [
+      ...seg.walls.map((w) => w.center.x - w.halfExtents.x),
+      ...seg.walls.map((w) => w.center.x + w.halfExtents.x),
+    ];
+    for (const w of seg.walls) {
+      const near = Math.min(Math.abs(w.center.x - w.halfExtents.x), Math.abs(w.center.x + w.halfExtents.x));
+      expect(near).toBeGreaterThan(LANE_HALF);
+    }
+    expect(edges.length).toBe(seg.walls.length * 2);
+    for (const p of seg.props) {
+      const half = PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents;
+      expect(Math.abs(p.pose.pos.x) - half.x).toBeGreaterThan(LANE_HALF);
+    }
+  });
+
+  test('roadworks fences stay outside the lane; the barriers are meant to block', () => {
+    for (const w of buildSegment(roadworks(40, 6)).walls) expect(Math.abs(w.center.x) - w.halfExtents.x).toBeGreaterThan(LANE_HALF);
+  });
+});
+
+// B5, with a pure box test for walls (T8).
+function spotBlocked(course: BuiltCourse, feet: Vec3): boolean {
+  const lo = feet.y + PLAYER_RADIUS + PLAYER_OVERLAP_LIFT;
+  const hi = feet.y + PLAYER_HEIGHT - PLAYER_RADIUS;
+  for (let y = lo; y <= hi + 1e-9; y += (hi - lo) / 10) {
+    for (const w of course.walls) {
+      if (distanceToBox(vec3(feet.x, y, feet.z), w.halfExtents, w.center, w.rot) < PLAYER_RADIUS) return true;
+    }
+  }
+  return false;
+}
+
+describe('B5 checkpoint spawns', () => {
+  const stopRoad: SegmentDef = road(40, { stop: { kind: 'fuel', side: 1, along: 20 } });
+  const all: [string, SegmentDef][] = [...CASES, ...NEW_CASES, ['road with stop', stopRoad]];
+
+  test.each(all)('%s: wheels and spawn slots of both vehicles stand on ground clear of walls', (_name, def) => {
+    const course = buildCourse({ id: 'one', segments: [def], targetTime: 100 });
+    for (const cp of course.checkpoints) {
+      for (const config of Object.values(VEHICLES)) {
+        for (const sx of [-1, 1]) {
+          for (const sz of [-1, 1]) {
+            const p = add(cp.spawn.pos, rotate(cp.spawn.rot, vec3(sx * config.wheelX, 0, sz * config.wheelZ)));
+            const h = groundHeightAt(course.ground, p.x, p.z);
+            expect(h, `${config.id} wheel ${sx},${sz}: no ground`).not.toBeNull();
+            expect(Math.abs(h! - p.y), `${config.id} wheel ${sx},${sz}`).toBeLessThanOrEqual(0.1);
+          }
+        }
+        const yaw = rotate(cp.spawn.rot, vec3(0, 0, -1));
+        const heading = Math.atan2(-yaw.x, -yaw.z);
+        const turn = { x: 0, y: Math.sin(heading / 2), z: 0, w: Math.cos(heading / 2) };
+        for (const [i, slot] of config.spawnSlots.entries()) {
+          const at = add(cp.spawn.pos, rotate(turn, vec3(slot.x, 0, slot.z)));
+          const h = groundHeightAt(course.ground, at.x, at.z);
+          expect(h, `${config.id} slot ${i}: no ground`).not.toBeNull();
+          expect(spotBlocked(course, vec3(at.x, h!, at.z)), `${config.id} slot ${i}: wall in the way`).toBe(false);
+        }
+      }
+    }
   });
 });
