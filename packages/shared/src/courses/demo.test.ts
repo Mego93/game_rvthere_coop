@@ -17,13 +17,17 @@ import { VEHICLES } from '../vehicles';
 import { createWorld } from '../world';
 import { buildCourse } from './build';
 import { segmentDemo } from './demo';
-import { getCourse } from './index';
+import { courseIds, getCourse } from './index';
 
 beforeAll(async () => {
   await RAPIER.init();
 });
 
 const course = getCourse('segment-demo');
+
+test('courseIds lists every registered course', () => {
+  expect(courseIds().sort()).toEqual(['segment-demo', 'test']);
+});
 const VEHICLE_CONFIGS = Object.values(VEHICLES);
 
 describe('the registry', () => {

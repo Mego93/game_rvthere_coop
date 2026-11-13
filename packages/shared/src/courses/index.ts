@@ -8,6 +8,10 @@ const COURSES: Record<string, BuiltCourse> = {
   [segmentDemo.id]: buildCourse(segmentDemo),
 };
 
+export function courseIds(): string[] {
+  return Object.keys(COURSES);
+}
+
 export function getCourse(courseId: string): BuiltCourse {
   const course = Object.hasOwn(COURSES, courseId) ? COURSES[courseId] : undefined;
   if (!course) throw new Error(`Unknown course: ${courseId}`);

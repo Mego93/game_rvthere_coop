@@ -1,6 +1,6 @@
 import { networkInterfaces } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { getCourse } from '@lodgy/shared';
+import { courseIds, getCourse } from '@lodgy/shared';
 import { startServer } from './listen';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -13,8 +13,10 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 const courseId = process.env.COURSE;
 try {
   if (courseId !== undefined) getCourse(courseId);
-} catch {
-  console.error(`COURSE "${courseId}" is not a course. Use "test" or "segment-demo", or leave it unset.`);
+} catch (error) {
+  if (!(error instanceof Error) || !error.message.startsWith('Unknown course:')) throw error;
+  const valid = courseIds().map((id) => `"${id}"`).join(' or ');
+  console.error(`COURSE "${courseId}" is not a course. Use ${valid}, or leave it unset.`);
   process.exit(1);
 }
 
