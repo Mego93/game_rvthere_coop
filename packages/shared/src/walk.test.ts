@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { beforeAll, describe, expect, test } from 'vitest';
+import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 import {
   GRAVITY,
   PLAYER_AIR_ACCEL,
@@ -22,6 +22,11 @@ import { createWalkController, stepWalk, type WalkState } from './walk';
 
 beforeAll(async () => {
   await RAPIER.init();
+});
+
+const disposers: (() => void)[] = [];
+afterEach(() => {
+  for (const dispose of disposers.splice(0)) dispose();
 });
 
 function walker(course: BuiltCourse, feet: Vec3) {
@@ -48,7 +53,9 @@ function walker(course: BuiltCourse, feet: Vec3) {
   const run = (ticks: number, fields: Partial<InputFields> = {}) => {
     for (let i = 0; i < ticks; i++) tick(fields);
   };
-  return { state, tick, run, collider };
+  const dispose = () => physics.free();
+  disposers.push(dispose);
+  return { state, tick, run, collider, dispose };
 }
 
 const START = vec3(0, PLAYER_CONTROLLER_OFFSET, 0);

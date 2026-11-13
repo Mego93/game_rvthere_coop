@@ -146,7 +146,9 @@ describe('createPredictor', () => {
 
     test('the stand-in does not move across repeated steps and zero steps', () => {
       const predictor = createPredictor(RAPIER, testGround, lodgy);
+      // Sunk 0.02 m into the ground, so the box starts penetrating it.
       const turned = pose(FAR.z - 4, quatFromAxisAngle(AXIS_Y, 0.4));
+      turned.pos.y = lodgy.halfExtents.y - 0.02;
       predictor.setVehicle(turned.pos, turned.rot);
       predictor.setVehicle(turned.pos, turned.rot);
       const me = driver(predictor, rest(FAR));
