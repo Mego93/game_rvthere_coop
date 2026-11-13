@@ -8,7 +8,7 @@ async function overlayNumber(page: Page, pattern: RegExp): Promise<number> {
 }
 const tick = (page: Page) => overlayNumber(page, /tick\s+(\d+)/);
 const vehicleZ = (page: Page) => overlayNumber(page, /pos\s+\S+\s+\S+\s+(\S+)/);
-// The throttle the server applied to the vehicle, from 0 to 1. It shows whose keys the server obeys without depending on speed.
+// The throttle the server applied to the vehicle, from -1 to 1. It shows whose keys the server obeys without depending on speed.
 const throttle = (page: Page) => overlayNumber(page, /throttle\s+(\S+)/);
 // The whole list of players as the overlay shows it, for example "Amal (drives), Badr".
 async function players(page: Page): Promise<string> {
@@ -94,8 +94,7 @@ test('two players share a room and see the same vehicle, driven by the first', a
     expect(size[1]).toBeGreaterThan(0);
   }
 
-  // When Amal leaves, Badr drives. This also shows that Badr's keys do reach the server, so the check above meant something.
-  // The vehicle is still rolling, so the throttle is the proof, not the distance.
+  // When Amal leaves, Badr drives. The vehicle is still rolling, so the applied throttle is the proof that Badr's keys reach the server.
   await amal.close();
   await expect.poll(() => players(badr)).toBe('Badr (drives)');
   expect(await throttle(badr)).toBe(0);
@@ -150,7 +149,7 @@ test('the name is remembered, and a reload keeps the player in the room', async 
   await expect(page.locator('#home-name')).toHaveValue('Amal');
   await page.locator('#home-primary').click();
   await expect(page.locator('#home')).toBeHidden();
-  // The same tab took its old place: one player, not two, and no "name taken".
+  // The tab is back in the room as one player, not two, and its old name was not refused.
   await expect.poll(() => players(page)).toBe('Amal (drives)');
 });
 

@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { PLAYER_COLOURS, REFERENCE_SLOPES_DEG, SURFACES } from './constants';
 import { AXIS_X, AXIS_Y, IDENTITY, lerp, nlerp, quatFromAxisAngle, quatMul, rotate, vec3, yawOf } from './math';
 
 test('identity rotation leaves a vector unchanged', () => {
@@ -54,5 +55,17 @@ test('the shared constant vectors cannot be modified', () => {
   }).toThrow(TypeError);
   expect(() => {
     (AXIS_Y as { y: number }).y = 0;
+  }).toThrow(TypeError);
+});
+
+test('the shared constant tables cannot be modified', () => {
+  expect(() => {
+    SURFACES.sand.grip = 1;
+  }).toThrow(TypeError);
+  expect(() => {
+    (PLAYER_COLOURS as unknown as string[])[0] = '#000000';
+  }).toThrow(TypeError);
+  expect(() => {
+    (REFERENCE_SLOPES_DEG as { steep: number }).steep = 0;
   }).toThrow(TypeError);
 });

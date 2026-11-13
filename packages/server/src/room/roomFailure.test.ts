@@ -1,13 +1,15 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { SNAPSHOT_EVERY_TICKS, TICK_RATE } from '@lodgy/shared';
-import { beforeAll, expect, test, vi } from 'vitest';
+import { EMPTY_ROOM_TIMEOUT, SNAPSHOT_EVERY_TICKS, TICK_RATE } from '@lodgy/shared';
+import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { createRoomServer } from './server';
-import { connectFakeClient, createFakeDeps } from './testing';
+import { connectFakeClient, createFakeDeps, type FakeClient } from './testing';
 
-// The nouns of the rooms whose simulation is made to fail.
+// The nouns of the rooms whose simulation, or whose disposal, is made to fail, and the nouns of the rooms disposed so far.
 const failing = vi.hoisted(() => new Set<string>());
+const failingDispose = vi.hoisted(() => new Set<string>());
+const disposed = vi.hoisted((): string[] => []);
 
-// No message a client can send makes a room's update throw, so the failure is injected here.
+// No message a client can send makes a room's update or disposal throw, so the failures are injected here.
 vi.mock('./room', async (importOriginal) => {
   const original = await importOriginal<typeof import('./room')>();
   const createRoom: typeof original.createRoom = (...args) => {
@@ -18,6 +20,11 @@ vi.mock('./room', async (importOriginal) => {
         if (failing.has(room.noun)) throw new Error('simulation failed');
         room.update(now);
       },
+      dispose() {
+        disposed.push(room.noun);
+        room.dispose();
+        if (failingDispose.has(room.noun)) throw new Error('dispose failed');
+      },
     };
   };
   return { ...original, createRoom };
@@ -26,6 +33,32 @@ vi.mock('./room', async (importOriginal) => {
 beforeAll(async () => {
   await RAPIER.init();
 });
+
+beforeEach(() => {
+  failing.clear();
+  failingDispose.clear();
+  disposed.length = 0;
+});
+
+// A server with fake time, the errors it reports, and a way to create a room and get its client and noun.
+function setup() {
+  const fake = createFakeDeps(RAPIER);
+  const errors: unknown[] = [];
+  const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) });
+  const host = (name: string, n: number) => {
+    const client = connectFakeClient(server);
+    client.send({ type: 'create', name, token: `token-${n}-abcdefghij` });
+    return { client, room: client.last('welcome').room };
+  };
+  // Lets time pass a second at a time while the given clients keep answering, so that they are not dropped as silent.
+  const wait = (seconds: number, ...awake: FakeClient[]) => {
+    for (let elapsed = 0; elapsed < seconds; elapsed += 1) {
+      fake.advance(1);
+      for (const client of awake) client.send({ type: 'pong' });
+    }
+  };
+  return { ...fake, server, errors, host, wait };
+}
 
 test('a room whose update throws is closed and reported, and the other rooms carry on', () => {
   const fake = createFakeDeps(RAPIER);
@@ -53,4 +86,49 @@ test('a room whose update throws is closed and reported, and the other rooms car
   const late = connectFakeClient(server);
   late.send({ type: 'join', room: amal.last('welcome').room, name: 'Chadi', token: 'token-3-abcdefghij' });
   expect(late.ofType('error').map((message) => message.reason)).toEqual(['unknown_room']);
+});
+
+test('an empty room is freed exactly once when it times out, and a failed room exactly once', () => {
+  const { server, advance, host, wait } = setup();
+  const amal = host('Amal', 1);
+  const badr = host('Badr', 2);
+  amal.client.close();
+  wait(EMPTY_ROOM_TIMEOUT, badr.client);
+  expect(disposed).toEqual([amal.room]);
+
+  failing.add(badr.room);
+  advance(1);
+  expect(disposed).toEqual([amal.room, badr.room]);
+
+  server.stop();
+  expect(disposed).toEqual([amal.room, badr.room]);
+});
+
+test('a room whose disposal throws is still deleted, and is reported once', () => {
+  const { server, advance, errors, host, wait } = setup();
+  const amal = host('Amal', 1);
+  const badr = host('Badr', 2);
+  failingDispose.add(amal.room);
+  amal.client.close();
+  wait(EMPTY_ROOM_TIMEOUT, badr.client);
+  expect(server.roomCount()).toBe(1);
+  expect(errors).toHaveLength(1);
+
+  // The tick is not stuck on the room that failed: the other room still runs, and nothing more is reported.
+  const before = badr.client.ofType('snapshot').length;
+  advance(1);
+  expect(badr.client.ofType('snapshot').length - before).toBe(TICK_RATE / SNAPSHOT_EVERY_TICKS);
+  expect(errors).toHaveLength(1);
+  expect(disposed).toEqual([amal.room]);
+});
+
+test('stop frees every room even when one disposal throws', () => {
+  const { server, errors, host } = setup();
+  const amal = host('Amal', 1);
+  const badr = host('Badr', 2);
+  failingDispose.add(amal.room);
+  expect(() => server.stop()).not.toThrow();
+  expect(disposed).toEqual([amal.room, badr.room]);
+  expect(errors).toHaveLength(1);
+  expect(server.roomCount()).toBe(0);
 });

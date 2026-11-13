@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import {
+  ERROR_REASONS,
   NEUTRAL_INPUT,
   cleanName,
   cleanRoom,
@@ -175,6 +176,12 @@ test.each([
   ['a snapshot whose throttle is text', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, throttle: 'full' } })],
 ])('parseServerMessage rejects %s', (_label, raw) => {
   expect(parseServerMessage(raw)).toBeNull();
+});
+
+test('parseServerMessage accepts every error reason the server can send', () => {
+  for (const reason of ERROR_REASONS) {
+    expect(parseServerMessage(JSON.stringify({ type: 'error', reason }))).toEqual({ type: 'error', reason });
+  }
 });
 
 test('parseServerMessage shows a reason it does not know as a general refusal', () => {

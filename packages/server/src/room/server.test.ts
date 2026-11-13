@@ -468,6 +468,24 @@ test('a connection whose send throws is reported and dropped, and the others car
   expect(amal.closedByServer).toBe(false);
 });
 
+test('a connection that has failed can no longer create a room', () => {
+  const { server, advance, errors } = setup();
+  const handle = server.connect({
+    send() {
+      throw new Error('socket failed');
+    },
+    close() {},
+  });
+  // The reply to this malformed message cannot be sent, which marks the connection as failed.
+  handle.message('not json');
+  expect(errors).toHaveLength(1);
+  handle.message(JSON.stringify({ type: 'create', name: 'Amal', token: token(1) }));
+  expect(server.roomCount()).toBe(0);
+  advance(0.1);
+  expect(server.roomCount()).toBe(0);
+  expect(errors).toHaveLength(1);
+});
+
 test('a connection whose close throws is still removed from its room', () => {
   const { host, advance, server, errors } = setup();
   const { client: amal, room } = host();

@@ -680,7 +680,7 @@ Each step ends in something runnable. Progress is tracked in `ROADMAP.md`. Each 
 
 Steps 1 to 15 run on a flat test ground with a ramp, reference slopes, a sand patch, an anchor, a heavy obstacle, a few props, a fuel station with a shop, a garage, a few coins, two checkpoints and a finish. Each of these is added to the test ground by the step that first simulates it.
 
-Until the lobby exists (step 11), creating a room starts a run on the test ground at once, with the Lodgy, and anyone opening the link joins it. Starting the server with `VEHICLE=rv` uses the RV instead. Until then the `lobby` message has no `timeOfDay` or `weather`, a disconnected player's slot is freed at once, and a reload joins as a new player.
+Until the lobby exists (step 11), creating a room starts a run on the test ground at once, with the Lodgy, and anyone opening the link joins it. Starting the server with `VEHICLE=rv` uses the RV instead. Until then the `lobby` message has no `timeOfDay` or `weather`, a disconnected player's slot is freed at once, and a reload usually joins as a new player (a join with the token of a slot whose old connection the server has not yet seen close still takes that slot over).
 
 | # | Step | Sign-off |
 |---|---|---|

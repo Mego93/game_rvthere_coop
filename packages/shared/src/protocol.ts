@@ -49,8 +49,9 @@ export type ClientMessage =
 
 export type Phase = 'lobby' | 'playing' | 'results';
 
-export type ErrorReason = 'unknown_room' | 'room_full' | 'name_taken' | 'bad_message' | 'server_full';
-const ERROR_REASONS: readonly string[] = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full'] satisfies ErrorReason[];
+// The type comes from the list, so a reason cannot be added to one and forgotten in the other.
+export const ERROR_REASONS = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full'] as const;
+export type ErrorReason = (typeof ERROR_REASONS)[number];
 
 export interface LobbyPlayer {
   playerId: string;
@@ -213,7 +214,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
     case 'error':
       if (!isText(data.reason)) return null;
       // A reason this version does not know is shown as a general refusal.
-      return ERROR_REASONS.includes(data.reason) ? message : { type: 'error', reason: 'bad_message' };
+      return (ERROR_REASONS as readonly string[]).includes(data.reason) ? message : { type: 'error', reason: 'bad_message' };
     case 'lobby':
       return isText(data.room) &&
         (data.phase === 'lobby' || data.phase === 'playing' || data.phase === 'results') &&

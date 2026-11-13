@@ -5870,3 +5870,16 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
 Do not merge the branch. The main session reviews it and merges.
+
+---
+
+## After the whole-branch review
+
+The whole-branch review (Opus, medium effort) and the review of Task 10 found nothing critical and asked for one wave of small fixes before the merge. They are in the commit `fix(server): free rooms safely and close the gaps found in the final review` and are recorded here, without checkboxes, because they were not planned tasks.
+
+- `packages/server/src/room/server.ts`: a room now leaves the server's list before its world is freed, in the empty-room timeout and in `stop()`, and every free goes through one guarded helper shared with `discard`. Before, a disposal that threw left the room in the list, was tried again on every tick, and stopped every room after it. A connection marked as failed can no longer send anything, so it cannot create a room before the next tick drops it. The comment on the takeover says when it really happens.
+- `packages/shared/src/protocol.ts`: `ERROR_REASONS` is exported and the `ErrorReason` type is derived from it.
+- `packages/shared/src/constants.ts`: `SURFACES`, `PLAYER_COLOURS` and `REFERENCE_SLOPES_DEG` are frozen.
+- Tests: six added (237 in 21 files): the constant tables cannot be modified; every error reason passes `parseServerMessage`; a failed connection cannot create a room; a room is freed exactly once; a disposal that throws is reported once and the room is still deleted; `stop()` frees every room even when one disposal throws.
+- `e2e/smoke.spec.ts`: three comments corrected (the throttle's range, what the hand-over proves, what the reload case proves).
+- `ROADMAP.md` and the spec: a reload usually joins as a new player and only takes its old slot over if the server has not yet seen the old connection close; `npm run dev` expects port 3000; two decisions-log dates and the log's order corrected; two decisions added; the minor findings that the review assigned to later steps added to "Carried into later steps".

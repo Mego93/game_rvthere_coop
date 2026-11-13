@@ -75,7 +75,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
 
     const existing = room.findByToken(message.token);
     if (existing) {
-      // The same browser tab has come back (a reload, a dropped socket): it takes its slot over at once.
+      // The same tab has come back while its old connection still looks alive (a socket that dropped without closing): it takes its slot over at once.
       for (const other of sessions) {
         if (other.player === existing) {
           other.room = null;
@@ -94,7 +94,8 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
   };
 
   const handle = (session: Session, raw: string) => {
-    if (!sessions.has(session)) return;
+    // A connection that failed is as good as gone; it is dropped at the next tick.
+    if (!sessions.has(session) || session.failed) return;
     const now = deps.clock();
     session.lastHeard = now;
     const verdict = session.limiter.hit(now);
@@ -122,6 +123,15 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     }
   };
 
+  // Frees the world of a room that has already left `rooms`. A failure is reported; the room is gone either way.
+  const free = (room: Room) => {
+    try {
+      room.dispose();
+    } catch (error) {
+      deps.onError?.(error);
+    }
+  };
+
   // Closes a failed room: its players are disconnected and its world is freed.
   const discard = (noun: string, room: Room) => {
     rooms.delete(noun);
@@ -130,11 +140,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
       sessions.delete(session);
       session.connection.close();
     }
-    try {
-      room.dispose();
-    } catch (error) {
-      deps.onError?.(error);
-    }
+    free(room);
   };
 
   const tick = () => {
@@ -158,8 +164,8 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
       }
       const emptySince = room.emptySince();
       if (emptySince !== null && now - emptySince >= EMPTY_ROOM_TIMEOUT) {
-        room.dispose();
         rooms.delete(noun);
+        free(room);
       }
     }
   };
@@ -205,9 +211,10 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     roomCount: () => rooms.size,
     stop() {
       stopTimer();
-      for (const room of rooms.values()) room.dispose();
+      const remaining = [...rooms.values()];
       rooms.clear();
       sessions.clear();
+      for (const room of remaining) free(room);
     },
   };
 }
