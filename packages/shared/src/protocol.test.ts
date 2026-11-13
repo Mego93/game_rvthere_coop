@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { PLAYER_COLOURS, PLAYER_COLOUR_PATTERN } from './constants';
 import {
   ERROR_REASONS,
   NEUTRAL_INPUT,
@@ -362,4 +363,8 @@ test('a __proto__ or constructor field does not reach the parsed message or Obje
     expect((message as Record<string, unknown>).polluted).toBeUndefined();
   }
   expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+});
+
+test('every colour the server hands out passes the colour check', () => {
+  expect(PLAYER_COLOURS.every((colour) => PLAYER_COLOUR_PATTERN.test(colour))).toBe(true);
 });
