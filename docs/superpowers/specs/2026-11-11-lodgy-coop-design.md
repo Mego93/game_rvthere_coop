@@ -415,13 +415,13 @@ The `room` layer holds all room, lobby and simulation-loop logic. It talks to an
   - After 30 s the slot is freed and its inventory drops at a spawn slot.
   - A `join` whose token matches a slot that is still connected replaces the old connection at once.
 - **Admin.** The player who creates the room. When the admin's slot is freed, the role passes to the longest-connected player; if nobody is connected, to the next player who joins.
-- **Liveness.** The server sends each connection a `ping` message every 2 s, which the client answers with `pong`, and treats 6 s without any message from a connection as a disconnect.
+- **Liveness.** The server sends each connection a `ping` message every 2 s, which the client answers with `pong`, and treats 6 s without any message from a connection as a disconnect. When the server's own timer finds more than 1 s since its previous run (an event-loop stall), the excess is credited to every connection last heard before that run, so a stall alone drops nobody.
 - **Simulation.** Each room in `playing` owns one world, stepped at a fixed 60 Hz. A snapshot is broadcast at 20 Hz. The loop runs at most 3 catch-up steps per iteration and discards the remaining backlog. A room with nobody connected is paused: its world keeps its state, and no ticks are owed when someone returns.
 - **Inputs.** The server keeps a queue of at most 8 inputs per player, dropping the oldest on overflow. It consumes one per tick, or two when the queue holds more than 3. With an empty queue it repeats the last input, which never counts as a new button press. After 15 ticks with no new input it substitutes a neutral input: axes at 0, buttons released, reel 0, aim unchanged.
-- **Rate limit.** Messages beyond 120 per second from one connection are dropped. A connection that stays over the limit for 3 s is closed.
-- A room is deleted when it has had no connected players for 60 s.
-- **Room limit.** The server holds at most 50 rooms. A `create` beyond that is refused with `server_full`.
-- **Failures.** A connection whose socket throws is dropped. A room whose simulation throws is closed and its players are disconnected. Both are logged, and the other rooms carry on.
+- **Rate limit.** Messages beyond 120 per second from one connection are dropped. A connection that stays over the limit for 3 s is closed, and so is one over the limit in 4 one-second windows within 8 s (a client alternating floods and quiet seconds).
+- A room is deleted when it has had no connected players for 60 s; a room that nobody but its creator ever joined (by token) is deleted after 30 s.
+- **Room limit.** The server holds at most 50 rooms. A `create` beyond that is refused with `server_full`, and so is a sixth successful `create` from one client address within 60 s. The node adapter also caps WebSocket connections at 360 in total and 12 per address (refused with HTTP 503 before the upgrade), drops a socket whose send buffer exceeds 1 MiB, and frees a dropped peer's slot within 1 s. Behind the Cloudflare Tunnel (`TRUST_PROXY=1`), the address is `CF-Connecting-IP` when the socket peer is loopback.
+- **Failures.** A connection whose socket throws is dropped. A room whose simulation throws is closed and its players are disconnected. Both are logged, and the other rooms carry on. Each source of failure reports at most once per 10 s, with the count of reports suppressed since its last one.
 - No database.
 - One process serves the built client and the WebSocket on the same port (default 3000). Any path that is not a static file serves the client, which reads the noun from the URL. The WebSocket endpoint is `/ws`.
 
