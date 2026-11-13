@@ -509,7 +509,7 @@ snapshot {
   props [ { id, kind, pos, rot } ],
   cable { state, holderId, anchorId, hookPos, length, reel },
   coinsLeft [ coinId ], wallet, coinsCollected, coinsTotal,
-  elapsed, checkpoint, checkpointCount, restarts, respawns
+  elapsed, checkpoint, checkpointCount, restarts, respawns, won
 }
 ```
 
@@ -517,6 +517,7 @@ snapshot {
 - `walk`, `carry`, `vy` and `grounded` are the player's walking state, sent for every player so that the snapshot stays identical for every client. The client resets its predicted player to them.
 - `seat` and `ground` are separate: a seated player has a `seat`; a player standing on the vehicle, a prop or an obstacle has a `ground`.
 - `cable.state` is `stowed`, `held`, `ground` or `attached`.
+- `won` is true once the vehicle's centre has entered the finish; it lets the page show the finish before the results message exists (step 8, K7). `checkpoint` is the index of the last recorded checkpoint; the page shows it as index + 1.
 - `props` lists only props that moved since the previous snapshot. A snapshot with `full` set lists every prop; it is sent to a client when it joins and to everyone after any restart or skip.
 
 Binary encoding is deferred until snapshot size is measured as a problem. Snapshot size is measured when course 1 is built.
