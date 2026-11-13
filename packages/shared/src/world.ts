@@ -75,7 +75,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   physics.timestep = TICK_DT;
 
   const props = createProps(rapier, physics, course);
-  const players = createPlayers(rapier, physics, vehicle, course);
+  const players = createPlayers(rapier, physics, vehicle, props, course);
   const previous = new Map<string, InputFields>();
   let tick = 0;
 

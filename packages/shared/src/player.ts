@@ -15,14 +15,16 @@ import { GROUP_GROUND, GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, sub, vec3, yawOf, type Quat, type Vec3 } from './math';
 import { exitPoints } from './seats';
 import { NEUTRAL_INPUT, type InputFields } from './protocol';
-import type { Rapier, RapierWorld } from './rapier';
+import type { Props } from './props';
+import type { Rapier, RapierWorld, RigidBody } from './rapier';
 import type { Vehicle } from './vehicle';
 import { createWalkController, stepWalk } from './walk';
 import type { SeatConfig } from './vehicles';
 
 export interface GroundRef {
-  bodyId: 'vehicle';
-  // The feet, in the vehicle's local frame.
+  // 'vehicle' or a prop id.
+  bodyId: string;
+  // The feet, in that body's local frame.
   localPos: Vec3;
 }
 
@@ -102,7 +104,7 @@ const SPAWN_RAY_LENGTH = 6;
 const MIN_UP_NORMAL = Math.cos(degToRad(PLAYER_MAX_SLOPE_DEG));
 const conjugate = (q: Quat): Quat => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
 
-export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Vehicle, course: BuiltCourse): Players {
+export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Vehicle, props: Props, course: BuiltCourse): Players {
   const worldGroups = groups(GROUP_WORLD, GROUP_WORLD);
   const capsule = new rapier.Capsule(CAPSULE_HALF_SEGMENT, PLAYER_RADIUS);
   const controller = createWalkController(rapier, physics);
@@ -116,27 +118,33 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     entry.collider.setTranslation({ x: pos.x, y: pos.y + PLAYER_HEIGHT / 2, z: pos.z });
   };
 
-  const touching = (feet: Vec3): { vehicle: boolean; statics: boolean } => {
+  // `body` is the first dynamic body the capsule overlaps: the vehicle, else the first unheld prop in course order.
+  const touching = (feet: Vec3): { body: string | null; statics: boolean } => {
     const centre = { x: feet.x, y: feet.y + PLAYER_OVERLAP_LIFT + PLAYER_HEIGHT / 2, z: feet.z };
-    const found = { vehicle: false, statics: false };
+    let hitVehicle = false;
+    let statics = false;
+    const hitProps = new Set<string>();
     physics.intersectionsWithShape(
       centre,
       IDENTITY,
       capsule,
       (collider) => {
-        if (collider.handle === vehicle.chassisHandle) found.vehicle = true;
-        else found.statics = true;
+        const prop = props.byCollider(collider.handle);
+        if (collider.handle === vehicle.chassisHandle) hitVehicle = true;
+        else if (!prop) statics = true;
+        else if (prop.heldBy === null) hitProps.add(prop.id);
         return true;
       },
       undefined,
       worldGroups,
     );
-    return found;
+    const first = hitVehicle ? 'vehicle' : (props.all().find((prop) => hitProps.has(prop.id))?.id ?? null);
+    return { body: first, statics };
   };
 
   const overlapsAnything = (feet: Vec3): boolean => {
     const found = touching(feet);
-    return found.vehicle || found.statics;
+    return found.body !== null || found.statics;
   };
 
   const groundBelow = (x: number, z: number, fromY: number): number | null => {
@@ -191,41 +199,54 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     state.respawnIn = null;
   };
 
-  // Horizontal velocity of the vehicle at a point: linear plus angular, about the body's world centre of mass.
-  const vehicleVelocityAt = (point: Vec3): { x: number; z: number } => {
-    const v = vehicle.body.linvel();
-    const w = vehicle.body.angvel();
-    const r = sub(point, vehicle.body.worldCom());
+  const bodyOf = (id: string): { body: RigidBody; half: Vec3 } => {
+    if (id === 'vehicle') return { body: vehicle.body, half: vehicle.config.halfExtents };
+    const prop = props.get(id)!;
+    return { body: prop.body, half: prop.config.halfExtents };
+  };
+
+  // Horizontal velocity of a body at a point: linear plus angular, about its world centre of mass.
+  const velocityAt = (body: RigidBody, point: Vec3): { x: number; z: number } => {
+    const v = body.linvel();
+    const w = body.angvel();
+    const r = sub(point, body.worldCom());
     return { x: v.x + w.y * r.z - w.z * r.y, z: v.z + w.x * r.y - w.y * r.x };
   };
 
-  const fromVehicleFrame = (local: Vec3): Vec3 =>
-    add(vehicle.body.translation(), rotate(vehicle.body.rotation(), local));
+  const fromBodyFrame = (body: RigidBody, local: Vec3): Vec3 => add(body.translation(), rotate(body.rotation(), local));
 
-  const toVehicleFrame = (world: Vec3): Vec3 =>
-    rotate(conjugate(vehicle.body.rotation()), sub(world, vehicle.body.translation()));
+  const toBodyFrame = (body: RigidBody, world: Vec3): Vec3 =>
+    rotate(conjugate(body.rotation()), sub(world, body.translation()));
 
-  // A player whose feet sank a little into the roof (the chassis rose into them) is lifted onto it, not shoved off it.
-  const liftOntoRoof = (state: PlayerState): boolean => {
-    if (rotate(vehicle.body.rotation(), vec3(0, 1, 0)).y < MIN_UP_NORMAL) return false;
-    const half = vehicle.config.halfExtents;
-    const local = toVehicleFrame(state.pos);
+  // The ground a player was following is gone: its prop is held, or has fallen below the plane and is about to be reset.
+  const groundLost = (ground: GroundRef): boolean => {
+    const prop = props.get(ground.bodyId);
+    return prop !== undefined && (prop.heldBy !== null || prop.body.translation().y < course.killPlaneY);
+  };
+
+  // A player whose feet sank a little into a body's top (it rose into them) is lifted onto it, not shoved off it.
+  const liftOntoTop = (state: PlayerState, id: string): boolean => {
+    const { body, half } = bodyOf(id);
+    if (rotate(body.rotation(), vec3(0, 1, 0)).y < MIN_UP_NORMAL) return false;
+    const local = toBodyFrame(body, state.pos);
     if (Math.abs(local.x) > half.x || Math.abs(local.z) > half.z || local.y < half.y - PLAYER_STEP_HEIGHT) return false;
-    state.ground = { bodyId: 'vehicle', localPos: vec3(local.x, half.y + PLAYER_CONTROLLER_OFFSET, local.z) };
-    state.pos = fromVehicleFrame(state.ground.localPos);
+    state.ground = { bodyId: id, localPos: vec3(local.x, half.y + PLAYER_CONTROLLER_OFFSET, local.z) };
+    state.pos = fromBodyFrame(body, state.ground.localPos);
     state.grounded = true;
     return true;
   };
 
   const shoveOut = (state: PlayerState) => {
-    if (!touching(state.pos).vehicle) return;
-    if (liftOntoRoof(state)) return;
-    const centre = vehicle.body.translation();
+    const overlapped = touching(state.pos).body;
+    if (overlapped === null) return;
+    if (liftOntoTop(state, overlapped)) return;
+    const { body } = bodyOf(overlapped);
+    const centre = body.translation();
     let dx = state.pos.x - centre.x;
     let dz = state.pos.z - centre.z;
     let distance = Math.hypot(dx, dz);
     if (distance < 1e-6) {
-      const yaw = yawOf(vehicle.body.rotation());
+      const yaw = yawOf(body.rotation());
       dx = Math.cos(yaw);
       dz = -Math.sin(yaw);
       distance = 1;
@@ -234,7 +255,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       const candidate = vec3(state.pos.x + (dx / distance) * along, state.pos.y, state.pos.z + (dz / distance) * along);
       const found = touching(candidate);
       if (found.statics) break;
-      if (!found.vehicle) {
+      if (found.body === null) {
         state.pos = candidate;
         return;
       }
@@ -251,7 +272,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
   const placeSeated = (state: PlayerState) => {
     const seat = state.seat === null ? undefined : seatConfig(state.seat);
     if (!seat) return;
-    const at = fromVehicleFrame(seat.pos);
+    const at = fromBodyFrame(vehicle.body, seat.pos);
     state.pos = vec3(at.x, at.y - PLAYER_HEIGHT / 2, at.z);
     state.walk = { x: 0, z: 0 };
     state.carry = { x: 0, z: 0 };
@@ -264,7 +285,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
   const move = (state: PlayerState, step: StepInputs) => {
     const { fields, pressed } = step;
     const wish = wishVelocity(state.yaw, finite(fields.moveX), finite(fields.moveY));
-    const wasOnVehicle = state.ground !== null;
+    const wasOn = state.ground?.bodyId ?? null;
     const entry = entries.get(state.id)!;
     const { collisions } = stepWalk(
       { controller, collider: entry.collider, groups: worldGroups },
@@ -272,13 +293,23 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       pressed.jump,
       wish,
     );
-    const standsOnVehicle = collisions.some(
-      (hit) => hit.handle === vehicle.chassisHandle && hit.normalY >= MIN_UP_NORMAL,
-    );
-    state.ground = state.grounded && standsOnVehicle ? { bodyId: 'vehicle', localPos: toVehicleFrame(state.pos) } : null;
-    if (!state.grounded && wasOnVehicle) {
-      state.carry = vehicleVelocityAt(state.pos);
+    let standingOn: string | null = null;
+    if (state.grounded) {
+      if (collisions.some((hit) => hit.handle === vehicle.chassisHandle && hit.normalY >= MIN_UP_NORMAL)) {
+        standingOn = 'vehicle';
+      } else {
+        for (const hit of collisions) {
+          const prop = props.byCollider(hit.handle);
+          if (prop && prop.heldBy === null && hit.normalY >= MIN_UP_NORMAL) {
+            standingOn = prop.id;
+            break;
+          }
+        }
+      }
     }
+    state.ground = standingOn === null ? null : { bodyId: standingOn, localPos: toBodyFrame(bodyOf(standingOn).body, state.pos) };
+    // Leaving a body takes its velocity, even on a tick the controller still reports grounded (the body's edge, or its snap).
+    if (wasOn !== null && standingOn === null) state.carry = velocityAt(bodyOf(wasOn).body, state.pos);
   };
 
   return {
@@ -324,8 +355,9 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
           placeSeated(state);
           continue;
         }
+        if (state.ground && groundLost(state.ground)) state.ground = null;
         if (state.ground) {
-          state.pos = fromVehicleFrame(state.ground.localPos);
+          state.pos = fromBodyFrame(bodyOf(state.ground.bodyId).body, state.ground.localPos);
           placeCollider(state.id);
         } else {
           shoveOut(state);
