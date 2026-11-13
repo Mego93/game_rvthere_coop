@@ -203,3 +203,27 @@ export const STOP_PAD: Vec3 = deepFreeze(vec3(4, 0.5, 8));
 export const STOP_ZONE: Vec3 = deepFreeze(vec3(2.5, 2, 5));
 // m above the ground.
 export const COIN_HEIGHT = 1;
+// m between the barriers of a row.
+export const ROADWORKS_BARRIER_SPACING = 3;
+// m along the road to the first row of barriers.
+export const ROADWORKS_FIRST_ROW = 16;
+// m of road after the last row of barriers.
+export const ROADWORKS_LAST_ROW_CLEARANCE = 8;
+// m to either side of the centre line, where ford rocks lie (the wheel tracks).
+export const FORD_ROCK_LATERAL = 1.0;
+// m between a clutter item and the alley wall.
+export const ALLEY_WALL_CLEARANCE = 0.1;
+// m into the top of a bank where the first boulders stand.
+export const BOULDER_FIRST_ALONG = 3;
+// m between each further pair of boulders.
+export const BOULDER_PAIR_SPACING = 2;
+// m in from the road edge where boulders stand.
+export const BOULDER_EDGE_INSET = 1;
+// m, half the thickness of the water decor.
+export const WATER_HALF_THICKNESS = 0.05;
+// m of gap between the road edge and a stop's parking zone.
+export const STOP_ZONE_GAP = 0.5;
+// m between the zone's outer side and the operate point.
+export const STOP_OPERATE_GAP = 1;
+// m along the road from the operate point to a fuel stop's shop counter.
+export const STOP_COUNTER_OFFSET = 2;

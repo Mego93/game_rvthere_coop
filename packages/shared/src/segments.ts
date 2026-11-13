@@ -1,18 +1,27 @@
 import {
   ALLEY_CLUTTER_SPACING,
+  ALLEY_WALL_CLEARANCE,
   ALLEY_WALL_HEIGHT,
   ALLEY_WIDTH,
   BANK_APPROACH,
   BANK_TOP,
+  BOULDER_EDGE_INSET,
+  BOULDER_FIRST_ALONG,
+  BOULDER_PAIR_SPACING,
   COIN_HEIGHT,
   FENCE_HEIGHT,
   FORD_ROCK,
+  FORD_ROCK_LATERAL,
   PALM_OFFSET,
   PROP_KINDS,
+  ROADWORKS_BARRIER_SPACING,
+  ROADWORKS_FIRST_ROW,
+  ROADWORKS_LAST_ROW_CLEARANCE,
   ROADWORKS_ROW,
   ROADWORKS_ROW_SPACING,
   SAND_APRON,
   WALL_THICKNESS,
+  WATER_HALF_THICKNESS,
   ROAD_JOINT_OVERLAP,
   ROAD_MAX_PIECE_YAW,
   ROAD_PIECE_LENGTH,
@@ -20,7 +29,10 @@ import {
   ROAD_WIDTH,
   SEGMENT_MIN_LENGTH,
   SEGMENT_SPAWN_INSET,
+  STOP_COUNTER_OFFSET,
+  STOP_OPERATE_GAP,
   STOP_PAD,
+  STOP_ZONE_GAP,
   STOP_ZONE,
   type PropKind,
   type Surface,
@@ -193,16 +205,16 @@ function addExtras(
     const rot = yawQuat(s.yaw);
     const padCenter = offsetFrom(s, side * (ROAD_WIDTH / 2 + STOP_PAD.x), -STOP_PAD.y);
     out.ground.push({ center: padCenter, halfExtents: STOP_PAD, rot, surface: 'road' });
-    const zoneLateral = side * (ROAD_WIDTH / 2 + 0.5 + STOP_ZONE.x);
-    const operateLateral = side * (ROAD_WIDTH / 2 + 0.5 + 2 * STOP_ZONE.x + 1);
+    const zoneLateral = side * (ROAD_WIDTH / 2 + STOP_ZONE_GAP + STOP_ZONE.x);
+    const operateLateral = side * (ROAD_WIDTH / 2 + STOP_ZONE_GAP + 2 * STOP_ZONE.x + STOP_OPERATE_GAP);
     const operatePoint = offsetFrom(s, operateLateral);
     out.stops.push({
       id: id('stop'),
       kind,
       zone: { center: offsetFrom(s, zoneLateral, STOP_ZONE.y), halfExtents: STOP_ZONE, rot },
       operatePoint,
-      // A stop sits on a straight road facing -Z, so 2 m further along is -2 in z.
-      shopCounter: kind === 'fuel' ? vec3(operatePoint.x, operatePoint.y, operatePoint.z - 2) : null,
+      // A stop sits on a straight road facing -Z, so further along is smaller z.
+      shopCounter: kind === 'fuel' ? vec3(operatePoint.x, operatePoint.y, operatePoint.z - STOP_COUNTER_OFFSET) : null,
     });
   }
 }
@@ -212,6 +224,7 @@ function buildRoad(def: Extract<SegmentDef, { type: 'road' }>): LocalSegment {
   const slope = def.slope ?? 0;
   if (!(def.length > 0)) throw new Error('A road needs a positive length');
   if (curve !== 0 && slope !== 0) throw new Error('A road cannot both curve and slope');
+  checkCount(def.debris, 'Debris');
   const pieces = roadPieces(def.length, curve, slope);
   const last = pieces[pieces.length - 1]!;
   const routeLength = last.alongStart + last.horizontal;
@@ -278,6 +291,10 @@ function edgeWall(side: -1 | 1, inner: number, height: number, length: number): 
   };
 }
 
+function checkCount(count: number | undefined, what: string): void {
+  if (count !== undefined && !(Number.isInteger(count) && count >= 0)) throw new Error(`${what} must be a non-negative whole number`);
+}
+
 function checkLength(length: number, what: string): void {
   if (!(length > 0)) throw new Error(`${what} needs a positive length`);
 }
@@ -291,10 +308,12 @@ function buildAlley(def: Extract<SegmentDef, { type: 'alley' }>): LocalSegment {
   const id = idCounter();
   const kinds: PropKind[] = ['crate', 'cart', 'scooter'];
   const count = Math.floor((def.clutter * def.length) / ALLEY_CLUTTER_SPACING + 1e-9);
-  const props = evenSlots(count, routeLength).map((slot, i): Placed => {
+  // Clutter starts past the RV standing on the checkpoint spawn, so none lands on a player slot there.
+  const from = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z + Math.max(...kinds.map((k) => PROP_KINDS[k].halfExtents.z));
+  const props = evenSlots(count, routeLength - from).map((slot, i): Placed => {
     const kind = kinds[i % kinds.length]!;
-    const lateral = slot.side * (ALLEY_WIDTH / 2 - PROP_KINDS[kind].halfExtents.x - 0.1);
-    return { id: id(kind), kind, pose: { pos: offsetFrom(surfaceAt(slot.along), lateral), rot: yawQuat(0) } };
+    const lateral = slot.side * (ALLEY_WIDTH / 2 - PROP_KINDS[kind].halfExtents.x - ALLEY_WALL_CLEARANCE);
+    return { id: id(kind), kind, pose: { pos: offsetFrom(surfaceAt(from + slot.along), lateral), rot: yawQuat(0) } };
   });
   return finish(
     pieces,
@@ -313,6 +332,7 @@ function buildAlley(def: Extract<SegmentDef, { type: 'alley' }>): LocalSegment {
 
 function buildSand(def: Extract<SegmentDef, { type: 'sand' }>): LocalSegment {
   checkLength(def.length, 'A sand segment');
+  checkCount(def.palms, 'Palms');
   const apron = roadPieces(SAND_APRON, 0, 0);
   const last = apron[apron.length - 1]!;
   const start = endOf(last);
@@ -333,6 +353,7 @@ function buildSand(def: Extract<SegmentDef, { type: 'sand' }>): LocalSegment {
 
 function buildFord(def: Extract<SegmentDef, { type: 'ford' }>): LocalSegment {
   checkLength(def.width, 'A ford');
+  checkCount(def.rocks, 'Rocks');
   const bed: Piece = { start: vec3(0, 0, 0), yaw: 0, pitch: 0, length: def.width, alongStart: 0, horizontal: def.width, surface: 'riverbed' };
   const surfaceAt = surfaceOnPieces([bed]);
   const id = idCounter();
@@ -340,7 +361,7 @@ function buildFord(def: Extract<SegmentDef, { type: 'ford' }>): LocalSegment {
   const from = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z + FORD_ROCK.z;
   const walls = evenSlots(def.rocks, def.width - FORD_ROCK.z - from).map(
     (slot): Box => ({
-      center: offsetFrom(surfaceAt(from + slot.along), slot.side * 1.0, FORD_ROCK.y),
+      center: offsetFrom(surfaceAt(from + slot.along), slot.side * FORD_ROCK_LATERAL, FORD_ROCK.y),
       halfExtents: FORD_ROCK,
       rot: yawQuat(0),
     }),
@@ -349,13 +370,14 @@ function buildFord(def: Extract<SegmentDef, { type: 'ford' }>): LocalSegment {
     id: id('water'),
     kind: 'water',
     pose: { pos: surfaceAt(def.width / 2).pos, rot: yawQuat(0) },
-    size: vec3(ROAD_WIDTH / 2, 0.05, def.width / 2),
+    size: vec3(ROAD_WIDTH / 2, WATER_HALF_THICKNESS, def.width / 2),
   };
   return finish([bed], { ground: roadBoxes([bed], false), walls, props: [], anchors: [], decor: [water], width: ROAD_WIDTH }, def, id);
 }
 
 function buildBank(def: Extract<SegmentDef, { type: 'bank' }>): LocalSegment {
   if (!(def.height > 0)) throw new Error('A bank needs a positive height');
+  checkCount(def.anchors, 'Bank anchors');
   if (!(def.gradient > 0 && def.gradient < 90)) throw new Error('A bank needs a gradient between 0 and 90 degrees');
   const approach = roadPieces(BANK_APPROACH, 0, 0);
   const ramp = roadPieces(def.height / Math.sin(degToRad(def.gradient)), 0, def.gradient, 'gravel', approach[approach.length - 1]);
@@ -364,22 +386,20 @@ function buildBank(def: Extract<SegmentDef, { type: 'bank' }>): LocalSegment {
   const surfaceAt = surfaceOnPieces(pieces);
   const topStart = top[0]!.alongStart;
   const id = idCounter();
-  // Boulders alternate sides 3 m into the top; each further pair sits 2 m further on.
+  // Boulders alternate sides; each further pair sits further on.
   const anchors = Array.from({ length: def.anchors }, (_, i): Placed => {
     const side = i % 2 === 0 ? -1 : 1;
-    const along = topStart + 3 + 2 * Math.floor(i / 2);
+    const along = topStart + BOULDER_FIRST_ALONG + BOULDER_PAIR_SPACING * Math.floor(i / 2);
     if (along > topStart + BANK_TOP) throw new Error('Too many boulders for the top of the bank');
-    return { id: id('boulder'), kind: 'boulder', pose: { pos: offsetFrom(surfaceAt(along), side * (ROAD_WIDTH / 2 - 1)), rot: yawQuat(0) } };
+    return { id: id('boulder'), kind: 'boulder', pose: { pos: offsetFrom(surfaceAt(along), side * (ROAD_WIDTH / 2 - BOULDER_EDGE_INSET)), rot: yawQuat(0) } };
   });
   const { anchors: _count, ...extras } = def;
   return finish(pieces, { ground: roadBoxes(pieces, false), walls: [], props: [], anchors, decor: [], width: ROAD_WIDTH }, extras, id);
 }
 
-const ROADWORKS_FIRST_ROW = 16;
-const ROADWORKS_LAST_ROW_CLEARANCE = 8;
-
 function buildRoadworks(def: Extract<SegmentDef, { type: 'roadworks' }>): LocalSegment {
   checkLength(def.length, 'A roadworks segment');
+  checkCount(def.obstacles, 'Obstacles');
   const rows = Math.ceil(def.obstacles / ROADWORKS_ROW);
   if (rows > 0 && def.length < ROADWORKS_FIRST_ROW + (rows - 1) * ROADWORKS_ROW_SPACING + ROADWORKS_LAST_ROW_CLEARANCE) {
     throw new Error(`${def.obstacles} obstacles do not fit in ${def.length} m of roadworks`);
@@ -390,7 +410,7 @@ function buildRoadworks(def: Extract<SegmentDef, { type: 'roadworks' }>): LocalS
   const id = idCounter();
   const props = Array.from({ length: def.obstacles }, (_, i): Placed => {
     const along = ROADWORKS_FIRST_ROW + Math.floor(i / ROADWORKS_ROW) * ROADWORKS_ROW_SPACING;
-    const lateral = ((i % ROADWORKS_ROW) - (ROADWORKS_ROW - 1) / 2) * 3;
+    const lateral = ((i % ROADWORKS_ROW) - (ROADWORKS_ROW - 1) / 2) * ROADWORKS_BARRIER_SPACING;
     return { id: id('barrier'), kind: 'barrier', pose: { pos: offsetFrom(surfaceAt(along), lateral), rot: yawQuat(0) } };
   });
   const walls = [edgeWall(-1, ROAD_WIDTH / 2, FENCE_HEIGHT, routeLength), edgeWall(1, ROAD_WIDTH / 2, FENCE_HEIGHT, routeLength)];

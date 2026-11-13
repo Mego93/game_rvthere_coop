@@ -28,8 +28,8 @@ import type { BuiltCourse, GroundBox } from './course';
 import { distanceToBox } from './seats';
 import { VEHICLES } from './vehicles';
 import { groundHeightAt } from './groundProbe';
-import { add, degToRad, rotate, vec3, type Vec3 } from './math';
-import { buildSegment, offsetFrom, type LocalSegment, type SegmentDef } from './segments';
+import { add, degToRad, rotate, vec3, type Quat, type Vec3 } from './math';
+import { buildSegment, offsetFrom, yawQuat, type LocalSegment, type SegmentDef } from './segments';
 
 const LATERALS = [-1, -0.5, 0, 0.5, 1].map((f) => f * (ROAD_WIDTH / 2 - 0.5));
 
@@ -424,6 +424,9 @@ describe('surfaces', () => {
   });
 });
 
+// Clutter starts past the RV on the checkpoint spawn, with the largest clutter half length.
+const CLUTTER_FROM = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z + 0.8;
+
 describe('alley', () => {
   test('walls stand on both sides with inner faces at half the alley width', () => {
     const seg = buildSegment(alley(50, 0));
@@ -453,11 +456,20 @@ describe('alley', () => {
       const half = PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents;
       const side = i % 2 === 0 ? -1 : 1;
       expect(p.pose.pos.x).toBeCloseTo(side * (ALLEY_WIDTH / 2 - half.x - 0.1), 9);
-      expect(p.pose.pos.z).toBeCloseTo(-((i + 0.5) / seg.props.length) * 60, 9);
+      expect(p.pose.pos.z).toBeCloseTo(-(CLUTTER_FROM + ((i + 0.5) / seg.props.length) * (60 - CLUTTER_FROM)), 9);
       expect(p.pose.pos.y).toBe(0);
       alongs.add(p.pose.pos.z);
     });
     expect(alongs.size).toBe(seg.props.length);
+  });
+
+  test('no clutter stands within the RV and clutter half lengths of the spawn along the route', () => {
+    for (const clutter of [0.3, 0.6, 1]) {
+      for (const p of buildSegment(alley(40, clutter)).props) {
+        const half = PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents.z;
+        expect(-p.pose.pos.z - half).toBeGreaterThanOrEqual(SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z - 1e-9);
+      }
+    }
   });
 
   test('a clutter density outside 0..1 throws', () => {
@@ -600,29 +612,86 @@ describe('roadworks', () => {
   });
 });
 
-describe('B4 the lane stays clear', () => {
-  const LANE_HALF = 1.15 + 0.5;
-  const cases = NEW_CASES.filter(([, def]) => def.type !== 'roadworks' && def.type !== 'ford');
+describe('counts', () => {
+  test.each([
+    ['debris', road(40, { debris: 1.5 })],
+    ['debris', road(40, { debris: -1 })],
+    ['palms', sand(30, 2.5)],
+    ['palms', sand(30, -1)],
+    ['palms', sand(30, Number.NaN)],
+    ['rocks', ford(20, 1.2)],
+    ['rocks', ford(20, -2)],
+    ['obstacles', roadworks(40, 2.5)],
+    ['obstacles', roadworks(40, -3)],
+    ['anchors', bank(3, 15, 1.5)],
+    ['anchors', bank(3, 15, -1)],
+  ])('%s that is not a non-negative whole number throws', (_what, def) => {
+    expect(() => buildSegment(def)).toThrow(/whole number/);
+  });
+});
 
-  test.each(cases)('%s: no wall or prop inside the lane around the centre line', (_name, def) => {
+// Horizontal footprint overlap of two yaw-oriented boxes (SAT); heights are ignored.
+interface Footprint {
+  center: Vec3;
+  half: Vec3;
+  rot: Quat;
+}
+function footprintsOverlap(a: Footprint, b: Footprint): boolean {
+  const corners = (f: Footprint) =>
+    [-1, 1].flatMap((sx) => [-1, 1].flatMap((sz) => [-1, 1].map((sy) => add(f.center, rotate(f.rot, vec3(sx * f.half.x, sy * f.half.y, sz * f.half.z))))));
+  const axes = [a, b].flatMap((f) => {
+    const x = rotate(f.rot, vec3(1, 0, 0));
+    const z = rotate(f.rot, vec3(0, 0, 1));
+    return [
+      [x.x, x.z],
+      [z.x, z.z],
+    ] as const;
+  });
+  const ca = corners(a);
+  const cb = corners(b);
+  for (const [ax, az] of axes) {
+    const len = Math.hypot(ax, az);
+    const project = (pts: Vec3[]) => pts.map((p) => (p.x * ax + p.z * az) / len);
+    const pa = project(ca);
+    const pb = project(cb);
+    if (Math.max(...pa) <= Math.min(...pb) + 1e-9 || Math.max(...pb) <= Math.min(...pa) + 1e-9) return false;
+  }
+  return true;
+}
+
+const asFootprint = (b: { center: Vec3; halfExtents: Vec3; rot: Quat }): Footprint => ({ center: b.center, half: b.halfExtents, rot: b.rot });
+
+// The RV's width plus 0.5 m each side, swept along the route centre line every 0.5 m.
+function laneBlockedBy(seg: LocalSegment, boxes: Footprint[]): boolean {
+  const total = routeLength(seg);
+  const rv = VEHICLES.rv.halfExtents;
+  for (let along = 0; along <= total + 1e-9; along += 0.5) {
+    const s = seg.surfaceAt(Math.min(along, total));
+    const lane: Footprint = { center: s.pos, half: vec3(rv.x + 0.5, 0.5, rv.z), rot: yawQuat(s.yaw) };
+    if (boxes.some((b) => footprintsOverlap(lane, b))) return true;
+  }
+  return false;
+}
+
+describe('B4 the lane stays clear', () => {
+  const propBoxes = (seg: LocalSegment, skip?: string): Footprint[] =>
+    seg.props
+      .filter((p) => p.kind !== skip)
+      .map((p) => ({ center: p.pose.pos, half: PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents, rot: p.pose.rot }));
+
+  test.each(NEW_CASES.map(([name, def]) => [name, def] as const))('%s: the swept lane meets no wall (ford rocks excepted) and no prop (barriers excepted)', (_name, def) => {
     const seg = buildSegment(def);
-    const edges = [
-      ...seg.walls.map((w) => w.center.x - w.halfExtents.x),
-      ...seg.walls.map((w) => w.center.x + w.halfExtents.x),
-    ];
-    for (const w of seg.walls) {
-      const near = Math.min(Math.abs(w.center.x - w.halfExtents.x), Math.abs(w.center.x + w.halfExtents.x));
-      expect(near).toBeGreaterThan(LANE_HALF);
-    }
-    expect(edges.length).toBe(seg.walls.length * 2);
-    for (const p of seg.props) {
-      const half = PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents;
-      expect(Math.abs(p.pose.pos.x) - half.x).toBeGreaterThan(LANE_HALF);
-    }
+    const walls = def.type === 'ford' ? [] : seg.walls.map(asFootprint);
+    expect(laneBlockedBy(seg, [...walls, ...propBoxes(seg, 'barrier')])).toBe(false);
   });
 
-  test('roadworks fences stay outside the lane; the barriers are meant to block', () => {
-    for (const w of buildSegment(roadworks(40, 6)).walls) expect(Math.abs(w.center.x) - w.halfExtents.x).toBeGreaterThan(LANE_HALF);
+  test('the sweep does notice a wall or a prop in the lane', () => {
+    const seg = buildSegment(alley(30, 0));
+    const inLane = { center: vec3(0.5, 0.5, -15), halfExtents: vec3(0.3, 0.3, 0.3), rot: yawQuat(0) };
+    expect(laneBlockedBy(seg, [asFootprint(inLane)])).toBe(true);
+    const beside = { ...inLane, center: vec3(2.6, 0.5, -15) };
+    expect(laneBlockedBy(seg, [asFootprint(beside)])).toBe(false);
+    expect(laneBlockedBy(buildSegment(roadworks(40, 3)), propBoxes(buildSegment(roadworks(40, 3))))).toBe(true);
   });
 });
 
@@ -633,6 +702,19 @@ function spotBlocked(course: BuiltCourse, feet: Vec3): boolean {
   for (let y = lo; y <= hi + 1e-9; y += (hi - lo) / 10) {
     for (const w of course.walls) {
       if (distanceToBox(vec3(feet.x, y, feet.z), w.halfExtents, w.center, w.rot) < PLAYER_RADIUS) return true;
+    }
+  }
+  return false;
+}
+
+// The same capsule samples against prop boxes (a pure box test, no physics).
+function propBlocks(course: BuiltCourse, feet: Vec3): boolean {
+  const lo = feet.y + PLAYER_RADIUS + PLAYER_OVERLAP_LIFT;
+  const hi = feet.y + PLAYER_HEIGHT - PLAYER_RADIUS;
+  for (let y = lo; y <= hi + 1e-9; y += (hi - lo) / 10) {
+    for (const p of course.props) {
+      const half = PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents;
+      if (distanceToBox(vec3(feet.x, y, feet.z), half, p.pose.pos, p.pose.rot) < PLAYER_RADIUS) return true;
     }
   }
   return false;
@@ -662,6 +744,7 @@ describe('B5 checkpoint spawns', () => {
           const h = groundHeightAt(course.ground, at.x, at.z);
           expect(h, `${config.id} slot ${i}: no ground`).not.toBeNull();
           expect(spotBlocked(course, vec3(at.x, h!, at.z)), `${config.id} slot ${i}: wall in the way`).toBe(false);
+          expect(propBlocks(course, vec3(at.x, h!, at.z)), `${config.id} slot ${i}: a prop in the way`).toBe(false);
         }
       }
     }
