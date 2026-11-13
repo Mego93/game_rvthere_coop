@@ -232,8 +232,10 @@ function buildRoad(def: Extract<SegmentDef, { type: 'road' }>): LocalSegment {
   const surfaceAt = surfaceOnPieces(pieces);
   const id = idCounter();
   const props: Placed[] = [];
-  for (const slot of evenSlots(def.debris ?? 0, routeLength)) {
-    const s = surfaceAt(slot.along);
+  // Debris starts past the RV standing on the checkpoint spawn, so none lands on a player slot there.
+  const from = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z + PROP_KINDS.crate.halfExtents.z;
+  for (const slot of evenSlots(def.debris ?? 0, routeLength - from)) {
+    const s = surfaceAt(from + slot.along);
     props.push({ id: id('crate'), kind: 'crate', pose: { pos: offsetFrom(s, (slot.side * ROAD_WIDTH) / 4), rot: yawPitchQuat(s.yaw, s.pitch) } });
   }
   const seg: LocalSegment = {

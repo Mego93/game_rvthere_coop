@@ -167,11 +167,12 @@ describe('surfaceAt', () => {
 });
 
 describe('debris', () => {
-  test('crates sit at (n - 0.5)/count of the route, alternating left then right at a quarter of the width', () => {
+  test('crates sit at (n - 0.5)/count of the route after the spawn clearance, alternating left then right at a quarter of the width', () => {
     const seg = buildSegment(road(40, { debris: 4 }));
     expect(seg.props.map((p) => p.id)).toEqual(['crate-1', 'crate-2', 'crate-3', 'crate-4']);
     expect(seg.props.every((p) => p.kind === 'crate')).toBe(true);
-    expect(seg.props.map((p) => p.pose.pos.z)).toEqual([-5, -15, -25, -35]);
+    const from = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z + PROP_KINDS.crate.halfExtents.z;
+    seg.props.forEach((p, i) => expect(p.pose.pos.z).toBeCloseTo(-(from + ((i + 0.5) / 4) * (40 - from)), 9));
     expect(seg.props.map((p) => p.pose.pos.x)).toEqual([-2.5, 2.5, -2.5, 2.5]);
     expect(seg.props.every((p) => p.pose.pos.y === 0)).toBe(true);
   });
@@ -179,7 +180,9 @@ describe('debris', () => {
   test('crates on a slope stand on the surface', () => {
     const seg = buildSegment(road(40, { slope: 8, debris: 2 }));
     const first = seg.props[0]!;
-    expect(first.pose.pos.y).toBeCloseTo(seg.surfaceAt(0.25 * 40 * Math.cos(degToRad(8))).pos.y, 9);
+    const from = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z + PROP_KINDS.crate.halfExtents.z;
+    const horizontal = 40 * Math.cos(degToRad(8));
+    expect(first.pose.pos.y).toBeCloseTo(seg.surfaceAt(from + 0.25 * (horizontal - from)).pos.y, 9);
   });
 });
 
@@ -722,7 +725,8 @@ function propBlocks(course: BuiltCourse, feet: Vec3): boolean {
 
 describe('B5 checkpoint spawns', () => {
   const stopRoad: SegmentDef = road(40, { stop: { kind: 'fuel', side: 1, along: 20 } });
-  const all: [string, SegmentDef][] = [...CASES, ...NEW_CASES, ['road with stop', stopRoad]];
+  const debrisRoad: SegmentDef = road(60, { curve: Math.PI / 4, debris: 4 });
+  const all: [string, SegmentDef][] = [...CASES, ...NEW_CASES, ['road with stop', stopRoad], ['road with debris', debrisRoad], ['road with full debris', road(30, { debris: 6 })]];
 
   test.each(all)('%s: wheels and spawn slots of both vehicles stand on ground clear of walls', (_name, def) => {
     const course = buildCourse({ id: 'one', segments: [def], targetTime: 100 });

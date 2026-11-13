@@ -139,6 +139,12 @@ test('starting on a port that is already in use is refused', async () => {
   expect((await fetch(url('/'))).status).toBe(200);
 });
 
+test('a server started with a course id runs it, and an unknown one is refused at start-up', async () => {
+  const other = await startServer({ port: 0, clientDir, courseId: 'segment-demo' });
+  await other.close();
+  await expect(startServer({ port: 0, clientDir, courseId: 'moon' })).rejects.toThrow('Unknown course: moon');
+});
+
 test('knows the content types the client needs', () => {
   expect(contentType('a/b/index.html')).toBe('text/html; charset=utf-8');
   expect(contentType('x.wasm')).toBe('application/wasm');

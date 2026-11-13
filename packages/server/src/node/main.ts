@@ -1,5 +1,6 @@
 import { networkInterfaces } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { getCourse } from '@lodgy/shared';
 import { startServer } from './listen';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -8,9 +9,18 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
   process.exit(1);
 }
 
+// COURSE=segment-demo runs every room on that course until the lobby (step 11) lets the admin choose.
+const courseId = process.env.COURSE;
+try {
+  if (courseId !== undefined) getCourse(courseId);
+} catch {
+  console.error(`COURSE "${courseId}" is not a course. Use "test" or "segment-demo", or leave it unset.`);
+  process.exit(1);
+}
+
 const clientDir = fileURLToPath(new URL('../../../client/dist', import.meta.url));
 // VEHICLE=rv runs every room with the RV until the lobby (step 11) lets the admin choose.
-const server = await startServer({ port, clientDir, vehicleId: process.env.VEHICLE });
+const server = await startServer({ port, clientDir, vehicleId: process.env.VEHICLE, courseId });
 
 if (process.env.LODGY_DEV) {
   // Under "npm run dev" the page comes from Vite, which prints its own addresses.
