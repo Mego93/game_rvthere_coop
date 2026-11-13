@@ -173,6 +173,26 @@ export function evenSlots(count: number, routeLength: number): { along: number; 
   return Array.from({ length: count }, (_, i) => ({ along: ((i + 0.5) / count) * routeLength, side: i % 2 === 0 ? -1 : 1 }));
 }
 
+// The pad and stop beside the road at `s`; side is +1 on the right, -1 on the left.
+// The counter offset assumes yaw 0 (a road facing -Z), as every caller has.
+export function placeStop(id: string, kind: ServiceStop['kind'], s: SurfacePoint, side: 1 | -1): { pad: GroundBox; stop: ServiceStop } {
+  const rot = yawQuat(s.yaw);
+  const padCenter = offsetFrom(s, side * (ROAD_WIDTH / 2 + STOP_PAD.x), -STOP_PAD.y);
+  const zoneLateral = side * (ROAD_WIDTH / 2 + STOP_ZONE_GAP + STOP_ZONE.x);
+  const operateLateral = side * (ROAD_WIDTH / 2 + STOP_ZONE_GAP + 2 * STOP_ZONE.x + STOP_OPERATE_GAP);
+  const operatePoint = offsetFrom(s, operateLateral);
+  return {
+    pad: { center: padCenter, halfExtents: STOP_PAD, rot, surface: 'road' },
+    stop: {
+      id,
+      kind,
+      zone: { center: offsetFrom(s, zoneLateral, STOP_ZONE.y), halfExtents: STOP_ZONE, rot },
+      operatePoint,
+      shopCounter: kind === 'fuel' ? vec3(operatePoint.x, operatePoint.y, operatePoint.z - STOP_COUNTER_OFFSET) : null,
+    },
+  };
+}
+
 function addExtras(
   def: SegmentExtras,
   flat: boolean,
@@ -201,21 +221,9 @@ function addExtras(
     if (!flat) throw new Error('A stop needs a straight, flat road');
     const { kind, side, along } = def.stop;
     if (along - STOP_PAD.z < 0 || along + STOP_PAD.z > routeLength) throw new Error('A stop pad would leave the segment');
-    const s = surfaceAt(along);
-    const rot = yawQuat(s.yaw);
-    const padCenter = offsetFrom(s, side * (ROAD_WIDTH / 2 + STOP_PAD.x), -STOP_PAD.y);
-    out.ground.push({ center: padCenter, halfExtents: STOP_PAD, rot, surface: 'road' });
-    const zoneLateral = side * (ROAD_WIDTH / 2 + STOP_ZONE_GAP + STOP_ZONE.x);
-    const operateLateral = side * (ROAD_WIDTH / 2 + STOP_ZONE_GAP + 2 * STOP_ZONE.x + STOP_OPERATE_GAP);
-    const operatePoint = offsetFrom(s, operateLateral);
-    out.stops.push({
-      id: id('stop'),
-      kind,
-      zone: { center: offsetFrom(s, zoneLateral, STOP_ZONE.y), halfExtents: STOP_ZONE, rot },
-      operatePoint,
-      // A stop sits on a straight road facing -Z, so further along is smaller z.
-      shopCounter: kind === 'fuel' ? vec3(operatePoint.x, operatePoint.y, operatePoint.z - STOP_COUNTER_OFFSET) : null,
-    });
+    const placed = placeStop(id('stop'), kind, surfaceAt(along), side);
+    out.ground.push(placed.pad);
+    out.stops.push(placed.stop);
   }
 }
 

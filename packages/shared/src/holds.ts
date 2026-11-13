@@ -14,6 +14,16 @@ export interface Hold {
   progress: number;
 }
 
+// Rule V6: holding interact at a service stop's operate point; the stop is the target.
+export interface OperateHold {
+  action: 'operate';
+  targetId: string;
+  // 0..1
+  progress: number;
+}
+
+export type PlayerHold = Hold | OperateHold;
+
 export interface HoldVehicle {
   pos: Vec3;
   rot: Quat;
@@ -107,6 +117,28 @@ export function stepHold(
     const item = inventory[input.slot] ?? null;
     if (!input.usePressed || target === null || item === null) return none;
     current = { action: target.revive ? 'revive' : 'useItem', targetId: target.id, slot: input.slot, item, progress: 0 };
+  }
+  const progress = current.progress + TICK_DT / HOLD_DURATION;
+  if (progress >= DONE) return { hold: null, completed: { ...current, progress: 1 } };
+  return { hold: { ...current, progress }, completed: null };
+}
+
+// Rule V6. The press tick binds and counts as the first tick of progress; `target` is the stop id while it is valid.
+export function stepOperateHold(
+  hold: OperateHold | null,
+  input: { interactPressed: boolean; interactHeld: boolean },
+  target: string | null,
+  blocked: boolean,
+): { hold: OperateHold | null; completed: OperateHold | null } {
+  const none = { hold: null, completed: null };
+  if (blocked || target === null) return none;
+  let current: OperateHold;
+  if (hold) {
+    if (!input.interactHeld || hold.targetId !== target) return none;
+    current = hold;
+  } else {
+    if (!input.interactPressed) return none;
+    current = { action: 'operate', targetId: target, progress: 0 };
   }
   const progress = current.progress + TICK_DT / HOLD_DURATION;
   if (progress >= DONE) return { hold: null, completed: { ...current, progress: 1 } };

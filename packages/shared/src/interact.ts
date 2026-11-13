@@ -1,4 +1,4 @@
-import { ANCHOR_HEIGHT, HANDS_RANGE, HOOK_RANGE, ITEM_KINDS, PROP_KINDS, PUSH_HEIGHT, WINCH_MAX_LENGTH } from './constants';
+import { ANCHOR_HEIGHT, HANDS_RANGE, HOOK_RANGE, ITEM_KINDS, PROP_KINDS, PUSH_HEIGHT, SHOP_COUNTER_HALF, SHOP_RANGE, STOP_OPERATE_RANGE, WINCH_MAX_LENGTH } from './constants';
 import type { Placed } from './course';
 import { IDENTITY, add, length, rotate, sub, vec3, type Quat, type Vec3 } from './math';
 import { aimRay } from './player';
@@ -18,7 +18,9 @@ export type InteractAction =
   | { kind: 'dropHook' }
   | { kind: 'takeHook' }
   | { kind: 'detachHook' }
-  | { kind: 'releaseHook' };
+  | { kind: 'releaseHook' }
+  | { kind: 'operate'; stopId: string }
+  | { kind: 'shop'; stopId: string };
 
 export interface InteractCandidate {
   action:
@@ -28,7 +30,9 @@ export interface InteractCandidate {
     | { kind: 'attachHook'; anchorId: string }
     | { kind: 'takeHook' }
     | { kind: 'detachHook' }
-    | { kind: 'releaseHook' };
+    | { kind: 'releaseHook' }
+    | { kind: 'operate'; stopId: string }
+    | { kind: 'shop'; stopId: string };
   // Radians between the aim and the candidate.
   angle: number;
 }
@@ -45,12 +49,24 @@ export function aimAngleToBox(origin: Vec3, dir: Vec3, centre: Vec3, rot: Quat, 
   return Math.acos(Math.min(1, Math.max(-1, cos)));
 }
 
+// What interactCandidates needs of a service stop; the caller fills usable with stopUsable.
+export interface StopContext {
+  id: string;
+  kind: 'fuel' | 'garage';
+  operatePoint: Vec3;
+  shopCounter: Vec3 | null;
+  usable: boolean;
+}
+
+// The counter box stands on its point.
+const counterCentre = (counter: Vec3): Vec3 => add(counter, vec3(0, SHOP_COUNTER_HALF.y, 0));
+
 const ZERO_HALF = vec3(0, 0, 0);
 
 const seatPos = (config: VehicleConfig, seatId: string): Vec3 => config.seats.find((seat) => seat.id === seatId)?.pos ?? vec3(0, 0, 0);
 
 // Rule K1 with W11: the boarding angle is to the chosen seat, not to the vehicle's box. Pure over poses so the server and the client's hint agree. Seated players have no candidates (they leave the seat).
-// Holding the hook: the anchors in range. Holding a prop: none. Empty hands: the hook, then boarding, props in the given order.
+// Stop candidates (operate, shop) come first in the list and are offered whatever the hands hold. Holding the hook: the anchors in range. Holding a prop: nothing else. Empty hands: the hook, then boarding, props in the given order.
 // The order of the list is the tie order (V8): board, takeHook, detachHook, releaseHook, then props, then items; attach: static anchors, then props.
 export function interactCandidates(ctx: {
   config: VehicleConfig;
@@ -70,6 +86,7 @@ export function interactCandidates(ctx: {
   heldProps: ReadonlySet<string>;
   cable: CableSnapshot;
   anchors: readonly Placed[];
+  stops: readonly StopContext[];
 }): InteractCandidate[] {
   if (ctx.seat !== null) return [];
   const { origin, dir } = aimRay(ctx.feet, ctx.yaw, ctx.pitch);
@@ -78,6 +95,19 @@ export function interactCandidates(ctx: {
   const inReach = (point: Vec3) => length(sub(point, chest)) <= HOOK_RANGE;
   const angleTo = (point: Vec3) => aimAngleToBox(origin, dir, point, IDENTITY, ZERO_HALF);
   const found: InteractCandidate[] = [];
+
+  // Rules V5 and V5a: the stop tier is offered whatever is in the hands; in course order, operate before shop.
+  for (const stop of ctx.stops) {
+    if (stop.usable && length(sub(stop.operatePoint, ctx.feet)) <= STOP_OPERATE_RANGE) {
+      found.push({ action: { kind: 'operate', stopId: stop.id }, angle: angleTo(stop.operatePoint) });
+    }
+    if (stop.kind === 'fuel' && stop.shopCounter !== null) {
+      const centre = counterCentre(stop.shopCounter);
+      if (distanceToBox(ctx.feet, SHOP_COUNTER_HALF, centre, IDENTITY) <= SHOP_RANGE) {
+        found.push({ action: { kind: 'shop', stopId: stop.id }, angle: angleTo(centre) });
+      }
+    }
+  }
 
   if (ctx.hands === 'hook') {
     const attach = (anchorId: string, point: Vec3) => {
@@ -93,7 +123,7 @@ export function interactCandidates(ctx: {
     }
     return found;
   }
-  if (ctx.hands !== null) return [];
+  if (ctx.hands !== null) return found;
 
   const seatId = chooseSeat(ctx.config, ctx.vehiclePos, ctx.vehicleRot, ctx.feet, ctx.takenSeats);
   if (seatId !== null) {
@@ -131,10 +161,19 @@ export function interactCandidates(ctx: {
 }
 
 const isAttach = (candidate: InteractCandidate) => candidate.action.kind === 'attachHook';
+const isStop = (candidate: InteractCandidate) => candidate.action.kind === 'operate' || candidate.action.kind === 'shop';
 
 // The candidates of interactCandidates split the way resolveInteract takes them.
-export function splitCandidates(found: readonly InteractCandidate[]): { candidates: InteractCandidate[]; attachCandidates: InteractCandidate[] } {
-  return { candidates: found.filter((c) => !isAttach(c)), attachCandidates: found.filter(isAttach) };
+export function splitCandidates(found: readonly InteractCandidate[]): {
+  candidates: InteractCandidate[];
+  attachCandidates: InteractCandidate[];
+  stopCandidates: InteractCandidate[];
+} {
+  return {
+    candidates: found.filter((c) => !isAttach(c) && !isStop(c)),
+    attachCandidates: found.filter(isAttach),
+    stopCandidates: found.filter(isStop),
+  };
 }
 
 const smallest = (list: readonly InteractCandidate[]): InteractCandidate | null => {
@@ -143,15 +182,23 @@ const smallest = (list: readonly InteractCandidate[]): InteractCandidate | null 
   return best;
 };
 
+// Rule M1: seat, attach, the stop tier, then drop or throw, then the rest.
 export function resolveInteract(ctx: {
   seat: string | null;
   hands: string | null;
   holdsHook: boolean;
   candidates: readonly InteractCandidate[];
   attachCandidates: readonly InteractCandidate[];
+  stopCandidates: readonly InteractCandidate[];
 }): InteractAction | null {
   if (ctx.seat !== null) return { kind: 'exitSeat' };
-  if (ctx.holdsHook) return smallest(ctx.attachCandidates)?.action ?? { kind: 'dropHook' };
+  if (ctx.holdsHook) {
+    const attach = smallest(ctx.attachCandidates);
+    if (attach) return attach.action;
+  }
+  const stop = smallest(ctx.stopCandidates);
+  if (stop) return stop.action;
+  if (ctx.holdsHook) return { kind: 'dropHook' };
   if (ctx.hands !== null) return { kind: 'throw' };
   return smallest(ctx.candidates)?.action ?? null;
 }

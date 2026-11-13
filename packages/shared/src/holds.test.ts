@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { HEAL_AIM_ANGLE, HEAL_RANGE, HOLD_DURATION, ITEM_REFUEL, PLAYER_HEIGHT, PLAYER_CONTROLLER_OFFSET, TICK_DT, TICK_RATE, USE_RANGE, type ItemKind } from './constants';
 import type { BuiltCourse, Placed } from './course';
 import { testGround } from './courses/testGround';
-import { holdTargetValid, pressTarget, stepHold, useTarget, type Hold, type UseContext } from './holds';
+import { holdTargetValid, pressTarget, stepHold, stepOperateHold, useTarget, type Hold, type OperateHold, type UseContext } from './holds';
 import { AXIS_Y, IDENTITY, deepFreeze, quatFromAxisAngle, vec3, type Vec3 } from './math';
 import { aimRay } from './player';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
@@ -420,5 +420,63 @@ describe('item use in the world', () => {
     for (let i = 1; i < seen.length; i++) expect(seen[i]!).toBeGreaterThan(seen[i - 1]!);
     expect(seen[TICK_RATE - 1]!).toBeCloseTo(TICK_RATE * TICK_DT / HOLD_DURATION, 6);
     world.dispose();
+  });
+});
+
+describe('stepOperateHold (S4)', () => {
+  const press = { interactPressed: true, interactHeld: true };
+  const held = { interactPressed: false, interactHeld: true };
+  const released = { interactPressed: false, interactHeld: false };
+
+  test('a press with a target binds, and counts as the first tick of progress', () => {
+    const { hold, completed } = stepOperateHold(null, press, 'stop-fuel', false);
+    expect(completed).toBeNull();
+    expect(hold).toEqual({ action: 'operate', targetId: 'stop-fuel', progress: TICK_DT / HOLD_DURATION });
+  });
+
+  test('no press, no target or blocked starts nothing', () => {
+    expect(stepOperateHold(null, held, 'stop-fuel', false).hold).toBeNull();
+    expect(stepOperateHold(null, press, null, false).hold).toBeNull();
+    expect(stepOperateHold(null, press, 'stop-fuel', true).hold).toBeNull();
+  });
+
+  test('it completes after exactly 3 s of ticks', () => {
+    let { hold } = stepOperateHold(null, press, 's', false);
+    let completed: OperateHold | null = null;
+    let ticks = 1;
+    while (hold) {
+      ({ hold, completed } = stepOperateHold(hold, held, 's', false));
+      ticks += 1;
+    }
+    expect(ticks).toBe(TICKS);
+    expect(completed).toEqual({ action: 'operate', targetId: 's', progress: 1 });
+  });
+
+  test('releasing interact resets it', () => {
+    const { hold } = stepOperateHold(null, press, 's', false);
+    expect(stepOperateHold(hold, released, 's', false)).toEqual({ hold: null, completed: null });
+  });
+
+  test('a stop that is no longer valid, or another stop, resets it', () => {
+    const { hold } = stepOperateHold(null, press, 's', false);
+    expect(stepOperateHold(hold, held, null, false).hold).toBeNull();
+    expect(stepOperateHold(hold, held, 'other', false).hold).toBeNull();
+  });
+
+  test('being blocked resets it', () => {
+    const { hold } = stepOperateHold(null, press, 's', false);
+    expect(stepOperateHold(hold, held, 's', true)).toEqual({ hold: null, completed: null });
+  });
+
+  test('after completion a fresh press is needed', () => {
+    let { hold } = stepOperateHold(null, press, 's', false);
+    let step = { hold, completed: null as OperateHold | null };
+    while (hold) {
+      step = stepOperateHold(hold, held, 's', false);
+      hold = step.hold;
+    }
+    expect(step.completed).not.toBeNull();
+    expect(stepOperateHold(null, held, 's', false).hold).toBeNull();
+    expect(stepOperateHold(null, press, 's', false).hold).not.toBeNull();
   });
 });

@@ -19,6 +19,7 @@ export * from './rules';
 export * from './seats';
 export * from './segments';
 export * from './statics';
+export * from './stops';
 export * from './vehicle';
 export * from './vehicles';
 export * from './walk';

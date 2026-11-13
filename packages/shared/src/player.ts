@@ -28,7 +28,7 @@ import {
   type ItemKind,
 } from './constants';
 import type { BuiltCourse } from './course';
-import type { Hold } from './holds';
+import type { PlayerHold } from './holds';
 import { damageAbove, relativeSpeed } from './health';
 import { GROUP_GROUND, GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, sub, vec3, yawOf, type Pose, type Quat, type Vec3 } from './math';
@@ -68,7 +68,7 @@ export interface PlayerState {
   respawnIn: number | null;
   inventory: [ItemKind | null, ItemKind | null, ItemKind | null];
   slot: 0 | 1 | 2;
-  hold: Hold | null;
+  hold: PlayerHold | null;
   // 0..100.
   health: number;
   // Seconds left before respawn while downed, else null.

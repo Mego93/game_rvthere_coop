@@ -104,3 +104,43 @@ test('four coins, coin-1 to coin-4, float at the planned positions', () => {
     ['coin-4', 'coin', -6, COIN_HEIGHT, -44],
   ]);
 });
+
+test('two stops, stop-fuel on the right and stop-garage on the left at z = -20, at the planned places', () => {
+  expect(testGround.stops.map((stop) => stop.id)).toEqual(['stop-fuel', 'stop-garage']);
+  const [fuel, garage] = testGround.stops;
+  expect([fuel!.kind, garage!.kind]).toEqual(['fuel', 'garage']);
+  expect(fuel!.operatePoint).toEqual({ x: 11.5, y: 0, z: -20 });
+  expect(fuel!.shopCounter).toEqual({ x: 11.5, y: 0, z: -22 });
+  expect(garage!.operatePoint).toEqual({ x: -11.5, y: 0, z: -20 });
+  expect(garage!.shopCounter).toBeNull();
+  expect(fuel!.zone.center).toEqual({ x: 8, y: 2, z: -20 });
+  expect(garage!.zone.center).toEqual({ x: -8, y: 2, z: -20 });
+});
+
+test('the pads are appended after the existing ground pieces, so the main slab stays first, and rest on the road', () => {
+  const ground = testGround.ground;
+  expect(ground[0]!.halfExtents.x).toBe(150);
+  expect(ground).toHaveLength(8);
+  const [fuelPad, garagePad] = ground.slice(-2);
+  expect([fuelPad!.center.x, fuelPad!.center.z]).toEqual([9, -20]);
+  expect([garagePad!.center.x, garagePad!.center.z]).toEqual([-9, -20]);
+  for (const stop of testGround.stops) {
+    const hit = probe(stop.operatePoint.x, stop.operatePoint.y, stop.operatePoint.z);
+    expect(hit!.distance, stop.id).toBeCloseTo(1, 2);
+  }
+});
+
+test('the stop zones and operate points keep clear of the spawn, the checkpoint triggers, the ramp, the props and the pickups', () => {
+  const clear = (zone: { center: { x: number; z: number }; halfExtents: { x: number; z: number } }, x: number, z: number, hx: number, hz: number) =>
+    Math.abs(zone.center.x - x) > zone.halfExtents.x + hx || Math.abs(zone.center.z - z) > zone.halfExtents.z + hz;
+  for (const stop of testGround.stops) {
+    for (const cp of testGround.checkpoints) {
+      expect(clear(stop.zone, cp.trigger.center.x, cp.trigger.center.z, cp.trigger.halfExtents.x, cp.trigger.halfExtents.z), `${stop.id} ${cp.id}`).toBe(true);
+    }
+    // The ramp at x = 8 from z = -60, 6 wide and 6 long.
+    expect(clear(stop.zone, 8, -57, 3, 3), `${stop.id} ramp`).toBe(true);
+    for (const placed of [...testGround.props, ...testGround.pickups, ...testGround.coins, ...testGround.anchors]) {
+      expect(clear(stop.zone, placed.pose.pos.x, placed.pose.pos.z, 1, 1), `${stop.id} ${placed.id}`).toBe(true);
+    }
+  }
+});

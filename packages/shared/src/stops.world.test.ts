@@ -1,6 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
-import { PLAYER_MAX_HEALTH } from './constants';
+import { HOLD_DURATION, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, STOP_OPERATE_RANGE, TICK_DT } from './constants';
+import { IDENTITY } from './math';
+import { testGround } from './courses/testGround';
+import { interactCandidates, splitCandidates, resolveInteract } from './interact';
+import { stopUsable } from './stops';
 import { coinTouched } from './coins';
 import { vec3, type Vec3 } from './math';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
@@ -187,6 +191,52 @@ describe('S12: status and final time', () => {
   });
 });
 
+describe('S12: the freeze after the win', () => {
+  test('a player who falls below the kill plane and respawns after the win changes neither respawns nor the final time', () => {
+    const world = make('p1');
+    world.debugBody('vehicle')!.setTranslation({ x: 0, y: 1, z: -100 }, true);
+    world.step(new Map());
+    expect(world.snapshot().won).toBe(true);
+    const won = world.status();
+    world.teleportPlayer('p1', vec3(40, testGround.killPlaneY - 5, 40));
+    const events = run(world, Math.ceil(PLAYER_KILL_RESPAWN_DELAY / TICK_DT) + 5);
+    expect(kinds(events, 'respawn')).toHaveLength(1);
+    expect(world.snapshot().respawns).toBe(won.respawns);
+    expect(world.status().respawns).toBe(won.respawns);
+    expect(world.status().finalTime).toBe(won.finalTime);
+  });
+
+  test('before the win the same fall adds a respawn', () => {
+    const world = make('p1');
+    world.teleportPlayer('p1', vec3(40, testGround.killPlaneY - 5, 40));
+    const events = run(world, Math.ceil(PLAYER_KILL_RESPAWN_DELAY / TICK_DT) + 5);
+    expect(kinds(events, 'respawn')).toHaveLength(1);
+    expect(world.snapshot().respawns).toBe(1);
+  });
+});
+
+describe('S5: a player waiting to respawn below the kill plane', () => {
+  test('collects no coin while falling through one', () => {
+    const deep = { id: 'coin-deep', kind: 'coin', pose: { pos: vec3(40, testGround.killPlaneY - 2, 40), rot: IDENTITY } };
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' }, { ...testGround, coins: [deep] });
+    worlds.push(world);
+    world.addPlayer('p1');
+    world.teleportPlayer('p1', vec3(40, testGround.killPlaneY - 0.001, 40));
+    let passed = false;
+    const events: WorldEvent[] = [];
+    for (let i = 0; i < 120; i++) {
+      events.push(...world.step(new Map()));
+      passed ||= coinTouched(player(world, 'p1').pos, deep.pose.pos);
+    }
+    // The player did fall through the coin's reach before the respawn delay ran out.
+    expect(passed).toBe(true);
+    expect(kinds(events, 'respawn')).toHaveLength(0);
+    expect(kinds(events, 'coin')).toHaveLength(0);
+    expect(world.snapshot().wallet).toBe(0);
+    expect(world.snapshot().coinsLeft).toEqual(['coin-deep']);
+  });
+});
+
 describe('S13: determinism', () => {
   test('two worlds with the same coin pickups give equal snapshots', () => {
     const play = () => {
@@ -200,6 +250,273 @@ describe('S13: determinism', () => {
       world.restartCheckpoint();
       run(world, 5);
       return JSON.stringify(world.snapshot());
+    };
+    expect(play()).toBe(play());
+  });
+});
+
+const HOLD_TICKS = Math.round(HOLD_DURATION / TICK_DT);
+const stopOf = (world: World, id: string) => world.course.stops.find((stop) => stop.id === id)!;
+// Parks the vehicle at rest with its centre `dx` from the zone's centre.
+const park = (world: World, stopId: string, dx = 0, dz = 0) => {
+  const zone = stopOf(world, stopId).zone.center;
+  const body = world.debugBody('vehicle')!;
+  body.setTranslation({ x: zone.x + dx, y: world.vehicleConfig.rideHeight, z: zone.z + dz }, true);
+  body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+  body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+};
+const standAt = (world: World, id: string, stopId: string) => {
+  const at = stopOf(world, stopId).operatePoint;
+  world.teleportPlayer(id, vec3(at.x, 0.02, at.z));
+  run(world, 3);
+};
+// Straight down: the operate point is at the player's feet, and the counter 2 m on would win by angle when aiming ahead.
+const AIM_AT_PUMP = -Math.PI / 2;
+const holdInteract = (world: World, id: string, ticks: number, fields: Partial<PlayerInput> = {}): WorldEvent[] => {
+  const events: WorldEvent[] = [];
+  for (let i = 0; i < ticks; i++) events.push(...world.step(new Map([[id, input({ interact: true, pitch: AIM_AT_PUMP, ...fields })]])));
+  return events;
+};
+
+describe('S8: fuel stop', () => {
+  test('holding interact at the operate point for 3 s with the vehicle in the zone fills the tank and sends a use event', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel');
+    world.debugVehicle().addFuel(-0.7);
+    standAt(world, 'p1', 'stop-fuel');
+    expect(world.snapshot().vehicle.fuel).toBeCloseTo(0.3, 6);
+    const events = holdInteract(world, 'p1', HOLD_TICKS - 1);
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'operate', targetId: 'stop-fuel' });
+    expect(world.snapshot().vehicle.fuel).toBeCloseTo(0.3, 6);
+    const last = holdInteract(world, 'p1', 1);
+    expect(kinds(events, 'use')).toHaveLength(0);
+    expect(kinds(last, 'use')).toEqual([{ kind: 'use', tick: world.snapshot().tick, playerId: 'p1', pos: stopOf(world, 'stop-fuel').operatePoint }]);
+    expect(world.snapshot().vehicle.fuel).toBe(1);
+    expect(player(world, 'p1').hold).toBeNull();
+  });
+
+  test('a completed hold needs a fresh press', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel');
+    world.debugVehicle().addFuel(-0.7);
+    standAt(world, 'p1', 'stop-fuel');
+    holdInteract(world, 'p1', HOLD_TICKS);
+    expect(world.snapshot().vehicle.fuel).toBe(1);
+    world.debugVehicle().addFuel(-0.5);
+    holdInteract(world, 'p1', 10);
+    expect(player(world, 'p1').hold).toBeNull();
+    run(world, 1);
+    holdInteract(world, 'p1', 1);
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'operate' });
+  });
+
+  test('releasing interact resets the progress', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel');
+    world.debugVehicle().addFuel(-0.7);
+    standAt(world, 'p1', 'stop-fuel');
+    holdInteract(world, 'p1', HOLD_TICKS - 5);
+    run(world, 1);
+    expect(player(world, 'p1').hold).toBeNull();
+    holdInteract(world, 'p1', 10);
+    expect(world.snapshot().vehicle.fuel).toBeCloseTo(0.3, 6);
+  });
+
+  test.each([
+    ['at the zone centre', 0],
+    ['near the zone\'s outer edge', 2.4],
+  ])('the player at the operate point gets operate, not board, with the vehicle %s', (_name, dx) => {
+    const world = make('p1');
+    park(world, 'stop-fuel', dx);
+    world.debugVehicle().addFuel(-0.7);
+    standAt(world, 'p1', 'stop-fuel');
+    const snap = world.snapshot();
+    const stop = stopOf(world, 'stop-fuel');
+    expect(stopUsable(stop, snap.vehicle.pos, snap.vehicle.fuel, snap.vehicle.health)).toBe(true);
+    holdInteract(world, 'p1', 1);
+    expect(player(world, 'p1').seat).toBeNull();
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'operate', targetId: 'stop-fuel' });
+    holdInteract(world, 'p1', HOLD_TICKS - 1);
+    expect(world.snapshot().vehicle.fuel).toBe(1);
+  });
+
+  test('at the outer edge the board candidate exists, so the operate tier is what wins', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel', 2.4);
+    world.debugVehicle().addFuel(-0.7);
+    standAt(world, 'p1', 'stop-fuel');
+    const snap = world.snapshot();
+    const me = player(world, 'p1');
+    const stop = stopOf(world, 'stop-fuel');
+    const found = interactCandidates({
+      config: world.vehicleConfig,
+      vehiclePos: snap.vehicle.pos,
+      vehicleRot: snap.vehicle.rot,
+      feet: me.pos,
+      yaw: me.yaw,
+      pitch: AIM_AT_PUMP,
+      seat: null,
+      hands: null,
+      takenSeats: new Set(),
+      props: [],
+      items: [],
+      freeSlot: true,
+      heldProps: new Set(),
+      cable: snap.cable,
+      anchors: [],
+      stops: world.course.stops.map((s) => ({ ...s, usable: true })),
+    });
+    expect(found.map((c) => c.action.kind)).toEqual(expect.arrayContaining(['board', 'operate']));
+    expect(resolveInteract({ seat: null, hands: null, holdsHook: false, ...splitCandidates(found) })).toEqual({ kind: 'operate', stopId: stop.id });
+  });
+
+  test('with the vehicle outside the zone nothing happens', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel', 0, 6);
+    world.debugVehicle().addFuel(-0.7);
+    standAt(world, 'p1', 'stop-fuel');
+    const events = holdInteract(world, 'p1', HOLD_TICKS + 5);
+    expect(player(world, 'p1').hold).toBeNull();
+    expect(kinds(events, 'use')).toHaveLength(0);
+    expect(world.snapshot().vehicle.fuel).toBeCloseTo(0.3, 6);
+  });
+
+  test('the vehicle leaving the zone mid-hold ends it', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel');
+    world.debugVehicle().addFuel(-0.7);
+    standAt(world, 'p1', 'stop-fuel');
+    holdInteract(world, 'p1', 30);
+    expect(player(world, 'p1').hold).not.toBeNull();
+    park(world, 'stop-fuel', 0, 6);
+    holdInteract(world, 'p1', 1);
+    expect(player(world, 'p1').hold).toBeNull();
+  });
+
+  test('at fuel 1 there is no operate candidate and no hold', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel');
+    standAt(world, 'p1', 'stop-fuel');
+    holdInteract(world, 'p1', 5);
+    expect(player(world, 'p1').hold).toBeNull();
+  });
+
+  test('out of STOP_OPERATE_RANGE there is no hold', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel');
+    world.debugVehicle().addFuel(-0.7);
+    const at = stopOf(world, 'stop-fuel').operatePoint;
+    world.teleportPlayer('p1', vec3(at.x + STOP_OPERATE_RANGE + 0.5, 0.02, at.z));
+    run(world, 3);
+    holdInteract(world, 'p1', 5);
+    expect(player(world, 'p1').hold).toBeNull();
+  });
+
+  test('being downed ends the hold', () => {
+    const world = make('p1', 'p2');
+    world.teleportPlayer('p2', vec3(40, 0.02, 40));
+    park(world, 'stop-fuel');
+    world.debugVehicle().addFuel(-0.7);
+    standAt(world, 'p1', 'stop-fuel');
+    holdInteract(world, 'p1', 20);
+    expect(player(world, 'p1').hold).not.toBeNull();
+    world.debugHurt('p1', 100);
+    holdInteract(world, 'p1', 1);
+    expect(player(world, 'p1').hold).toBeNull();
+  });
+});
+
+describe('S9: garage', () => {
+  test('holding interact at the garage for 3 s repairs the vehicle to full health', () => {
+    const world = make('p1');
+    park(world, 'stop-garage');
+    world.debugVehicle().repair(-0.6);
+    standAt(world, 'p1', 'stop-garage');
+    expect(world.snapshot().vehicle.health).toBeCloseTo(0.4, 6);
+    holdInteract(world, 'p1', HOLD_TICKS - 1);
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'operate', targetId: 'stop-garage' });
+    const last = holdInteract(world, 'p1', 1);
+    expect(kinds(last, 'use')).toEqual([{ kind: 'use', tick: world.snapshot().tick, playerId: 'p1', pos: stopOf(world, 'stop-garage').operatePoint }]);
+    expect(world.snapshot().vehicle.health).toBe(1);
+  });
+
+  test.each([
+    ['at the zone centre', 0],
+    ['near the zone\'s outer edge', -2.4],
+  ])('the player at the operate point gets operate, not board, with the vehicle %s', (_name, dx) => {
+    const world = make('p1');
+    park(world, 'stop-garage', dx);
+    world.debugVehicle().repair(-0.6);
+    standAt(world, 'p1', 'stop-garage');
+    holdInteract(world, 'p1', 1);
+    expect(player(world, 'p1').seat).toBeNull();
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'operate', targetId: 'stop-garage' });
+  });
+
+  test('a full-health vehicle gives no hold, and fuel does not matter to a garage', () => {
+    const world = make('p1');
+    park(world, 'stop-garage');
+    world.debugVehicle().addFuel(-0.7);
+    standAt(world, 'p1', 'stop-garage');
+    holdInteract(world, 'p1', 5);
+    expect(player(world, 'p1').hold).toBeNull();
+  });
+
+  test('with the vehicle outside the zone nothing happens', () => {
+    const world = make('p1');
+    park(world, 'stop-garage', 0, 6);
+    world.debugVehicle().repair(-0.6);
+    standAt(world, 'p1', 'stop-garage');
+    holdInteract(world, 'p1', HOLD_TICKS + 5);
+    expect(world.snapshot().vehicle.health).toBeCloseTo(0.4, 6);
+  });
+});
+
+describe('S10: operate and item holds', () => {
+  test('an interact press resolving to operate while an item hold runs starts no operate hold', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel', 2.4);
+    world.debugVehicle().addFuel(-0.7);
+    world.debugSetInventory('p1', ['jerrycan', null, null]);
+    standAt(world, 'p1', 'stop-fuel');
+    for (let i = 0; i < 10; i++) world.step(new Map([['p1', input({ use: true })]]));
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'useItem' });
+    for (let i = 0; i < 5; i++) world.step(new Map([['p1', input({ use: true, interact: true, pitch: AIM_AT_PUMP })]]));
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'useItem' });
+    expect(player(world, 'p1').seat).toBeNull();
+  });
+
+  test('a use press while an operate hold runs starts no item hold', () => {
+    const world = make('p1');
+    park(world, 'stop-fuel', 2.4);
+    world.debugVehicle().addFuel(-0.7);
+    world.debugSetInventory('p1', ['jerrycan', null, null]);
+    standAt(world, 'p1', 'stop-fuel');
+    holdInteract(world, 'p1', 10);
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'operate' });
+    holdInteract(world, 'p1', 5, { use: true });
+    expect(player(world, 'p1').hold).toMatchObject({ action: 'operate' });
+    expect(player(world, 'p1').inventory[0]).toBe('jerrycan');
+    holdInteract(world, 'p1', HOLD_TICKS, { use: true });
+    expect(world.snapshot().vehicle.fuel).toBe(1);
+    expect(player(world, 'p1').inventory[0]).toBe('jerrycan');
+  });
+});
+
+describe('S13: determinism with an operate hold', () => {
+  test('two worlds with a coin pickup and an operate hold give equal snapshots', () => {
+    const play = () => {
+      const world = make('p1', 'p2');
+      touch(world, 'p1', 'coin-1');
+      park(world, 'stop-fuel', 2.4);
+      world.debugVehicle().addFuel(-0.7);
+      world.teleportPlayer('p2', feetAt(coin(world, 'coin-3')));
+      standAt(world, 'p1', 'stop-fuel');
+      const events = holdInteract(world, 'p1', 40);
+      const snapshotMid = JSON.stringify(world.snapshot());
+      holdInteract(world, 'p1', HOLD_TICKS);
+      return JSON.stringify([snapshotMid, world.snapshot(), events]);
     };
     expect(play()).toBe(play());
   });

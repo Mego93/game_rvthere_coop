@@ -1,10 +1,10 @@
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DROP_HEIGHT, GRAVITY, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
+import { DROP_HEIGHT, GRAVITY, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
-import { holdTargetValid, pressTarget, stepHold, type UseContext } from './holds';
+import { holdTargetValid, pressTarget, stepHold, stepOperateHold, type UseContext } from './holds';
 import { AXIS_Y, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
 import { interactCandidates, resolveInteract, splitCandidates } from './interact';
@@ -16,6 +16,7 @@ import { createProps, type PropSnapshot } from './props';
 import { NEUTRAL_INPUT, type InputFields, type PlayerSnapshot } from './protocol';
 import type { Rapier, RigidBody } from './rapier';
 import { buildStatics } from './statics';
+import { stopUsable } from './stops';
 import { createVehicle, type Vehicle, type VehicleState } from './vehicle';
 import { getVehicleConfig, type VehicleConfig } from './vehicles';
 import { canReel, createWinch, type CableSnapshot, type Winch } from './winch';
@@ -128,6 +129,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const winch = createWinch(rapier, physics, vehicle, props, course);
   const previous = new Map<string, InputFields>();
   const usePressed = new Set<string>();
+  // Players whose interact press this tick resolved to operate, with the stop.
+  const operatePressed = new Map<string, string>();
   let tick = 0;
   let runTicks = 0;
   let won = false;
@@ -215,7 +218,21 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
 
   // Rules I1, V3, K1 and K2: in join order, so of two players pressing for one seat or crate the earlier gets it.
   // The aim is this tick's input (R6), not the yaw the player ended the last tick with.
+  const stopById = (id: string) => course.stops.find((stop) => stop.id === id);
+
+  const stopsContext = () => {
+    const centre = vehicle.body.translation();
+    return course.stops.map((stop) => ({
+      id: stop.id,
+      kind: stop.kind,
+      operatePoint: stop.operatePoint,
+      shopCounter: stop.shopCounter,
+      usable: stopUsable(stop, centre, vehicle.fuel(), vehicle.health()),
+    }));
+  };
+
   const resolveInteracts = (onFoot: ReadonlyMap<string, StepInputs>) => {
+    operatePressed.clear();
     for (const player of players.all()) {
       const step = onFoot.get(player.id);
       if (!step?.pressed.interact) continue;
@@ -238,6 +255,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         heldProps,
         cable: winch.state(),
         anchors: course.anchors,
+        stops: stopsContext(),
       });
       const action = resolveInteract({
         seat: player.seat,
@@ -274,7 +292,11 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         if (winch.state().holderId === player.id) players.setHands(player.id, 'hook');
       } else if (action?.kind === 'releaseHook') {
         winch.release();
+      } else if (action?.kind === 'operate') {
+        // Rule V6: an item hold running blocks it, as does an operate hold already running.
+        if (player.hold === null) operatePressed.set(player.id, action.stopId);
       }
+      // A 'shop' action does nothing on the server (rule V5a).
     }
   };
 
@@ -295,7 +317,29 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
           .filter((other) => other.id !== player.id)
           .map((other) => ({ id: other.id, feet: other.pos, health: other.health, downed: other.downed, seated: other.seat !== null })),
       };
-      const running = player.hold;
+      const operating = player.hold?.action === 'operate' || (player.hold === null && operatePressed.has(player.id));
+      if (operating) {
+        const stopId = player.hold ? player.hold.targetId : operatePressed.get(player.id)!;
+        const stop = stopById(stopId);
+        const usable = stop !== undefined && stopUsable(stop, body.translation(), vehicle.fuel(), vehicle.health());
+        const near = stop !== undefined && length(sub(stop.operatePoint, player.pos)) <= STOP_OPERATE_RANGE;
+        const { hold, completed } = stepOperateHold(
+          player.hold?.action === 'operate' ? player.hold : null,
+          { interactPressed: operatePressed.has(player.id), interactHeld: fields?.interact === true },
+          usable && near ? stopId : null,
+          seated || player.downed !== null,
+        );
+        player.hold = hold;
+        if (completed !== null && stop) {
+          if (stop.kind === 'fuel') vehicle.addFuel(1);
+          else vehicle.repair(1);
+          vehicleView.fuel = vehicle.fuel();
+          vehicleView.health = vehicle.health();
+          events.push({ kind: 'use', tick: tick + 1, playerId: player.id, pos: { ...stop.operatePoint } });
+        }
+        continue;
+      }
+      const running = player.hold?.action === 'operate' ? null : player.hold;
       const target = running
         ? holdTargetValid(running, ctx) ? { id: running.targetId, revive: running.action === 'revive' } : null
         : pressTarget(player.inventory[player.slot], ctx);

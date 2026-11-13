@@ -1,15 +1,15 @@
 import { describe, expect, test } from 'vitest';
 import { HANDS_RANGE } from './constants';
 import { AXIS_Y, IDENTITY, add, quatFromAxisAngle, rotate, sub, vec3, type Vec3 } from './math';
-import { aimAngleToBox, interactCandidates, resolveInteract, splitCandidates, type InteractCandidate } from './interact';
+import { aimAngleToBox, interactCandidates, resolveInteract, splitCandidates, type InteractCandidate, type StopContext } from './interact';
 import { getVehicleConfig } from './vehicles';
 import type { CableSnapshot } from './winch';
 import type { Placed } from './course';
 import type { PropSnapshot } from './props';
-import { ANCHOR_HEIGHT, HOOK_RANGE, ITEM_KINDS, PLAYER_EYE_HEIGHT, PUSH_HEIGHT } from './constants';
+import { ANCHOR_HEIGHT, HOOK_RANGE, ITEM_KINDS, PLAYER_EYE_HEIGHT, PUSH_HEIGHT, SHOP_COUNTER_HALF, SHOP_RANGE } from './constants';
 
 const resolve = (ctx: { seat: string | null; hands: string | null; candidates: readonly InteractCandidate[] }) =>
-  resolveInteract({ holdsHook: ctx.hands === 'hook', attachCandidates: [], ...ctx });
+  resolveInteract({ holdsHook: ctx.hands === 'hook', attachCandidates: [], stopCandidates: [], ...ctx });
 const attach = (anchorId: string, angle: number): InteractCandidate => ({ action: { kind: 'attachHook', anchorId }, angle });
 const takeHook: InteractCandidate = { action: { kind: 'takeHook' }, angle: 0.5 };
 const detachHook: InteractCandidate = { action: { kind: 'detachHook' }, angle: 0.5 };
@@ -46,10 +46,10 @@ describe('resolveInteract', () => {
 
 describe('resolveInteract with the hook', () => {
   const holding = (attachCandidates: InteractCandidate[], candidates: InteractCandidate[] = []) =>
-    resolveInteract({ seat: null, hands: 'hook', holdsHook: true, candidates, attachCandidates });
+    resolveInteract({ seat: null, hands: 'hook', holdsHook: true, candidates, attachCandidates, stopCandidates: [] });
 
   test('a seated player leaves the seat even holding the hook', () => {
-    expect(resolveInteract({ seat: 'driver', hands: 'hook', holdsHook: true, candidates: [], attachCandidates: [attach('a', 0)] })).toEqual({ kind: 'exitSeat' });
+    expect(resolveInteract({ seat: 'driver', hands: 'hook', holdsHook: true, candidates: [], attachCandidates: [attach('a', 0)], stopCandidates: [] })).toEqual({ kind: 'exitSeat' });
   });
 
   test('holding the hook attaches to the smallest angle, the earlier on a tie, else drops', () => {
@@ -114,6 +114,7 @@ describe('interactCandidates', () => {
     anchors: [] as Placed[],
     items: [] as PropSnapshot[],
     freeSlot: true,
+    stops: [] as StopContext[],
   };
   const crateAt = (id: string, x: number, z: number) => ({ id, kind: 'crate', pos: vec3(x, 0.3, z), rot: IDENTITY });
 
@@ -201,6 +202,7 @@ describe('interactCandidates and the hook', () => {
     cable: cable('stowed'),
     items: [] as PropSnapshot[],
     freeSlot: true,
+    stops: [] as StopContext[],
   };
   // Feet such that the chest is 1 m in front of the winch box (the mount faces -z).
   const nearBox = vec3(mount.x, mount.y - PUSH_HEIGHT, mount.z - 1);
@@ -291,5 +293,119 @@ describe('interactCandidates and the hook', () => {
 
   test('holding a prop: no candidates', () => {
     expect(interactCandidates({ ...base, hands: 'crate-1', feet: nearBox })).toEqual([]);
+  });
+});
+
+describe('stop candidates (S3, S3b)', () => {
+  const config = getVehicleConfig('lodgy');
+  const operatePoint = vec3(11.5, 0, -20);
+  const shopCounter = vec3(11.5, 0, -22);
+  const fuelStop = (usable: boolean, id = 'stop-fuel'): StopContext => ({ id, kind: 'fuel', operatePoint, shopCounter, usable });
+  const garageStop = (usable: boolean): StopContext => ({ id: 'stop-garage', kind: 'garage', operatePoint: vec3(-11.5, 0, -20), shopCounter: null, usable });
+  const base = {
+    config,
+    vehiclePos: vec3(0, 1, 0),
+    vehicleRot: IDENTITY,
+    yaw: 0,
+    pitch: 0,
+    seat: null as string | null,
+    hands: null as string | null,
+    takenSeats: new Set<string>(),
+    heldProps: new Set<string>(),
+    props: [] as PropSnapshot[],
+    anchors: [] as Placed[],
+    cable: { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 0, 0), length: 0, reel: 0 } as CableSnapshot,
+    items: [] as PropSnapshot[],
+    freeSlot: true,
+    stops: [] as StopContext[],
+  };
+  const kinds = (found: InteractCandidate[]) => found.map((c) => c.action.kind);
+  const at = vec3(11.5, 0, -19);
+
+  test('a usable stop with the feet in range gives operate, aimed at the operate point', () => {
+    const found = interactCandidates({ ...base, feet: at, stops: [fuelStop(true)] });
+    expect(found.filter((c) => c.action.kind === 'operate')).toEqual([{ action: { kind: 'operate', stopId: 'stop-fuel' }, angle: expect.any(Number) }]);
+  });
+
+  test('an unusable stop gives no operate candidate, in or out of range', () => {
+    expect(kinds(interactCandidates({ ...base, feet: at, stops: [fuelStop(false)] }))).not.toContain('operate');
+    expect(kinds(interactCandidates({ ...base, feet: at, stops: [garageStop(false)] }))).not.toContain('operate');
+  });
+
+  test('operate needs the feet within STOP_OPERATE_RANGE in 3D', () => {
+    const near = interactCandidates({ ...base, feet: vec3(11.5, 0, -18.01), stops: [fuelStop(true)] });
+    const far = interactCandidates({ ...base, feet: vec3(11.5, 0, -17.99), stops: [fuelStop(true)] });
+    expect(kinds(near)).toContain('operate');
+    expect(kinds(far)).not.toContain('operate');
+    const high = interactCandidates({ ...base, feet: vec3(11.5, 2.01, -20), stops: [fuelStop(true)] });
+    expect(kinds(high)).not.toContain('operate');
+  });
+
+  test('a garage has an operate candidate and never a shop', () => {
+    const found = interactCandidates({ ...base, feet: vec3(-11.5, 0, -19), stops: [garageStop(true)] });
+    expect(kinds(found)).toEqual(['operate']);
+  });
+
+  test('the shop candidate needs the feet within SHOP_RANGE of the counter box and does not need usable', () => {
+    const half = SHOP_COUNTER_HALF;
+    const edge = shopCounter.z + half.z + SHOP_RANGE;
+    const near = interactCandidates({ ...base, feet: vec3(11.5, 0.5, edge - 0.01), stops: [fuelStop(false)] });
+    expect(kinds(near)).toEqual(['shop']);
+    const far = interactCandidates({ ...base, feet: vec3(11.5, 0.5, edge + 0.01), stops: [fuelStop(false)] });
+    expect(kinds(far)).toEqual([]);
+  });
+
+  test('stop candidates are offered whatever is in the hands, but never while seated', () => {
+    const stops = [fuelStop(true)];
+    expect(kinds(interactCandidates({ ...base, feet: at, hands: 'crate-1', stops }))).toEqual(['operate']);
+    expect(kinds(interactCandidates({ ...base, feet: at, hands: 'hook', stops }))).toEqual(['operate']);
+    expect(interactCandidates({ ...base, feet: at, seat: 'driver', stops })).toEqual([]);
+  });
+
+  test('ties inside the tier go to the earlier stop, operate before shop', () => {
+    const found = interactCandidates({ ...base, feet: vec3(11.5, 0, -21), stops: [fuelStop(true, 'a'), fuelStop(true, 'b')] });
+    expect(found.map((c) => c.action)).toEqual([
+      { kind: 'operate', stopId: 'a' },
+      { kind: 'shop', stopId: 'a' },
+      { kind: 'operate', stopId: 'b' },
+      { kind: 'shop', stopId: 'b' },
+    ]);
+  });
+
+  test('splitCandidates returns a third list of stop candidates', () => {
+    const found = interactCandidates({ ...base, feet: vec3(11.5, 0, -21), stops: [fuelStop(true)] });
+    const split = splitCandidates(found);
+    expect(split.stopCandidates.map((c) => c.action.kind)).toEqual(['operate', 'shop']);
+    expect(split.candidates).toEqual([]);
+    expect(split.attachCandidates).toEqual([]);
+  });
+
+  describe('resolveInteract (S3b)', () => {
+    const operate: InteractCandidate = { action: { kind: 'operate', stopId: 's' }, angle: 1.2 };
+    const shop: InteractCandidate = { action: { kind: 'shop', stopId: 's' }, angle: 0.4 };
+    const near: InteractCandidate = { action: { kind: 'board', seatId: 'driver' }, angle: 0.01 };
+    const resolveAll = (c: Partial<Parameters<typeof resolveInteract>[0]>) =>
+      resolveInteract({ seat: null, hands: null, holdsHook: false, candidates: [], attachCandidates: [], stopCandidates: [], ...c });
+
+    test('operate beats a board with the smaller angle', () => {
+      expect(resolveAll({ candidates: [near], stopCandidates: [operate] })).toEqual({ kind: 'operate', stopId: 's' });
+    });
+    test('operate beats a throw with debris in the hands', () => {
+      expect(resolveAll({ hands: 'crate-1', stopCandidates: [operate] })).toEqual({ kind: 'operate', stopId: 's' });
+    });
+    test('operate beats dropping the hook', () => {
+      expect(resolveAll({ hands: 'hook', holdsHook: true, stopCandidates: [operate] })).toEqual({ kind: 'operate', stopId: 's' });
+    });
+    test('attachHook beats operate', () => {
+      const attachNear = { action: { kind: 'attachHook' as const, anchorId: 'a' }, angle: 2 };
+      expect(resolveAll({ hands: 'hook', holdsHook: true, attachCandidates: [attachNear], stopCandidates: [operate] })).toEqual({ kind: 'attachHook', anchorId: 'a' });
+    });
+    test('being seated still leaves the seat', () => {
+      expect(resolveAll({ seat: 'driver', stopCandidates: [operate] })).toEqual({ kind: 'exitSeat' });
+    });
+    test('the smallest angle wins inside the tier, the earlier on a tie', () => {
+      expect(resolveAll({ stopCandidates: [operate, shop] })).toEqual({ kind: 'shop', stopId: 's' });
+      expect(resolveAll({ stopCandidates: [{ ...operate, angle: 0.4 }, shop] })).toEqual({ kind: 'operate', stopId: 's' });
+    });
   });
 });

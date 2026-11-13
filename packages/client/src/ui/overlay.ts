@@ -92,6 +92,7 @@ export function interactHint(
     heldProps,
     cable: cable ?? STOWED,
     anchors,
+    stops: [],
   });
   const action = resolveInteract({ seat: local.seat, hands: local.hands, holdsHook: local.hands === 'hook', ...splitCandidates(found) });
   if (action?.kind === 'exitSeat') return 'E to leave the seat';
