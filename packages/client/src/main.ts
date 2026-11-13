@@ -5,6 +5,11 @@ import { createGame, type Game } from './game';
 import { openSocket, type GameSocket } from './net/socket';
 import { roomFromPath, socketUrl } from './route';
 import { createMemoryStore, saveName, savedName, sessionToken, type KeyValueStore } from './session';
+import { createInputSource } from './input/combined';
+import { createKeyboardSource } from './input/keyboard';
+import { createMouseLook } from './input/mouse';
+import type { GameInput } from './input/source';
+import { createTouchSource } from './input/touch';
 import { createHome, errorText } from './ui/home';
 
 // Some private browsing modes refuse access to storage; the page then works without remembering anything.
@@ -32,6 +37,20 @@ const RAPIER_FAILED = 'The game could not load its physics engine. Reload the pa
 const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
 const overlay = document.querySelector<HTMLElement>('#overlay')!;
 const crosshair = document.querySelector<HTMLElement>('#crosshair')!;
+
+// Chosen once at load. The touch controls are a stub until the touch UI exists, so only the joystick and look drag work.
+const touchDevice = window.matchMedia('(pointer: coarse)').matches;
+const makeInput = (): GameInput =>
+  touchDevice
+    ? createTouchSource({
+        surface: canvas,
+        win: window,
+        doc: document,
+        width: () => window.innerWidth,
+        controls: { onButton() {}, onSlot() {}, onCancel() {} },
+      })
+    : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document));
+
 const CONNECTION_LOST = 'The connection to the server was lost.';
 
 let renderer: THREE.WebGLRenderer | null = null;
@@ -88,7 +107,7 @@ function startGame(lobby: LobbyMessage) {
     socket?.close();
     return;
   }
-  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input: makeInput }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
 function onClose() {

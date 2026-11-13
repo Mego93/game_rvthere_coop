@@ -16,9 +16,7 @@ import {
   type SnapshotMessage,
 } from '@lodgy/shared';
 import * as THREE from 'three';
-import { createInputSource } from './input/combined';
-import { createKeyboardSource } from './input/keyboard';
-import { createMouseLook } from './input/mouse';
+import type { GameInput } from './input/source';
 import { createFixedStepper, createFrameClock } from './loop';
 import { createSnapshotBuffer } from './net/snapshotBuffer';
 import { createReconciler } from './prediction/reconciler';
@@ -47,6 +45,8 @@ export interface GameView {
   crosshair: HTMLElement;
   // The initialised Rapier module.
   rapier: Rapier;
+  // Makes the run's input source; chosen once at load by the page.
+  input: () => GameInput;
 }
 
 // Draws one run: sends an input every tick and shows the vehicle and the players from the server's snapshots.
@@ -82,8 +82,7 @@ export function createGame(
   resize();
 
   const buffer = createSnapshotBuffer();
-  const mouse = createMouseLook(renderer.domElement, document);
-  const input = createInputSource(createKeyboardSource(window), mouse);
+  const input = view.input();
   const playerMeshes = new Map<string, { mesh: THREE.Group; name: string; colour: string }>();
   const propMeshes = new Map<string, { mesh: THREE.Mesh; kind: string }>();
   // The local player's entry in the newest snapshot, not interpolated.
@@ -162,6 +161,7 @@ export function createGame(
     stepper.advance(frameSeconds);
     if (frameSeconds > 0) fps += (1 / frameSeconds - fps) * 0.05;
 
+    const aim = input.aim();
     const sampled = buffer.sample(now / 1000);
     const vehicle = sampled?.vehicle ?? null;
     const interpolated = sampled?.players ?? [];
@@ -169,7 +169,7 @@ export function createGame(
     let players = interpolated;
     if (drawnPosition && latestLocal) {
       // Seat and ground come from the newest snapshot so leaving a seat switches the view at once.
-      const drawn = { ...latestLocal, pos: drawnPosition, yaw: mouse.yaw(), seat: null, ground: null };
+      const drawn = { ...latestLocal, pos: drawnPosition, yaw: aim.yaw, seat: null, ground: null };
       players = interpolated.some((player) => player.playerId === playerId)
         ? interpolated.map((player) => (player.playerId === playerId ? drawn : player))
         : [...interpolated, drawn];
@@ -194,7 +194,7 @@ export function createGame(
     crosshair.hidden = !onFoot;
     if (local && onFoot) {
       const head = vec3(local.pos.x, local.pos.y + PLAYER_EYE_HEIGHT, local.pos.z);
-      const placement = cameraPlacement(head, mouse.yaw(), mouse.pitch(), cameraBoxes);
+      const placement = cameraPlacement(head, aim.yaw, aim.pitch, cameraBoxes);
       camera.position.set(placement.position.x, placement.position.y, placement.position.z);
       camera.lookAt(placement.target.x, placement.target.y, placement.target.z);
     } else if (vehicle) {
@@ -210,7 +210,7 @@ export function createGame(
       localId: playerId,
       predicted: drawnPosition,
       server: latestLocal?.pos ?? null,
-      aim: { yaw: mouse.yaw(), pitch: mouse.pitch() },
+      aim,
       propPoses: sampled?.props ?? [],
       cable: buffer.latestCable(),
       anchors: course.anchors,
