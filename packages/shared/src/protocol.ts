@@ -210,7 +210,9 @@ const isVehicleState = (value: unknown): value is VehicleState =>
   isQuat(value.rot) &&
   isVec3(value.linvel) &&
   finite(value.throttle) &&
-  finite(value.steer);
+  finite(value.steer) &&
+  finite(value.fuel) &&
+  finite(value.health);
 const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   isRecord(value) &&
   isText(value.playerId) &&
@@ -222,7 +224,12 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   isVec2(value.walk) &&
   isVec2(value.carry) &&
   finite(value.vy) &&
-  typeof value.grounded === 'boolean';
+  typeof value.grounded === 'boolean' &&
+  Array.isArray(value.inventory) &&
+  value.inventory.length === 3 &&
+  value.inventory.every((slot) => slot === null || isText(slot)) &&
+  (value.slot === 0 || value.slot === 1 || value.slot === 2) &&
+  (value.hold === null || (isRecord(value.hold) && isText(value.hold.action) && isText(value.hold.targetId) && finite(value.hold.progress)));
 const isPropSnapshot = (value: unknown): value is PropSnapshot =>
   isRecord(value) && isText(value.id) && isText(value.kind) && isVec3(value.pos) && isQuat(value.rot);
 const isCableSnapshot = (value: unknown): value is CableSnapshot =>

@@ -109,3 +109,69 @@ test('a prop that moves after a quiet spell is listed again', () => {
   expect(second.received.some((message) => message.props.some((prop) => prop.id === 'push-me'))).toBe(true);
   again.room.dispose();
 });
+
+// Course pickups kept, unlike `course`; the test ground's own three are left out.
+const withPickups = (pickups: BuiltCourse['pickups']): BuiltCourse => ({ ...course(0), pickups });
+const offGround = { id: 'lost-can', kind: 'jerrycan', pose: { pos: vec3(300, 0, -200), rot: IDENTITY } };
+
+test('picking an item up makes the next snapshot full for every client, and the item is absent', () => {
+  // Pass one finds where a player walking away from the vehicle ends up.
+  const walk = (testCourse: BuiltCourse, finish: (setupResult: ReturnType<typeof setup>, one: ReturnType<ReturnType<typeof setup>['join']>) => void) => {
+    const s = setup(testCourse);
+    const one = s.join(1);
+    const two = s.join(2);
+    s.run(60);
+    for (let i = 0; i < 60; i++) {
+      one.player.queue.push({ ...NEUTRAL_INPUT, seq: i + 1, moveY: 1, yaw: Math.PI / 2 });
+      s.run(1);
+    }
+    for (let i = 0; i < 30; i++) {
+      one.player.queue.push({ ...NEUTRAL_INPUT, seq: 61 + i, yaw: Math.PI / 2 });
+      s.run(1);
+    }
+    finish(s, one);
+    return { s, one, two };
+  };
+  let feet = vec3(0, 0, 0);
+  walk(withPickups([]), (_s, one) => {
+    feet = one.received[one.received.length - 1]!.players[0]!.pos;
+  }).s.room.dispose();
+  expect(feet.x).toBeLessThan(-4);
+
+  const can = { id: 'can-1', kind: 'jerrycan', pose: { pos: vec3(feet.x, 0, feet.z), rot: IDENTITY } };
+  const { s, one, two } = walk(withPickups([can]), () => {});
+  const before = one.received[one.received.length - 1]!;
+  expect(before.props.map((prop) => prop.id)).not.toContain('can-1');
+  expect(one.received.some((message) => message.props.some((prop) => prop.id === 'can-1'))).toBe(true);
+
+  one.received.length = 0;
+  two.received.length = 0;
+  one.player.queue.push({ ...NEUTRAL_INPUT, seq: 91, interact: true, yaw: Math.PI / 2 });
+  s.run(SNAPSHOT_EVERY_TICKS);
+  for (const client of [one, two]) {
+    const message = client.received[0]!;
+    expect(message.full).toBe(true);
+    expect(message.props.map((prop) => prop.id)).toEqual(['crate-1', 'crate-2', 'crate-3', 'barrier-1']);
+  }
+  expect(one.received[0]!.players[0]!.inventory[0]).toBe('jerrycan');
+
+  // With the set of ids unchanged again, snapshots are partial.
+  s.run(SNAPSHOT_EVERY_TICKS);
+  expect(one.received[1]!.full).toBe(false);
+  s.room.dispose();
+});
+
+test('a course pickup reset by the kill plane is sent at its reset pose', () => {
+  const { room, join, run } = setup(withPickups([offGround]));
+  const { received } = join(1);
+  run(SNAPSHOT_EVERY_TICKS * 3);
+  const heights = () => received.flatMap((message) => message.props.filter((prop) => prop.id === 'lost-can').map((prop) => prop.pos.y));
+  expect(heights()[0]).toBeGreaterThan(0);
+  // It falls past the kill plane (y -20) in about two seconds, then is put back at y of its spawn pose.
+  run(180);
+  const seen = heights();
+  const lowest = seen.indexOf(Math.min(...seen));
+  expect(Math.min(...seen)).toBeLessThan(-15);
+  expect(seen.slice(lowest + 1).some((y) => y > 0)).toBe(true);
+  room.dispose();
+});

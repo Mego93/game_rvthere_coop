@@ -141,6 +141,9 @@ const onFoot = {
   carry: { x: 0, z: 0 },
   vy: 0,
   grounded: true,
+  inventory: [null, 'jerrycan', null],
+  slot: 1,
+  hold: null,
 };
 const seated = { ...onFoot, playerId: 'p2', seat: 'driver' };
 const onVehicle = { ...onFoot, playerId: 'p3', ground: { bodyId: 'vehicle', localPos: { x: 0, y: 1, z: 0 } } };
@@ -203,6 +206,9 @@ test.each([
   ['a snapshot whose position lacks z', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, pos: { x: 1, y: 2 } } })],
   ['a snapshot whose rotation lacks w', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, rot: { x: 0, y: 0, z: 0 } } })],
   ['a snapshot whose velocity is null', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, linvel: null } })],
+  ['a vehicle without fuel', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, fuel: undefined } })],
+  ['a vehicle whose fuel is text', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, fuel: '1' } })],
+  ['a vehicle whose health is too large to be finite', JSON.stringify(snapshot).replace('"health":1', '"health":1e999')],
   ['a snapshot whose throttle is text', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, throttle: 'full' } })],
 ])('parseServerMessage rejects %s', (_label, raw) => {
   expect(parseServerMessage(raw)).toBeNull();
@@ -236,6 +242,12 @@ test('parseServerMessage accepts every cable state with null or text ids', () =>
   }
 });
 
+test('parseServerMessage accepts an inventory of kinds and a hold in progress', () => {
+  const holding = { ...onFoot, inventory: ['jerrycan', 'toolbox', 'newer-kind'], hold: { action: 'useItem', targetId: 'vehicle', progress: 0.4 } };
+  const message = { ...snapshot, players: [holding] };
+  expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
+});
+
 const withPlayer = (changes: Record<string, unknown>) => JSON.stringify({ ...snapshot, players: [{ ...onFoot, ...changes }] });
 
 test.each([
@@ -246,6 +258,21 @@ test.each([
   ['a player that is null', JSON.stringify({ ...snapshot, players: [null] })],
   ['a player that is an array', JSON.stringify({ ...snapshot, players: [[]] })],
   ['one bad player among good ones', JSON.stringify({ ...snapshot, players: [onFoot, { ...seated, yaw: 'x' }] })],
+  ['a player without an inventory', withPlayer({ inventory: undefined })],
+  ['an inventory that is not a list', withPlayer({ inventory: 'jerrycan' })],
+  ['an inventory of two', withPlayer({ inventory: [null, null] })],
+  ['an inventory of four', withPlayer({ inventory: [null, null, null, null] })],
+  ['an inventory with a number in it', withPlayer({ inventory: [null, 3, null] })],
+  ['a player without a slot', withPlayer({ slot: undefined })],
+  ['a player whose slot is 3', withPlayer({ slot: 3 })],
+  ['a player whose slot is -1', withPlayer({ slot: -1 })],
+  ['a player whose slot is text', withPlayer({ slot: '1' })],
+  ['a player without a hold field', withPlayer({ hold: undefined })],
+  ['a hold that is a string', withPlayer({ hold: 'useItem' })],
+  ['a hold without an action', withPlayer({ hold: { targetId: 'vehicle', progress: 0.5 } })],
+  ['a hold without a target', withPlayer({ hold: { action: 'useItem', progress: 0.5 } })],
+  ['a hold whose progress is text', withPlayer({ hold: { action: 'useItem', targetId: 'vehicle', progress: '0.5' } })],
+  ['a hold whose progress is not finite', withPlayer({ hold: { action: 'useItem', targetId: 'vehicle', progress: 0.5 } }).replace('"progress":0.5', '"progress":1e999')],
   ['a player without an id', withPlayer({ playerId: undefined })],
   ['a player whose id is a number', withPlayer({ playerId: 1 })],
   ['a player without a position', withPlayer({ pos: undefined })],

@@ -1,13 +1,18 @@
-import { PROP_KINDS, type PropKind, type PropSnapshot } from '@lodgy/shared';
+import { ITEM_KINDS, PROP_KINDS, type ItemKind, type PropKind, type PropSnapshot } from '@lodgy/shared';
 import * as THREE from 'three';
 
 const COLOURS: Record<PropKind, number> = { crate: 0xb5833f, barrier: 0xc0392b };
+const ITEM_COLOURS: Record<ItemKind, number> = { jerrycan: 0xd32f2f, toolbox: 0x1e6fd9 };
 const UNKNOWN_HALF = 0.25;
 
 const material = (color: number) => new THREE.MeshLambertMaterial({ color, flatShading: true });
 
-// A prop drawn as a box of its kind's size; a kind this client does not know is a grey 0.5 m cube.
+// A prop or item drawn as a box of its kind's size; a kind this client does not know is a grey 0.5 m cube.
 export function createPropMesh(kind: string): THREE.Mesh {
+  if (Object.hasOwn(ITEM_KINDS, kind)) {
+    const h = ITEM_KINDS[kind as ItemKind].halfExtents;
+    return new THREE.Mesh(new THREE.BoxGeometry(h.x * 2, h.y * 2, h.z * 2), material(ITEM_COLOURS[kind as ItemKind]));
+  }
   if (!Object.hasOwn(PROP_KINDS, kind)) {
     return new THREE.Mesh(new THREE.BoxGeometry(UNKNOWN_HALF * 2, UNKNOWN_HALF * 2, UNKNOWN_HALF * 2), material(0x888888));
   }

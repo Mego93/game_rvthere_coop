@@ -225,3 +225,42 @@ test('shows the cable state and length to one decimal, and nothing before the fi
   expect(overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [], localId: 'p1', predicted: null, server: null, ...noAim, cable: stowed })).toContain('cable    stowed 0.0 m');
   expect(overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [], localId: 'p1', predicted: null, server: null, ...noAim, cable: null })).not.toContain('cable');
 });
+
+const holding = (changes: Partial<PlayerSnapshot>): PlayerSnapshot => ({ ...nearDoor, ...changes });
+const lines = (players: PlayerSnapshot[], v: VehicleState = vehicle) => call(players, 'p1', v).split('\n');
+
+test('shows fuel and health as percentages', () => {
+  expect(lines([nearDoor])).toContain('fuel     100%   health 100%');
+  expect(lines([nearDoor], { ...vehicle, fuel: 0.254, health: 0.5 })).toContain('fuel     25%   health 50%');
+});
+
+test('shows the slots with the selected one in brackets and empty ones as a dash', () => {
+  expect(lines([nearDoor])).toContain('slots    [-] - -');
+  const carrying = holding({ inventory: ['jerrycan', null, 'toolbox'], slot: 0 });
+  expect(lines([carrying])).toContain('slots    [jerrycan] - toolbox');
+  expect(lines([{ ...carrying, slot: 2 }])).toContain('slots    jerrycan - [toolbox]');
+  expect(lines([{ ...carrying, slot: 1 }])).toContain('slots    jerrycan [-] toolbox');
+});
+
+test('shows the hold progress only while holding', () => {
+  expect(call([nearDoor]).includes('hold ')).toBe(false);
+  const hold = { action: 'useItem', targetId: 'vehicle', progress: 0.4 };
+  expect(lines([holding({ inventory: ['jerrycan', null, null], hold })])).toContain('hold     40%');
+});
+
+test('hints to refuel or repair when the selected item suits the vehicle and it is in range', () => {
+  const jerrycan = holding({ inventory: ['jerrycan', null, null] });
+  const toolbox = holding({ inventory: ['toolbox', null, null] });
+  const low = { ...vehicle, fuel: 0.3, health: 0.4 };
+  expect(lines([jerrycan], low)).toContain('hint     Hold F to refuel');
+  expect(lines([toolbox], low)).toContain('hint     Hold F to repair');
+  // After the interact hint.
+  const text = lines([jerrycan], low);
+  expect(text.indexOf('hint     E to board')).toBeLessThan(text.indexOf('hint     Hold F to refuel'));
+  // Full tank or full health, wrong slot selected, out of range, seated: no hint.
+  expect(lines([jerrycan]).some((line) => line.includes('Hold F'))).toBe(false);
+  expect(lines([toolbox], { ...vehicle, fuel: 0.3 }).some((line) => line.includes('Hold F'))).toBe(false);
+  expect(lines([{ ...jerrycan, slot: 1 }], low).some((line) => line.includes('Hold F'))).toBe(false);
+  expect(lines([holding({ inventory: ['jerrycan', null, null], pos: far.pos })], low).some((line) => line.includes('Hold F'))).toBe(false);
+  expect(lines([holding({ inventory: ['jerrycan', null, null], seat: 'driver' })], low).some((line) => line.includes('Hold F'))).toBe(false);
+});

@@ -325,3 +325,21 @@ test('a full snapshot replaces the props: one missing from it is gone', () => {
 test('before any snapshot there are no props', () => {
   expect(createSnapshotBuffer().latestProps()).toEqual([]);
 });
+
+test('copies the inventory, slot and hold of a player and the fuel and health of the vehicle', () => {
+  const holding: PlayerSnapshot = {
+    ...player('a', 0, 0),
+    inventory: ['jerrycan', null, 'toolbox'],
+    slot: 2,
+    hold: { action: 'useItem', targetId: 'vehicle', progress: 0.5 },
+  };
+  const buffer = pair([player('a', 0, 0)], [holding]);
+  const view = buffer.sample((9 + DELAY_TICKS) * TICK_DT)!;
+  expect(view.players[0]!.inventory).toEqual(['jerrycan', null, 'toolbox']);
+  expect(view.players[0]!.slot).toBe(2);
+  expect(view.players[0]!.hold).toEqual({ action: 'useItem', targetId: 'vehicle', progress: 0.5 });
+  expect(view.players[0]!.inventory).not.toBe(holding.inventory);
+  expect(view.players[0]!.hold).not.toBe(holding.hold);
+  expect(view.vehicle.fuel).toBe(1);
+  expect(view.vehicle.health).toBe(1);
+});

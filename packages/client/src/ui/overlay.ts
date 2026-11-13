@@ -5,6 +5,7 @@ import {
   resolveInteract,
   rotate,
   splitCandidates,
+  useTarget,
   vec3,
   type CableSnapshot,
   type LobbyMessage,
@@ -17,6 +18,7 @@ import {
 } from '@lodgy/shared';
 
 const FORWARD = vec3(0, 0, -1);
+const percent = (fraction: number) => `${Math.round(fraction * 100)}%`;
 const fixed = (value: number, digits = 1) => value.toFixed(digits).padStart(7);
 
 export interface OverlayData {
@@ -113,6 +115,7 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
       `speed    ${fixed(speed * 3.6)} km/h`,
       `pos      ${fixed(vehicle.pos.x)} ${fixed(vehicle.pos.y)} ${fixed(vehicle.pos.z)}`,
       `throttle ${fixed(vehicle.throttle, 2)}   steer ${fixed(vehicle.steer, 2)}`,
+      `fuel     ${percent(vehicle.fuel)}   health ${percent(vehicle.health)}`,
     );
     // These lines must not start with "pos": the e2e test reads the vehicle's position from the "pos" line.
     if (predicted) {
@@ -122,6 +125,15 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
     const local = players.find((player) => player.playerId === localId);
     const hint = local ? interactHint(config, vehicle, local, players, aim.yaw, aim.pitch, propPoses, cable, anchors) : null;
     if (hint) lines.push(`hint     ${hint}`);
+    if (local) {
+      lines.push(`slots    ${local.inventory.map((kind, index) => (index === local.slot ? `[${kind ?? '-'}]` : (kind ?? '-'))).join(' ')}`);
+      if (local.hold) lines.push(`hold     ${percent(local.hold.progress)}`);
+      const selected = local.inventory[local.slot];
+      const half = config.halfExtents;
+      if (local.seat === null && useTarget(selected ?? null, local.pos, { pos: vehicle.pos, rot: vehicle.rot, half, fuel: vehicle.fuel, health: vehicle.health })) {
+        lines.push(`hint     Hold F to ${selected === 'jerrycan' ? 'refuel' : 'repair'}`);
+      }
+    }
   } else {
     lines.push('waiting for the server…');
   }

@@ -96,6 +96,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
 
   const broadcastSnapshot = () => {
     const snapshot = world.snapshot();
+    // Rule I7: a prop or item that appeared or vanished cannot be told as a partial list, so everyone gets the whole.
+    const idsChanged = snapshot.props.length !== lastSent.size || snapshot.props.some((prop) => !lastSent.has(prop.id));
+    if (idsChanged) lastSent.clear();
     const moved = snapshot.props.filter((prop) => {
       const sent = lastSent.get(prop.id);
       return !sent || movedSince(sent, prop);
@@ -105,9 +108,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       const message: SnapshotMessage = {
         type: 'snapshot',
         ...snapshot,
-        props: player.sentFull ? moved : snapshot.props,
+        props: player.sentFull && !idsChanged ? moved : snapshot.props,
         ackSeq: player.queue.ackSeq(),
-        full: !player.sentFull,
+        full: !player.sentFull || idsChanged,
       };
       player.sentFull = true;
       player.connection.send(JSON.stringify(message));

@@ -2,6 +2,7 @@ export * from './constants';
 export * from './course';
 export * from './courses/index';
 export * from './groups';
+export * from './holds';
 export * from './interact';
 export * from './items';
 export * from './math';
