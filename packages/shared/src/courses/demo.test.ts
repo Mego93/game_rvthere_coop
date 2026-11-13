@@ -15,6 +15,7 @@ import { distanceToBox } from '../seats';
 import { createRig } from '../testRig';
 import { VEHICLES } from '../vehicles';
 import { createWorld } from '../world';
+import { buildCourse } from './build';
 import { segmentDemo } from './demo';
 import { getCourse } from './index';
 
@@ -238,7 +239,8 @@ describe('B7 ids', () => {
   });
 
   test('building the demo again gives an equal course', () => {
-    expect(getCourse('segment-demo')).toEqual(course);
+    expect(buildCourse(segmentDemo)).toEqual(course);
+    expect(Object.isFrozen(course)).toBe(true);
   });
 });
 
