@@ -141,5 +141,7 @@ export const HANDS_RANGE = 2;
 export const HOLD_OFFSET: Vec3 = deepFreeze(vec3(0, 1.1, -0.75));
 // m/s along the aim, added to the holder's horizontal velocity.
 export const THROW_SPEED = 7;
+// m, the gap above the head when a throw is blocked and the prop is released overhead.
+export const THROW_HEAD_CLEARANCE = 0.05;
 // m or quaternion component; a smaller change is not sent.
 export const PROP_MOVED_EPSILON = 1e-4;

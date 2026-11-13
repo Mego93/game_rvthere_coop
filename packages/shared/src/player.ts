@@ -12,6 +12,7 @@ import {
   PUSH_TIPPED_DEG,
   SHOVE_MAX_DISTANCE,
   SHOVE_STEP,
+  THROW_HEAD_CLEARANCE,
   THROW_SPEED,
 } from './constants';
 import type { BuiltCourse } from './course';
@@ -336,7 +337,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     const half = prop.config.halfExtents;
     const pose = holdPoseAt(state.pos, yaw);
     const at = boxBlocked(pose, prop.kind, half)
-      ? { pos: add(state.pos, vec3(0, PLAYER_HEIGHT + half.y + 0.05, 0)), rot: pose.rot }
+      ? { pos: add(state.pos, vec3(0, PLAYER_HEIGHT + half.y + THROW_HEAD_CLEARANCE, 0)), rot: pose.rot }
       : pose;
     props.release(prop.id, at.pos, at.rot, velocity);
   };
