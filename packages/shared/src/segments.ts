@@ -306,6 +306,7 @@ function buildAlley(def: Extract<SegmentDef, { type: 'alley' }>): LocalSegment {
   if (!(def.clutter >= 0 && def.clutter <= 1)) throw new Error('Alley clutter is a density from 0 to 1');
   const pieces = roadPieces(def.length, 0, 0);
   const routeLength = routeLengthOf(pieces);
+  if (routeLength < SEGMENT_MIN_LENGTH) throw new Error(`A segment's route must be at least ${SEGMENT_MIN_LENGTH} m`);
   const surfaceAt = surfaceOnPieces(pieces);
   const id = idCounter();
   const kinds: PropKind[] = ['crate', 'cart', 'scooter'];
@@ -356,6 +357,7 @@ function buildSand(def: Extract<SegmentDef, { type: 'sand' }>): LocalSegment {
 function buildFord(def: Extract<SegmentDef, { type: 'ford' }>): LocalSegment {
   checkLength(def.width, 'A ford');
   checkCount(def.rocks, 'Rocks');
+  if (def.width < SEGMENT_MIN_LENGTH) throw new Error(`A segment's route must be at least ${SEGMENT_MIN_LENGTH} m`);
   const bed: Piece = { start: vec3(0, 0, 0), yaw: 0, pitch: 0, length: def.width, alongStart: 0, horizontal: def.width, surface: 'riverbed' };
   const surfaceAt = surfaceOnPieces([bed]);
   const id = idCounter();

@@ -1,4 +1,4 @@
-import { CHECKPOINT_TRIGGER, FINISH_PAD, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET } from '../constants';
+import { CHECKPOINT_TRIGGER, FINISH_PAD, FINISH_TRIGGER, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET } from '../constants';
 import type { Box, BuiltCourse, Checkpoint, GroundBox, Placed } from '../course';
 import { add, deepFreeze, quatMul, rotate, vec3, type Pose, type Vec3 } from '../math';
 import { buildSegment, yawPitchQuat, yawQuat, type LocalSegment, type SegmentDef } from '../segments';
@@ -99,8 +99,8 @@ export function buildCourse(def: CourseDef): BuiltCourse {
   ground.push(...pad.ground.map(at.box));
   addRoute(pad, at, false);
   course.finish = {
-    center: at.point(vec3(0, 2, -FINISH_PAD / 2)),
-    halfExtents: vec3(ROAD_WIDTH / 2, 2, 2),
+    center: at.point(vec3(0, FINISH_TRIGGER.y, -FINISH_PAD / 2)),
+    halfExtents: FINISH_TRIGGER,
     rot: at.q,
   };
 

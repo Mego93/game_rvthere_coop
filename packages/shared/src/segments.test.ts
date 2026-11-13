@@ -271,6 +271,10 @@ describe('validation', () => {
     expect(() => buildSegment(road(SEGMENT_MIN_LENGTH))).not.toThrow();
   });
 
+  test('an alley shorter than the minimum throws even with clutter', () => {
+    expect(() => buildSegment(alley(SEGMENT_MIN_LENGTH - 1, 1))).toThrow(/at least/);
+  });
+
   test('a non-positive length throws', () => {
     expect(() => buildSegment(road(0))).toThrow();
   });
@@ -541,6 +545,7 @@ describe('ford', () => {
 
   test('a ford shorter than the minimum route throws', () => {
     expect(() => buildSegment(ford(SEGMENT_MIN_LENGTH - 1, 0))).toThrow(/at least/);
+    expect(() => buildSegment(ford(SEGMENT_MIN_LENGTH - 1, 3))).toThrow(/at least/);
   });
 });
 
@@ -680,7 +685,10 @@ describe('B4 the lane stays clear', () => {
   const propBoxes = (seg: LocalSegment, skip?: string): Footprint[] =>
     seg.props
       .filter((p) => p.kind !== skip)
-      .map((p) => ({ center: p.pose.pos, half: PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents, rot: p.pose.rot }));
+      .map((p) => {
+        const half = PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents;
+        return { center: add(p.pose.pos, rotate(p.pose.rot, vec3(0, half.y, 0))), half, rot: p.pose.rot };
+      });
 
   test.each(NEW_CASES.map(([name, def]) => [name, def] as const))('%s: the swept lane meets no wall (ford rocks excepted) and no prop (barriers excepted)', (_name, def) => {
     const seg = buildSegment(def);
@@ -717,7 +725,7 @@ function propBlocks(course: BuiltCourse, feet: Vec3): boolean {
   for (let y = lo; y <= hi + 1e-9; y += (hi - lo) / 10) {
     for (const p of course.props) {
       const half = PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents;
-      if (distanceToBox(vec3(feet.x, y, feet.z), half, p.pose.pos, p.pose.rot) < PLAYER_RADIUS) return true;
+      if (distanceToBox(vec3(feet.x, y, feet.z), half, add(p.pose.pos, rotate(p.pose.rot, vec3(0, half.y, 0))), p.pose.rot) < PLAYER_RADIUS) return true;
     }
   }
   return false;
@@ -744,7 +752,7 @@ describe('B5 checkpoint spawns', () => {
         const heading = Math.atan2(-yaw.x, -yaw.z);
         const turn = { x: 0, y: Math.sin(heading / 2), z: 0, w: Math.cos(heading / 2) };
         for (const [i, slot] of config.spawnSlots.entries()) {
-          const at = add(cp.spawn.pos, rotate(turn, vec3(slot.x, 0, slot.z)));
+          const at = add(add(cp.spawn.pos, rotate(cp.spawn.rot, vec3(0, config.rideHeight, 0))), rotate(turn, vec3(slot.x, 0, slot.z)));
           const h = groundHeightAt(course.ground, at.x, at.z);
           expect(h, `${config.id} slot ${i}: no ground`).not.toBeNull();
           expect(spotBlocked(course, vec3(at.x, h!, at.z)), `${config.id} slot ${i}: wall in the way`).toBe(false);

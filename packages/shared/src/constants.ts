@@ -227,3 +227,5 @@ export const STOP_ZONE_GAP = 0.5;
 export const STOP_OPERATE_GAP = 1;
 // m along the road from the operate point to a fuel stop's shop counter.
 export const STOP_COUNTER_OFFSET = 2;
+// Half extents of the finish trigger; its centre is half its height above the road.
+export const FINISH_TRIGGER: Vec3 = deepFreeze(vec3(ROAD_WIDTH / 2, 2, 2));

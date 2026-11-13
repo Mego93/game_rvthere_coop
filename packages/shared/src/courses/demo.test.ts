@@ -162,7 +162,10 @@ describe('B4 over the whole course', () => {
     const walls = course.walls.filter((w) => w.halfExtents.y > 0.5).map(asFootprint);
     const props = course.props
       .filter((p) => p.kind !== 'barrier')
-      .map((p) => ({ center: p.pose.pos, half: PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents, rot: p.pose.rot }));
+      .map((p) => {
+        const half = PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents;
+        return { center: add(p.pose.pos, rotate(p.pose.rot, vec3(0, half.y, 0))), half, rot: p.pose.rot };
+      });
     const blockers = [...walls, ...props];
     for (const s of samples(0.5)) {
       const yaw = Math.atan2(-s.dx, -s.dz);
@@ -188,7 +191,10 @@ describe('B5 every checkpoint of the demo', () => {
   test.each(VEHICLE_CONFIGS.map((c) => [c.id, c] as const))('%s: wheels and player slots stand on ground, clear of walls and props', (_id, config) => {
     const blockers = [
       ...course.walls.map((w) => ({ half: w.halfExtents, center: w.center, rot: w.rot })),
-      ...course.props.map((p) => ({ half: PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents, center: p.pose.pos, rot: p.pose.rot })),
+      ...course.props.map((p) => {
+        const half = PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents;
+        return { half, center: add(p.pose.pos, rotate(p.pose.rot, vec3(0, half.y, 0))), rot: p.pose.rot };
+      }),
     ];
     for (const cp of course.checkpoints) {
       for (const sx of [-1, 1]) {
@@ -203,7 +209,7 @@ describe('B5 every checkpoint of the demo', () => {
       const heading = Math.atan2(-fwd.x, -fwd.z);
       const turn = { x: 0, y: Math.sin(heading / 2), z: 0, w: Math.cos(heading / 2) };
       config.spawnSlots.forEach((slot, i) => {
-        const at = add(cp.spawn.pos, rotate(turn, vec3(slot.x, 0, slot.z)));
+        const at = add(add(cp.spawn.pos, rotate(cp.spawn.rot, vec3(0, config.rideHeight, 0))), rotate(turn, vec3(slot.x, 0, slot.z)));
         const h = groundHeightAt(course.ground, at.x, at.z);
         expect(h, `${cp.id} slot ${i}: no ground`).not.toBeNull();
         expect(pointBlocked(blockers, vec3(at.x, h!, at.z)), `${cp.id} slot ${i}: something in the way`).toBe(false);
