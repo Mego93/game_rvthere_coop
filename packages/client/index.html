@@ -32,6 +32,23 @@
         pointer-events: none;
         white-space: pre;
       }
+      #crosshair {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: 20px;
+        height: 20px;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        /* Two strokes with a dark outline, readable on sand and on sky. */
+        background:
+          linear-gradient(#fff, #fff) center / 2px 100% no-repeat,
+          linear-gradient(#fff, #fff) center / 100% 2px no-repeat;
+        filter: drop-shadow(0 0 1px #000);
+      }
+      #crosshair[hidden] {
+        display: none;
+      }
       #overlay:empty {
         display: none;
       }
@@ -101,6 +118,7 @@
   <body>
     <canvas id="game"></canvas>
     <pre id="overlay"></pre>
+    <div id="crosshair" hidden></div>
     <div id="home" hidden>
       <form id="home-form" novalidate>
         <h1 id="home-title">Lodgy Co-op</h1>

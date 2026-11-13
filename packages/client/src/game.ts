@@ -1,10 +1,23 @@
-import { getCourse, getVehicleConfig, type ClientMessage, type LobbyMessage, type WorldSnapshot } from '@lodgy/shared';
+import {
+  PLAYER_EYE_HEIGHT,
+  getCourse,
+  getVehicleConfig,
+  vec3,
+  type ClientMessage,
+  type LobbyMessage,
+  type PlayerSnapshot,
+  type WorldSnapshot,
+} from '@lodgy/shared';
 import * as THREE from 'three';
+import { createInputSource } from './input/combined';
 import { createKeyboardSource } from './input/keyboard';
+import { createMouseLook } from './input/mouse';
 import { createFixedStepper, createFrameClock } from './loop';
 import { createSnapshotBuffer } from './net/snapshotBuffer';
 import { updateFollowCamera } from './render/followCamera';
+import { createPlayerMesh, disposePlayerMesh, placePlayerMesh } from './render/playerMesh';
 import { createScene } from './render/scene';
+import { cameraPlacement } from './render/shoulderCamera';
 import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
 import { overlayText } from './ui/overlay';
 
@@ -21,13 +34,21 @@ export interface Game {
 export interface GameView {
   renderer: THREE.WebGLRenderer;
   overlay: HTMLElement;
+  crosshair: HTMLElement;
 }
 
-// Draws one run: sends an input every tick and shows the vehicle from the server's snapshots.
-export function createGame(view: GameView, firstLobby: LobbyMessage, send: (message: ClientMessage) => void): Game {
-  const { renderer, overlay } = view;
+// Draws one run: sends an input every tick and shows the vehicle and the players from the server's snapshots.
+export function createGame(
+  view: GameView,
+  playerId: string,
+  firstLobby: LobbyMessage,
+  send: (message: ClientMessage) => void,
+): Game {
+  const { renderer, overlay, crosshair } = view;
   let lobby = firstLobby;
-  const scene = createScene(getCourse(lobby.courseId));
+  const course = getCourse(lobby.courseId);
+  const cameraBoxes = [...course.ground, ...course.walls];
+  const scene = createScene(course);
   const vehicleMesh = createVehicleMesh(getVehicleConfig(lobby.vehicleId));
   vehicleMesh.visible = false;
   scene.add(vehicleMesh);
@@ -43,12 +64,42 @@ export function createGame(view: GameView, firstLobby: LobbyMessage, send: (mess
   resize();
 
   const buffer = createSnapshotBuffer();
-  const keyboard = createKeyboardSource(window);
+  const mouse = createMouseLook(renderer.domElement, document);
+  const input = createInputSource(createKeyboardSource(window), mouse);
+  const playerMeshes = new Map<string, { mesh: THREE.Group; name: string; colour: string }>();
   let seq = 0;
   const stepper = createFixedStepper(() => {
     seq += 1;
-    send({ type: 'input', ...keyboard.sample(), seq });
+    send({ type: 'input', ...input.sample(), seq });
   });
+
+  // Seated players are not drawn; meshes are remade when a player's name or colour changes, and dropped when they leave.
+  const syncPlayerMeshes = (players: PlayerSnapshot[]) => {
+    const present = new Set<string>();
+    for (const player of players) {
+      const info = lobby.players.find((candidate) => candidate.playerId === player.playerId);
+      if (!info || player.seat !== null) continue;
+      present.add(player.playerId);
+      let entry = playerMeshes.get(player.playerId);
+      if (entry && (entry.name !== info.name || entry.colour !== info.colour)) {
+        scene.remove(entry.mesh);
+        disposePlayerMesh(entry.mesh);
+        entry = undefined;
+      }
+      if (!entry) {
+        entry = { mesh: createPlayerMesh(info.name, info.colour), name: info.name, colour: info.colour };
+        playerMeshes.set(player.playerId, entry);
+        scene.add(entry.mesh);
+      }
+      placePlayerMesh(entry.mesh, player);
+    }
+    for (const [id, entry] of playerMeshes) {
+      if (present.has(id)) continue;
+      scene.remove(entry.mesh);
+      disposePlayerMesh(entry.mesh);
+      playerMeshes.delete(id);
+    }
+  };
 
   const frameClock = createFrameClock(MAX_FRAME_SECONDS);
   let fps = 60;
@@ -57,13 +108,27 @@ export function createGame(view: GameView, firstLobby: LobbyMessage, send: (mess
     stepper.advance(frameSeconds);
     if (frameSeconds > 0) fps += (1 / frameSeconds - fps) * 0.05;
 
-    const vehicle = buffer.sample(now / 1000)?.vehicle ?? null;
+    const sampled = buffer.sample(now / 1000);
+    const vehicle = sampled?.vehicle ?? null;
+    const players = sampled?.players ?? [];
     if (vehicle) {
       vehicleMesh.visible = true;
       placeVehicleMesh(vehicleMesh, vehicle);
+    }
+    syncPlayerMeshes(players);
+
+    const local = players.find((player) => player.playerId === playerId);
+    const onFoot = local !== undefined && local.seat === null;
+    crosshair.hidden = !onFoot;
+    if (local && onFoot) {
+      const head = vec3(local.pos.x, local.pos.y + PLAYER_EYE_HEIGHT, local.pos.z);
+      const placement = cameraPlacement(head, mouse.yaw(), mouse.pitch(), cameraBoxes);
+      camera.position.set(placement.position.x, placement.position.y, placement.position.z);
+      camera.lookAt(placement.target.x, placement.target.y, placement.target.z);
+    } else if (vehicle) {
       updateFollowCamera(camera, vehicle, frameSeconds);
     }
-    overlay.textContent = overlayText({ lobby, tick: buffer.latestTick(), fps, vehicle });
+    overlay.textContent = overlayText({ lobby, tick: buffer.latestTick(), fps, vehicle, players, localId: playerId });
     renderer.render(scene, camera);
     frameRequest = requestAnimationFrame(frame);
   });
@@ -76,7 +141,10 @@ export function createGame(view: GameView, firstLobby: LobbyMessage, send: (mess
     stop() {
       cancelAnimationFrame(frameRequest);
       window.removeEventListener('resize', resize);
-      keyboard.dispose();
+      input.dispose();
+      crosshair.hidden = true;
+      for (const entry of playerMeshes.values()) disposePlayerMesh(entry.mesh);
+      playerMeshes.clear();
     },
   };
 }

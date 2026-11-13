@@ -1,4 +1,15 @@
-import { dot, rotate, vec3, type LobbyMessage, type VehicleState } from '@lodgy/shared';
+import {
+  chooseSeat,
+  dot,
+  getVehicleConfig,
+  resolveInteract,
+  rotate,
+  vec3,
+  type LobbyMessage,
+  type PlayerSnapshot,
+  type VehicleConfig,
+  type VehicleState,
+} from '@lodgy/shared';
 
 const FORWARD = vec3(0, 0, -1);
 const fixed = (value: number, digits = 1) => value.toFixed(digits).padStart(7);
@@ -9,12 +20,32 @@ export interface OverlayData {
   fps: number;
   // Null until the first snapshot arrives.
   vehicle: VehicleState | null;
+  players: PlayerSnapshot[];
+  localId: string;
+}
+
+// What pressing interact would do for the local player, or null if nothing.
+export function interactHint(
+  config: VehicleConfig,
+  vehicle: VehicleState,
+  local: PlayerSnapshot,
+  players: PlayerSnapshot[],
+): string | null {
+  const taken = new Set<string>();
+  for (const player of players) if (player.seat !== null) taken.add(player.seat);
+  const seatChoice = local.seat === null ? chooseSeat(config, vehicle.pos, vehicle.rot, local.pos, taken) : null;
+  const action = resolveInteract({ seat: local.seat, seatChoice });
+  if (action?.kind === 'exitSeat') return 'E to leave the seat';
+  if (action?.kind === 'board') return 'E to board';
+  return null;
 }
 
 // The debug text shown until the real HUD exists.
-export function overlayText({ lobby, tick, fps, vehicle }: OverlayData): string {
-  // Until seats exist (step 3) the first player in the list drives.
-  const names = lobby.players.map((player, index) => (index === 0 ? `${player.name} (drives)` : player.name));
+export function overlayText({ lobby, tick, fps, vehicle, players, localId }: OverlayData): string {
+  const names = lobby.players.map((player) => {
+    const snapshot = players.find((candidate) => candidate.playerId === player.playerId);
+    return snapshot ? `${player.name} (${snapshot.seat ?? 'on foot'})` : player.name;
+  });
   const lines = [
     `room     ${lobby.room}   vehicle ${lobby.vehicleId}   course ${lobby.courseId}`,
     `players  ${names.join(', ')}`,
@@ -27,9 +58,12 @@ export function overlayText({ lobby, tick, fps, vehicle }: OverlayData): string 
       `pos      ${fixed(vehicle.pos.x)} ${fixed(vehicle.pos.y)} ${fixed(vehicle.pos.z)}`,
       `throttle ${fixed(vehicle.throttle, 2)}   steer ${fixed(vehicle.steer, 2)}`,
     );
+    const local = players.find((player) => player.playerId === localId);
+    const hint = local ? interactHint(getVehicleConfig(lobby.vehicleId), vehicle, local, players) : null;
+    if (hint) lines.push(`hint     ${hint}`);
   } else {
     lines.push('waiting for the server…');
   }
-  lines.push('', 'WASD drive   Space brake');
+  lines.push('', 'WASD move   Space jump (brake when driving)   E board or leave   click to look');
   return lines.join('\n');
 }

@@ -26,12 +26,14 @@ const token = sessionToken(
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
 const overlay = document.querySelector<HTMLElement>('#overlay')!;
+const crosshair = document.querySelector<HTMLElement>('#crosshair')!;
 const CONNECTION_LOST = 'The connection to the server was lost.';
 
 let renderer: THREE.WebGLRenderer | null = null;
 let socket: GameSocket | null = null;
 let game: Game | null = null;
 let name = savedName(nameStore);
+let playerId = '';
 // What the home page says when the socket next closes.
 let closeReason = CONNECTION_LOST;
 
@@ -49,6 +51,7 @@ const home = createHome(document.querySelector<HTMLElement>('#home')!, {
 function onMessage(message: ServerMessage) {
   switch (message.type) {
     case 'welcome':
+      playerId = message.playerId;
       saveName(nameStore, name);
       // Creating a room, or joining one by name, changes the address to the room's without reloading.
       if (roomFromPath(location.pathname) !== message.room) history.pushState(null, '', `/${message.room}`);
@@ -80,7 +83,7 @@ function startGame(lobby: LobbyMessage) {
     socket?.close();
     return;
   }
-  game = createGame({ renderer, overlay }, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ renderer, overlay, crosshair }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
 function onClose() {
