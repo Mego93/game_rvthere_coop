@@ -126,9 +126,23 @@ test('returns copies: mutating one changes no later result', () => {
   expect(queue.next().input.moveY).toBe(0.5);
 });
 
-test('an empty queue repeats the unmerged second input after a merged tick', () => {
+// A two-input take always leaves at least two queued, so the unmerged-last rule cannot be seen through the public API; this checks that no merged tap is repeated.
+test('a repeat after draining a merged tick never carries the tap', () => {
   const { queue, tick } = consumeTwo({ interact: true });
   expect(tick.input.interact).toBe(true);
   for (let i = 0; i < 3; i++) queue.next();
   expect(queue.next()).toMatchObject({ input: { interact: false, moveX: 0.05 }, fresh: false });
+});
+
+test('repeat and neutral results are copies too', () => {
+  const queue = createInputQueue();
+  const neutral = queue.next().input;
+  neutral.moveY = 9;
+  expect(NEUTRAL_INPUT.moveY).toBe(0);
+  queue.push(input(1, { moveY: 1 }));
+  queue.next();
+  const repeat = queue.next().input;
+  repeat.moveY = 9;
+  repeat.jump = true;
+  expect(queue.next().input).toMatchObject({ moveY: 1, jump: false });
 });
