@@ -63,7 +63,14 @@ function setup() {
 test('a room whose update throws is closed and reported, and the other rooms carry on', () => {
   const fake = createFakeDeps(RAPIER);
   const errors: unknown[] = [];
-  const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) });
+  const sources: string[] = [];
+  const server = createRoomServer({
+    ...fake.deps,
+    onError: (error, source) => {
+      errors.push(error);
+      sources.push(source);
+    },
+  });
   const amal = connectFakeClient(server);
   amal.send({ type: 'create', name: 'Amal', token: 'token-1-abcdefghij' });
   const badr = connectFakeClient(server);
@@ -77,6 +84,7 @@ test('a room whose update throws is closed and reported, and the other rooms car
   fake.advance(1);
 
   expect(errors).toHaveLength(1);
+  expect(sources).toEqual([`room:${amal.last('welcome').room}`]);
   expect(server.roomCount()).toBe(1);
   expect(amal.closedByServer).toBe(true);
   expect(badr.closedByServer).toBe(false);

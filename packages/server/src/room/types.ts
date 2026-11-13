@@ -26,18 +26,21 @@ export interface RoomDeps {
   // A number in [0, 1).
   random: () => number;
   timer: Timer;
-  // Told about a connection or a room that failed; the server carries on without it.
-  onError?: (error: unknown) => void;
+  // Told about a failure; `source` is `room:<noun>`, `connection:<noun>` or `connection`, and `suppressed` is 0 from this layer.
+  onError?: (error: unknown, source: string, suppressed: number) => void;
 }
 
 export interface RoomServerOptions {
   // Until the lobby exists (step 11), every room runs this course with this vehicle.
   courseId?: string;
   vehicleId?: string;
+  // `create` messages one address may send in 60 s; defaults to CREATE_PER_MINUTE.
+  createPerMinute?: number;
 }
 
 export interface RoomServer {
-  connect(connection: Connection): ConnectionHandle;
+  // `address` is the client's address, used to limit room creation per address.
+  connect(connection: Connection, address: string): ConnectionHandle;
   roomCount(): number;
   // Stops the timer and frees every room.
   stop(): void;

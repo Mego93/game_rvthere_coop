@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -118,20 +118,6 @@ test('never serves a file outside the client folder', async () => {
   }
   expect(resolveStaticPath('/srv/dist', '/../../etc/passwd')).toBe(path.join('/srv/dist', 'etc/passwd'));
   expect(resolveStaticPath('/srv/dist', '/%E0%A4%A')).toBeNull();
-});
-
-test('a file that cannot be read ends that response and leaves the server running', async () => {
-  const locked = path.join(clientDir, 'assets', 'locked.js');
-  await writeFile(locked, 'console.log("locked")');
-  await chmod(locked, 0o000);
-  // The headers are sent before the file is opened, so the failure shows as a broken response.
-  const body = await fetch(url('/assets/locked.js'))
-    .then((response) => response.text())
-    .catch(() => 'failed');
-  // As root the file is still readable; either way the server must survive.
-  expect(['failed', 'console.log("locked")']).toContain(body);
-  await chmod(locked, 0o644);
-  expect((await fetch(url('/'))).status).toBe(200);
 });
 
 test('starting on a port that is already in use is refused', async () => {

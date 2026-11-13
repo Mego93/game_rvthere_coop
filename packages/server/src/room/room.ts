@@ -46,6 +46,8 @@ export interface Room {
   update(now: number): void;
   // When the last player left, or null while anyone is connected.
   emptySince(): number | null;
+  // Whether anyone with a token other than the creator's has ever joined.
+  everJoinedByOthers(): boolean;
   dispose(): void;
 }
 
@@ -76,6 +78,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   // The time at which tick 0 would have run, given the ticks simulated so far.
   let startTime = createdAt;
   let emptySince: number | null = createdAt;
+  // The first token to join is the creator's.
+  let creatorToken: string | null = null;
+  let joinedByOthers = false;
 
   const broadcastLobby = () => {
     const message: LobbyMessage = {
@@ -149,6 +154,8 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
         sentFull: false,
       };
       nextPlayerNumber += 1;
+      creatorToken ??= token;
+      if (token !== creatorToken) joinedByOthers = true;
       players.push(player);
       world.addPlayer(player.playerId);
       adminId ??= player.playerId;
@@ -191,6 +198,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       for (let i = 0; i < due; i++) stepOnce();
     },
     emptySince: () => emptySince,
+    everJoinedByOthers: () => joinedByOthers,
     dispose: () => world.dispose(),
   };
 }

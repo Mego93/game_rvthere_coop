@@ -75,7 +75,7 @@ export interface FakeClient {
   last<T extends ServerMessage['type']>(type: T): Extract<ServerMessage, { type: T }>;
 }
 
-export function connectFakeClient(server: RoomServer): FakeClient {
+export function connectFakeClient(server: RoomServer, address = 'test'): FakeClient {
   const received: ServerMessage[] = [];
   let handle: ConnectionHandle | null = null;
   const client: FakeClient = {
@@ -93,11 +93,14 @@ export function connectFakeClient(server: RoomServer): FakeClient {
       return message;
     },
   };
-  handle = server.connect({
-    send: (data) => received.push(JSON.parse(data) as ServerMessage),
-    close: () => {
-      client.closedByServer = true;
+  handle = server.connect(
+    {
+      send: (data) => received.push(JSON.parse(data) as ServerMessage),
+      close: () => {
+        client.closedByServer = true;
+      },
     },
-  });
+    address,
+  );
   return client;
 }
