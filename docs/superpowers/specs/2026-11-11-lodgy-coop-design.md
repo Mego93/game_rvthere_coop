@@ -154,7 +154,7 @@ The admin picks the vehicle in the lobby. Vehicles differ in look and handling b
 | Mass | Baseline | About 2.5 times heavier |
 | Tipping | Rolls but recovers | High centre of gravity |
 | Climbing | Weak on steep slopes | Needs the winch on any real slope |
-| Soft sand | Slows to a crawl | Cannot pull away from rest on sand; crosses it only with a run-up. Pushing or the winch frees it |
+| Soft sand | Slows to a crawl | Cannot pull away from rest on sand; crosses it only with a run-up. The winch frees it |
 | Fuel burn | Baseline | About 1.5 times |
 | Pushing | Crew can shove it free | Barely moves; righting it needs the winch |
 | Turning circle | Tight | Wide |
@@ -183,10 +183,10 @@ Course geometry is sized so the RV fits, and every segment is completable by the
 
 ### Push
 
-- The push is a horizontal force along the player's move input, applied at the point where the player touches the object. It applies only while the input points into the surface.
-- On the vehicle, forces add per player, capped at 4 pushers' worth. Because the force acts at the contact point, pushing can roll a flipped vehicle upright.
+- The push is a horizontal force along the player's move input, applied at the contact point: the point of the object's box nearest to the player's push point, a fixed height above the feet. It applies only while the input points into the surface. A player's force is a constant, capped at the object's mass times a maximum acceleration, so light debris is not launched.
+- On the vehicle, forces add per player, capped at 4 pushers' worth (the first 4 in join order among those pushing it that tick). Because the force acts at the contact point, pushing can roll a flipped vehicle upright. While the vehicle is tipped more than 45° from upright, each player's push uses a larger constant, so four players can roll a Lodgy lying on its side back onto its wheels; an upturned or tipped RV needs the winch.
 - A player standing on an object applies no push to it.
-- A heavy obstacle is locked in place. It unlocks only while enough players push it at once, or while the cable attached to it is taut. The count is 1 when one player is connected, 2 for 2–3 connected players, 3 for 4–6, and follows the players currently connected. The vehicle cannot shove a locked obstacle.
+- A heavy obstacle is locked in place. It unlocks only while enough players push it at once, or while the cable attached to it is taut. The count is 1 when one player is connected, 2 for 2–3 connected players, 3 for 4–6, and follows the players currently connected. The vehicle cannot shove a locked obstacle. A heavy obstacle never rotates: unlocked, it slides.
 
 ### Winch
 
@@ -329,7 +329,8 @@ world.snapshot();                  // serialisable state
 world.status();                    // 'running' | 'won', plus the results fields
 
 const predictor = createPredictor(rapier, builtCourse, vehicleConfig);   // used by the client only
-predictor.setVehicle(pos, rot);    // positions the vehicle stand-in (prop stand-ins arrive with props)
+predictor.setVehicle(pos, rot);    // positions the vehicle stand-in
+predictor.setProps(props);         // creates, moves or removes prop stand-ins by id; props held by a player are left out
 predictor.stepPlayer(state, input, previousJump) // returns the next player state; the press is jump && !previousJump
 ```
 
