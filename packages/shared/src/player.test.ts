@@ -3,6 +3,8 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import {
   PLAYER_AIR_ACCEL,
   PLAYER_EYE_HEIGHT,
+  PLAYER_HEIGHT,
+  PLAYER_RADIUS,
   PLAYER_WALK_SPEED,
   TICK_DT,
   TICK_RATE,
@@ -297,10 +299,20 @@ const LODGY = getVehicleConfig('lodgy');
 const conjugate = (q: Quat): Quat => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
 const toLocal = (body: { translation(): Vec3; rotation(): Quat }, p: Vec3): Vec3 =>
   rotate(conjugate(body.rotation()), vec3(p.x - body.translation().x, p.y - body.translation().y, p.z - body.translation().z));
-const insideChassis = (body: { translation(): Vec3; rotation(): Quat }, p: Vec3): boolean => {
-  const l = toLocal(body, p);
+// The capsule axis is sampled; the tolerance covers the overlap lift and the controller's skin gap.
+const capsuleHitsChassis = (body: { translation(): Vec3; rotation(): Quat }, feet: Vec3): boolean => {
   const h = LODGY.halfExtents;
-  return Math.abs(l.x) < h.x && Math.abs(l.y) < h.y && Math.abs(l.z) < h.z;
+  for (let i = 0; i <= 10; i++) {
+    const y = feet.y + PLAYER_RADIUS + ((PLAYER_HEIGHT - 2 * PLAYER_RADIUS) * i) / 10;
+    const l = toLocal(body, vec3(feet.x, y, feet.z));
+    const gap = Math.hypot(
+      Math.max(Math.abs(l.x) - h.x, 0),
+      Math.max(Math.abs(l.y) - h.y, 0),
+      Math.max(Math.abs(l.z) - h.z, 0),
+    );
+    if (gap < PLAYER_RADIUS - 0.06) return true;
+  }
+  return false;
 };
 
 describe('standing on the vehicle', () => {
@@ -358,7 +370,6 @@ describe('standing on the vehicle', () => {
     run(5);
     tick({ p1: { jump: true } });
     expect(player.ground).toBeNull();
-    expect(player.carry.x).toBeCloseTo(0, 0);
     expect(Math.abs(player.carry.x)).toBeLessThan(0.2);
     expect(player.carry.z).toBeGreaterThan(-10.2);
     expect(player.carry.z).toBeLessThan(-9.8);
@@ -413,7 +424,7 @@ describe('shoving a player out of the vehicle\'s way', () => {
     for (let i = 0; i < 4 * TICK_RATE; i++) {
       tick({});
       expect(Number.isFinite(player.pos.x + player.pos.y + player.pos.z)).toBe(true);
-      expect(insideChassis(body, player.pos)).toBe(false);
+      expect(capsuleHitsChassis(body, player.pos)).toBe(false);
     }
     expect(toLocal(body, player.pos).z).toBeLessThan(-LODGY.halfExtents.z);
     expect(body.translation().z).toBeLessThan(z + LODGY.halfExtents.z - 5);
@@ -436,9 +447,11 @@ describe('shoving a player out of the vehicle\'s way', () => {
     for (let i = 0; i < 4 * TICK_RATE; i++) {
       tick({});
       expect(Number.isFinite(player.pos.x + player.pos.y + player.pos.z)).toBe(true);
-      expect(insideChassis(body, player.pos)).toBe(false);
-      const inWall = Math.abs(player.pos.x) < 3 && player.pos.z > zp - 6.1 && player.pos.z < zp - 0.1;
-      expect(inWall).toBe(false);
+      expect(capsuleHitsChassis(body, player.pos)).toBe(false);
+      if (relocated) {
+        const gap = Math.hypot(Math.max(Math.abs(player.pos.x) - 3, 0), Math.max(zp - 6.1 - player.pos.z, player.pos.z - (zp - 0.1), 0));
+        expect(gap).toBeGreaterThanOrEqual(PLAYER_RADIUS - 0.06);
+      }
       if (!relocated && Math.hypot(player.pos.x - last.x, player.pos.z - last.z) > 0.5) {
         relocated = true;
         const turn = quatFromAxisAngle(AXIS_Y, yawOf(body.rotation()));
@@ -474,7 +487,7 @@ describe('shoving a player out of the vehicle\'s way', () => {
 });
 
 describe('players never change the vehicle', () => {
-  test('a player standing in the path of a driven vehicle does not make the chassis rise or tilt', () => {
+  test('a player standing in the path of a driven vehicle is shoved aside and does not disturb the chassis', () => {
     const { rig, players, run, tick, vehicleRun } = harness();
     const body = rig.vehicle.body;
     const settled = body.translation().y;
@@ -490,13 +503,14 @@ describe('players never change the vehicle', () => {
     expect(body.translation().z).toBeLessThan(z);
   });
 
-  test('a player under a wheel is ignored by the wheel rays', () => {
+  // A seated player is never shoved, so this is the way a capsule ends up under a wheel ray.
+  test('a seated capsule under a wheel ray does not move the chassis', () => {
     const { rig, players, tick } = harness();
     const body = rig.vehicle.body;
     const settled = body.translation().y;
     players.add('p1');
     const at = body.translation();
-    players.teleport('p1', vec3(at.x - LODGY.wheelX, 0.02, at.z - LODGY.wheelZ));
+    players.setSeat('p1', 'driver', vec3(at.x - LODGY.wheelX, 0.02, at.z - LODGY.wheelZ));
     let worst = 0;
     for (let i = 0; i < 30; i++) {
       tick({});

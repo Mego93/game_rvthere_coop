@@ -241,11 +241,8 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     const { fields, pressed } = step;
     const wish = wishVelocity(state.yaw, finite(fields.moveX), finite(fields.moveY));
     const wasOnVehicle = state.ground !== null;
-    let jumped = false;
     if (pressed.jump && state.grounded) {
       state.vy = PLAYER_JUMP_SPEED;
-      jumped = true;
-      if (wasOnVehicle) state.carry = vehicleVelocityAt(state.pos);
     }
     state.vy -= GRAVITY * TICK_DT;
 
@@ -273,7 +270,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     if (state.grounded) {
       state.vy = 0;
       state.carry = { x: 0, z: 0 };
-    } else if (wasOnVehicle && !jumped) {
+    } else if (wasOnVehicle) {
       state.carry = vehicleVelocityAt(state.pos);
     }
     placeCollider(state.id);
