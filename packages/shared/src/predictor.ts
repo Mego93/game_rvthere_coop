@@ -1,10 +1,11 @@
-import { GRAVITY, PLAYER_HEIGHT, PLAYER_RADIUS, TICK_DT } from './constants';
+import { GRAVITY, PLAYER_HEIGHT, PLAYER_RADIUS, PROP_KINDS, TICK_DT, type PropKind } from './constants';
 import type { BuiltCourse } from './course';
 import { GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, add, rotate, scale, type Quat, type Vec3 } from './math';
 import { wishVelocity } from './player';
 import { sanitiseInput, type InputFields, type PlayerSnapshot } from './protocol';
-import type { Rapier } from './rapier';
+import type { PropSnapshot } from './props';
+import type { Rapier, RigidBody } from './rapier';
 import { buildStatics } from './statics';
 import type { VehicleConfig } from './vehicles';
 import { createWalkController, stepWalk } from './walk';
@@ -20,6 +21,8 @@ export interface PredictedState {
 export interface Predictor {
   // Moves the vehicle stand-in to this pose (from the latest snapshot).
   setVehicle(pos: Vec3, rot: Quat): void;
+  // Makes the prop stand-ins match this list: new ids are created, listed ones moved, absent ones removed.
+  setProps(props: readonly PropSnapshot[]): void;
   // One tick: the next state for this input. `previousJump` is the jump button of the input before.
   stepPlayer(state: PredictedState, input: InputFields, previousJump: boolean): PredictedState;
   dispose(): void;
@@ -55,16 +58,27 @@ export function createPredictor(rapier: Rapier, course: BuiltCourse, vehicle: Ve
       physics.step();
       physics.timestep = TICK_DT;
     };
+    const placeBody = (body: RigidBody, pos: Vec3, rot: Quat) => {
+      body.setTranslation(pos, false);
+      body.setRotation(rot, false);
+      body.setLinvel({ x: 0, y: 0, z: 0 }, false);
+      body.setAngvel({ x: 0, y: 0, z: 0 }, false);
+    };
     const place = (pos: Vec3, rot: Quat) => {
-      standIn.setTranslation(pos, false);
-      standIn.setRotation(rot, false);
-      standIn.setLinvel({ x: 0, y: 0, z: 0 }, false);
-      standIn.setAngvel({ x: 0, y: 0, z: 0 }, false);
+      placeBody(standIn, pos, rot);
       settle();
     };
     const start = course.checkpoints[0];
     if (start) place(add(start.spawn.pos, rotate(start.spawn.rot, scale(AXIS_Y, vehicle.rideHeight))), start.spawn.rot);
     else settle();
+
+    const propBodies = new Map<string, { body: RigidBody; kind: string }>();
+    const removeProp = (id: string) => {
+      const entry = propBodies.get(id);
+      if (!entry) return;
+      physics.removeRigidBody(entry.body);
+      propBodies.delete(id);
+    };
 
     const controller = createWalkController(rapier, physics);
     const collider = physics.createCollider(
@@ -82,6 +96,32 @@ export function createPredictor(rapier: Rapier, course: BuiltCourse, vehicle: Ve
       setVehicle(pos, rot) {
         alive();
         place(pos, rot);
+      },
+      setProps(props) {
+        alive();
+        const listed = new Set<string>();
+        for (const prop of props) {
+          if (!Object.hasOwn(PROP_KINDS, prop.kind)) continue;
+          listed.add(prop.id);
+          let entry = propBodies.get(prop.id);
+          if (entry && entry.kind !== prop.kind) {
+            removeProp(prop.id);
+            entry = undefined;
+          }
+          if (!entry) {
+            const half = PROP_KINDS[prop.kind as PropKind].halfExtents;
+            const body = physics.createRigidBody(rapier.RigidBodyDesc.dynamic().setGravityScale(0).setCanSleep(false));
+            physics.createCollider(
+              rapier.ColliderDesc.cuboid(half.x, half.y, half.z).setCollisionGroups(groups(GROUP_WORLD, GROUP_WORLD)),
+              body,
+            );
+            entry = { body, kind: prop.kind };
+            propBodies.set(prop.id, entry);
+          }
+          placeBody(entry.body, prop.pos, prop.rot);
+        }
+        for (const id of [...propBodies.keys()]) if (!listed.has(id)) removeProp(id);
+        settle();
       },
       stepPlayer(state, input, previousJump) {
         alive();

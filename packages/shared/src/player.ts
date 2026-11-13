@@ -95,6 +95,11 @@ const NEUTRAL_STEP: StepInputs = {
 
 const finite = (value: number): number => (Number.isFinite(value) ? value : 0);
 
+export function holdPoseAt(feet: Vec3, yaw: number): Pose {
+  const rot = quatFromAxisAngle(AXIS_Y, yaw);
+  return { pos: add(feet, rotate(rot, HOLD_OFFSET)), rot };
+}
+
 export function wishVelocity(yaw: number, moveX: number, moveY: number): { x: number; z: number } {
   const sin = Math.sin(yaw);
   const cos = Math.cos(yaw);
@@ -302,10 +307,6 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
   };
 
   const yawQuat = (yaw: number): Quat => quatFromAxisAngle(AXIS_Y, yaw);
-  const holdPoseAt = (feet: Vec3, yaw: number): Pose => {
-    const rot = yawQuat(yaw);
-    return { pos: add(feet, rotate(rot, HOLD_OFFSET)), rot };
-  };
 
   const cuboids = new Map<string, InstanceType<Rapier['Cuboid']>>();
   const boxBlocked = (pose: Pose, kind: string, half: Vec3): boolean => {

@@ -3,11 +3,13 @@ import {
   createPredictor,
   getCourse,
   getVehicleConfig,
+  holdPoseAt,
   predictedFrom,
   vec3,
   type ClientMessage,
   type LobbyMessage,
   type PlayerSnapshot,
+  type PropSnapshot,
   type Rapier,
   type SnapshotMessage,
 } from '@lodgy/shared';
@@ -20,6 +22,7 @@ import { createSnapshotBuffer } from './net/snapshotBuffer';
 import { createReconciler } from './prediction/reconciler';
 import { updateFollowCamera } from './render/followCamera';
 import { createPlayerMesh, disposePlayerMesh, placePlayerMesh } from './render/playerMesh';
+import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMesh';
 import { createScene } from './render/scene';
 import { cameraPlacement } from './render/shoulderCamera';
 import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
@@ -76,6 +79,7 @@ export function createGame(
   const mouse = createMouseLook(renderer.domElement, document);
   const input = createInputSource(createKeyboardSource(window), mouse);
   const playerMeshes = new Map<string, { mesh: THREE.Group; name: string; colour: string }>();
+  const propMeshes = new Map<string, { mesh: THREE.Mesh; kind: string }>();
   // The local player's entry in the newest snapshot, not interpolated.
   let latestLocal: PlayerSnapshot | null = null;
   let seq = 0;
@@ -115,6 +119,38 @@ export function createGame(
     }
   };
 
+  // A prop in a player's hands is drawn at that player's hold pose; the rest where the snapshot puts them.
+  const syncPropMeshes = (props: PropSnapshot[], players: PlayerSnapshot[]) => {
+    const held = new Map<string, PlayerSnapshot>();
+    for (const player of players) if (player.hands !== null) held.set(player.hands, player);
+    const present = new Set<string>();
+    for (const prop of props) {
+      present.add(prop.id);
+      let entry = propMeshes.get(prop.id);
+      if (entry && entry.kind !== prop.kind) {
+        scene.remove(entry.mesh);
+        disposePropMesh(entry.mesh);
+        propMeshes.delete(prop.id);
+        entry = undefined;
+      }
+      if (!entry) {
+        const mesh = createPropMesh(prop.kind);
+        if (!mesh) continue;
+        entry = { mesh, kind: prop.kind };
+        propMeshes.set(prop.id, entry);
+        scene.add(mesh);
+      }
+      const holder = held.get(prop.id);
+      placePropMesh(entry.mesh, holder ? holdPoseAt(holder.pos, holder.yaw) : prop);
+    }
+    for (const [id, entry] of propMeshes) {
+      if (present.has(id)) continue;
+      scene.remove(entry.mesh);
+      disposePropMesh(entry.mesh);
+      propMeshes.delete(id);
+    }
+  };
+
   const frameClock = createFrameClock(MAX_FRAME_SECONDS);
   let fps = 60;
   let frameRequest = requestAnimationFrame(function frame(now: number) {
@@ -139,6 +175,7 @@ export function createGame(
       placeVehicleMesh(vehicleMesh, vehicle);
     }
     syncPlayerMeshes(players);
+    syncPropMeshes(sampled?.props ?? [], players);
 
     const local = players.find((player) => player.playerId === playerId);
     const onFoot = local !== undefined && local.seat === null;
@@ -175,6 +212,8 @@ export function createGame(
     pushSnapshot(snapshot) {
       buffer.push(snapshot, performance.now() / 1000);
       predictor.setVehicle(snapshot.vehicle.pos, snapshot.vehicle.rot);
+      const held = new Set(snapshot.players.flatMap((player) => (player.hands === null ? [] : [player.hands])));
+      predictor.setProps(buffer.latestProps().filter((prop) => !held.has(prop.id)));
       const entry = snapshot.players.find((player) => player.playerId === playerId);
       latestLocal = entry ?? null;
       if (entry && entry.seat === null && entry.ground === null) reconciler.correct(predictedFrom(entry), snapshot.ackSeq);
@@ -189,6 +228,8 @@ export function createGame(
       crosshair.hidden = true;
       for (const entry of playerMeshes.values()) disposePlayerMesh(entry.mesh);
       playerMeshes.clear();
+      for (const entry of propMeshes.values()) disposePropMesh(entry.mesh);
+      propMeshes.clear();
     },
   };
 }

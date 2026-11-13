@@ -20,6 +20,7 @@ beforeAll(async () => {
 // Exact arithmetic: x advances by moveY; vy counts jump presses.
 const fake = (): Predictor => ({
   setVehicle() {},
+  setProps() {},
   stepPlayer(state, input, previousJump) {
     return {
       ...state,

@@ -110,6 +110,71 @@ describe('createPredictor', () => {
     world.dispose();
   });
 
+  describe('prop stand-ins', () => {
+    const BARRIER = vec3(-10, 0.5, 10);
+    const barrier = (z = BARRIER.z, id = 'barrier-1', kind = 'barrier') => ({ id, kind, pos: vec3(BARRIER.x, 0.5, z), rot: IDENTITY });
+    const START = vec3(BARRIER.x, PLAYER_CONTROLLER_OFFSET, BARRIER.z + 6);
+
+    test('Y1: a barrier stand-in stops the player where the server stops them', () => {
+      const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+      world.addPlayer('p');
+      // An idle second player makes the barrier need two pushers, so one leaves it locked.
+      world.addPlayer('idle');
+      world.teleportPlayer('idle', vec3(100, PLAYER_CONTROLLER_OFFSET, -300));
+      world.teleportPlayer('p', START);
+      const predictor = createPredictor(RAPIER, world.course, lodgy);
+      predictor.setVehicle(world.snapshot().vehicle.pos, world.snapshot().vehicle.rot);
+      predictor.setProps(world.snapshot().props);
+      const me = driver(predictor, rest(START));
+      for (let i = 0; i < 240; i++) {
+        world.step(new Map([['p', { ...NEUTRAL_INPUT, seq: 0, moveY: 1 }]]));
+        // As on the client: the stand-ins follow every snapshot.
+        predictor.setProps(world.snapshot().props);
+        me.tick({ moveY: 1 });
+      }
+      const server = world.snapshot().players.find((player) => player.playerId === 'p')!;
+      expect(Math.abs(server.pos.x - me.state.pos.x)).toBeLessThan(1e-6);
+      expect(Math.abs(server.pos.z - me.state.pos.z)).toBeLessThan(1e-6);
+      expect(me.state.pos.z).toBeGreaterThan(BARRIER.z + 0.4);
+      predictor.dispose();
+      world.dispose();
+    });
+
+    test('Y2: a moved stand-in blocks at its new place', () => {
+      const predictor = createPredictor(RAPIER, testGround, lodgy);
+      predictor.setProps([barrier(BARRIER.z - 10)]);
+      const me = driver(predictor, rest(START));
+      me.run(240, { moveY: 1 });
+      expect(me.state.pos.z).toBeGreaterThan(BARRIER.z - 10 + 0.4);
+      expect(me.state.pos.z).toBeLessThan(BARRIER.z - 10 + 0.4 + PLAYER_RADIUS + 0.05);
+      predictor.setProps([barrier(BARRIER.z + 20)]);
+      me.run(120, { moveY: 1 });
+      expect(me.state.pos.z).toBeLessThan(BARRIER.z - 10);
+      predictor.dispose();
+    });
+
+    test('Y3: a stand-in absent from the list is removed, and the player passes', () => {
+      const predictor = createPredictor(RAPIER, testGround, lodgy);
+      predictor.setProps([barrier()]);
+      const me = driver(predictor, rest(START));
+      me.run(240, { moveY: 1 });
+      expect(me.state.pos.z).toBeGreaterThan(BARRIER.z);
+      predictor.setProps([]);
+      me.run(120, { moveY: 1 });
+      expect(me.state.pos.z).toBeLessThan(BARRIER.z - 1);
+      predictor.dispose();
+    });
+
+    test('Y4: a prop of an unknown kind is skipped', () => {
+      const predictor = createPredictor(RAPIER, testGround, lodgy);
+      predictor.setProps([barrier(BARRIER.z, 'x-1', 'sofa'), barrier(BARRIER.z, 'x-2', '__proto__')]);
+      const me = driver(predictor, rest(START));
+      me.run(240, { moveY: 1 });
+      expect(me.state.pos.z).toBeLessThan(BARRIER.z - 1);
+      predictor.dispose();
+    });
+  });
+
   describe('vehicle stand-in', () => {
     const pose = (z: number, rot: Quat = IDENTITY) => ({ pos: vec3(FAR.x, lodgy.halfExtents.y + 0.02, z), rot });
 
