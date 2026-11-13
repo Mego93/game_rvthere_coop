@@ -712,6 +712,7 @@ describe('health kits (W6, W7, W8, W12)', () => {
     const last = holdUse(world, 1);
     expect(kinds(last, 'revive', 'p2')).toHaveLength(1);
     expect(length(sub(kinds(last, 'revive', 'p2')[0]!.pos!, lying))).toBeLessThan(0.05);
+    expect(kinds(last, 'revive', 'p2')[0]!.tick).toBe(world.snapshot().tick);
     expect(me(world, 'p2').downed).toBeNull();
     expect(me(world, 'p2').health).toBe(PLAYER_REVIVE_HEALTH);
     expect(length(sub(me(world, 'p2').pos, lying))).toBeLessThan(0.05);
@@ -864,11 +865,11 @@ describe('health kits (W6, W7, W8, W12)', () => {
 
 describe('determinism (W13)', () => {
   test('W13: two worlds with the same inputs through a fall, a vehicle hit, a crate hit and a downed timer have equal snapshots', () => {
-    const script = (world: World) => {
+    const script = (world: World, events: WorldEvent[]) => {
       world.addPlayer('p1');
       world.addPlayer('p2');
       world.teleportPlayer('p2', vec3(30, 0.02, 30));
-      for (let i = 0; i < 600; i++) {
+      for (let i = 0; i < 900; i++) {
         if (i === 10) world.teleportPlayer('p1', vec3(5, 8.02, 20));
         if (i === 100) world.teleportPlayer('p2', vec3(0, 0.02, -7));
         if (i === 130) world.debugBody('vehicle')!.setLinvel(vec3(0, 0, -10), true);
@@ -879,20 +880,33 @@ describe('determinism (W13)', () => {
           crate.setLinvel(vec3(0, 0, 12), true);
         }
         if (i === 400) world.debugHurt('p1', 100);
+        if (i === 410) {
+          const at = world.snapshot().players[0]!.pos;
+          world.debugSetInventory('p2', ['healthKit', null, null]);
+          world.teleportPlayer('p2', vec3(at.x, 0.02, at.z + 1.5));
+        }
         const move = i % 90 < 45 ? 1 : -1;
-        world.step(new Map([['p1', input({ moveY: move, yaw: i / 100 })], ['p2', input(i < 100 ? { moveX: 1 } : {})]]));
+        const p2 = i >= 430 ? { use: true, yaw: 0, pitch: -0.45 } : i < 100 ? { moveX: 1 } : {};
+        events.push(...world.step(new Map([['p1', input({ moveY: move, yaw: i / 100 })], ['p2', input(p2)]])));
       }
       return world.snapshot();
     };
     const a = make();
     const b = make();
-    const first = script(a);
-    const second = script(b);
+    const firstEvents: WorldEvent[] = [];
+    const secondEvents: WorldEvent[] = [];
+    const first = script(a, firstEvents);
+    const second = script(b, secondEvents);
     // p2 took both the vehicle's hit and the crate's.
     expect(first.players[1]!.health).toBeLessThan(40);
     expect(first.players[1]!.health).toBeGreaterThan(0);
-    expect(first.players[0]!.downed).not.toBeNull();
-    expect(first.players[0]!.health).toBe(0);
+    // p1 was downed at tick 400 and p2's kit revived them.
+    expect(kinds(firstEvents, 'downed', 'p1')).toHaveLength(1);
+    expect(kinds(firstEvents, 'revive', 'p1')).toHaveLength(1);
+    expect(kinds(secondEvents, 'revive', 'p1')).toHaveLength(1);
+    expect(first.players[0]!.downed).toBeNull();
+    expect(first.players[0]!.health).toBe(PLAYER_REVIVE_HEALTH);
     expect(second).toEqual(first);
+    expect(secondEvents).toEqual(firstEvents);
   });
 });

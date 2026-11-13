@@ -155,7 +155,7 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
         vehicle: { pos: vehicle.pos, rot: vehicle.rot, half, fuel: vehicle.fuel, health: vehicle.health },
         players: others,
       };
-      const target = local.seat === null ? useTarget(selected ?? null, context) : null;
+      const target = local.seat === null && local.downed === null ? useTarget(selected ?? null, context) : null;
       if (target) {
         if (selected === 'jerrycan') lines.push('hint     Hold F to refuel');
         else if (selected === 'toolbox') lines.push('hint     Hold F to repair');

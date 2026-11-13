@@ -305,7 +305,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       if (!patient) continue;
       if (completed.action === 'revive') {
         players.revive(patient.id, PLAYER_REVIVE_HEALTH);
-        events.push({ kind: 'revive', tick, playerId: patient.id, pos: { ...patient.pos } });
+        // Stamped with the tick this step produces, like every other event.
+        events.push({ kind: 'revive', tick: tick + 1, playerId: patient.id, pos: { ...patient.pos } });
       } else {
         patient.health = Math.min(PLAYER_MAX_HEALTH, patient.health + HEALTH_KIT_HEAL);
       }

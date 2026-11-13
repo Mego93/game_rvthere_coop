@@ -330,4 +330,8 @@ describe('C2: health kit hints', () => {
     expect(aimed([kit(), mate()]).some((line) => line.includes('Hold F'))).toBe(false);
     expect(aimed([kit({ slot: 1 }), mate({ health: 0, downed: 20 })]).some((line) => line.includes('Hold F'))).toBe(false);
   });
+
+  test('a downed local player gets no hint', () => {
+    expect(aimed([kit({ health: 0, downed: 20 }), mate({ health: 40 })]).some((line) => line.includes('Hold F'))).toBe(false);
+  });
 });
