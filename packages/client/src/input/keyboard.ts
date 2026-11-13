@@ -21,6 +21,8 @@ export function createKeyboardSource(target: EventTarget): InputSource {
 
   const onKeyDown = (event: Event) => {
     const code = (event as KeyboardEvent).code;
+    // macOS sends no keyup for a key released while Cmd is held, so such a key would stick.
+    if (leaveBrowserAlone(event as KeyboardEvent)) return;
     claim(event as KeyboardEvent);
     if (BUTTON_KEYS.includes(code) && !down.has(code)) tapped.add(code);
     down.add(code);
@@ -29,7 +31,9 @@ export function createKeyboardSource(target: EventTarget): InputSource {
   };
   const onKeyUp = (event: Event) => {
     claim(event as KeyboardEvent);
-    down.delete((event as KeyboardEvent).code);
+    const code = (event as KeyboardEvent).code;
+    if (code === 'MetaLeft' || code === 'MetaRight') down.clear();
+    down.delete(code);
   };
   // Keys released while the window is unfocused never send keyup.
   const onBlur = () => {

@@ -155,7 +155,8 @@ test('seat and ground come from the newer snapshot', () => {
 });
 
 test('the result does not alias stored snapshots', () => {
-  const buffer = pair([player('a', 0, 0)], [player('a', 10, 0)]);
+  const grounded = { ...player('a', 10, 0), ground: { bodyId: 'vehicle', localPos: vec3(1, 2, 3) } };
+  const buffer = pair([player('a', 0, 0)], [grounded]);
   // Held at the newest, held at the oldest, and blended: all three paths.
   for (const now of [100, 0, (9 + DELAY_TICKS) * TICK_DT]) {
     const first = buffer.sample(now)!;
@@ -163,6 +164,7 @@ test('the result does not alias stored snapshots', () => {
     first.vehicle.pos.z = 999;
     first.vehicle.rot.w = 999;
     first.players[0]!.pos.x = 999;
+    if (first.players[0]!.ground) first.players[0]!.ground.localPos.x = 999;
     first.players[0]!.ground = { bodyId: 'x', localPos: vec3(0, 0, 0) };
     const second = buffer.sample(now)!;
     expect(second).toEqual(before);
@@ -204,4 +206,13 @@ test('after a 3 s gap the view holds, then recovers when snapshots resume', () =
   for (let tick = resume + 3; tick <= resume + 30; tick += 3) buffer.push(snapshot(tick), tick * TICK_DT);
   const last = resume + 30;
   expect(buffer.sample(last * TICK_DT)!.vehicle.pos.z).toBeCloseTo(-(last - DELAY_TICKS), 0);
+});
+
+test('player yaw stays in (-pi, pi] after blending', () => {
+  const buffer = pair([player('a', 0, 3.1)], [player('a', 0, -3.1)]);
+  for (const tick of [7, 8, 9, 10, 11]) {
+    const yaw = buffer.sample((tick + DELAY_TICKS) * TICK_DT)!.players[0]!.yaw;
+    expect(yaw).toBeGreaterThan(-Math.PI);
+    expect(yaw).toBeLessThanOrEqual(Math.PI);
+  }
 });

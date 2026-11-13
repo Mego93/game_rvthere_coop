@@ -51,7 +51,9 @@ function blendPlayer(a: PlayerSnapshot | undefined, b: PlayerSnapshot, t: number
   if (!a) return copyPlayer(b);
   // The shorter way round, so a turn across +-pi does not spin the long way.
   const turn = Math.atan2(Math.sin(b.yaw - a.yaw), Math.cos(b.yaw - a.yaw));
-  return { ...copyPlayer(b), pos: lerp(a.pos, b.pos, t), yaw: a.yaw + turn * t };
+  const yaw = a.yaw + turn * t;
+  const wrapped = yaw > Math.PI ? yaw - 2 * Math.PI : yaw <= -Math.PI ? yaw + 2 * Math.PI : yaw;
+  return { ...copyPlayer(b), pos: lerp(a.pos, b.pos, t), yaw: wrapped };
 }
 
 export function createSnapshotBuffer(): SnapshotBuffer {

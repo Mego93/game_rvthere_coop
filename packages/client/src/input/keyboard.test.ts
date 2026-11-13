@@ -168,3 +168,28 @@ test('with Ctrl, Meta or Alt held a game key is left alone (Ctrl+R)', () => {
     expect(release('KeyR', { [modifier]: true }).defaultPrevented, modifier).toBe(false);
   }
 });
+
+test('a key pressed with a modifier held is not tracked (no keyup comes on macOS)', () => {
+  const { source, press } = setup();
+  press('KeyD', { metaKey: true });
+  press('Digit3', { ctrlKey: true });
+  expect(source.sample()).toEqual(NEUTRAL_INPUT);
+});
+
+test('a keyup with a modifier held still releases the key', () => {
+  const { source, press, release } = setup();
+  press('KeyW');
+  release('KeyW', { ctrlKey: true });
+  expect(source.sample().moveY).toBe(0);
+});
+
+test('releasing Meta clears every held key', () => {
+  const { source, press, release } = setup();
+  press('KeyW');
+  press('KeyD');
+  release('MetaLeft');
+  expect(source.sample()).toMatchObject({ moveX: 0, moveY: 0 });
+  press('KeyW');
+  release('MetaRight');
+  expect(source.sample().moveY).toBe(0);
+});
