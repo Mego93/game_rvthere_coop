@@ -97,6 +97,12 @@ test('shared course and vehicle data cannot be modified', () => {
   expect(() => {
     world.course.checkpoints[0]!.spawn.pos.x = 5;
   }).toThrow(TypeError);
+  expect(() => {
+    (world.vehicleConfig.seats[0] as { side: number }).side = 1;
+  }).toThrow(TypeError);
+  expect(() => {
+    (world.vehicleConfig.spawnSlots[0] as { x: number }).x = 0;
+  }).toThrow(TypeError);
 });
 
 test('dispose frees the physics world', () => {

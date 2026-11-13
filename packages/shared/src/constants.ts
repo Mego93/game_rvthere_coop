@@ -67,3 +67,33 @@ export const WINCH_FORCE_PER_WEIGHT = 0.6;
 export const WINCH_REEL_SPEED = 1;
 export const WINCH_MIN_LENGTH = 1.5;
 export const WINCH_MAX_LENGTH = 25;
+
+// Players on foot.
+export const PLAYER_RADIUS = 0.35;
+export const PLAYER_HEIGHT = 1.8;
+export const PLAYER_EYE_HEIGHT = 1.6;
+export const PLAYER_WALK_SPEED = 4.5;
+export const PLAYER_GROUND_ACCEL = 40;
+export const PLAYER_AIR_ACCEL = 10;
+export const PLAYER_JUMP_SPEED = 5;
+export const PLAYER_STEP_HEIGHT = 0.3;
+export const PLAYER_SNAP_DISTANCE = 0.3;
+export const PLAYER_MAX_SLOPE_DEG = 45;
+export const PLAYER_SLIDE_SLOPE_DEG = 50;
+export const PLAYER_CONTROLLER_OFFSET = 0.02;
+// A capsule is lifted this much when tested for overlap, so standing on the ground is not an overlap.
+export const PLAYER_OVERLAP_LIFT = 0.05;
+export const PLAYER_KILL_RESPAWN_DELAY = 3;
+export const BOARD_RANGE = 2;
+export const DRIVER_DOOR_RANGE = 1.5;
+export const SEAT_EXIT_DISTANCE = 0.9;
+export const SHOVE_STEP = 0.1;
+export const SHOVE_MAX_DISTANCE = 4;
+// Client only.
+export const LOOK_SENSITIVITY = 0.0025;
+export const CAMERA_DISTANCE = 3.2;
+export const CAMERA_SHOULDER = 0.6;
+export const CAMERA_MIN_DISTANCE = 0.4;
+export const CAMERA_WALL_MARGIN = 0.2;
+
+export const PLAYER_COLOUR_PATTERN = /^#[0-9a-f]{6}$/;

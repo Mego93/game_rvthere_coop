@@ -2,6 +2,14 @@ import { deepFreeze, vec3, type Vec3 } from './math';
 
 export type VehicleId = 'lodgy' | 'rv';
 
+export interface SeatConfig {
+  id: string;
+  // Chassis-local sitting position.
+  pos: Vec3;
+  // -1 left (-X), +1 right (+X); the door is on this side.
+  side: -1 | 1;
+}
+
 export interface VehicleConfig {
   id: VehicleId;
   halfExtents: Vec3;
@@ -30,6 +38,10 @@ export interface VehicleConfig {
   maxSteer: number;
   // Front bumper point where the winch cable leaves the vehicle, relative to the chassis centre.
   winchMount: Vec3;
+  // seats[0] is the driver seat.
+  seats: readonly SeatConfig[];
+  // In the vehicle yaw frame; y is ignored, the ground is found below.
+  spawnSlots: readonly Vec3[];
 }
 
 export const VEHICLES: Record<VehicleId, VehicleConfig> = deepFreeze({
@@ -56,6 +68,22 @@ export const VEHICLES: Record<VehicleId, VehicleConfig> = deepFreeze({
     brakeForce: 12000,
     maxSteer: 0.55,
     winchMount: vec3(0, -0.3, -2.25),
+    seats: [
+      { id: 'driver', pos: vec3(-0.4, 0.1, -0.7), side: -1 },
+      { id: 'seat1', pos: vec3(0.4, 0.1, -0.7), side: 1 },
+      { id: 'seat2', pos: vec3(-0.4, 0.1, 0.4), side: -1 },
+      { id: 'seat3', pos: vec3(0.4, 0.1, 0.4), side: 1 },
+      { id: 'seat4', pos: vec3(-0.4, 0.1, 1.5), side: -1 },
+      { id: 'seat5', pos: vec3(0.4, 0.1, 1.5), side: 1 },
+    ],
+    spawnSlots: [
+      vec3(-2.08, 0, -0.7),
+      vec3(2.08, 0, -0.7),
+      vec3(-2.08, 0, 0.4),
+      vec3(2.08, 0, 0.4),
+      vec3(-2.08, 0, 1.5),
+      vec3(2.08, 0, 1.5),
+    ],
   },
   rv: {
     id: 'rv',
@@ -80,6 +108,22 @@ export const VEHICLES: Record<VehicleId, VehicleConfig> = deepFreeze({
     brakeForce: 24000,
     maxSteer: 0.45,
     winchMount: vec3(0, -0.9, -3.4),
+    seats: [
+      { id: 'driver', pos: vec3(-0.55, 0.0, -2.2), side: -1 },
+      { id: 'seat1', pos: vec3(0.55, 0.0, -2.2), side: 1 },
+      { id: 'seat2', pos: vec3(-0.55, 0.0, -0.4), side: -1 },
+      { id: 'seat3', pos: vec3(0.55, 0.0, -0.4), side: 1 },
+      { id: 'seat4', pos: vec3(-0.55, 0.0, 1.8), side: -1 },
+      { id: 'seat5', pos: vec3(0.55, 0.0, 1.8), side: 1 },
+    ],
+    spawnSlots: [
+      vec3(-2.35, 0, -2.2),
+      vec3(2.35, 0, -2.2),
+      vec3(-2.35, 0, -0.4),
+      vec3(2.35, 0, -0.4),
+      vec3(-2.35, 0, 1.8),
+      vec3(2.35, 0, 1.8),
+    ],
   },
 });
 

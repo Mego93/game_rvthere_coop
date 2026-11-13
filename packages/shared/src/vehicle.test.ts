@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { GRAVITY, SURFACES } from './constants';
+import { DRIVER_DOOR_RANGE, GRAVITY, SURFACES } from './constants';
 import { SAND_PATCH_CENTER } from './courses/testGround';
 import { IDENTITY, vec3, yawOf, type Pose } from './math';
 import { createRig } from './testRig';
@@ -112,5 +112,52 @@ describe.each(['lodgy', 'rv'] as const)('%s', (id) => {
     rig.run(0.1, { throttle: 3, steer: -3 });
     expect(rig.vehicle.state().throttle).toBe(1);
     expect(rig.vehicle.state().steer).toBe(-1);
+  });
+});
+
+describe.each(['lodgy', 'rv'] as const)('%s seats and spawn slots', (id) => {
+  const config = VEHICLES[id];
+  const h = config.halfExtents;
+
+  test('has at least six seats, the driver first and on the left, with unique ids', () => {
+    expect(config.seats.length).toBeGreaterThanOrEqual(6);
+    expect(config.seats[0]!.id).toBe('driver');
+    expect(config.seats[0]!.side).toBe(-1);
+    expect(config.seats.map((s) => s.id)).toEqual(['driver', 'seat1', 'seat2', 'seat3', 'seat4', 'seat5']);
+    expect(new Set(config.seats.map((s) => s.id)).size).toBe(config.seats.length);
+  });
+
+  test('every seat is inside the chassis box and on the side its x says', () => {
+    for (const seat of config.seats) {
+      expect(Math.abs(seat.pos.x)).toBeLessThan(h.x);
+      expect(Math.abs(seat.pos.y)).toBeLessThan(h.y);
+      expect(Math.abs(seat.pos.z)).toBeLessThan(h.z);
+      expect(Math.sign(seat.pos.x)).toBe(seat.side);
+    }
+  });
+
+  test('has six distinct spawn slots at least 1 m outside the chassis box', () => {
+    expect(config.spawnSlots).toHaveLength(6);
+    for (const slot of config.spawnSlots) {
+      expect(Math.abs(slot.x) - h.x >= 1 || Math.abs(slot.z) - h.z >= 1).toBe(true);
+    }
+    expect(new Set(config.spawnSlots.map((s) => `${s.x},${s.z}`)).size).toBe(6);
+  });
+
+  test('slot 0 is within door range of the driver door and slot 2 is not', () => {
+    const driver = config.seats[0]!;
+    const door = { x: driver.side * h.x, z: driver.pos.z };
+    const distance = (slot: { x: number; z: number }) => Math.hypot(slot.x - door.x, slot.z - door.z);
+    expect(distance(config.spawnSlots[0]!)).toBeLessThanOrEqual(DRIVER_DOOR_RANGE);
+    expect(distance(config.spawnSlots[2]!)).toBeGreaterThan(DRIVER_DOOR_RANGE);
+  });
+
+  test('seats and slots cannot be modified', () => {
+    expect(() => {
+      (config.seats[0] as { side: number }).side = 1;
+    }).toThrow(TypeError);
+    expect(() => {
+      (config.spawnSlots[0] as { x: number }).x = 0;
+    }).toThrow(TypeError);
   });
 });

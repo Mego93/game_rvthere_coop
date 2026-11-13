@@ -7,6 +7,7 @@ import {
   VEHICLE_STOPPED_SPEED,
   type Surface,
 } from './constants';
+import { GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, IDENTITY, add, clamp, dot, rotate, scale, vec3, type Pose, type Quat, type Vec3 } from './math';
 import type { Rapier, RapierWorld, RigidBody } from './rapier';
 import type { VehicleConfig } from './vehicles';
@@ -30,6 +31,7 @@ export interface VehicleState {
 export interface Vehicle {
   readonly config: VehicleConfig;
   readonly body: RigidBody;
+  readonly chassisHandle: number;
   // Sets the wheel forces for this tick. Call once per tick, before the physics world steps.
   step(controls: VehicleControls): void;
   state(): VehicleState;
@@ -65,7 +67,13 @@ export function createVehicle(
       .setCanSleep(false)
       .setAdditionalMassProperties(config.mass, { x: 0, y: config.comY, z: 0 }, inertia, IDENTITY),
   );
-  world.createCollider(rapier.ColliderDesc.cuboid(h.x, h.y, h.z).setDensity(0).setFriction(CHASSIS_FRICTION), body);
+  const chassis = world.createCollider(
+    rapier.ColliderDesc.cuboid(h.x, h.y, h.z)
+      .setDensity(0)
+      .setFriction(CHASSIS_FRICTION)
+      .setCollisionGroups(groups(GROUP_WORLD, GROUP_WORLD)),
+    body,
+  );
 
   const controller = world.createVehicleController(body);
   controller.indexUpAxis = 1;
@@ -109,6 +117,7 @@ export function createVehicle(
   return {
     config,
     body,
+    chassisHandle: chassis.handle,
     forwardSpeed,
     wheelSurfaces,
     step(controls) {
