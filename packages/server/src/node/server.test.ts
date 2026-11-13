@@ -145,6 +145,7 @@ test('a server started with a course id runs it, and an unknown one is refused a
 test('knows the content types the client needs', () => {
   expect(contentType('a/b/index.html')).toBe('text/html; charset=utf-8');
   expect(contentType('x.wasm')).toBe('application/wasm');
+  expect(contentType('x.webmanifest')).toBe('application/manifest+json; charset=utf-8');
   expect(contentType('x.unknown')).toBe('application/octet-stream');
 });
 

@@ -23,6 +23,8 @@ const STYLE = `
 #touch-slots button.selected { border-color: #ffd34e; box-shadow: 0 0 0 2px #ffd34e; }
 #touch-joystick { position: absolute; border: 2px solid rgba(255, 255, 255, 0.6); border-radius: 50%; background: rgba(255, 255, 255, 0.12); pointer-events: none; }
 #touch-joystick-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); }
+#rotate-prompt { position: absolute; inset: 0; display: none; place-items: center; padding: 24px; text-align: center; font-size: 20px; color: #fff; background: #1d3b52; pointer-events: auto; touch-action: none; }
+@media (orientation: portrait) { #rotate-prompt { display: grid; } }
 `;
 
 const ITEM_LABELS: Record<ItemKind, string> = { jerrycan: 'Fuel', toolbox: 'Tools', healthKit: 'Heal' };
@@ -129,7 +131,11 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
   ring.append(knob);
   ring.style.width = ring.style.height = `${JOYSTICK_RADIUS * 2}px`;
 
-  root.append(style, ring, actions, slotBox);
+  const rotate = document.createElement('div');
+  rotate.id = 'rotate-prompt';
+  rotate.textContent = 'Rotate your phone to landscape';
+
+  root.append(style, ring, actions, slotBox, rotate);
 
   let shown: TouchView | null = null;
   let joystickKey = '';

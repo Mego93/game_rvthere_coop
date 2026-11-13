@@ -39,6 +39,9 @@ const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
 const overlay = document.querySelector<HTMLElement>('#overlay')!;
 const crosshair = document.querySelector<HTMLElement>('#crosshair')!;
 
+// Safari's pinch gesture would zoom the page.
+document.addEventListener('gesturestart', (event) => event.preventDefault());
+
 // Chosen once at load; the touch UI is made on the first run on a touch device.
 const touchDevice = window.matchMedia('(pointer: coarse)').matches;
 let touchUi: ReturnType<typeof createTouchUi> | null = null;
