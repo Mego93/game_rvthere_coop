@@ -34,7 +34,9 @@ function heightGained(id: VehicleId, slope: ReferenceSlope): number {
   rig.run(1, { brake: true });
   const before = rig.vehicle.state().pos.y;
   rig.run(CLIMB_SECONDS, { throttle: 1 });
-  return rig.vehicle.state().pos.y - before;
+  const gained = rig.vehicle.state().pos.y - before;
+  rig.world.free();
+  return gained;
 }
 
 test('the Lodgy climbs the gentle slope unaided', () => {
@@ -60,6 +62,7 @@ test.each(['lodgy', 'rv'] as const)('the %s creeps less than 0.1 m/s on the stee
   const before = rig.vehicle.state().pos;
   rig.run(5, { brake: true });
   const after = rig.vehicle.state().pos;
+  rig.world.free();
   expect(Math.hypot(after.y - before.y, after.z - before.z) / 5).toBeLessThan(0.1);
 });
 
@@ -141,7 +144,9 @@ function winchRun(
     maxSpin = Math.max(maxSpin, length(rig.vehicle.body.angvel()));
     if (options.done(rig.vehicle.body.translation())) break;
   }
-  return { rig, seconds: ticks / TICK_RATE, maxSpeed, maxSpin, initialLength, finished: ticks < limit || options.done(rig.vehicle.body.translation()) };
+  const end = { ...rig.vehicle.body.translation() };
+  rig.world.free();
+  return { end, seconds: ticks / TICK_RATE, maxSpeed, maxSpin, initialLength, finished: ticks < limit || options.done(end) };
 }
 
 describe.each(['lodgy', 'rv'] as const)('the %s on the winch', (id) => {
@@ -181,7 +186,7 @@ describe.each(['lodgy', 'rv'] as const)('the %s on the winch', (id) => {
     const spawn: Pose = { pos: along(8), rot };
     const uphill = rotate(rot, vec3(0, 0, -1));
     const run = winchRun(id, course, spawn, 'stall', { maxSeconds: 20, done: () => false });
-    const gain = dot(sub(run.rig.vehicle.body.translation(), spawn.pos), uphill);
+    const gain = dot(sub(run.end, spawn.pos), uphill);
     return { ...run, gain };
   }
 
@@ -205,5 +210,5 @@ test('(10) the RV from rest on the sand patch, hook on anchor-3, reel in and ful
   const spawn: Pose = { pos: SAND_PATCH_CENTER, rot: IDENTITY };
   const run = winchRun('rv', testGround, spawn, 'anchor-3', { throttle: 1, maxSeconds: 40, done: (pos) => pos.z < -45 });
   expect(run.finished).toBe(true);
-  expect(run.rig.vehicle.body.translation().z).toBeLessThan(-45);
+  expect(run.end.z).toBeLessThan(-45);
 });

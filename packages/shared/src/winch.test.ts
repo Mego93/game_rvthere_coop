@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { beforeAll, describe, expect, test } from 'vitest';
+import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 import {
   ANCHOR_HEIGHT,
   GRAVITY,
@@ -94,8 +94,14 @@ function ahead(z: number): BuiltCourse {
   return deepFreeze({ ...base, anchors: [{ id: 'near', kind: 'milestone', pose: { pos: vec3(0, 0, z), rot: IDENTITY } }] });
 }
 
+const rigs: { world: RAPIER.World }[] = [];
+afterEach(() => {
+  for (const rig of rigs.splice(0)) rig.world.free();
+});
+
 function setup(vehicleId: VehicleId = 'lodgy', course: BuiltCourse = ahead(-12), spawn: Pose = { pos: vec3(0, 0, 0), rot: IDENTITY }) {
   const rig = createRig(RAPIER, vehicleId, spawn, course);
+  rigs.push(rig);
   const props = createProps(RAPIER, rig.world, course);
   rig.world.step();
   const winch = createWinch(RAPIER, rig.world, rig.vehicle, props, course);
@@ -561,8 +567,8 @@ describe('the hook in the hands (world)', () => {
     run(world, 20);
     world.step(
       new Map([
-        ['p1', input({ interact: true, ...aimAt(world, mount, 'p1') })],
         ['p2', input({ interact: true, ...aimAt(world, mount, 'p2') })],
+        ['p1', input({ interact: true, ...aimAt(world, mount, 'p1') })],
       ]),
     );
     expect(me(world, 'p1').hands).toBe('hook');
@@ -680,7 +686,7 @@ describe('the reel and obstacles (world)', () => {
     standAtBox(world, 'p2');
     run(world, 20);
     const before = cable(world).length;
-    run(world, 30, new Map([['p1', input({ reel: 1 })], ['p2', input({ reel: -1 })]]));
+    run(world, 30, new Map([['p2', input({ reel: -1 })], ['p1', input({ reel: 1 })]]));
     expect(cable(world).length).toBeCloseTo(before - 0.5, 1);
     world.dispose();
   });
