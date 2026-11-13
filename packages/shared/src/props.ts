@@ -93,6 +93,10 @@ export function createProps(rapier: Rapier, physics: RapierWorld, course: BuiltC
   function applyLock(prop: Prop, locked: boolean) {
     prop.locked = locked;
     prop.body.setEnabledTranslations(!locked, true, !locked, true);
+    if (locked) {
+      const v = prop.body.linvel();
+      prop.body.setLinvel({ x: 0, y: v.y, z: 0 }, true);
+    }
   }
 
   const need = (id: string): Prop => {

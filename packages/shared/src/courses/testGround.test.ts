@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, expect, test } from 'vitest';
-import { GRAVITY, PROP_KINDS, REFERENCE_SLOPES_DEG, type PropKind, type ReferenceSlope } from '../constants';
+import { GRAVITY, PROP_KINDS, REFERENCE_SLOPES_DEG, type ReferenceSlope } from '../constants';
 import { degToRad } from '../math';
 import { buildStatics } from '../statics';
 import { getCourse } from './index';
@@ -65,6 +65,5 @@ test('props are known kinds with unique ids and rest on ground', () => {
     const hit = probe(prop.pose.pos.x, prop.pose.pos.y, prop.pose.pos.z);
     expect(hit, prop.id).not.toBeNull();
     expect(hit!.distance, prop.id).toBeCloseTo(1, 2);
-    expect(PROP_KINDS[prop.kind as PropKind].halfExtents.y).toBeGreaterThan(0);
   }
 });

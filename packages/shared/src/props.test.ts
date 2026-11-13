@@ -40,6 +40,8 @@ describe('createProps', () => {
       expect(prop.kind).toBe(placed.kind);
       expect(dist(prop.pos, propCentre(placed, config))).toBeLessThan(0.01);
       expect(prop.pos.y).toBeCloseTo(config.halfExtents.y, 2);
+      const v = props.get(prop.id)!.body.linvel();
+      expect(Math.hypot(v.x, v.y, v.z)).toBeLessThan(0.01);
     }
   });
 
@@ -87,7 +89,7 @@ describe('createProps', () => {
     physics.createCollider(RAPIER.ColliderDesc.cuboid(0.2, 0.2, 0.2).setCollisionGroups(groups(GROUP_WORLD, GROUP_WORLD)), box);
     crate.body.setTranslation({ x: 10, y: 1, z: 8 }, true);
     run(1);
-    expect(box.translation().y).toBeLessThan(0.3);
+    expect(box.translation().y).toBeCloseTo(0.2, 2);
     expect(crate.body.translation().y).toBeCloseTo(1, 5);
 
     props.release('crate-1', vec3(12, 1, 8), IDENTITY, vec3(0, 0, 0));
@@ -97,6 +99,37 @@ describe('createProps', () => {
     run(2);
     expect(crate.body.translation().y).toBeCloseTo(0.3, 2);
     expect(box2.translation().y).toBeGreaterThan(0.45);
+  });
+
+  test('unlocking lets an impulse move the barrier and locking stops it', () => {
+    const { props, run } = rig();
+    const body = props.get('barrier-1')!.body;
+    const push = () => body.applyImpulse({ x: 600, y: 0, z: 0 }, true);
+    push();
+    run(1);
+    expect(body.translation().x).toBeCloseTo(-10, 2);
+    props.setLocked('barrier-1', false);
+    push();
+    run(1);
+    expect(body.translation().x).toBeGreaterThan(-9.5);
+    props.setLocked('barrier-1', true);
+    const x = body.translation().x;
+    push();
+    run(1);
+    expect(Math.abs(body.translation().x - x)).toBeLessThan(0.01);
+  });
+
+  test('relocking zeroes the horizontal velocity, so the next unlock starts at rest', () => {
+    const { props, run } = rig();
+    const body = props.get('barrier-1')!.body;
+    props.setLocked('barrier-1', false);
+    body.setLinvel({ x: 3, y: 0, z: 2 }, true);
+    props.setLocked('barrier-1', true);
+    props.setLocked('barrier-1', false);
+    const x = body.translation().x;
+    const z = body.translation().z;
+    run(1);
+    expect(Math.hypot(body.translation().x - x, body.translation().z - z)).toBeLessThan(0.01);
   });
 
   test('a held prop is not reset by the kill plane', () => {
