@@ -68,7 +68,36 @@ test('the driver\'s input drives: moveY is throttle, moveX is steer, jump is bra
   expect(moving.pos.z).toBeLessThan(-3);
   expect(moving.pos.x).toBeGreaterThan(0.5);
 
-  run(world, 300, new Map([['a', input({ jump: true })]]));
+  const driven = world.debug().forwardSpeed;
+  expect(driven).toBeGreaterThan(3);
+  const coasted = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+  coasted.addPlayer('a');
+  coasted.addPlayer('b');
+  seat(coasted, 'a');
+  seat(coasted, 'b');
+  run(coasted, 60, new Map());
+  run(coasted, 180, inputs);
+  run(coasted, 60, new Map());
+  run(world, 60, new Map([['a', input({ jump: true })]]));
+  // Same speed to start from; the brake must take clearly more of it than coasting does.
+  expect(world.debug().forwardSpeed).toBeLessThan(0.5 * coasted.debug().forwardSpeed);
+});
+
+test('a passenger who joined first does not drive: only the driver seat does', () => {
+  const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+  world.addPlayer('p0');
+  world.addPlayer('p1');
+  run(world, 30, new Map());
+  const [slot0, slot1] = [world.snapshot().players[0]!.pos, world.snapshot().players[1]!.pos];
+  world.teleportPlayer('p1', slot0);
+  world.teleportPlayer('p0', slot1);
+  world.step(new Map([['p0', input({ interact: true })]]));
+  world.step(new Map([['p1', input({ interact: true })]]));
+  expect(seatOf(world, 'p0')).toBe('seat1');
+  expect(seatOf(world, 'p1')).toBe('driver');
+  run(world, 120, new Map([['p0', input({ moveY: 1, moveX: 1 })]]));
+  expect(world.snapshot().vehicle.throttle).toBe(0);
+  expect(world.snapshot().vehicle.steer).toBe(0);
   expect(Math.abs(world.debug().forwardSpeed)).toBeLessThan(0.01);
 });
 

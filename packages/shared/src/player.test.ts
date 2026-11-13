@@ -693,4 +693,57 @@ describe('a player on the roof during a suspension bounce', () => {
     expect(Math.abs(player.ground!.localPos.x - takeoff.x)).toBeLessThan(0.3);
     expect(Math.abs(player.ground!.localPos.z - takeoff.z)).toBeLessThan(0.3);
   });
+
+  describe('is not lifted onto the roof when it should be shoved', () => {
+    const top = (body: { translation(): Vec3 }) => body.translation().y + LODGY.halfExtents.y;
+
+    test('a player at ground level with the vehicle driven into them', () => {
+      const { rig, players, run, tick, vehicleRun } = harness();
+      const body = rig.vehicle.body;
+      const player = players.add('p1');
+      players.teleport('p1', vec3(0, 0.02, body.translation().z - LODGY.halfExtents.z - 1.5));
+      run(10);
+      vehicleRun.beforePhysics = () => body.setLinvel({ x: 0, y: 0, z: -5 }, true);
+      for (let i = 0; i < 3 * TICK_RATE; i++) {
+        tick({});
+        expect(player.ground).toBeNull();
+        expect(player.pos.y).toBeLessThan(0.2);
+      }
+    });
+
+    test('feet 0.5 m below the roof inside the footprint', () => {
+      const { rig, players, tick } = harness();
+      const body = rig.vehicle.body;
+      const player = players.add('p1');
+      const at = body.translation();
+      players.teleport('p1', vec3(at.x, top(body) - 0.5, at.z));
+      tick({});
+      expect(player.ground).toBeNull();
+      expect(Math.abs(toLocal(body, player.pos).x)).toBeGreaterThan(LODGY.halfExtents.x);
+    });
+
+    test('feet at roof height but outside the footprint', () => {
+      const { rig, players, tick } = harness();
+      const body = rig.vehicle.body;
+      const player = players.add('p1');
+      const at = body.translation();
+      players.teleport('p1', vec3(at.x + LODGY.halfExtents.x + 0.1, top(body) - 0.2, at.z));
+      tick({});
+      expect(player.ground).toBeNull();
+      expect(Math.abs(toLocal(body, player.pos).x)).toBeGreaterThan(LODGY.halfExtents.x + PLAYER_RADIUS - 0.06);
+    });
+
+    test('a rolled vehicle: feet beside its local top face, which faces sideways', () => {
+      const rolled: Pose = { pos: vec3(0, 0.98, 0), rot: quatFromAxisAngle(vec3(0, 0, 1), Math.PI / 2) };
+      const { rig, players, tick } = harness(testGround, rolled);
+      const body = rig.vehicle.body;
+      expect(rotate(body.rotation(), vec3(0, 1, 0)).y).toBeLessThan(0.1);
+      const player = players.add('p1');
+      const at = body.translation();
+      players.teleport('p1', vec3(at.x - 0.5, at.y - 0.7, at.z));
+      tick({});
+      expect(player.ground).toBeNull();
+      expect(capsuleHitsChassis(body, player.pos)).toBe(false);
+    });
+  });
 });

@@ -112,7 +112,7 @@ describe('chooseSeat', () => {
   });
 
   test('a tie goes to the lower index', () => {
-    // Between seat2 and seat3: equally far from both doors.
+    // The seat2 and seat3 doors are symmetric about x = 0, so the tie is exact.
     expect(chooseSeat(LODGY, AT, IDENTITY, vec3(0, 0, 0.4), new Set(['driver']))).toBe('seat2');
   });
 });
