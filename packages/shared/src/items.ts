@@ -21,6 +21,8 @@ export interface Items {
   drop(kind: ItemKind, at: Vec3): string;
   // Items below the plane: a dropped one is removed, a course pickup returns to its spawn. Returns their ids.
   killPlane(killPlaneY: number): string[];
+  // Removes every body and recreates the given ones, in order, with their ids and box centres, at rest. The id counter is not rewound.
+  restore(list: { id: string; kind: ItemKind; centre: Vec3; rot: Quat }[]): void;
   // { id, kind, pos (box centre), rot }.
   snapshot(): PropSnapshot[];
   dispose(): void;
@@ -36,10 +38,9 @@ export function createItems(rapier: Rapier, physics: RapierWorld, course: BuiltC
 
   const centreOf = (kind: ItemKind, pos: Vec3, rot: Quat): Vec3 => add(pos, rotate(rot, vec3(0, ITEM_KINDS[kind].halfExtents.y, 0)));
 
-  const spawn = (id: string, kind: ItemKind, pos: Vec3, rot: Quat): ItemEntity => {
+  const spawn = (id: string, kind: ItemKind, centre: Vec3, rot: Quat): ItemEntity => {
     const config = ITEM_KINDS[kind];
     const h = config.halfExtents;
-    const centre = centreOf(kind, pos, rot);
     const inertia = {
       x: (config.mass / 3) * (h.y * h.y + h.z * h.z),
       y: (config.mass / 3) * (h.x * h.x + h.z * h.z),
@@ -67,7 +68,7 @@ export function createItems(rapier: Rapier, physics: RapierWorld, course: BuiltC
     if (entities.has(placed.id)) throw new Error(`Duplicate pickup id: ${placed.id}`);
     if (!Object.hasOwn(ITEM_KINDS, placed.kind)) throw new Error(`Unknown item kind: ${placed.kind}`);
     spawns.set(placed.id, placed);
-    spawn(placed.id, placed.kind as ItemKind, placed.pose.pos, placed.pose.rot);
+    spawn(placed.id, placed.kind as ItemKind, centreOf(placed.kind as ItemKind, placed.pose.pos, placed.pose.rot), placed.pose.rot);
   }
 
   const remove = (entity: ItemEntity) => {
@@ -87,7 +88,7 @@ export function createItems(rapier: Rapier, physics: RapierWorld, course: BuiltC
     drop(kind, at) {
       counter += 1;
       const id = `item-${counter}`;
-      spawn(id, kind, at, IDENTITY);
+      spawn(id, kind, centreOf(kind, at, IDENTITY), IDENTITY);
       return id;
     },
     killPlane(killPlaneY) {
@@ -106,6 +107,10 @@ export function createItems(rapier: Rapier, physics: RapierWorld, course: BuiltC
         entity.body.setAngvel(ZERO, true);
       }
       return gone;
+    },
+    restore(list) {
+      for (const entity of [...entities.values()]) remove(entity);
+      for (const item of list) spawn(item.id, item.kind, item.centre, item.rot);
     },
     snapshot: () =>
       [...entities.values()].map(({ id, kind, body }) => {

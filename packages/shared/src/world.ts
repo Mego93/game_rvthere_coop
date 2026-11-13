@@ -1,9 +1,9 @@
-import { enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
-import { DROP_HEIGHT, GRAVITY, HOOK_RANGE, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, TICK_DT, type Surface } from './constants';
+import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
+import { DROP_HEIGHT, GRAVITY, HOOK_RANGE, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { stepHold, useTarget } from './holds';
-import { add, length, rotate, sub, vec3, type Vec3 } from './math';
+import { AXIS_Y, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
 import { interactCandidates, resolveInteract, splitCandidates } from './interact';
 import { createPlayers, type PlayerState, type StepInputs } from './player';
@@ -72,6 +72,8 @@ export interface World {
   removePlayer(id: string): void;
   teleportPlayer(id: string, pos: Vec3): void;
   status(): WorldStatus;
+  // Restarts at the last checkpoint on the next step; does nothing once the run is won.
+  restartCheckpoint(): void;
   debug(): WorldDebug;
   // Tests only: the rigid body of the vehicle ('vehicle') or of a prop.
   debugBody(id: 'vehicle' | string): RigidBody | undefined;
@@ -111,7 +113,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   let tick = 0;
   let runTicks = 0;
   let won = false;
-  const restarts = 0;
+  let restarts = 0;
+  let restartPending = false;
   let respawns = 0;
   let record: CheckpointRecord;
 
@@ -330,6 +333,59 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }
   };
 
+  // Rule K3 in the order of Q1 and Q7: the world is put right first, the players last.
+  const restart = (events: WorldEvent[]) => {
+    const checkpoint = course.checkpoints[record.index]!;
+    winch.stow();
+    for (const player of players.all()) {
+      releaseHook(player.id, 'stow');
+      players.setHands(player.id, null);
+      player.hold = null;
+      player.respawnIn = null;
+    }
+    players.takePushIntents();
+    for (const player of players.all()) players.setSeat(player.id, null);
+    vehicle.resetTo(checkpoint.spawn, Math.max(record.fuel, RESTART_FLOOR), Math.max(record.health, RESTART_FLOOR));
+    const vehicleBox = {
+      center: add(checkpoint.spawn.pos, rotate(checkpoint.spawn.rot, scale(AXIS_Y, vehicleConfig.rideHeight))),
+      halfExtents: vehicleConfig.halfExtents,
+      rot: checkpoint.spawn.rot,
+    };
+    for (const prop of props.all()) {
+      const recorded = record.props.get(prop.id);
+      if (recorded && !boxesOverlap({ center: recorded.centre, halfExtents: prop.config.halfExtents, rot: recorded.rot }, vehicleBox)) {
+        props.placeAtRest(prop.id, recorded.centre, recorded.rot);
+      } else {
+        props.resetToSpawn(prop.id);
+      }
+    }
+    items.restore(record.items);
+    // Queries see nothing new until the broad phase has run (Rapier 0.21), as at creation.
+    physics.timestep = 0;
+    physics.step();
+    physics.step();
+    physics.timestep = TICK_DT;
+    for (const player of players.all()) {
+      const saved = record.players.get(player.id);
+      players.restoreInventory(player.id, saved?.inventory ?? []);
+      players.setSeat(player.id, null, players.findSpawn(player.id));
+    }
+    let level = 1;
+    for (const [id, saved] of record.players) {
+      if (players.get(id)) continue;
+      for (const kind of saved.inventory) {
+        if (kind === null) continue;
+        const at = checkpoint.spawn.pos;
+        items.drop(kind, vec3(at.x, at.y + level * DROP_HEIGHT, at.z));
+        level += 1;
+      }
+    }
+    cableTension = 0;
+    resetLastTick = new Set();
+    restarts += 1;
+    events.push({ kind: 'vehicleLost', tick });
+  };
+
   return {
     course,
     vehicleConfig,
@@ -369,8 +425,11 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
           recordCheckpoint(entered);
           events.push({ kind: 'checkpoint', tick, pos: vec3(centre.x, centre.y, centre.z) });
         }
-        const lost = vehicleLost(centre, vehicle.health(), course.killPlaneY);
-        if (reachedFinish(centre, course.finish, lost)) won = true;
+        // The pending flag lives only until this check; a manual restart also stops a win on its tick.
+        const restarting = vehicleLost(centre, vehicle.health(), course.killPlaneY) || restartPending;
+        restartPending = false;
+        if (restarting) restart(events);
+        if (reachedFinish(centre, course.finish, restarting)) won = true;
       }
       return events;
     },
@@ -401,6 +460,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       respawns,
       won,
     }),
+    restartCheckpoint() {
+      if (!won) restartPending = true;
+    },
     status: () => ({ state: won ? 'won' : 'running', elapsed: elapsedAfter(runTicks), restarts, respawns }),
     addPlayer: (id) => void players.add(id),
     removePlayer(id) {

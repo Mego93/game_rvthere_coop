@@ -34,6 +34,8 @@ export interface Props {
   release(id: string, pos: Vec3, rot: Quat, linvel: Vec3): void;
   // No-op on light props.
   setLocked(id: string, locked: boolean): void;
+  // The body centre and rotation, at rest, released if held; a heavy prop locks.
+  placeAtRest(id: string, centre: Vec3, rot: Quat): void;
   // Spawn pose, at rest, released; a heavy prop locks.
   resetToSpawn(id: string): void;
   // Resets unheld props whose centre is below the plane; returns their ids.
@@ -126,6 +128,16 @@ export function createProps(rapier: Rapier, physics: RapierWorld, course: BuiltC
     if (prop.config.class === 'heavy') applyLock(prop, true);
   };
 
+  const placeAtRest = (id: string, centre: Vec3, rot: Quat) => {
+    const prop = need(id);
+    makeDynamic(prop);
+    prop.body.setTranslation(centre, true);
+    prop.body.setRotation(rot, true);
+    prop.body.setLinvel(ZERO, true);
+    prop.body.setAngvel(ZERO, true);
+    if (prop.config.class === 'heavy') applyLock(prop, true);
+  };
+
   return {
     all: () => [...list],
     get: (id) => byId.get(id),
@@ -148,6 +160,7 @@ export function createProps(rapier: Rapier, physics: RapierWorld, course: BuiltC
       const prop = need(id);
       if (prop.config.class === 'heavy') applyLock(prop, locked);
     },
+    placeAtRest,
     resetToSpawn,
     killPlane(killPlaneY) {
       const reset: string[] = [];

@@ -50,6 +50,8 @@ export interface Vehicle {
   health(): number;
   addFuel(amount: number): void;
   repair(amount: number): void;
+  // Placed on the ground pose (raised by the ride height) with zero velocities; impact tracking restarts.
+  resetTo(pose: Pose, fuel: number, health: number): void;
   // Impact and upside-down damage. Call once per tick, after the physics world steps.
   afterPhysics(): void;
 }
@@ -170,6 +172,17 @@ export function createVehicle(
     },
     repair(amount) {
       health = clamp(health + amount, 0, 1);
+    },
+    resetTo(pose, newFuel, newHealth) {
+      const at = add(pose.pos, rotate(pose.rot, scale(AXIS_Y, config.rideHeight)));
+      body.setTranslation(at, true);
+      body.setRotation(pose.rot, true);
+      body.setLinvel(vec3(0, 0, 0), true);
+      body.setAngvel(vec3(0, 0, 0), true);
+      fuel = clamp(newFuel, 0, 1);
+      health = clamp(newHealth, 0, 1);
+      previousVelocity = vec3(0, 0, 0);
+      impact = 0;
     },
     afterPhysics() {
       const v = body.linvel();

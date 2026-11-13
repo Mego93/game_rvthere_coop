@@ -89,6 +89,8 @@ export interface Players {
   setHands(id: string, hands: 'hook' | null): void;
   // Where the player's held prop is placed: the hold pose, or null with empty hands.
   holdPose(id: string): Pose | null;
+  // The inventory, copied in; the selected slot is the client's.
+  restoreInventory(id: string, inventory: readonly (ItemKind | null)[]): void;
   // Rule S1.
   findSpawn(forId: string | null): Vec3;
   // Where findSpawn falls back to when no slot is valid; the last checkpoint's spawn.
@@ -546,6 +548,11 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     holdPose(id) {
       const state = entries.get(id)?.state;
       return state && state.hands !== null ? holdPoseAt(state.pos, state.yaw) : null;
+    },
+    restoreInventory(id, inventory) {
+      const state = entries.get(id)?.state;
+      if (!state) return;
+      for (let i = 0; i < state.inventory.length; i++) state.inventory[i] = inventory[i] ?? null;
     },
     findSpawn,
     setFallbackSpawn(pos) {
