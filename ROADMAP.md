@@ -7,9 +7,9 @@ Single source of truth for where the project stands. Update it in the same commi
 
 ## Current state
 
-**Current step:** step 2 is done. Next action: write the plan for step 3.
+**Current step:** step 3 is done (branch `claude/busy-brown-wkdjue`, merge to `main` pending). Next action: write the plan for step 4. The owner still has to check the rendering, the feel and the iPhone load (see "Working notes").
 
-**Runnable today:** `npm run dev` starts the game server and the page. Create a room on the home page and share its address; everyone who opens it sees the same vehicle on the test ground, driven by the first player in the room. There are no characters on foot yet.
+**Runnable today:** `npm run dev` starts the game server and the page. Create a room on the home page and share its address; everyone who opens it appears as a character beside the same vehicle on the test ground. Players walk (WASD) and jump (Space), board with E at the nearest free seat (the driver's seat if standing at its door), drive from the driver seat, and leave with E. After clicking the canvas, the mouse looks around from a shoulder camera with a crosshair; while seated the camera follows the vehicle.
 
 ## Steps (spec 1: engine and course 1)
 
@@ -19,7 +19,7 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 |---|---|---|---|---|---|
 | 1 | Workspace scaffold, Rapier passed into `shared`, test ground, both vehicle configs as boxes, drivable in one tab, keyboard input, text overlay, force-based cable experiment | done | step-1-scaffold-and-drivable-vehicle | [plan](docs/superpowers/plans/step-1-scaffold-and-drivable-vehicle.md) | Automated tests |
 | 2 | Server (`room` layer and `node` adapter), validation, rate limit, liveness, home page, create and join by noun, snapshots, interpolation, Playwright test begins | done | step-2-server-rooms-snapshots | [plan](docs/superpowers/plans/step-2-server-rooms-snapshots.md) | Automated tests |
-| 3 | Server-side players on foot: movement, moving bodies, shove-out, spawn slots, seats, kill-plane respawn; shoulder camera and crosshair; iPhone load check | todo | | | Automated tests |
+| 3 | Server-side players on foot: movement, moving bodies, shove-out, spawn slots, seats, kill-plane respawn; shoulder camera and crosshair; iPhone load check | done | claude/busy-brown-wkdjue | [plan](docs/superpowers/plans/step-3-players-on-foot.md) | Automated tests |
 | 4 | Client prediction of walking and jumping | todo | | | Automated tests |
 | 5 | Push, hands, light debris, heavy obstacles, prop kill plane | todo | | | Automated tests |
 | 6 | Winch | todo | | | Automated tests |
@@ -66,7 +66,7 @@ Requires Node 22.12 or later. Node 23 and 25 work but print an `EBADENGINE` warn
 
 Set `PORT` to change the server's port when using `npm start`; `npm run dev` expects port 3000, because the page's proxy is fixed to it. Set `VEHICLE=rv` to run every room with the RV: `VEHICLE=rv npm run dev`.
 
-In the page: WASD to drive, Space to brake. Only the first player in the room drives until seats exist (step 3).
+In the page: WASD to walk, Space to jump, E to board or leave a seat, click the canvas and move the mouse to look. Seated in the driver seat: WASD to drive, Space to brake. Nobody is seated at the start; press E beside the vehicle.
 
 ## Working notes (for every session)
 
@@ -77,7 +77,8 @@ What step 2 cost and what changed because of it. Estimates are rough, plus or mi
 - **Time per task:** a clean task takes about 5 minutes (implementation 1 to 1.5, review 1.5 to 2.5). A fix round adds 15 to 25 minutes, mostly designing and checking the fix.
 - **Remaining steps, active hours each:** steps 3, 5, 7, 11, 15 about 7 to 9; steps 4, 6, 8, 9, 10, 12, 14, 16, 19 about 4 to 6; steps 13, 17, 18 about 2 to 3. In total about 80 to 110 hours, or 25 to 35 five-hour windows, not counting the owner's own time on the sign-off steps (12, 13, 14, 16, 17, 18).
 - **Where to look for savings:** let Sonnet write the code (done from step 3), review the plan before implementing (done from step 3), and run the dispatch-and-verify loop on a cheaper model while Fable keeps planning and designing fixes.
-- **Waiting on the owner:** the real-iPhone checks (the page loading over the same Wi-Fi at the end of step 3; touch controls at step 14).
+- **Waiting on the owner:** the real-iPhone checks. Open for step 3: the page loads over the same Wi-Fi on a real iPhone, renders, and shows both players (nobody has tried it; only WebKit with an iPhone viewport ran in the smoke test). Touch controls follow at step 14.
+- **Step 3 is unverified by hand:** rendering and game feel (walking, jumping, the shoulder camera, how the characters look, the crosshair) and the iPhone load were not checked; they are for the owner. Automated tests pass. The smoke test ran in Chromium only in the session that wrote it (Playwright's browser download was blocked there, so the system Chrome was used); the WebKit phone project was not run.
 
 ## Known issues
 
@@ -86,6 +87,8 @@ What step 2 cost and what changed because of it. Estimates are rough, plus or mi
 - A vehicle that has rolled over or is stuck cannot be recovered yet: create a new room. Pushing arrives at step 5, the winch at step 6 and checkpoint restart at step 8.
 - Reloading the page, or losing the connection, returns the player to the name form. Joining again usually makes a new player, because the server removes a disconnected player at once; if the server has not yet seen the old connection close, the same tab takes its old place back. Held slots arrive at step 11 and automatic reconnection at step 19.
 - The RV cannot pull away from rest on sand, by the owner's decision (it is how a heavy road-going motorhome behaves): sand's rolling resistance (0.25 × its weight, about 9200 N) exceeds its engine force (7500 N), so it stays put in either direction until it is pushed or winched out. Arriving with speed it crosses: by arithmetic it loses about 0.45 m/s² and a 30 m patch costs it under 2 m/s from 15 m/s, not yet confirmed by a test. The Lodgy crawls through. The test "sand slows it" passes for the RV at zero distance and is replaced in the rows below.
+- The local player is drawn from interpolated snapshots, so it lags its own input by the interpolation delay until client prediction arrives in step 4.
+- Nobody can climb onto the vehicle's roof yet (D11): the Lodgy's roof is 1.5 m up and a jump reaches 1.27 m. Props at step 5 give players something to climb.
 
 ## Carried into later steps
 
@@ -93,13 +96,8 @@ Findings from reviews that belong to a later step. Each step's plan must cover i
 
 | Step | Item |
 |---|---|
-| 3 | Keyboard source: call `preventDefault` for game keys; test opposite keys on every axis, key repeat and `dispose` |
-| 3 | When the server consumes two queued inputs in one tick, only the second reaches the world, so a button pressed only in the first would be missed. Merge presses when seats and jumping arrive |
-| 3 | The snapshot gains `players`; the client's snapshot buffer interpolates the vehicle only, and `parseServerMessage` must check the new fields |
-| 3 | `World.step` takes `InputFields` only, and the room discards the input queue's `fresh` flag; buttons that act once per press (jump, interact) need both. "The first player drives" is encoded twice, as the order of the inputs map in `world.ts` and as index 0 of the lobby list in `overlay.ts`; seats replace both |
-| 3 | Protocol tests to add as the protocol grows: non-finite and boundary values for every input field, length limits from both sides, extra and `__proto__` fields dropped by `parseClientMessage`, and every vehicle and lobby field in `parseServerMessage`. Check a player's `colour` against `#rrggbb` where it first reaches a style or a material. The input queue stores and returns input objects by reference. Turn on Playwright's trace on failure |
 | 4 | The page no longer bundles Rapier; prediction brings it back, and the bundle size with it |
-| 4 | Snapshot buffer: `sample` returns stored objects by reference at both ends; tests are missing for the clock offset's jump to an earlier snapshot, duplicates, a long gap and a rewind; after the server discards a backlog the view holds the newest snapshot until the offset converges (5% per snapshot). The first frame's time step can be slightly negative. Test `ackSeq` through the neutral substitute |
+| 4 | Snapshot buffer: after the server discards a backlog the view holds the newest snapshot until the offset converges (5% per snapshot). Test `ackSeq` through the neutral substitute |
 | 5 | The RV is bogged on sand from rest by design: replace the test "sand slows it" for the RV with "from rest on sand it stays within 0.5 m for 10 s" and "entering the sand patch at 12 m/s it crosses", and use pushing and the winch to get it out |
 | 6 | Use the tension formula of `experiments/cable/cable.experiment.ts` exactly, or re-run the sweep. Test near the stall angle as well as at 25°, add a test tying stiffness to reel speed, and test the 25 m maximum length and the test ground's anchor |
 | 7 | A vehicle at rest reports a vertical speed of about −0.06 m/s; impact thresholds and "at rest" checks must allow for it |
@@ -157,3 +155,20 @@ Decisions made during the design and afterwards. Change the spec too when a deci
 | 2026-11-13 | The smoke test's phone project runs in WebKit, the engine of Safari, with an iPhone 14 viewport and touch | Asked for by the owner during step 2. It is not Safari on a real iPhone, which stays the owner's check at step 14 |
 | 2026-11-13 | A room leaves the server's list before its world is freed, and a failed free is reported, not retried | Whole-branch review: a disposal that threw would have been tried again on every tick, stopping every room after it |
 | 2026-11-13 | The `ErrorReason` type is derived from the `ERROR_REASONS` list | Whole-branch review: the page turns a reason missing from the list into `bad_message`, so the two must not drift apart |
+| 2026-11-13 | Spawn slots are not shared: a slot is valid only when no other player stands within two body radii of it, so players take successive slots (D1) | Without it every player would stack in slot 0 |
+| 2026-11-13 | Nobody is seated at the start of a run; a player boards with interact, so "the first player drives" no longer holds (D2) | Seats need the interact button, and boarding by choice is the design |
+| 2026-11-13 | Press detection (jump, interact, drop) lives in the world: a press is a button true now and false in that player's previous tick input; the input queue merges taps (D3) | A tap that falls between two ticks must not be lost; this replaces the carried rows about `fresh` and merging |
+| 2026-11-13 | `World` gains `addPlayer`, `removePlayer` and `teleportPlayer`; `teleportPlayer` serves tests now and checkpoint restarts at step 8 (D4) | The spec listed the first two only |
+| 2026-11-13 | The camera's wall pull-in is computed on the client by a ray against the course's ground and wall boxes (D5) | No physics on the client before step 4 |
+| 2026-11-13 | While seated the camera is the existing vehicle follow camera (D6) | It is what "orbits the vehicle" means until the HUD and camera passes |
+| 2026-11-13 | `respawn` events from `World.step` are ignored by the room until step 9 (D7) | There is no `event` message yet |
+| 2026-11-13 | The shove-out search runs along one line away from the vehicle's centre and may not pass through static geometry; with no free place the player goes to a spawn slot (D8) | A sideways search could put a player on the far side of a wall |
+| 2026-11-13 | `createWorld` and `createRig` take an optional `BuiltCourse` that replaces the id's course (D9) | Tests add walls and ledges |
+| 2026-11-13 | Seat ids are `driver`, `seat1` to `seat5` (D10) | They cannot be confused with player ids `p1` to `p6` |
+| 2026-11-13 | There is no way onto the vehicle's roof from the ground yet; tests use `teleportPlayer` (D11) | The Lodgy's roof is 1.5 m up, a jump reaches 1.27 m; props at step 5 give a way up |
+| 2026-11-13 | Roof guard: a player whose feet are inside the vehicle's footprint, no deeper than the step height below its roof face (vehicle up within 45° of world up), is lifted onto the roof instead of shoved sideways (D12) | Found in Task 5: a rising roof pushed a falling player off the edge |
+| 2026-11-13 | `createWorld` runs one zero-length physics step so queries work before the first tick | Spawn rays and overlap tests ran against an empty query pipeline |
+| 2026-11-13 | A ground collision group (`GROUP_GROUND`) separates ground boxes from walls and the chassis; the spawn ray uses it | The spawn ray hit walls and the chassis and found no floor under slots next to them |
+| 2026-11-13 | Plan test Q1-6 (the input queue's unmerged-last rule) is unobservable through the public API and is not tested; the rule stays as a defence | A two-input take always leaves at least two inputs queued |
+| 2026-11-13 | The wheel-ray filter (N1) now matters only for seated capsules | Shove-out removes standing players from under the wheels before the next ray |
+| 2026-11-13 | The keyboard ignores game keys pressed with Ctrl, Meta or Alt held | Ctrl+R and similar browser shortcuts must keep working |

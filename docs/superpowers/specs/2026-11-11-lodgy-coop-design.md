@@ -98,7 +98,7 @@ Roles are not assigned.
 - Players do not block or push objects by contact. The only force a player applies is the explicit push described under "Crew actions". A vehicle or prop that moves into a player shoves them out of the way.
 - A character is a capsule body with a sphere head, in one of six fixed colours, with the player's name above it. There is no skeletal animation.
 
-**Spawn slots.** Each vehicle config lists six positions around the vehicle. A slot is valid when it has ground beneath it and nothing overlapping it. Whenever a rule says "beside the vehicle" or "in a spawn slot", the player goes to the first valid slot; if none is valid, to the last checkpoint's spawn pose. A run starts with all players in spawn slots.
+**Spawn slots.** Each vehicle config lists six positions around the vehicle. A slot is valid when it has ground beneath it, nothing overlapping it, and no other player (not the one being placed) standing within two body radii of it horizontally; so players placed one after another take successive slots. Whenever a rule says "beside the vehicle" or "in a spawn slot", the player goes to the first valid slot; if none is valid, to the last checkpoint's spawn pose. A run starts with all players in spawn slots.
 
 ### Player health
 
@@ -318,8 +318,9 @@ Every package follows these, so that code written separately agrees.
 The simulation is a pure module with no network or rendering code. The caller initialises Rapier and passes it in, so `shared` never loads WebAssembly itself.
 
 ```ts
-const world = createWorld(rapier, { courseId, vehicleId, weather });
+const world = createWorld(rapier, { courseId, vehicleId, weather }, builtCourse?);   // the optional course replaces the id's, for tests
 world.addPlayer(id); world.removePlayer(id);
+world.teleportPlayer(id, pos);     // places a player; used by tests and checkpoint restarts
 world.step(inputsByPlayer);        // advances one fixed tick; returns the tick's events
 world.buy(playerId, item);         // shop purchase; returns ok or a refusal reason
 world.restartCheckpoint();         // the admin's manual restart; not an admin tool
@@ -385,7 +386,8 @@ When two players compete for the same thing on one tick, players are processed i
 
 - While a player stands on a body, their position is kept in that body's local frame and re-derived each tick before their own movement is applied. They slide off only past the maximum slope angle.
 - A player who leaves a moving body, by jumping or walking off, keeps that body's horizontal velocity at that point while airborne.
-- A player overlapped by a moving vehicle or prop is moved out horizontally, away from that body's centre, and never into static geometry. If no free position is found, the player goes to a spawn slot.
+- A player overlapped by a moving vehicle or prop is moved out horizontally, along one line away from that body's centre, and never into static geometry or through it: the line from the old position to the new one crosses no static collider. If no free position is found, the player goes to a spawn slot.
+- Roof guard: when a player's feet are inside the vehicle's footprint and no deeper than the player step height below its roof face (the vehicle's up within 45° of world up), the player is lifted onto the roof instead of being shoved sideways. A rolled vehicle's up-facing side has no guard.
 - Dynamic bodies ignore players in the physics solver, and wheel raycasts ignore players.
 
 **Interact resolution.** `interact` exposes a pure function from a player's state and the nearby world to the action interact would perform. The server uses it to act; the client uses it on snapshot state to show the prompt. Among in-range targets of the same priority, the one closest to the player's aim wins, meaning the smallest angle from the aim ray.
