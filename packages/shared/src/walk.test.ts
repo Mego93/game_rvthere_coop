@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
 import {
   GRAVITY,
+  PLAYER_AIR_ACCEL,
   PLAYER_CONTROLLER_OFFSET,
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
@@ -47,7 +48,7 @@ function walker(course: BuiltCourse, feet: Vec3) {
   const run = (ticks: number, fields: Partial<InputFields> = {}) => {
     for (let i = 0; i < ticks; i++) tick(fields);
   };
-  return { state, tick, run };
+  return { state, tick, run, collider };
 }
 
 const START = vec3(0, PLAYER_CONTROLLER_OFFSET, 0);
@@ -112,6 +113,50 @@ describe('stepWalk', () => {
     expect(apex - base).toBeGreaterThan(1.15);
     expect(apex - base).toBeLessThan(1.3);
     expect(state.vy).toBe(0);
+  });
+
+  test('the collider sits at the feet plus half the height right after a step', () => {
+    const { state, tick, collider } = walker(testGround, START);
+    for (let i = 0; i < 40; i++) {
+      tick({ moveY: 1, jump: i === 20 });
+      const at = collider.translation();
+      expect(at.x).toBeCloseTo(state.pos.x, 5);
+      expect(at.y).toBeCloseTo(state.pos.y + PLAYER_HEIGHT / 2, 5);
+      expect(at.z).toBeCloseTo(state.pos.z, 5);
+    }
+  });
+
+  test('agrees with a createWorld player through a mid-air reversal of the wish', () => {
+    const feet = vec3(20, 0.02, -100);
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+    world.addPlayer('p');
+    world.teleportPlayer('p', feet);
+    const { state, tick } = walker(testGround, feet);
+    let airborneAtReversal = false;
+    for (let i = 0; i < 150; i++) {
+      const fields: InputFields = {
+        ...NEUTRAL_INPUT,
+        moveY: i < 30 ? 1 : i < 40 ? 1 : -1,
+        jump: i >= 30 && i < 33,
+      };
+      const wasAirborne = !state.grounded;
+      const before = { ...state.walk };
+      world.step(new Map([['p', fields]]));
+      tick(fields);
+      // Both sides share stepWalk, so the air limit is checked against the constant itself.
+      if (wasAirborne) {
+        expect(Math.hypot(state.walk.x - before.x, state.walk.z - before.z)).toBeLessThanOrEqual(
+          PLAYER_AIR_ACCEL * TICK_DT + 1e-9,
+        );
+      }
+      const server = world.snapshot().players.find((player) => player.playerId === 'p')!.pos;
+      expect(Math.abs(server.x - state.pos.x)).toBeLessThan(1e-9);
+      expect(Math.abs(server.y - state.pos.y)).toBeLessThan(1e-9);
+      expect(Math.abs(server.z - state.pos.z)).toBeLessThan(1e-9);
+      if (i === 39) airborneAtReversal = !state.grounded;
+    }
+    expect(airborneAtReversal).toBe(true);
+    world.dispose();
   });
 
   test('agrees with a createWorld player given the same inputs, within 1e-9 m for 300 ticks', () => {
