@@ -17,6 +17,7 @@ import {
 } from '@lodgy/shared';
 import * as THREE from 'three';
 import type { GameInput } from './input/source';
+import type { TouchSource } from './input/touch';
 import { createFixedStepper, createFrameClock } from './loop';
 import { createSnapshotBuffer } from './net/snapshotBuffer';
 import { predictionActive } from './prediction/gate';
@@ -29,6 +30,8 @@ import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
 import { overlayText } from './ui/overlay';
+import type { TouchUi } from './ui/touchUi';
+import { touchView } from './ui/touchView';
 
 // A frame longer than this (a background tab, a debugger pause) is treated as this long.
 const MAX_FRAME_SECONDS = 0.25;
@@ -48,6 +51,8 @@ export interface GameView {
   rapier: Rapier;
   // Makes the run's input source; chosen once at load by the page.
   input: () => GameInput;
+  // The touch buttons, or null on a device without touch.
+  touchUi: TouchUi | null;
 }
 
 // Draws one run: sends an input every tick and shows the vehicle and the players from the server's snapshots.
@@ -201,6 +206,7 @@ export function createGame(
     } else if (vehicle) {
       updateFollowCamera(camera, vehicle, frameSeconds);
     }
+    const latestCable = buffer.latestCable();
     overlay.textContent = overlayText({
       lobby,
       config: vehicleConfig,
@@ -213,10 +219,15 @@ export function createGame(
       server: latestLocal?.pos ?? null,
       aim,
       propPoses: sampled?.props ?? [],
-      cable: buffer.latestCable(),
+      cable: latestCable,
       anchors: course.anchors,
       status: buffer.latestStatus(),
+      touch: view.touchUi !== null,
     });
+    if (view.touchUi) {
+      view.touchUi.update(touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable }));
+      view.touchUi.setJoystick((input as TouchSource).joystick());
+    }
     renderer.render(scene, camera);
     frameRequest = requestAnimationFrame(frame);
   });

@@ -188,3 +188,85 @@ test('dispose removes the listeners and the pending long press', () => {
   vi.advanceTimersByTime(LONG_PRESS * 1000 + 1);
   expect(h.source.sample().drop).toBe(false);
 });
+
+test('releasing another slot does not cancel the long press of the held one', () => {
+  const { source, slot } = setup();
+  slot(0, true);
+  slot(1, true);
+  slot(0, false);
+  vi.advanceTimersByTime(LONG_PRESS * 1000);
+  expect(source.sample()).toMatchObject({ slot: 1, drop: true });
+});
+
+test('releasing the owning slot still cancels it', () => {
+  const { source, slot } = setup();
+  slot(0, true);
+  slot(1, true);
+  slot(1, false);
+  vi.advanceTimersByTime(LONG_PRESS * 1000);
+  expect(source.sample().drop).toBe(false);
+});
+
+test('a disposed source receives nothing from controls that keep every handler', () => {
+  const handlers = { button: [] as ((n: TouchButtonName, d: boolean) => void)[], slot: [] as ((s: 0 | 1 | 2, d: boolean) => void)[], cancel: [] as (() => void)[] };
+  const controls: TouchControls = {
+    onButton: (h) => handlers.button.push(h),
+    onSlot: (h) => handlers.slot.push(h),
+    onCancel: (h) => handlers.cancel.push(h),
+  };
+  const make = () =>
+    createTouchSource({ surface: new EventTarget(), win: new EventTarget(), doc: Object.assign(new EventTarget(), { visibilityState: 'visible' }), width: () => 800, controls });
+  const first = make();
+  first.dispose();
+  const second = make();
+  for (const h of handlers.button) h('jump', true);
+  for (const h of handlers.slot) h(2, true);
+  expect(first.sample()).toMatchObject({ jump: false, slot: 0 });
+  expect(second.sample()).toMatchObject({ jump: true, slot: 2 });
+});
+
+test('with controls that replace the handler, only the second source sees events', () => {
+  let onButton: (n: TouchButtonName, d: boolean) => void = () => {};
+  const controls: TouchControls = { onButton: (h) => (onButton = h), onSlot() {}, onCancel() {} };
+  const make = () =>
+    createTouchSource({ surface: new EventTarget(), win: new EventTarget(), doc: Object.assign(new EventTarget(), { visibilityState: 'visible' }), width: () => 800, controls });
+  const first = make();
+  const second = make();
+  onButton('interact', true);
+  expect(first.sample().interact).toBe(false);
+  expect(second.sample().interact).toBe(true);
+});
+
+test('the surface listeners are non-passive and the touch events are default-prevented', () => {
+  const added: [string, unknown][] = [];
+  const surface = new EventTarget();
+  const original = surface.addEventListener.bind(surface);
+  surface.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject, options?: unknown) => {
+    added.push([type, options]);
+    original(type, listener, options as AddEventListenerOptions);
+  }) as typeof surface.addEventListener;
+  createTouchSource({ surface, win: new EventTarget(), doc: Object.assign(new EventTarget(), { visibilityState: 'visible' }), width: () => 800, controls: { onButton() {}, onSlot() {}, onCancel() {} } });
+  for (const type of ['touchstart', 'touchmove', 'touchend']) {
+    expect(added.find(([t]) => t === type)?.[1]).toEqual({ passive: false });
+    const event = Object.assign(new Event(type, { cancelable: true }), { changedTouches: [{ identifier: 1, clientX: 1, clientY: 1 }] });
+    surface.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  }
+});
+
+test('dispose removes the blur and visibilitychange listeners too', () => {
+  const win = new EventTarget();
+  const doc = Object.assign(new EventTarget(), { visibilityState: 'visible' });
+  const removed: string[] = [];
+  for (const target of [win, doc]) {
+    const remove = target.removeEventListener.bind(target);
+    target.removeEventListener = ((type: string, listener: EventListenerOrEventListenerObject) => {
+      removed.push(type);
+      remove(type, listener);
+    }) as typeof target.removeEventListener;
+  }
+  const source = createTouchSource({ surface: new EventTarget(), win, doc, width: () => 800, controls: { onButton() {}, onSlot() {}, onCancel() {} } });
+  source.dispose();
+  expect(removed).toContain('blur');
+  expect(removed).toContain('visibilitychange');
+});

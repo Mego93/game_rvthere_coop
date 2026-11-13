@@ -6,6 +6,8 @@ import {
   PLAYER_EYE_HEIGHT,
   PLAYER_KILL_RESPAWN_DELAY,
   HOOK_DROP_RAY,
+  HOOK_RANGE,
+  PUSH_HEIGHT,
   TICK_DT,
   TICK_RATE,
   WINCH_DAMPING_RATIO,
@@ -21,7 +23,7 @@ import { createProps } from './props';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
 import { createWorld, type World } from './world';
 import { createRig, withProps } from './testRig';
-import { anchorPoint, cableTension, createWinch, reelLength, type CableEnd } from './winch';
+import { anchorPoint, cableTension, canReel, createWinch, reelLength, type CableEnd } from './winch';
 import type { BuiltCourse } from './course';
 import type { VehicleId } from './vehicles';
 
@@ -778,3 +780,29 @@ describe('the reel and obstacles (world)', () => {
   });
 });
 
+
+describe('canReel', () => {
+  const mount = vec3(0, 1, -3);
+  const feetFor = (offset: Vec3) => sub(add(mount, offset), vec3(0, PUSH_HEIGHT, 0));
+  const onFoot = (pos: Vec3, downed: number | null = null) => ({ seat: null, pos, downed });
+
+  test('the driver may reel from anywhere', () => {
+    expect(canReel({ seat: 'driver', pos: vec3(100, 0, 100), downed: null }, mount)).toBe(true);
+  });
+
+  test('a player on foot within range of the mount may reel', () => {
+    expect(canReel(onFoot(feetFor(vec3(HOOK_RANGE - 0.01, 0, 0))), mount)).toBe(true);
+  });
+
+  test('a player on foot out of range may not', () => {
+    expect(canReel(onFoot(feetFor(vec3(HOOK_RANGE + 0.01, 0, 0))), mount)).toBe(false);
+  });
+
+  test('a passenger may not, even at the mount', () => {
+    expect(canReel({ seat: 'seat1', pos: feetFor(vec3(0, 0, 0)), downed: null }, mount)).toBe(false);
+  });
+
+  test('a downed player in range may not', () => {
+    expect(canReel(onFoot(feetFor(vec3(0, 0, 0)), 5), mount)).toBe(false);
+  });
+});

@@ -1,5 +1,4 @@
 import {
-  aimRay,
   dot,
   interactCandidates,
   ITEM_KINDS,
@@ -18,6 +17,7 @@ import {
   type VehicleState,
 } from '@lodgy/shared';
 import type { RunStatus } from '../net/snapshotBuffer';
+import { buildUseContext } from './useContext';
 
 const FORWARD = vec3(0, 0, -1);
 const percent = (fraction: number) => `${Math.floor(fraction * 100 + 1e-9)}%`;
@@ -52,6 +52,8 @@ export interface OverlayData {
   anchors: readonly Placed[];
   // The run's clock and counters, or null before the first snapshot.
   status: RunStatus | null;
+  // True on a touch device, which changes the control line.
+  touch?: boolean;
 }
 
 const STOWED: CableSnapshot = { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 0, 0), length: 0, reel: 0 };
@@ -109,7 +111,7 @@ export function interactHint(
 }
 
 // The debug text shown until the real HUD exists.
-export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses, cable, anchors, status }: OverlayData): string {
+export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses, cable, anchors, status, touch }: OverlayData): string {
   const names = lobby.players.map((player) => {
     const snapshot = players.find((candidate) => candidate.playerId === player.playerId);
     return snapshot ? `${player.name} (${snapshot.seat ?? 'on foot'})` : player.name;
@@ -145,16 +147,8 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
       if (local.downed !== null) lines.push(`DOWNED   ${Math.ceil(local.downed - 1e-9)}s`);
       if (local.hold) lines.push(`hold     ${percent(local.hold.progress)}`);
       const selected = local.inventory[local.slot];
-      const half = config.halfExtents;
-      const { origin, dir } = aimRay(local.pos, aim.yaw, aim.pitch);
-      const others = players
-        .filter((other) => other.playerId !== local.playerId)
-        .map((other) => ({ id: other.playerId, feet: other.pos, health: other.health, downed: other.downed, seated: other.seat !== null }));
-      const context = {
-        self: { id: local.playerId, feet: local.pos, eye: origin, aim: dir, health: local.health },
-        vehicle: { pos: vehicle.pos, rot: vehicle.rot, half, fuel: vehicle.fuel, health: vehicle.health },
-        players: others,
-      };
+      const context = buildUseContext(local, players, vehicle, config, aim);
+      const others = context.players;
       const target = local.seat === null && local.downed === null ? useTarget(selected ?? null, context) : null;
       if (target) {
         if (selected === 'jerrycan') lines.push('hint     Hold F to refuel');
@@ -174,6 +168,6 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
   }
   lines.push(`props    ${propPoses.length}`);
   if (cable) lines.push(`cable    ${cable.state} ${cable.length.toFixed(1)} m`);
-  lines.push('', 'WASD move   Space jump (brake when driving)   E board or leave   click to look');
+  lines.push('', touch ? 'joystick move   drag right half to look   buttons act' : 'WASD move   Space jump (brake when driving)   E board or leave   click to look');
   return lines.join('\n');
 }

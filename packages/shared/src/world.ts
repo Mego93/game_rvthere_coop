@@ -1,5 +1,5 @@
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
-import { DROP_HEIGHT, GRAVITY, HEALTH_KIT_HEAL, HOOK_RANGE, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
+import { DROP_HEIGHT, GRAVITY, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
@@ -17,7 +17,7 @@ import type { Rapier, RigidBody } from './rapier';
 import { buildStatics } from './statics';
 import { createVehicle, type Vehicle, type VehicleState } from './vehicle';
 import { getVehicleConfig, type VehicleConfig } from './vehicles';
-import { createWinch, type CableSnapshot, type Winch } from './winch';
+import { canReel, createWinch, type CableSnapshot, type Winch } from './winch';
 
 export interface WorldOptions {
   courseId: string;
@@ -349,10 +349,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     const body = vehicle.body;
     const mount = add(body.translation(), rotate(body.rotation(), vehicleConfig.winchMount));
     for (const player of players.all()) {
-      if (player.seat !== null || player.downed !== null) continue;
+      if (!canReel(player, mount)) continue;
       const reel = onFoot.get(player.id)?.fields.reel;
-      if ((reel !== 1 && reel !== -1) || length(sub(mount, add(player.pos, vec3(0, PUSH_HEIGHT, 0)))) > HOOK_RANGE) continue;
-      return reel;
+      if (reel === 1 || reel === -1) return reel;
     }
     return 0;
   };

@@ -44,3 +44,7 @@ test('the output is continuous at the dead-zone edge', () => {
   const edge = joystickVector(origin, { x: 100 + R * Z + 1e-9, y: 100 }, R, Z);
   expect(len(edge)).toBeLessThan(1e-6);
 });
+
+test('a zero offset with a zero dead zone gives 0, not NaN', () => {
+  expect(joystickVector(origin, origin, R, 0)).toEqual({ moveX: 0, moveY: 0 });
+});

@@ -45,10 +45,14 @@ export function createTouchSource({ surface, win, doc, width, controls }: TouchS
   let slot: 0 | 1 | 2 = 0;
   let dropLatched = false;
   let longPress: ReturnType<typeof setTimeout> | null = null;
+  // The slot whose press owns the timer.
+  let pressedSlot: 0 | 1 | 2 | null = null;
+  let disposed = false;
 
   const clearLongPress = () => {
     if (longPress !== null) clearTimeout(longPress);
     longPress = null;
+    pressedSlot = null;
   };
   const cancelAll = () => {
     tracker.cancelAll();
@@ -88,19 +92,28 @@ export function createTouchSource({ surface, win, doc, width, controls }: TouchS
   doc.addEventListener('visibilitychange', onVisibility);
 
   controls.onButton((name, down) => {
+    if (disposed) return;
     if (down) buttons[name].down();
     else buttons[name].up();
   });
   controls.onSlot((pressed, down) => {
+    if (disposed) return;
+    if (!down) {
+      if (pressedSlot === pressed) clearLongPress();
+      return;
+    }
     clearLongPress();
-    if (!down) return;
     slot = pressed;
+    pressedSlot = pressed;
     longPress = setTimeout(() => {
       longPress = null;
+      pressedSlot = null;
       dropLatched = true;
     }, LONG_PRESS * 1000);
   });
-  controls.onCancel(cancelAll);
+  controls.onCancel(() => {
+    if (!disposed) cancelAll();
+  });
 
   return {
     sample() {
@@ -132,6 +145,7 @@ export function createTouchSource({ surface, win, doc, width, controls }: TouchS
     joystick: () => tracker.joystick(),
     dispose() {
       cancelAll();
+      disposed = true;
       surface.removeEventListener('touchstart', onStart);
       surface.removeEventListener('touchmove', onMove);
       surface.removeEventListener('touchend', onEnd);

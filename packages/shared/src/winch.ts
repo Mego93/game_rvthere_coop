@@ -1,6 +1,8 @@
 import {
   ANCHOR_HEIGHT,
   HOOK_DROP_RAY,
+  HOOK_RANGE,
+  PUSH_HEIGHT,
   GRAVITY,
   PROP_KINDS,
   TICK_DT,
@@ -50,6 +52,13 @@ export function cableTension(
   const cap = WINCH_FORCE_PER_WEIGHT * vehicleMass * GRAVITY;
   const tension = stretch > 0 ? clamp(stiffness * stretch + damping * rate, 0, cap) : 0;
   return { tension, dir, stretch };
+}
+
+// Rule W5: the driver, or a player on foot and not downed whose chest is within hook range of the winch mount.
+export function canReel(player: { seat: string | null; pos: Vec3; downed: number | null }, mount: Vec3): boolean {
+  if (player.seat === 'driver') return true;
+  if (player.seat !== null || player.downed !== null) return false;
+  return length(sub(mount, add(player.pos, vec3(0, PUSH_HEIGHT, 0)))) <= HOOK_RANGE;
 }
 
 export function reelLength(cableLength: number, reel: -1 | 0 | 1, atCap: boolean): number {

@@ -8,6 +8,7 @@ export function joystickVector(origin: Point, point: Point, radius: number, dead
   // Screen y grows downward; up is positive.
   const dy = origin.y - point.y;
   const length = Math.hypot(dx, dy);
+  if (length === 0) return { moveX: 0, moveY: 0 };
   const m = Math.min(length / radius, 1);
   if (m <= deadZone) return { moveX: 0, moveY: 0 };
   const scale = (m - deadZone) / (1 - deadZone) / length;

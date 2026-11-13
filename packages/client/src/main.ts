@@ -11,6 +11,7 @@ import { createMouseLook } from './input/mouse';
 import type { GameInput } from './input/source';
 import { createTouchSource } from './input/touch';
 import { createHome, errorText } from './ui/home';
+import { createTouchUi } from './ui/touchUi';
 
 // Some private browsing modes refuse access to storage; the page then works without remembering anything.
 function storage(get: () => Storage): KeyValueStore {
@@ -38,18 +39,9 @@ const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
 const overlay = document.querySelector<HTMLElement>('#overlay')!;
 const crosshair = document.querySelector<HTMLElement>('#crosshair')!;
 
-// Chosen once at load. The touch controls are a stub until the touch UI exists, so only the joystick and look drag work.
+// Chosen once at load; the touch UI is made on the first run on a touch device.
 const touchDevice = window.matchMedia('(pointer: coarse)').matches;
-const makeInput = (): GameInput =>
-  touchDevice
-    ? createTouchSource({
-        surface: canvas,
-        win: window,
-        doc: document,
-        width: () => window.innerWidth,
-        controls: { onButton() {}, onSlot() {}, onCancel() {} },
-      })
-    : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document));
+let touchUi: ReturnType<typeof createTouchUi> | null = null;
 
 const CONNECTION_LOST = 'The connection to the server was lost.';
 
@@ -107,13 +99,25 @@ function startGame(lobby: LobbyMessage) {
     socket?.close();
     return;
   }
-  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input: makeInput }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  if (touchDevice && !touchUi) {
+    const root = document.createElement('div');
+    document.body.append(root);
+    touchUi = createTouchUi(root);
+  }
+  const controls = touchUi;
+  const input = (): GameInput =>
+    controls
+      ? createTouchSource({ surface: canvas, win: window, doc: document, width: () => window.innerWidth, controls })
+      : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document));
+  touchUi?.setVisible(true);
+  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
 function onClose() {
   socket = null;
   game?.stop();
   game = null;
+  touchUi?.setVisible(false);
   overlay.textContent = '';
   home.setBusy(false);
   home.show({ room: roomFromPath(location.pathname), name, error: closeReason });
