@@ -28,6 +28,12 @@ function placer(frame: Frame) {
 
 export function buildCourse(def: CourseDef): BuiltCourse {
   if (def.segments.length === 0) throw new Error('A course needs at least one segment');
+  def.segments.forEach((a, i) => {
+    const b = def.segments[i + 1];
+    if (a.type !== 'road' || b?.type !== 'road') return;
+    // A curve's end overlap would leave a lip against a sloped neighbour.
+    if ((a.curve && b.slope) || (a.slope && b.curve)) throw new Error(`Segments ${i} and ${i + 1}: a curved road next to a sloped one`);
+  });
   const ground: GroundBox[] = [];
   const course: BuiltCourse = {
     id: def.id,

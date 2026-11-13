@@ -267,8 +267,30 @@ describe('extras after chaining', () => {
   });
 
   test('props on a climb after a quarter turn stand on the surface', () => {
-    const built = buildCourse(course(road(90, { curve: Math.PI / 2 }), road(40, { slope: 8, debris: 2 })));
+    const built = buildCourse(course(road(90, { curve: Math.PI / 2 }), road(20), road(40, { slope: 8, debris: 2 })));
     const crate = built.props[0]!;
     expect(groundHeightAt(built.ground, crate.pose.pos.x, crate.pose.pos.z)).toBeCloseTo(crate.pose.pos.y, 2);
+  });
+});
+
+describe('curve next to slope', () => {
+  const curved = road(90, { curve: Math.PI / 2 });
+  const sloped = road(40, { slope: 5 });
+
+  test.each([
+    ['a curve then a slope', [curved, sloped]],
+    ['a slope then a curve', [sloped, curved]],
+    ['a curve between flat roads then a slope after the curve', [road(30), curved, sloped, road(30)]],
+  ] as const)('%s throws', (_name, segments) => {
+    expect(() => buildCourse(course(...segments))).toThrow(/curved road next to a sloped one/);
+  });
+
+  test('a flat road between them is allowed', () => {
+    expect(() => buildCourse(course(curved, road(30), sloped))).not.toThrow();
+    expect(() => buildCourse(course(sloped, road(30), curved))).not.toThrow();
+  });
+
+  test('a curve next to a flat road, and a slope next to a flat road, are allowed', () => {
+    expect(() => buildCourse(course(road(30), curved, road(30), sloped, road(30)))).not.toThrow();
   });
 });
