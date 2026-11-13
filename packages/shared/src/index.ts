@@ -5,6 +5,7 @@ export * from './groups';
 export * from './interact';
 export * from './math';
 export * from './player';
+export * from './predictor';
 export * from './protocol';
 export * from './rapier';
 export * from './seats';

@@ -96,4 +96,14 @@ export const CAMERA_SHOULDER = 0.6;
 export const CAMERA_MIN_DISTANCE = 0.4;
 export const CAMERA_WALL_MARGIN = 0.2;
 
+// Prediction (client).
+// A correction larger than this (m) moves the player at once.
+export const PREDICTION_TELEPORT_DISTANCE = 1;
+// Per second; a smaller correction fades out as 1 - exp(-rate * dt) per frame.
+export const PREDICTION_SMOOTH_RATE = 12;
+// A correction smaller than this (m) is ignored.
+export const PREDICTION_IGNORE_DISTANCE = 0.002;
+// Inputs kept for replay: two seconds' worth.
+export const PREDICTION_MAX_PENDING = 120;
+
 export const PLAYER_COLOUR_PATTERN = /^#[0-9a-f]{6}$/;
