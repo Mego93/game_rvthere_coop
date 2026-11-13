@@ -26,7 +26,7 @@ export interface RoomDeps {
   // A number in [0, 1).
   random: () => number;
   timer: Timer;
-  // Told about a connection or a room that failed; the server carries on without it. `source` is `room:<noun>`, or `connection` outside any room. The room layer does not rate-limit, so `suppressed` is 0 from here.
+  // Told about a failure; `source` is `room:<noun>`, `connection:<noun>` or `connection`, and `suppressed` is 0 from this layer.
   onError?: (error: unknown, source: string, suppressed: number) => void;
 }
 

@@ -55,7 +55,8 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
   const refuse = (session: Session, reason: ErrorReason) => send(session.connection, { type: 'error', reason });
 
   // Failures are reported with the room they belong to, if any; the adapter rate-limits per source.
-  const report = (error: unknown, room: Room | null) => deps.onError?.(error, room ? `room:${room.noun}` : 'connection', 0);
+  const report = (error: unknown, source: string) => deps.onError?.(error, source, 0);
+  const reportConnection = (error: unknown, room: Room | null) => report(error, room ? `connection:${room.noun}` : 'connection');
 
   // Forgets a session whose connection is gone, and takes its player out of the room.
   const forget = (session: Session) => {
@@ -160,7 +161,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     try {
       room.dispose();
     } catch (error) {
-      report(error, room);
+      report(error, `room:${room.noun}`);
     }
   };
 
@@ -200,7 +201,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
         room.update(now);
       } catch (error) {
         // A room whose simulation fails is closed, so that it cannot stop the other rooms.
-        report(error, room);
+        report(error, `room:${room.noun}`);
         discard(noun, room);
         continue;
       }
@@ -229,14 +230,14 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
               connection.send(data);
             } catch (error) {
               session.failed = true;
-              report(error, session.room);
+              reportConnection(error, session.room);
             }
           },
           close() {
             try {
               connection.close();
             } catch (error) {
-              report(error, session.room);
+              reportConnection(error, session.room);
             }
           },
         },

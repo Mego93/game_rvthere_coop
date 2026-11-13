@@ -41,7 +41,17 @@ function setup(options?: RoomServerOptions) {
   const fake = createFakeDeps(RAPIER);
   // Everything the server reports through onError, oldest first.
   const errors: unknown[] = [];
-  const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) }, options);
+  const sources: string[] = [];
+  const server = createRoomServer(
+    {
+      ...fake.deps,
+      onError: (error, source) => {
+        errors.push(error);
+        sources.push(source);
+      },
+    },
+    options,
+  );
   const connect = (address?: string) => connectFakeClient(server, address);
   // Connects a client and creates a room with it.
   const host = (name = 'Amal') => {
@@ -55,7 +65,7 @@ function setup(options?: RoomServerOptions) {
     client.send({ type: 'join', room, name, token: token(n) });
     return client;
   };
-  return { ...fake, server, errors, connect, host, guest };
+  return { ...fake, server, errors, sources, connect, host, guest };
 }
 
 const reasons = (client: FakeClient) => client.ofType('error').map((message) => message.reason);
@@ -565,9 +575,10 @@ test('silence of exactly the timeout drops a connection and a hair less does not
 test('a stall with every client silent during it drops nobody', () => {
   const { connect, advance, stall } = setup();
   const client = connect();
-  advance(1);
+  advance(3);
   stall(STALL_GRACE + 3);
   advance(0.1);
+  // 7.1 s of silence in all, 4.1 s once the stall's excess is credited.
   expect(client.closedByServer).toBe(false);
 });
 
@@ -582,15 +593,14 @@ test('a client silent for the full timeout of non-stalled time is still dropped 
   expect(client.closedByServer).toBe(true);
 });
 
-test('a message after a stall, before the next timer run, is not extended: the client is dropped the timeout after it', () => {
+test('a message heard after the previous timer run is not credited the stall excess', () => {
   const { connect, advance, stall } = setup();
   const client = connect();
-  advance(1);
-  stall(STALL_GRACE + 3);
+  stall(0.5);
   client.send({ type: 'pong' });
-  advance(SILENCE_TIMEOUT - 0.1);
-  expect(client.closedByServer).toBe(false);
-  advance(0.2);
+  stall(4);
+  // The message at 0.5 s makes the client due at 6.5 s; credited the excess it would be due at 10 s.
+  advance(2.5);
   expect(client.closedByServer).toBe(true);
 });
 
@@ -657,7 +667,7 @@ test('create is refused once the server holds the most rooms it allows, until on
 });
 
 test('a connection whose send throws is reported and dropped, and the others carry on', () => {
-  const { host, advance, server, errors } = setup();
+  const { host, advance, server, errors, sources } = setup();
   const { client: amal, room } = host();
   let broken = false;
   let closed = false;
@@ -676,6 +686,7 @@ test('a connection whose send throws is reported and dropped, and the others car
   const before = amal.ofType('snapshot').length;
   advance(1);
   expect(errors).toHaveLength(1);
+  expect(sources).toEqual([`connection:${room}`]);
   expect(closed).toBe(true);
   expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
   // The tick was never interrupted: Amal missed no snapshot.

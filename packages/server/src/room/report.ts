@@ -1,7 +1,6 @@
 import { REPORT_INTERVAL } from '@lodgy/shared';
 
-// Reports at most once per REPORT_INTERVAL per source; the next report carries the count of those dropped since the last.
-// A count that no later report picks up is never sent.
+// Reports at most once per REPORT_INTERVAL per source; the next report carries the count dropped since.
 export function createReporter(
   onError: (error: unknown, source: string, suppressed: number) => void,
   clock: () => number,
