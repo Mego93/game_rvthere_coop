@@ -142,7 +142,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       })),
     }),
     addPlayer: (id) => void players.add(id),
-    removePlayer: (id) => players.remove(id),
+    removePlayer(id) {
+      players.remove(id);
+      previous.delete(id);
+    },
     teleportPlayer: (id, pos) => players.teleport(id, pos),
     debug: () => ({ forwardSpeed: vehicle.forwardSpeed(), wheelSurfaces: vehicle.wheelSurfaces() }),
     dispose() {

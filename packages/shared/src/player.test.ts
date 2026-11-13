@@ -213,12 +213,15 @@ describe('jumping', () => {
     const base = player.pos.y;
     let takeoffs = 0;
     let wasGrounded = true;
+    let heldApex = base;
     for (let i = 0; i < 3 * TICK_RATE; i++) {
       tick({ p1: { jump: true } });
+      heldApex = Math.max(heldApex, player.pos.y);
       if (wasGrounded && !player.grounded) takeoffs += 1;
       wasGrounded = player.grounded;
     }
     expect(takeoffs).toBe(1);
+    expect(heldApex - base).toBeGreaterThan(1.1);
     expect(player.pos.y).toBeCloseTo(base, 2);
 
     // A fresh press while airborne adds nothing: the apex stays that of one jump.

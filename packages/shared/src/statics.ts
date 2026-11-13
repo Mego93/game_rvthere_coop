@@ -1,5 +1,5 @@
 import { COURSE_FRICTION, type Surface } from './constants';
-import { GROUP_WORLD, groups } from './groups';
+import { GROUP_GROUND, GROUP_WORLD, groups } from './groups';
 import type { Box, BuiltCourse } from './course';
 import type { Rapier, RapierWorld } from './rapier';
 
@@ -10,15 +10,15 @@ export interface Statics {
 
 export function buildStatics(rapier: Rapier, world: RapierWorld, course: BuiltCourse): Statics {
   const surfaces = new Map<number, Surface>();
-  const addBox = (box: Box) =>
+  const addBox = (box: Box, membership: number) =>
     world.createCollider(
       rapier.ColliderDesc.cuboid(box.halfExtents.x, box.halfExtents.y, box.halfExtents.z)
         .setTranslation(box.center.x, box.center.y, box.center.z)
         .setRotation(box.rot)
         .setFriction(COURSE_FRICTION)
-        .setCollisionGroups(groups(GROUP_WORLD, GROUP_WORLD)),
+        .setCollisionGroups(groups(membership, GROUP_WORLD)),
     );
-  for (const ground of course.ground) surfaces.set(addBox(ground).handle, ground.surface);
-  for (const wall of course.walls) addBox(wall);
+  for (const ground of course.ground) surfaces.set(addBox(ground, GROUP_WORLD | GROUP_GROUND).handle, ground.surface);
+  for (const wall of course.walls) addBox(wall, GROUP_WORLD);
   return { surfaceOf: (handle) => surfaces.get(handle) ?? null };
 }

@@ -16,7 +16,7 @@ import {
   TICK_DT,
 } from './constants';
 import type { BuiltCourse } from './course';
-import { GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
+import { GROUP_GROUND, GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, vec3, yawOf, type Vec3 } from './math';
 import { NEUTRAL_INPUT, type InputFields } from './protocol';
 import type { Rapier, RapierWorld } from './rapier';
@@ -102,7 +102,6 @@ export function aimRay(pos: Vec3, yaw: number, pitch: number): { origin: Vec3; d
 const CAPSULE_HALF_SEGMENT = PLAYER_HEIGHT / 2 - PLAYER_RADIUS;
 const SPAWN_RAY_HEIGHT = 3;
 const SPAWN_RAY_LENGTH = 6;
-const NEAR = 1e-6;
 
 export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Vehicle, course: BuiltCourse): Players {
   const worldGroups = groups(GROUP_WORLD, GROUP_WORLD);
@@ -114,24 +113,6 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
   controller.setMaxSlopeClimbAngle(degToRad(PLAYER_MAX_SLOPE_DEG));
   controller.setMinSlopeSlideAngle(degToRad(PLAYER_SLIDE_SLOPE_DEG));
   controller.setApplyImpulsesToDynamicBodies(false);
-
-  // The spawn ray looks for ground, not for the top of a wall.
-  const wallHandles = new Set<number>();
-  physics.colliders.forEach((collider) => {
-    const half = collider.halfExtents();
-    if (!half) return;
-    const centre = collider.translation();
-    const isWall = course.walls.some(
-      (wall) =>
-        Math.abs(wall.center.x - centre.x) < NEAR &&
-        Math.abs(wall.center.y - centre.y) < NEAR &&
-        Math.abs(wall.center.z - centre.z) < NEAR &&
-        Math.abs(wall.halfExtents.x - half.x) < NEAR &&
-        Math.abs(wall.halfExtents.y - half.y) < NEAR &&
-        Math.abs(wall.halfExtents.z - half.z) < NEAR,
-    );
-    if (isWall) wallHandles.add(collider.handle);
-  });
 
   const entries = new Map<string, { state: PlayerState; collider: ReturnType<RapierWorld['createCollider']> }>();
 
@@ -166,10 +147,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       SPAWN_RAY_LENGTH,
       true,
       undefined,
-      worldGroups,
-      undefined,
-      undefined,
-      (collider) => collider.handle !== vehicle.chassisHandle && !wallHandles.has(collider.handle),
+      groups(GROUP_WORLD, GROUP_GROUND),
     );
     return hit ? fromY - hit.timeOfImpact : null;
   };

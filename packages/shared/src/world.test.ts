@@ -174,6 +174,17 @@ test('a slot blocked by a wall is skipped; with every slot blocked the player go
   expect(all.snapshot().players[0]!.pos).toEqual(spawn);
 });
 
+test('a wall box shaped like a ground box does not remove that ground from the spawn ray', () => {
+  const ground = testGround.ground[0]!;
+  const course = withBoxes(testGround, { walls: [{ center: ground.center, halfExtents: ground.halfExtents, rot: ground.rot }] });
+  const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' }, course);
+  world.addPlayer('p1');
+  const [slot] = slotPositions(world);
+  const [player] = world.snapshot().players;
+  expect(player!.pos.x).toBeCloseTo(slot!.x, 2);
+  expect(player!.pos.z).toBeCloseTo(slot!.z, 2);
+});
+
 test('a course passed in is used instead of the id\'s course', () => {
   const course = withBoxes(testGround, { walls: [] });
   expect(createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' }, course).course).toBe(course);
