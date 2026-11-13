@@ -1,3 +1,4 @@
+import RAPIER from '@dimforge/rapier3d-compat';
 import type { ClientMessage, LobbyMessage, ServerMessage } from '@lodgy/shared';
 import * as THREE from 'three';
 import { createGame, type Game } from './game';
@@ -23,6 +24,10 @@ const token = sessionToken(
   storage(() => sessionStorage),
   (bytes) => crypto.getRandomValues(bytes),
 );
+
+// The physics module loads once; creating or joining a room waits for it.
+const rapierReady = RAPIER.init();
+const RAPIER_FAILED = 'The game could not load its physics engine. Reload the page to try again.';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
 const overlay = document.querySelector<HTMLElement>('#overlay')!;
@@ -83,7 +88,7 @@ function startGame(lobby: LobbyMessage) {
     socket?.close();
     return;
   }
-  game = createGame({ renderer, overlay, crosshair }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
 function onClose() {
@@ -96,9 +101,21 @@ function onClose() {
   closeReason = CONNECTION_LOST;
 }
 
-// Sends a create or join request, opening the socket first if there is none.
+// Sends a create or join request once the physics module is ready.
 function request(message: ClientMessage) {
   home.setBusy(true);
+  // Until the physics module is ready nothing is sent, so no lobby (and no game) can arrive before it.
+  rapierReady.then(
+    () => send(message),
+    () => {
+      home.setBusy(false);
+      home.setError(RAPIER_FAILED);
+    },
+  );
+}
+
+// Opens the socket first if there is none.
+function send(message: ClientMessage) {
   if (socket) {
     socket.send(message);
     return;

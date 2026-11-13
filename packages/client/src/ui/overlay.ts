@@ -7,6 +7,7 @@ import {
   type LobbyMessage,
   type PlayerSnapshot,
   type VehicleConfig,
+  type Vec3,
   type VehicleState,
 } from '@lodgy/shared';
 
@@ -22,6 +23,10 @@ export interface OverlayData {
   vehicle: VehicleState | null;
   players: PlayerSnapshot[];
   localId: string;
+  // The drawn predicted position of the local player, or null while prediction is off.
+  predicted: Vec3 | null;
+  // The local player's position in the latest snapshot (not interpolated), or null if absent.
+  server: Vec3 | null;
 }
 
 // What pressing interact would do for the local player, or null if nothing.
@@ -41,7 +46,7 @@ export function interactHint(
 }
 
 // The debug text shown until the real HUD exists.
-export function overlayText({ lobby, config, tick, fps, vehicle, players, localId }: OverlayData): string {
+export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server }: OverlayData): string {
   const names = lobby.players.map((player) => {
     const snapshot = players.find((candidate) => candidate.playerId === player.playerId);
     return snapshot ? `${player.name} (${snapshot.seat ?? 'on foot'})` : player.name;
@@ -58,6 +63,11 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
       `pos      ${fixed(vehicle.pos.x)} ${fixed(vehicle.pos.y)} ${fixed(vehicle.pos.z)}`,
       `throttle ${fixed(vehicle.throttle, 2)}   steer ${fixed(vehicle.steer, 2)}`,
     );
+    // These lines must not start with "pos": the e2e test reads the vehicle's position from the "pos" line.
+    if (predicted) {
+      lines.push(`you      ${fixed(predicted.x)} ${fixed(predicted.y)} ${fixed(predicted.z)}   (predicted)`);
+      if (server) lines.push(`server   ${fixed(server.x)} ${fixed(server.y)} ${fixed(server.z)}`);
+    }
     const local = players.find((player) => player.playerId === localId);
     const hint = local ? interactHint(config, vehicle, local, players) : null;
     if (hint) lines.push(`hint     ${hint}`);

@@ -6,6 +6,7 @@ import {
   vec3,
   type LobbyMessage,
   type PlayerSnapshot,
+  type Vec3,
   type VehicleState,
 } from '@lodgy/shared';
 import { expect, test } from 'vitest';
@@ -49,7 +50,7 @@ const far = player('p1', 40, -32.24);
 const rv = getVehicleConfig('rv');
 
 const call = (players: PlayerSnapshot[], localId = 'p1', v: VehicleState | null = vehicle) =>
-  overlayText({ lobby, config: rv, tick: 180, fps: 59.6, vehicle: v, players, localId });
+  overlayText({ lobby, config: rv, tick: 180, fps: 59.6, vehicle: v, players, localId, predicted: null, server: null });
 
 test('shows the room and each player with their state', () => {
   const text = call([player('p1', 0, 0, 'driver'), player('p2', 3, 0)]);
@@ -95,7 +96,7 @@ test('interactHint: with the driver seat taken, a free seat still says board', (
 });
 
 test('shows the speed along the vehicle, the position and the controls', () => {
-  const text = overlayText({ lobby, config: rv, tick: 180, fps: 60, vehicle, players: [], localId: 'p1' });
+  const text = overlayText({ lobby, config: rv, tick: 180, fps: 60, vehicle, players: [], localId: 'p1', predicted: null, server: null });
   expect(text).toContain('speed       36.0 km/h');
   expect(text).toContain('pos          1.3     1.7   -30.0');
   expect(text).toContain('throttle    1.00   steer   -0.50');
@@ -103,11 +104,39 @@ test('shows the speed along the vehicle, the position and the controls', () => {
 
 test('speed is negative when the vehicle rolls backwards, whichever way it faces', () => {
   const facingLeft = { ...vehicle, rot: quatFromAxisAngle(AXIS_Y, Math.PI / 2), linvel: vec3(5, 0, 0) };
-  expect(overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle: facingLeft, players: [], localId: 'p1' })).toContain('speed      -18.0 km/h');
+  expect(overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle: facingLeft, players: [], localId: 'p1', predicted: null, server: null })).toContain('speed      -18.0 km/h');
 });
 
 test('says it is waiting before the first snapshot', () => {
-  const text = overlayText({ lobby, config: rv, tick: 0, fps: 60, vehicle: null, players: [], localId: 'p1' });
+  const text = overlayText({ lobby, config: rv, tick: 0, fps: 60, vehicle: null, players: [], localId: 'p1', predicted: null, server: null });
   expect(text).toContain('waiting for the server');
   expect(text).not.toContain('speed');
+});
+
+const withPrediction = (predicted: Vec3 | null, server: Vec3 | null, v: VehicleState | null = vehicle) =>
+  overlayText({ lobby, config: rv, tick: 180, fps: 60, vehicle: v, players: [], localId: 'p1', predicted, server });
+
+test('shows the predicted and the server position of the local player', () => {
+  const text = withPrediction(vec3(1.25, 0, -3.5), vec3(1, 0.5, -3));
+  expect(text).toContain('you          1.3     0.0    -3.5   (predicted)');
+  expect(text).toContain('server       1.0     0.5    -3.0');
+});
+
+test('the prediction lines are not mistaken for the vehicle position line', () => {
+  const text = withPrediction(vec3(7, 8, 9), vec3(4, 5, 6));
+  expect(text.match(/pos\s+\S+\s+\S+\s+(\S+)/)?.[1]).toBe('-30.0');
+  expect(text.match(/tick\s+(\d+)/)?.[1]).toBe('180');
+  expect(text.match(/throttle\s+(\S+)/)?.[1]).toBe('1.00');
+});
+
+test('omits the prediction lines while prediction is off', () => {
+  const text = withPrediction(null, vec3(1, 0, 1));
+  expect(text).not.toContain('you ');
+  expect(text).not.toContain('server');
+});
+
+test('omits the prediction lines before the first snapshot', () => {
+  const text = withPrediction(null, null, null);
+  expect(text).not.toContain('you ');
+  expect(text).not.toContain('(predicted)');
 });
