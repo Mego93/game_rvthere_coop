@@ -265,3 +265,118 @@ The coin look and placement, the stop and shop flow, the shop menu's look, and t
 - Interact at a pump while standing near the vehicle's door: the smaller angle decides between boarding and operating. Check that a player at the operate point, aiming at the pump, gets `operate`.
 - The shop menu and pointer lock: closing the menu must not leave the mouse unlocked with no hint. The existing "click to look" behaviour covers it.
 - `coinsLeft` in every snapshot costs about 10 bytes per coin. Measure it at step 16.
+
+## Amendments after the plan review (binding; where they differ from the text above, they win)
+
+The angles and positions below come from a probe run against the real `interactCandidates` and the `placeStop` formula.
+
+M1 (V5, the interact tier; spec "Interact resolution" priority 3).
+- Stop candidates form their own tier. `resolveInteract` resolves in this order:
+  1. Seated → `exitSeat`.
+  2. Holding the hook → the attach candidate with the smallest angle.
+  3. Otherwise → the stop-tier candidate (`operate` or `shop`) with the smallest angle. This applies even with the hook or debris in the hands.
+  4. Then, with the hook in hand → `dropHook`; with debris → `throw`.
+  5. Otherwise → the smallest angle among the rest, as today.
+- `interactCandidates` returns stop-tier candidates whatever `hands` holds, but never while seated. `splitCandidates` returns them as a third list, `stopCandidates`, and `resolveInteract` gains a `stopCandidates` parameter.
+- Within the tier, ties go to the earlier stop in course order, with `operate` before `shop`.
+- Test S3b: `resolveInteract` picks `operate` over `board` even when the board angle is smaller, over `throw` with debris in the hands, and over `dropHook`. It picks `attachHook` over `operate`.
+- This replaces the known risk "the smaller angle decides". Without it, a player at the pump boards a vehicle parked near the zone's outer edge.
+
+M2 (V5a, the shop counter).
+- `interactCandidates` adds `{ kind: 'shop', stopId }` for each fuel stop whose counter box (M4) is within `SHOP_RANGE` of the feet. Its angle is measured to the counter box's centre. `InteractAction` gains `{ kind: 'shop'; stopId: string }`.
+- When `resolveInteract` returns `shop`, the world does nothing: no hold, no event, no other action.
+- The context's `stops` entries are `{ id, kind, operatePoint, shopCounter, usable }`.
+- V10's menu opening becomes: it opens when the local player's interact press resolves to `shop`. The client decides this with `resolveInteract` on its own state: the latest snapshot, the predicted feet when prediction is on, and the input's aim. This is the same resolution the hint uses.
+- S17 gains a case: an interact press at a usable pump's operate point, aiming at the pump, does not open the menu.
+
+M3 (V6, holds).
+- Types:
+  - `Hold` keeps its name and shape (the item hold).
+  - Add `OperateHold = { action: 'operate'; targetId: string; progress: number }` and `PlayerHold = Hold | OperateHold`.
+  - `PlayerState.hold` becomes `PlayerHold | null`.
+  - `stepHold`, `pressTarget` and `holdTargetValid` keep their signatures, so `holds.test.ts` does not change.
+- Rules:
+  - A use press while an operate hold runs starts no item hold.
+  - An interact press that resolves to `operate` while an item hold runs starts no operate hold.
+  - Every other interact action (board, throw, pick up, the hook) works as today, and still ends a running hold by the existing rules. `holds.test.ts` test 7, "boarding mid-hold resets it", must pass unchanged.
+
+M4 (shop range to the counter's box; spec Conventions).
+- New constant `SHOP_COUNTER_HALF = vec3(0.6, 0.5, 0.3)`: the counter box's half extents. The box is centred 0.5 m above `shopCounter` and unrotated.
+- "Within `SHOP_RANGE`" means `distanceToBox(feet, SHOP_COUNTER_HALF, centre, IDENTITY) ≤ SHOP_RANGE`. `scene.ts` draws the counter from the constant.
+
+M5 (V4, final time freezes). Once the run is won, respawns still happen but are no longer counted: `respawns` freezes at the win tick, in the snapshot and in `status()`. S12 becomes: after the win, a solo player is downed (`debugHurt` 200) and respawns, and neither `respawns` nor `status().finalTime` changes.
+
+M6 (V12, event ticks). Every new event carries the tick its step produces:
+- The operate completion's `use` event is raised in `stepHolds` and uses `tick + 1`, like `revive`.
+- The coin check runs after `tick += 1` and uses `tick`. It runs after `winch.afterCharacters` and before `stepHealth`.
+- A `buy` event queued by `world.buy` carries `tick + 1` as at the call, and the next `step` returns it first.
+
+S5 and S11 assert that the stamped tick equals `world.snapshot().tick` after that step.
+
+M7 (existing tests and files that change, replacing the list above).
+- Task 1:
+  - `snapshotBuffer.test.ts`: the snapshot literal, and the `latestStatus` expectation.
+  - `protocol.test.ts`: the snapshot literal.
+  - `checkpoints.test.ts`: the `recordState` literal.
+  - `overlay.test.ts`: the `run()` helper's `RunStatus`.
+  - `RunStatus` gains `wallet`, `coinsCollected` and `coinsTotal`.
+  - `SnapshotBuffer` gains `latestCoinsLeft(): string[]`, empty before any snapshot.
+- Task 2:
+  - `interact.test.ts`: both `base` contexts gain `stops: []`, and the `resolve` helper gains `stopCandidates: []`.
+  - `courses/testGround.test.ts`: the lists.
+- Task 3: `client/src/ui/home.ts` gains `cannot_buy: 'You cannot buy that here.'` in `ERROR_TEXT`. Without it, typecheck fails.
+- Task 4:
+  - `overlay.test.ts`: the `OverlayData` literals gain `stops: readonly ServiceStop[]` and `targetTime: number`.
+  - `e2e/smoke.spec.ts` gains the S18 case.
+
+M8 (module layout, as in the spec).
+- `finalTime` and `stars` go in `rules.ts`, not a new `score.ts`.
+- New `coins.ts` exports `coinTouched(feet: Vec3, coinPos: Vec3): boolean`, with a pure test at ε = 0.01 m for S6.
+- New `stops.ts` exports `stopUsable(stop: ServiceStop, vehicleCentre: Vec3, fuel: number, health: number): boolean`. The world and the page both call it.
+- S3 tests `stopUsable` with these cases:
+
+  | Stop | Vehicle centre | Fuel | Health | Usable |
+  |---|---|---|---|---|
+  | fuel | in zone | 0.5 | | true |
+  | fuel | in zone | 1 | | false |
+  | fuel | 0.01 m outside the zone | | | false |
+  | garage | | | 1 | false |
+  | garage | | 1 | 0.5 | true |
+
+- S3 also tests `interactCandidates` with `usable` true and false, and with the player in and out of `STOP_OPERATE_RANGE`.
+
+M9 (V10, shop menu).
+- While the menu is open, the fixed stepper sends `neutralInput(last)` with the aim and slot kept, and still records it for the reconciler (spec "Menus").
+- Two new constants: `SHOP_MENU_TELEPORT = 2` (m between consecutive snapshots of the local player) and `SHOP_ERROR_SECONDS = 2`.
+- `Game` gains `showShopError(): void`. `main.ts` routes an `error` with reason `cannot_buy` to it when `game` is not null, and drops it otherwise. It never goes to the home page. The error is ignored while the menu is closed.
+- S17 adds a case: an input sampled while the menu is open is neutral.
+
+M10 (V8, room).
+- `Room` gains `buy(player: RoomPlayer, item: ItemKind): 'ok' | 'cannot_buy'`, which calls `world.buy`.
+- `server.ts` gains a case `'buy'`:
+  - not in a room → refuse with `cannot_buy`;
+  - `room.buy` returns `'cannot_buy'` → refuse with `cannot_buy` to that session only.
+- S15 lives in `server/src/room/server.test.ts`, with fake connections, and also covers a `buy` sent before `join`, which gets `cannot_buy`.
+- The parse uses `Object.hasOwn(ITEM_KINDS, item)`. S14 rejects `item: 'toString'`.
+- `ERROR_REASONS` gains `'cannot_buy'`. It is not there today. `parseServerMessage` maps unknown reasons to `bad_message`, so this lands in task 3 together with the server change.
+
+M11 (V9, geometry).
+- Positions, from `placeStop` at s = (0, 0, −20) with yaw 0:
+
+  | Stop | Pad | Zone | Operate point | Counter |
+  |---|---|---|---|---|
+  | fuel | x 5..13, z −28..−12 | x 5.5..10.5, z −25..−15 | (11.5, 0, −20) | (11.5, 0, −22) |
+  | garage | x −13..−5 | x −10.5..−5.5 | (−11.5, 0, −20) | none |
+
+- The ramp is at x = 8 from z = −60. The plan's "−40" was wrong.
+- The fuel pad overlaps the sand slab by 1 m (x 12–13, z −28 to −15). This is known and accepted: the sand slab sits on top.
+- The pads are appended after the existing ground pieces, so `ground[0]` stays the main slab (`world.test.ts` reads it). The pads are coplanar with the main slab; that is accepted on the test ground.
+- Both vehicles fit inside the zone.
+- `placeStop` assumes yaw 0 for the counter offset, as its only callers use it. Add a one-line note.
+- S11 reaches a wallet of 3 by teleporting the player onto `coin-1`, `coin-2` and `coin-3`, stepping once after each.
+- `coin-1` is about 0.65–0.92 m from the line a player walks straight forward from the vehicle's right slot. No test may expect a wallet of 0 after such a walk.
+
+M12 (documents and the owner's checks).
+- The decisions-log line for V11 says that `COURSE=segment-demo` already places stops beside fences, so the demo course is exposed to the wall-ray issue until step 16.
+- The operate angle is measured to a point at ground level, while the drawn pump is 1.4 m tall. Add this to the owner's hand checks.
+- Task 5 adds the coin check's place in the tick order to the spec.
