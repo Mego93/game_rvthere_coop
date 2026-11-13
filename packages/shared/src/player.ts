@@ -342,7 +342,8 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     state.walk = { x: 0, z: 0 };
     state.carry = { x: 0, z: 0 };
     state.hold = null;
-    return hit;
+    // The move to a spawn slot is a teleport and costs nothing (rule J2).
+    return null;
   };
 
   const seatConfig = (seatId: string): SeatConfig | undefined => vehicle.config.seats.find((seat) => seat.id === seatId);

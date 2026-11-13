@@ -1,13 +1,13 @@
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
-import { DROP_HEIGHT, GRAVITY, HOOK_RANGE, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
+import { DROP_HEIGHT, GRAVITY, HEALTH_KIT_HEAL, HOOK_RANGE, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_HEIGHT, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
-import { stepHold, useTarget } from './holds';
+import { holdTargetValid, pressTarget, stepHold, type UseContext } from './holds';
 import { AXIS_Y, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
 import { interactCandidates, resolveInteract, splitCandidates } from './interact';
-import { createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
+import { aimRay, createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
 import { elapsedAfter, reachedFinish, vehicleLost } from './rules';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
@@ -259,28 +259,53 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }
   };
 
-  // Rules I8 and I9, after interact and drop so a pickup, drop or boarding this tick already counts.
-  const stepHolds = (onFoot: ReadonlyMap<string, StepInputs>) => {
+  // Rules I8, I9, H9, H10 and J1, after interact and drop so a pickup, drop or boarding this tick already counts.
+  const stepHolds = (onFoot: ReadonlyMap<string, StepInputs>, events: WorldEvent[]) => {
     const body = vehicle.body;
-    const target = { pos: body.translation(), rot: body.rotation(), half: vehicleConfig.halfExtents, fuel: vehicle.fuel(), health: vehicle.health() };
+    const vehicleView = { pos: body.translation(), rot: body.rotation(), half: vehicleConfig.halfExtents, fuel: vehicle.fuel(), health: vehicle.health() };
     for (const player of players.all()) {
       const seated = player.seat !== null;
-      const aim = useTarget(player.inventory[player.slot], player.pos, target);
+      const fields = onFoot.get(player.id)?.fields;
+      // The aim is this tick's input, as for interact (R6).
+      const { origin, dir } = aimRay(player.pos, fields?.yaw ?? player.yaw, fields?.pitch ?? player.pitch);
+      const ctx: UseContext = {
+        self: { id: player.id, feet: player.pos, eye: origin, aim: dir, health: player.health },
+        vehicle: vehicleView,
+        players: players
+          .all()
+          .filter((other) => other.id !== player.id)
+          .map((other) => ({ id: other.id, feet: other.pos, health: other.health, downed: other.downed, seated: other.seat !== null })),
+      };
+      const running = player.hold;
+      const target = running
+        ? holdTargetValid(running, ctx) ? { id: running.targetId, revive: running.action === 'revive' } : null
+        : pressTarget(player.inventory[player.slot], ctx);
       const { hold, completed } = stepHold(
-        player.hold,
-        { usePressed: usePressed.has(player.id), useHeld: onFoot.get(player.id)?.fields.use === true, slot: player.slot },
+        running,
+        { usePressed: usePressed.has(player.id), useHeld: fields?.use === true, slot: player.slot },
         player.inventory,
-        seated ? null : aim,
-        seated,
+        seated ? null : target,
+        seated || player.downed !== null,
       );
       player.hold = hold;
       if (completed === null) continue;
       player.inventory[completed.slot] = null;
-      if (completed.item === 'jerrycan') vehicle.addFuel(ITEM_REFUEL);
-      else vehicle.repair(ITEM_REPAIR);
-      // A second holder this tick sees the new fuel and health.
-      target.fuel = vehicle.fuel();
-      target.health = vehicle.health();
+      if (completed.targetId === 'vehicle') {
+        if (completed.item === 'jerrycan') vehicle.addFuel(ITEM_REFUEL);
+        else vehicle.repair(ITEM_REPAIR);
+        // A second holder this tick sees the new fuel and health.
+        vehicleView.fuel = vehicle.fuel();
+        vehicleView.health = vehicle.health();
+        continue;
+      }
+      const patient = players.get(completed.targetId);
+      if (!patient) continue;
+      if (completed.action === 'revive') {
+        players.revive(patient.id, PLAYER_REVIVE_HEALTH);
+        events.push({ kind: 'revive', tick, playerId: patient.id, pos: { ...patient.pos } });
+      } else {
+        patient.health = Math.min(PLAYER_MAX_HEALTH, patient.health + HEALTH_KIT_HEAL);
+      }
     }
   };
 
@@ -359,7 +384,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }
     for (const player of players.all()) {
       if (player.downed === null || player.respawnIn !== null || justDowned.has(player.id)) continue;
-      const left = stepDowned(player.downed, false);
+      // Rule H6 and J7: a revive hold on this player pauses the timer.
+      const paused = players.all().some((other) => other.hold?.action === 'revive' && other.hold.targetId === player.id);
+      const left = stepDowned(player.downed, paused);
       if (left === 'respawn') respawnPlayer(player, events);
       else player.downed = left;
     }
@@ -451,7 +478,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       for (const player of players.all()) player.slot = slotOf(onFoot.get(player.id)?.fields.slot ?? 0) ?? player.slot;
       resolveInteracts(onFoot);
       for (const player of players.all()) if (player.seat === null && onFoot.get(player.id)?.pressed.drop) dropSelected(player);
-      stepHolds(onFoot);
+      const events: WorldEvent[] = [];
+      stepHolds(onFoot, events);
       const taut = winch.tautObstacle();
       applyPushes(taut);
       const cable = winch.applyForces(reelInput(onFoot));
@@ -469,7 +497,6 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       vehicle.afterPhysics();
       const pulled = winch.afterCharacters((id) => players.holdPose(id));
       if (pulled !== null) players.setHands(pulled, null);
-      const events: WorldEvent[] = [];
       stepHealth(events);
       killPlane(events);
       resetLastTick = new Set(props.killPlane(course.killPlaneY));

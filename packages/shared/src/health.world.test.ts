@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
-import { DOWNED_TIMEOUT, PLAYER_EYE_HEIGHT, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_REVIVE_HEALTH, TICK_RATE } from './constants';
+import { DOWNED_TIMEOUT, HEALTH_KIT_HEAL, HOLD_DURATION, PLAYER_EYE_HEIGHT, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_REVIVE_HEALTH, TICK_RATE } from './constants';
 import { add, length, rotate, sub, vec3, type Vec3 } from './math';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
 import { createWorld, type World, type WorldEvent } from './world';
@@ -527,6 +527,82 @@ describe('hit cooldowns (W11)', () => {
   });
 });
 
+describe('the order of a tick (H12) and cooldown clears (J9)', () => {
+  const shootAt = (world: World, pos: Vec3) => {
+    const body = world.debugBody('crate-1')!;
+    body.setTranslation(vec3(pos.x + 1.5, pos.y + 0.98, pos.z), true);
+    body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    body.setLinvel(vec3(-12, 0, 0), true);
+    body.setAngvel(vec3(0, 0, 0), true);
+  };
+  const hurtsOf = (events: WorldEvent[]) => kinds(events, 'hurt', 'p1').length;
+
+  test('H12: a hit that downs the player on the tick of their landing leaves the fall nothing to do', () => {
+    const world = pair();
+    // Left at 20 health, p1 lands from 5 m at tick 59 of the fall, which costs 8.
+    world.debugHurt('p1', 80);
+    run(world, 1);
+    world.teleportPlayer('p1', vec3(5, 5.02, 20));
+    const events: WorldEvent[][] = [];
+    for (let i = 0; i < 80; i++) {
+      // Timed so that the crate's 30 and the landing's 8 are found on the same tick.
+      if (i === 55) {
+        const body = world.debugBody('crate-1')!;
+        body.setTranslation(vec3(6.5, 1.0, 20), true);
+        body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+        body.setLinvel(vec3(-12, 0, 0), true);
+        body.setAngvel(vec3(0, 0, 0), true);
+      }
+      events.push(world.step(new Map()));
+    }
+    const downedAt = events.findIndex((step) => kinds(step, 'downed', 'p1').length > 0);
+    expect(downedAt).toBe(59);
+    // One hurt: the hit. Had the fall come first, it would have been two.
+    expect(events.flat().filter((event) => event.kind === 'hurt' && event.playerId === 'p1')).toHaveLength(1);
+    expect(world.debugPlayerHealth('p1')).toBe(0);
+  });
+
+  test('J9: a downed player is not hurt by a crate, and the downed timeout respawn leaves them open to the next one', () => {
+    const world = pair();
+    world.teleportPlayer('p1', vec3(5, 0.02, 20));
+    run(world, 30);
+    world.debugHurt('p1', 100);
+    run(world, 1);
+    shootAt(world, me(world, 'p1').pos);
+    expect(hurtsOf(run(world, 15))).toBe(0);
+    run(world, 1784);
+    expect(me(world, 'p1').downed).not.toBeNull();
+    const respawn = run(world, 1);
+    expect(kinds(respawn, 'respawn', 'p1')).toHaveLength(1);
+    expect(me(world, 'p1').downed).toBeNull();
+    shootAt(world, me(world, 'p1').pos);
+    const second = run(world, 15);
+    expect(hurtsOf(second)).toBe(1);
+  });
+
+  test('J9: the kill plane respawn clears the cooldowns: a hit right after it hurts, though a body was touching until it', () => {
+    const world = pair();
+    world.teleportPlayer('p1', vec3(5, 0.02, 20));
+    run(world, 30);
+    shootAt(world, me(world, 'p1').pos);
+    expect(hurtsOf(run(world, 15))).toBe(1);
+    world.teleportPlayer('p1', vec3(60, world.course.killPlaneY - 1, 40));
+    // The crate keeps touching the falling player, so the cooldown is refreshed every tick until the respawn.
+    let respawned = false;
+    for (let i = 0; i < 300 && !respawned; i++) {
+      const at = me(world, 'p1').pos;
+      const body = world.debugBody('crate-1')!;
+      body.setTranslation(vec3(at.x, at.y + 0.9, at.z), true);
+      body.setLinvel(vec3(0, 0, 0), true);
+      body.setAngvel(vec3(0, 0, 0), true);
+      respawned = kinds(world.step(new Map()), 'respawn', 'p1').length > 0;
+    }
+    expect(respawned).toBe(true);
+    shootAt(world, me(world, 'p1').pos);
+    expect(hurtsOf(run(world, 15))).toBe(1);
+  });
+});
+
 describe('restart (W11)', () => {
   const CP1 = vec3(0, 0.95, -50);
   const recordCp1 = (world: World) => {
@@ -572,6 +648,170 @@ describe('restart (W11)', () => {
     world.addPlayer('p2');
     expect(me(world, 'p2').health).toBe(PLAYER_MAX_HEALTH);
     expect(me(world, 'p2').downed).toBeNull();
+  });
+});
+
+describe('health kits (W6, W7, W8, W12)', () => {
+  const TICKS = Math.round(HOLD_DURATION * TICK_RATE);
+  const AIM = { yaw: 0, pitch: -0.45 };
+  // p1 stands 1.5 m south of p2 and looks at them; the slot is p1's first.
+  const beside = (world: World, mate = 'p2', gap = 1.5) => {
+    const at = me(world, mate).pos;
+    world.teleportPlayer('p1', vec3(at.x, 0.02, at.z + gap));
+    run(world, 20);
+  };
+  const holdUse = (world: World, ticks: number, extra: Partial<PlayerInput> = {}) =>
+    run(world, ticks, new Map([['p1', input({ use: true, ...AIM, ...extra })]]));
+  const withKit = (...ids: string[]) => {
+    const world = make('p1', 'p2', ...ids);
+    for (const id of ['p2', ...ids]) world.teleportPlayer(id, vec3(30 + 3 * (['p2', ...ids].indexOf(id)), 0.02, 30));
+    world.teleportPlayer('p1', vec3(-1, 0.02, 15.2));
+    run(world, 30);
+    run(world, 1, new Map([['p1', input({ interact: true, yaw: 0, pitch: -0.45 })]]));
+    run(world, 1);
+    expect(me(world, 'p1').inventory[0]).toBe('healthKit');
+    return world;
+  };
+
+  test('H14: the test ground has a health kit pickup after the toolbox', () => {
+    const world = make('p1');
+    const kinds = world.snapshot().props.map((prop) => `${prop.id}:${prop.kind}`);
+    expect(kinds.slice(-2)).toEqual(['toolbox-1:toolbox', 'healthKit-1:healthKit']);
+  });
+
+  test('W6: the downed timer pauses while a teammate\'s health-kit hold on them runs, and resumes when it ends', () => {
+    const world = withKit();
+    world.debugHurt('p2', 100);
+    run(world, 1);
+    run(world, 60);
+    expect(me(world, 'p2').downed).toBeCloseTo(DOWNED_TIMEOUT - 1, 6);
+    beside(world);
+    // The timer runs during the 20 ticks p1 walked over.
+    const before = me(world, 'p2').downed!;
+    holdUse(world, 60);
+    expect(me(world, 'p1').hold).toMatchObject({ action: 'revive', targetId: 'p2' });
+    expect(me(world, 'p2').downed).toBe(before);
+    run(world, 1, new Map([['p1', input(AIM)]]));
+    expect(me(world, 'p1').hold).toBeNull();
+    run(world, 60);
+    // The tick that ended the hold counts down too.
+    expect(me(world, 'p2').downed).toBeCloseTo(before - 61 / TICK_RATE, 6);
+    expect(me(world, 'p1').inventory[0]).toBe('healthKit');
+  });
+
+  test('W7: a 3 s health-kit hold on a downed player revives them at 50 where they lie, with a revive event, and uses the kit', () => {
+    const world = withKit();
+    world.debugHurt('p2', 100);
+    run(world, 1);
+    beside(world);
+    const lying = me(world, 'p2').pos;
+    const respawns = world.snapshot().respawns;
+    const events = holdUse(world, TICKS - 1);
+    expect(me(world, 'p2').downed).not.toBeNull();
+    expect(kinds(events, 'revive')).toHaveLength(0);
+    const last = holdUse(world, 1);
+    expect(kinds(last, 'revive', 'p2')).toHaveLength(1);
+    expect(length(sub(kinds(last, 'revive', 'p2')[0]!.pos!, lying))).toBeLessThan(0.05);
+    expect(me(world, 'p2').downed).toBeNull();
+    expect(me(world, 'p2').health).toBe(PLAYER_REVIVE_HEALTH);
+    expect(length(sub(me(world, 'p2').pos, lying))).toBeLessThan(0.05);
+    expect(me(world, 'p1').inventory[0]).toBeNull();
+    expect(me(world, 'p1').hold).toBeNull();
+    expect(world.snapshot().respawns).toBe(respawns);
+  });
+
+  test('W8: a health kit on a hurt teammate adds 50, capped at 100', () => {
+    const world = withKit();
+    world.debugHurt('p2', 70);
+    run(world, 1);
+    beside(world);
+    expect(holdUse(world, 1)).toEqual([]);
+    expect(me(world, 'p1').hold).toMatchObject({ action: 'useItem', targetId: 'p2' });
+    holdUse(world, TICKS - 1);
+    expect(me(world, 'p2').health).toBe(30 + HEALTH_KIT_HEAL);
+    expect(me(world, 'p1').inventory[0]).toBeNull();
+    const again = withKit();
+    again.debugHurt('p2', 20);
+    run(again, 1);
+    beside(again);
+    holdUse(again, TICKS);
+    expect(me(again, 'p2').health).toBe(PLAYER_MAX_HEALTH);
+  });
+
+  test('W8: with no teammate in front it heals oneself', () => {
+    const world = withKit();
+    world.debugHurt('p1', 70);
+    run(world, 1);
+    holdUse(world, 1);
+    expect(me(world, 'p1').hold).toMatchObject({ action: 'useItem', targetId: 'p1' });
+    holdUse(world, TICKS - 1);
+    expect(me(world, 'p1').health).toBe(30 + HEALTH_KIT_HEAL);
+    expect(me(world, 'p1').inventory[0]).toBeNull();
+  });
+
+  test('W8: a teammate outside the crosshair is not healed, oneself is', () => {
+    const world = withKit();
+    world.debugHurt('p2', 70);
+    world.debugHurt('p1', 70);
+    run(world, 1);
+    beside(world);
+    holdUse(world, 1, { yaw: Math.PI / 2 });
+    expect(me(world, 'p1').hold).toMatchObject({ targetId: 'p1' });
+  });
+
+  test('W8: at full health with nobody hurt, use does nothing and the kit stays', () => {
+    const world = withKit();
+    beside(world);
+    holdUse(world, TICKS + 10);
+    expect(me(world, 'p1').hold).toBeNull();
+    expect(me(world, 'p1').inventory[0]).toBe('healthKit');
+    expect(me(world, 'p2').health).toBe(PLAYER_MAX_HEALTH);
+  });
+
+  test('a hold ends when the target leaves HEAL_RANGE', () => {
+    const world = withKit();
+    world.debugHurt('p2', 70);
+    run(world, 1);
+    beside(world);
+    holdUse(world, 20);
+    expect(me(world, 'p1').hold).not.toBeNull();
+    world.teleportPlayer('p2', vec3(me(world, 'p2').pos.x, 0.02, me(world, 'p2').pos.z - 3));
+    holdUse(world, 1);
+    expect(me(world, 'p1').hold).toBeNull();
+    expect(me(world, 'p1').inventory[0]).toBe('healthKit');
+  });
+
+  test('W12: a downed player\'s hold ends and they cannot start one', () => {
+    const world = withKit('p3');
+    world.debugHurt('p2', 70);
+    run(world, 1);
+    beside(world);
+    holdUse(world, 20);
+    expect(me(world, 'p1').hold).not.toBeNull();
+    world.debugHurt('p1', 100);
+    run(world, 1, new Map([['p1', input({ use: true, ...AIM })]]));
+    expect(me(world, 'p1').downed).not.toBeNull();
+    expect(me(world, 'p1').hold).toBeNull();
+    // Use is pressed fresh while downed; the kit is for oneself too, and nothing starts.
+    for (let i = 0; i < 20; i++) run(world, 1, new Map([['p1', input({ use: i % 2 === 0, ...AIM })]]));
+    expect(me(world, 'p1').hold).toBeNull();
+    expect(me(world, 'p1').inventory[0]).toBe('healthKit');
+    expect(me(world, 'p2').health).toBe(30);
+  });
+
+  test('W12: a revive hold ends when the holder is downed, and the downed timer runs again', () => {
+    const world = withKit('p3');
+    world.debugHurt('p2', 100);
+    run(world, 1);
+    beside(world);
+    holdUse(world, 20);
+    expect(me(world, 'p1').hold).toMatchObject({ action: 'revive' });
+    const frozen = me(world, 'p2').downed!;
+    world.debugHurt('p1', 100);
+    run(world, 1, new Map([['p1', input({ use: true, ...AIM })]]));
+    expect(me(world, 'p1').hold).toBeNull();
+    run(world, 30, new Map([['p1', input({ use: true, ...AIM })]]));
+    expect(me(world, 'p2').downed).toBeLessThan(frozen);
   });
 });
 
