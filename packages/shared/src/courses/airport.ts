@@ -25,7 +25,7 @@ export const airport: CourseDef = {
     { type: 'road', length: 360, curve: 0.35, debris: 4, coins: coinsAlong(6, 360) },
     { type: 'road', length: 300, curve: -0.5, debris: 3 },
     { type: 'road', length: 200, stop: { kind: 'fuel', side: 1, along: 100 } },
-    { type: 'sand', length: 140, palms: 6, coins: coinsAlong(5, 140), pickups: [{ kind: 'jerrycan', along: 20, lateral: -3 }] },
+    { type: 'sand', length: 110, palms: 4, coins: coinsAlong(4, 110), pickups: [{ kind: 'jerrycan', along: 20, lateral: -3 }] },
     { type: 'road', length: 260, curve: 0.4, coins: coinsAlong(4, 260) },
     { type: 'ford', width: 24, rocks: 8, coins: [{ along: 18, lateral: -2.5 }, { along: 21, lateral: 2.5 }] },
     { type: 'road', length: 60, slope: 4 },
