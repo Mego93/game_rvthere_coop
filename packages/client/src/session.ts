@@ -72,4 +72,10 @@ export function lastAutoReload(store: KeyValueStore): number | null {
   return store.getItem(RELOADED_KEY) !== null && Number.isFinite(value) ? value : null;
 }
 
+// A mark from the future (the clock went backwards) is stale.
+export function autoReloadAllowed(store: KeyValueStore, at: number, guard: number): boolean {
+  const last = lastAutoReload(store);
+  return last === null || at < last || at - last >= guard;
+}
+
 export const markAutoReload = (store: KeyValueStore, at: number): void => remember(store, RELOADED_KEY, String(at));

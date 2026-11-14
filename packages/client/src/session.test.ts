@@ -1,6 +1,6 @@
 import { parseClientMessage } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { createMemoryStore, lastAutoReload, markAutoReload, saveName, savedName, saveRejoin, sessionToken, takeRejoin } from './session';
+import { autoReloadAllowed, createMemoryStore, lastAutoReload, markAutoReload, saveName, savedName, saveRejoin, sessionToken, takeRejoin } from './session';
 
 const countUp = (bytes: Uint8Array) => bytes.forEach((_, index) => (bytes[index] = index * 17));
 
@@ -83,4 +83,13 @@ test('S4: the reload time survives taking the rejoin', () => {
   saveRejoin(store, { room: 'camel', name: 'Badr', at: 1234 });
   takeRejoin(store, 'camel');
   expect(lastAutoReload(store)).toBe(1234);
+});
+
+test('the reload guard allows a first reload, blocks a quick second, and treats a mark from the future as stale', () => {
+  const store = createMemoryStore();
+  expect(autoReloadAllowed(store, 1000, 10_000)).toBe(true);
+  markAutoReload(store, 1000);
+  expect(autoReloadAllowed(store, 5000, 10_000)).toBe(false);
+  expect(autoReloadAllowed(store, 11_000, 10_000)).toBe(true);
+  expect(autoReloadAllowed(store, 500, 10_000)).toBe(true);
 });

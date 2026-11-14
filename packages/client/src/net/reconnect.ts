@@ -41,8 +41,30 @@ export function reconnectStep(
       if (state.kind !== 'reconnecting') return { state, action: 'none' };
       const failures = state.failures + 1;
       const connectAt = now + delayAfter(failures);
-      if (connectAt > state.droppedAt + RECONNECT_WINDOW) return { state: { kind: 'gaveUp' }, action: 'giveUp' };
+      const limit = state.droppedAt + RECONNECT_WINDOW;
+      // One last attempt at the end of the window, while the server still holds the slot.
+      if (connectAt > limit) {
+        if (limit <= now) return { state: { kind: 'gaveUp' }, action: 'giveUp' };
+        return { state: { ...state, failures }, action: { connectAt: limit } };
+      }
       return { state: { ...state, failures }, action: { connectAt } };
     }
   }
+}
+
+export type ResumeAction = 'none' | 'autoJoin' | 'scheduleAttempt' | 'beginReconnect';
+
+// What a page restored from the back/forward cache must do, given what it still holds.
+export function resumeAction(page: {
+  autoJoining: boolean;
+  inRoom: boolean;
+  hasSocket: boolean;
+  hasAttempt: boolean;
+  hasAttemptTimer: boolean;
+  reconnecting: boolean;
+}): ResumeAction {
+  if (page.autoJoining && !page.hasSocket) return 'autoJoin';
+  if (page.reconnecting) return !page.hasAttempt && !page.hasAttemptTimer ? 'scheduleAttempt' : 'none';
+  if (page.inRoom && !page.hasSocket && !page.hasAttempt) return 'beginReconnect';
+  return 'none';
 }

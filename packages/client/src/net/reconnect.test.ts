@@ -6,6 +6,7 @@ import {
   RECONNECT_WINDOW,
   SERVER_SILENCE,
   reconnectStep,
+  resumeAction,
   type ReconnectState,
 } from './reconnect';
 
@@ -57,8 +58,18 @@ describe('reconnectStep', () => {
     const atBoundary = reconnectStep(rec, 'attemptFailed', 100 + RECONNECT_WINDOW - RECONNECT_DELAYS[1]!);
     expect(atBoundary.action).toEqual({ connectAt: 100 + RECONNECT_WINDOW });
     const past = reconnectStep(rec, 'attemptFailed', 100 + RECONNECT_WINDOW - RECONNECT_DELAYS[1]! + 0.01);
-    expect(past.action).toBe('giveUp');
-    expect(past.state).toEqual({ kind: 'gaveUp' });
+    expect(past.action).toEqual({ connectAt: 100 + RECONNECT_WINDOW });
+    const after = reconnectStep(past.state, 'attemptFailed', 100 + RECONNECT_WINDOW);
+    expect(after.action).toBe('giveUp');
+    expect(after.state).toEqual({ kind: 'gaveUp' });
+  });
+
+  it('makes one last attempt at the end of the window when the next delay would pass it', () => {
+    const rec = reconnectStep(joined, 'dropped', 0).state;
+    const r = reconnectStep(rec, 'attemptFailed', 23.5);
+    expect(r.action).toEqual({ connectAt: 23.5 + RECONNECT_DELAYS[1]! });
+    const late = reconnectStep({ kind: 'reconnecting', droppedAt: 0, failures: 4 }, 'attemptFailed', 23.5);
+    expect(late.action).toEqual({ connectAt: RECONNECT_WINDOW });
   });
 
   it('gives up at once on kicked, refused and left from any state', () => {
@@ -74,5 +85,23 @@ describe('reconnectStep', () => {
     const rec = reconnectStep(reconnectStep(joined, 'dropped', 0).state, 'attemptFailed', 1).state;
     const back = reconnectStep(rec, 'joined', 2).state;
     expect(reconnectStep(back, 'dropped', 50).state).toEqual({ kind: 'reconnecting', droppedAt: 50, failures: 0 });
+  });
+});
+
+describe('resumeAction', () => {
+  const base = { autoJoining: false, inRoom: false, hasSocket: false, hasAttempt: false, hasAttemptTimer: false, reconnecting: false };
+  it('rejoins an auto-join that never sent', () => {
+    expect(resumeAction({ ...base, autoJoining: true })).toBe('autoJoin');
+    expect(resumeAction({ ...base, autoJoining: true, hasSocket: true })).toBe('none');
+  });
+  it('restarts a reconnect that has neither attempt nor timer', () => {
+    expect(resumeAction({ ...base, reconnecting: true, inRoom: false })).toBe('scheduleAttempt');
+    expect(resumeAction({ ...base, reconnecting: true, hasAttempt: true })).toBe('none');
+    expect(resumeAction({ ...base, reconnecting: true, hasAttemptTimer: true })).toBe('none');
+  });
+  it('starts reconnecting when joined but the socket is gone', () => {
+    expect(resumeAction({ ...base, inRoom: true })).toBe('beginReconnect');
+    expect(resumeAction({ ...base, inRoom: true, hasSocket: true })).toBe('none');
+    expect(resumeAction(base)).toBe('none');
   });
 });

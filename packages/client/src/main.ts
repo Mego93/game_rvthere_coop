@@ -3,9 +3,9 @@ import type { ClientMessage, LobbyMessage, Phase, ResultsMessage, ServerMessage 
 import * as THREE from 'three';
 import { createGame, type Game } from './game';
 import { openSocket, type CloseInfo, type GameSocket } from './net/socket';
-import { RECONNECT_IDLE, RECONNECT_WINDOW, SOCKET_OPEN_TIMEOUT, reconnectStep, type ReconnectEvent, type ReconnectState } from './net/reconnect';
+import { RECONNECT_IDLE, RECONNECT_WINDOW, SOCKET_OPEN_TIMEOUT, reconnectStep, resumeAction, type ReconnectEvent, type ReconnectState } from './net/reconnect';
 import { roomFromPath, socketUrl } from './route';
-import { createMemoryStore, lastAutoReload, markAutoReload, saveName, savedName, saveRejoin, sessionToken, takeRejoin, type KeyValueStore } from './session';
+import { autoReloadAllowed, createMemoryStore, markAutoReload, saveName, savedName, saveRejoin, sessionToken, takeRejoin, type KeyValueStore } from './session';
 import { createInputSource } from './input/combined';
 import { createKeyboardSource } from './input/keyboard';
 import { createMouseLook } from './input/mouse';
@@ -66,6 +66,7 @@ let reconnect: ReconnectState = RECONNECT_IDLE;
 let attemptTimer: number | null = null;
 let deadlineTimer: number | null = null;
 let autoJoining = false;
+let autoJoinRoom = '';
 let pageHidden = false;
 let currentRoom: string | null = null;
 let droppedPlayerId = '';
@@ -369,6 +370,8 @@ function send(message: ClientMessage) {
 function autoJoin(room: string, rejoinName: string) {
   name = rejoinName;
   autoJoining = true;
+  autoJoinRoom = room;
+  if (pageHidden) return;
   reconnectOverlay.hidden = false;
   rapierReady.then(
     () => {
@@ -384,14 +387,28 @@ window.addEventListener('pagehide', () => {
   pageHidden = true;
 });
 
+// A page restored from the cache has lost its sockets and timers' purpose; pick the connection up again.
+window.addEventListener('pageshow', (event) => {
+  if (!event.persisted) return;
+  pageHidden = false;
+  const action = resumeAction({
+    autoJoining,
+    inRoom: playerId !== '',
+    hasSocket: socket !== null,
+    hasAttempt: attempt !== null,
+    hasAttemptTimer: attemptTimer !== null,
+    reconnecting: reconnect.kind === 'reconnecting',
+  });
+  if (action === 'autoJoin') autoJoin(autoJoinRoom, name);
+  else if (action === 'scheduleAttempt') scheduleAttempt(clock());
+  else if (action === 'beginReconnect') beginReconnect();
+});
+
 canvas.addEventListener('webglcontextlost', () => {
-  if (!currentRoom || (playerId === '' && reconnect.kind !== 'reconnecting')) {
-    renderer = null;
-    return;
-  }
+  // Outside a room Three's own listener restores the context.
+  if (!currentRoom || (playerId === '' && reconnect.kind !== 'reconnecting')) return;
   const at = Date.now();
-  const last = lastAutoReload(sessionStore);
-  if (last !== null && at - last < AUTO_RELOAD_GUARD) {
+  if (!autoReloadAllowed(sessionStore, at, AUTO_RELOAD_GUARD)) {
     reconnectEvent('left');
     giveUp(VIEW_LOST);
     return;
