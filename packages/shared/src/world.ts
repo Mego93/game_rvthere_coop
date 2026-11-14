@@ -253,7 +253,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }));
   };
 
-  const resolveInteracts = (onFoot: ReadonlyMap<string, StepInputs>) => {
+  const resolveInteracts = (onFoot: ReadonlyMap<string, StepInputs>, events: WorldEvent[]) => {
     operatePressed.clear();
     for (const player of players.all()) {
       const step = onFoot.get(player.id);
@@ -295,25 +295,39 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       } else if (action?.kind === 'throw') {
         players.throwHeld(player.id, step.fields.yaw, step.fields.pitch);
       } else if (action?.kind === 'pickUp') {
-        players.pickUp(player.id, action.propId);
+        const prop = props.get(action.propId);
+        const at = prop ? { ...prop.body.translation() } : undefined;
+        if (players.pickUp(player.id, action.propId) && at) events.push({ kind: 'pickup', tick: tick + 1, playerId: player.id, pos: at });
       } else if (action?.kind === 'pickUpItem') {
         const free = player.inventory.indexOf(null);
         if (free >= 0) {
+          const item = items.get(action.itemId);
+          const at = item ? { ...item.body.translation() } : undefined;
           const kind = items.take(action.itemId);
-          if (kind !== null) player.inventory[free] = kind;
+          if (kind !== null) {
+            player.inventory[free] = kind;
+            events.push({ kind: 'pickup', tick: tick + 1, playerId: player.id, ...(at ? { pos: at } : {}) });
+          }
         }
       } else if (action?.kind === 'attachHook') {
-        if (winch.attach(action.anchorId)) players.setHands(player.id, null);
+        if (winch.attach(action.anchorId)) {
+          players.setHands(player.id, null);
+          events.push({ kind: 'hookAttach', tick: tick + 1, playerId: player.id, pos: { ...winch.state().hookPos } });
+        }
       } else if (action?.kind === 'dropHook') {
         releaseHook(player.id, 'drop');
       } else if (action?.kind === 'takeHook') {
         winch.take(player.id);
         if (winch.state().holderId === player.id) players.setHands(player.id, 'hook');
       } else if (action?.kind === 'detachHook') {
+        const at = { ...winch.state().hookPos };
         winch.detach(player.id);
+        events.push({ kind: 'hookDetach', tick: tick + 1, playerId: player.id, pos: at });
         if (winch.state().holderId === player.id) players.setHands(player.id, 'hook');
       } else if (action?.kind === 'releaseHook') {
+        const at = { ...winch.state().hookPos };
         winch.release();
+        events.push({ kind: 'hookDetach', tick: tick + 1, playerId: player.id, pos: at });
       } else if (action?.kind === 'operate') {
         // Rule V6: an item hold running blocks it, as does an operate hold already running.
         if (player.hold === null) operatePressed.set(player.id, action.stopId);
@@ -381,6 +395,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         // A second holder this tick sees the new fuel and health.
         vehicleView.fuel = vehicle.fuel();
         vehicleView.health = vehicle.health();
+        events.push({ kind: 'use', tick: tick + 1, playerId: player.id, pos: { ...body.translation() } });
         continue;
       }
       const patient = players.get(completed.targetId);
@@ -391,6 +406,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         events.push({ kind: 'revive', tick: tick + 1, playerId: patient.id, pos: { ...patient.pos } });
       } else {
         patient.health = Math.min(PLAYER_MAX_HEALTH, patient.health + HEALTH_KIT_HEAL);
+        if (patient.downed === null) events.push({ kind: 'use', tick: tick + 1, playerId: player.id, pos: { ...patient.pos } });
       }
     }
   };
@@ -620,9 +636,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     step(inputs) {
       const onFoot = stepInputsFor(inputs);
       for (const player of players.all()) player.slot = slotOf(onFoot.get(player.id)?.fields.slot ?? 0) ?? player.slot;
-      resolveInteracts(onFoot);
-      for (const player of players.all()) if (player.seat === null && onFoot.get(player.id)?.pressed.drop) dropSelected(player);
       const events: WorldEvent[] = queuedEvents.splice(0);
+      resolveInteracts(onFoot, events);
+      for (const player of players.all()) if (player.seat === null && onFoot.get(player.id)?.pressed.drop) dropSelected(player);
       stepHolds(onFoot, events);
       const taut = winch.tautObstacle();
       applyPushes(taut);
@@ -638,7 +654,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       physics.step();
       tick += 1;
       players.stepOnFoot(onFoot);
-      vehicle.afterPhysics();
+      const impactSpeed = vehicle.afterPhysics();
+      if (impactSpeed > 0) events.push({ kind: 'impact', tick, pos: { ...vehicle.body.translation() } });
       const pulled = winch.afterCharacters((id) => players.holdPose(id));
       if (pulled !== null) players.setHands(pulled, null);
       stepCoins(events);

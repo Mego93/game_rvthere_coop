@@ -55,7 +55,8 @@ export interface Vehicle {
   // Placed on the ground pose (raised by the ride height) with zero velocities; impact tracking restarts.
   resetTo(pose: Pose, fuel: number, health: number): void;
   // Impact and upside-down damage. Call once per tick, after the physics world steps.
-  afterPhysics(): void;
+  // Returns the impact speed that caused damage this tick (above the threshold), or 0.
+  afterPhysics(): number;
 }
 
 const WHEEL_COUNT = 4;
@@ -193,13 +194,18 @@ export function createVehicle(
       const v = body.linvel();
       const jolt = Math.hypot(v.x - previousVelocity.x, v.y - previousVelocity.y + GRAVITY * TICK_DT, v.z - previousVelocity.z);
       previousVelocity = { x: v.x, y: v.y, z: v.z };
+      let damaging = 0;
       if (jolt > VEHICLE_JOLT_FLOOR) impact += jolt;
       else {
-        if (impact > VEHICLE_IMPACT_SPEED) health -= (impact - VEHICLE_IMPACT_SPEED) * VEHICLE_IMPACT_DAMAGE;
+        if (impact > VEHICLE_IMPACT_SPEED) {
+          health -= (impact - VEHICLE_IMPACT_SPEED) * VEHICLE_IMPACT_DAMAGE;
+          damaging = impact;
+        }
         impact = 0;
       }
       if (rotate(body.rotation(), AXIS_Y).y < 0) health -= VEHICLE_UPSIDE_DOWN_DRAIN * TICK_DT;
       health = clamp(health, 0, 1);
+      return damaging;
     },
     state() {
       const t = body.translation();

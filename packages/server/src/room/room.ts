@@ -17,6 +17,7 @@ import {
   type ErrorReason,
   type InputFields,
   type ItemKind,
+  type EventMessage,
   type LobbyMessage,
   type Phase,
   type PlayerInput,
@@ -216,7 +217,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   const stepOnce = (current: World): boolean => {
     const inputs = new Map<string, InputFields>();
     for (const player of players) if (player.connected) inputs.set(player.playerId, player.queue.next().input);
-    if (current.step(inputs).some((event) => event.kind === 'vehicleLost')) restarted = true;
+    const events = current.step(inputs);
+    if (events.some((event) => event.kind === 'vehicleLost')) restarted = true;
+    for (const event of events) broadcast({ type: 'event', ...event, tick: event.tick + tickOffset } as EventMessage);
     tick += 1;
     worldTicks += 1;
     if (current.status().state === 'won') {

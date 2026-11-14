@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { ITEM_KINDS, PLAYER_COLOURS, PLAYER_COLOUR_PATTERN } from './constants';
 import {
   ERROR_REASONS,
+  EVENT_KINDS,
   NEUTRAL_INPUT,
   cleanName,
   cleanRoom,
@@ -658,5 +659,32 @@ describe('L14: the name rule', () => {
   test.each(['Amal', 'Ünal'])('create and join accept %s', (name) => {
     expect(create(name)).toMatchObject({ name });
     expect(join(name)).toMatchObject({ name });
+  });
+});
+
+describe('E1: the event message', () => {
+  const parse = (value: unknown) => parseServerMessage(JSON.stringify(value));
+
+  test.each(EVENT_KINDS)('parses kind %s', (kind) => {
+    const message = { type: 'event', kind, tick: 12, playerId: 'p1', pos: { x: 1, y: 2, z: 3 } };
+    expect(parse(message)).toEqual(message);
+  });
+
+  test('accepts a missing playerId and a missing pos', () => {
+    expect(parse({ type: 'event', kind: 'checkpoint', tick: 0 })).toEqual({ type: 'event', kind: 'checkpoint', tick: 0 });
+  });
+
+  test.each([
+    ['an unknown kind', { type: 'event', kind: 'explosion', tick: 1 }],
+    ['a missing kind', { type: 'event', tick: 1 }],
+    ['a missing tick', { type: 'event', kind: 'hurt' }],
+    ['a negative tick', { type: 'event', kind: 'hurt', tick: -1 }],
+    ['a fractional tick', { type: 'event', kind: 'hurt', tick: 1.5 }],
+    ['a pos that is not a vec3', { type: 'event', kind: 'hurt', tick: 1, pos: { x: 1, y: 2 } }],
+    ['a pos with text', { type: 'event', kind: 'hurt', tick: 1, pos: { x: 1, y: 2, z: '3' } }],
+    ['a pos that is a number', { type: 'event', kind: 'hurt', tick: 1, pos: 5 }],
+    ['a playerId that is a number', { type: 'event', kind: 'hurt', tick: 1, playerId: 7 }],
+  ])('rejects %s', (_label, message) => {
+    expect(parse(message)).toBeNull();
   });
 });

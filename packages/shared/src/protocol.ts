@@ -140,6 +140,17 @@ export interface PlayerSnapshot {
   downed: number | null;
 }
 
+export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn'] as const;
+export type EventKind = (typeof EVENT_KINDS)[number];
+
+export interface EventMessage {
+  type: 'event';
+  kind: EventKind;
+  tick: number;
+  playerId?: string;
+  pos?: Vec3;
+}
+
 export interface SnapshotMessage extends WorldSnapshot {
   type: 'snapshot';
   // The props that moved since the last one sent to this room's clients, or every prop when `full`.
@@ -153,6 +164,7 @@ export type ServerMessage =
   | { type: 'welcome'; playerId: string; room: string }
   | LobbyMessage
   | SnapshotMessage
+  | EventMessage
   | ResultsMessage
   | { type: 'error'; reason: ErrorReason }
   | { type: 'ping' };
@@ -392,6 +404,13 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         Array.isArray(data.props) &&
         data.props.every(isPropSnapshot) &&
         isCableSnapshot(data.cable)
+        ? message
+        : null;
+    case 'event':
+      return (EVENT_KINDS as readonly unknown[]).includes(data.kind) &&
+        isCount(data.tick) &&
+        (data.playerId === undefined || isText(data.playerId)) &&
+        (data.pos === undefined || isVec3(data.pos))
         ? message
         : null;
     case 'results':
