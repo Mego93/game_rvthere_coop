@@ -320,17 +320,17 @@ The simulation is a pure module with no network or rendering code. The caller in
 
 ```ts
 const world = createWorld(rapier, { courseId, vehicleId, weather }, builtCourse?);   // the optional course replaces the id's, for tests
-world.addPlayer(id); world.removePlayer(id);
+world.addPlayer(id);               // a new player at 100 health, or a held entry restored (a downed one rejoins as a counted respawn)
 world.teleportPlayer(id, pos);     // places a player; used by tests and checkpoint restarts
 world.step(inputsByPlayer);        // advances one fixed tick; returns the tick's events
 world.buy(playerId, item);         // shop purchase; returns 'ok' or 'cannot_buy'; the room sends `error cannot_buy` to that client, and the page shows it in the shop menu, never on the home page
 world.restartCheckpoint();         // the admin's manual restart; not an admin tool
-world.adminTool(tool);             // 'skipCheckpoint' | 'refill'; marks the run assisted
+world.adminTool(tool);             // 'skipCheckpoint' | 'refill'; returns whether it did anything, and marks the run assisted when it did; a skip also returns a carried prop to its spawn
 world.recordStart();               // re-records the course start with the players present (the room calls it at start)
 world.removePlayer(id, mode);      // 'leave' drops the inventory; 'hold' keeps health, downed and inventory for a rejoin
-world.forgetHeld(id);              // a held slot expired: its inventory drops at a spawn slot
+world.forgetHeld(id);              // a held slot expired or was kicked: its inventory drops at a spawn slot (removePlayer(id, 'leave') on a held id does the same)
 world.snapshot();                  // serialisable state, including `assisted`
-world.status();                    // { state: 'running' | 'won', elapsed, restarts, respawns, wallet, coinsCollected, coinsTotal, finalTime }
+world.status();                    // { state: 'running' | 'won', elapsed, restarts, respawns, wallet, coinsCollected, coinsTotal, finalTime, assisted }
 
 const predictor = createPredictor(rapier, builtCourse, vehicleConfig);   // used by the client only
 predictor.setVehicle(pos, rot);    // positions the vehicle stand-in
@@ -514,7 +514,7 @@ snapshot {
   props [ { id, kind, pos, rot } ],
   cable { state, holderId, anchorId, hookPos, length, reel },
   coinsLeft [ coinId ], wallet, coinsCollected, coinsTotal,
-  elapsed, checkpoint, checkpointCount, restarts, respawns, won
+  elapsed, checkpoint, checkpointCount, restarts, respawns, won, assisted
 }
 ```
 
