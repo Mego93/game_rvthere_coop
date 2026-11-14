@@ -340,3 +340,15 @@ export const SHOP_COUNTER_HALF: Vec3 = deepFreeze(vec3(0.6, 0.5, 0.3));
 export const SHOP_MENU_TELEPORT = 2;
 // s the shop menu shows a refusal.
 export const SHOP_ERROR_SECONDS = 2;
+
+// Lobby.
+export const TIMES_OF_DAY = ['dawn', 'midday', 'sunset', 'night'] as const;
+export type TimeOfDay = (typeof TIMES_OF_DAY)[number];
+export const WEATHERS = ['clear', 'rain', 'sandstorm'] as const;
+export type Weather = (typeof WEATHERS)[number];
+export const DEFAULT_TIME_OF_DAY: TimeOfDay = 'midday';
+export const DEFAULT_WEATHER: Weather = 'clear';
+// s a disconnected player's slot is kept.
+export const HELD_SLOT_TIMEOUT = 30;
+// Course ids in campaign order; step 16 replaces it with the real campaign.
+export const CAMPAIGN: readonly string[] = deepFreeze(['test', 'segment-demo']);

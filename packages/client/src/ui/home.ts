@@ -1,4 +1,4 @@
-import { cleanName, cleanRoom, type ErrorReason } from '@lodgy/shared';
+import { cleanName, cleanRoom, hasForbiddenNameCharacter, type ErrorReason } from '@lodgy/shared';
 
 const ERROR_TEXT: Record<ErrorReason, string> = {
   unknown_room: 'There is no room with that name.',
@@ -7,6 +7,10 @@ const ERROR_TEXT: Record<ErrorReason, string> = {
   bad_message: 'The server did not understand the request.',
   server_full: 'The server has no space for another room. Try again later.',
   cannot_buy: 'You cannot buy that here.',
+  kicked: 'You were removed from the room.',
+  not_admin: 'Only the admin can do that.',
+  not_ready: 'Not everyone is ready.',
+  bad_phase: 'That cannot be done now.',
 };
 
 export const errorText = (reason: ErrorReason): string => ERROR_TEXT[reason];
@@ -45,9 +49,13 @@ export function createHome(root: HTMLElement, handlers: HomeHandlers): HomeView 
     error.textContent = text;
   };
 
+  const NAME_TEXT = 'Enter a name of 1 to 16 characters.';
+  const nameError = (value: string) =>
+    hasForbiddenNameCharacter(value.trim()) ? 'Names cannot contain control or invisible characters.' : NAME_TEXT;
+
   const join = () => {
     const name = cleanName(nameInput.value);
-    if (!name) return setError('Enter a name of 1 to 16 characters.');
+    if (!name) return setError(nameError(nameInput.value));
     const room = linkedRoom ?? cleanRoom(roomInput.value);
     if (!room) return setError('Enter the name of the room, for example camel.');
     setError('');
@@ -59,7 +67,7 @@ export function createHome(root: HTMLElement, handlers: HomeHandlers): HomeView 
     // Enter joins when the page is for one room or a room has been typed; otherwise it creates.
     if (linkedRoom || roomInput.value.trim() !== '') return join();
     const name = cleanName(nameInput.value);
-    if (!name) return setError('Enter a name of 1 to 16 characters.');
+    if (!name) return setError(nameError(nameInput.value));
     setError('');
     handlers.onCreate(name);
   });

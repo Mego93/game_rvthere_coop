@@ -136,3 +136,5 @@ export function getVehicleConfig(id: string): VehicleConfig {
   if (!config) throw new Error(`Unknown vehicle: ${id}`);
   return config;
 }
+
+export const VEHICLE_IDS = Object.keys(VEHICLES) as VehicleId[];

@@ -86,6 +86,8 @@ test('create makes a room and welcomes its creator, then announces the lobby', (
     adminId: 'p1',
     courseId: 'test',
     vehicleId: 'lodgy',
+    timeOfDay: 'midday',
+    weather: 'clear',
   });
 });
 

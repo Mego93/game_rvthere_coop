@@ -1,7 +1,9 @@
-import { ITEM_KINDS, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, type ItemKind } from './constants';
+import { ITEM_KINDS, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, TIMES_OF_DAY, WEATHERS, type ItemKind, type TimeOfDay, type Weather } from './constants';
+import { courseIds } from './courses/index';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
 import type { PropSnapshot } from './props';
 import type { VehicleState } from './vehicle';
+import { VEHICLE_IDS } from './vehicles';
 import type { CableSnapshot } from './winch';
 import type { WorldSnapshot } from './world';
 
@@ -48,12 +50,31 @@ export type ClientMessage =
   | { type: 'join'; room: string; name: string; token: string }
   | ({ type: 'input' } & PlayerInput)
   | { type: 'buy'; item: ItemKind }
-  | { type: 'pong' };
+  | { type: 'pong' }
+  | { type: 'ready'; ready: boolean }
+  | ({ type: 'configure' } & RoomSettings)
+  | { type: 'kick'; playerId: string }
+  | { type: 'start' }
+  | { type: 'restartCheckpoint' }
+  | { type: 'restartCourse' }
+  | { type: 'adminTool'; tool: AdminTool }
+  | { type: 'toLobby' }
+  | { type: 'next' };
+
+export const ADMIN_TOOLS = ['skipCheckpoint', 'refill'] as const;
+export type AdminTool = (typeof ADMIN_TOOLS)[number];
+
+export interface RoomSettings {
+  courseId: string;
+  vehicleId: string;
+  timeOfDay: TimeOfDay;
+  weather: Weather;
+}
 
 export type Phase = 'lobby' | 'playing' | 'results';
 
 // The type comes from the list, so a reason cannot be added to one and forgotten in the other.
-export const ERROR_REASONS = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full', 'cannot_buy'] as const;
+export const ERROR_REASONS = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full', 'cannot_buy', 'kicked', 'not_admin', 'not_ready', 'bad_phase'] as const;
 export type ErrorReason = (typeof ERROR_REASONS)[number];
 
 export interface LobbyPlayer {
@@ -72,6 +93,27 @@ export interface LobbyMessage {
   adminId: string | null;
   courseId: string;
   vehicleId: string;
+  timeOfDay: TimeOfDay;
+  weather: Weather;
+}
+
+export interface ResultsMessage {
+  type: 'results';
+  courseId: string;
+  vehicleId: string;
+  timeOfDay: TimeOfDay;
+  weather: Weather;
+  elapsed: number;
+  restarts: number;
+  respawns: number;
+  wallet: number;
+  coinsCollected: number;
+  coinsTotal: number;
+  finalTime: number;
+  stars: [boolean, boolean, boolean];
+  assisted: boolean;
+  // Present once every campaign course has a final time.
+  campaignTotal?: number;
 }
 
 export interface PlayerSnapshot {
@@ -111,17 +153,24 @@ export type ServerMessage =
   | { type: 'welcome'; playerId: string; room: string }
   | LobbyMessage
   | SnapshotMessage
+  | ResultsMessage
   | { type: 'error'; reason: ErrorReason }
   | { type: 'ping' };
 
 const ROOM_PATTERN = /^[a-z0-9]{1,24}$/;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
 
-// A trimmed display name, or null if it is not 1 to 16 characters.
+// Control, format, private-use, unassigned and line or paragraph separator characters; look-alike letters still pass (known limit).
+const FORBIDDEN_NAME_CHARACTERS = /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Zl}\p{Zp}]/u;
+
+export const hasForbiddenNameCharacter = (value: string): boolean => FORBIDDEN_NAME_CHARACTERS.test(value);
+
+// A trimmed display name, or null if it is not 1 to 16 characters or has a forbidden character.
 export function cleanName(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const name = value.trim();
-  return name.length >= 1 && name.length <= NAME_MAX_LENGTH ? name : null;
+  if (name.length < 1 || name.length > NAME_MAX_LENGTH) return null;
+  return hasForbiddenNameCharacter(name) ? null : name;
 }
 
 // A room noun in lower case, or null if it is not a valid one.
@@ -134,6 +183,11 @@ export function cleanRoom(value: unknown): string | null {
 // A session token the server accepts, or null.
 export const cleanToken = (value: unknown): string | null =>
   typeof value === 'string' && TOKEN_PATTERN.test(value) ? value : null;
+
+const isTimeOfDay = (value: unknown): value is TimeOfDay => (TIMES_OF_DAY as readonly unknown[]).includes(value);
+const isWeather = (value: unknown): value is Weather => (WEATHERS as readonly unknown[]).includes(value);
+const isCourseId = (value: unknown): value is string => typeof value === 'string' && courseIds().includes(value);
+const isVehicleId = (value: unknown): value is string => (VEHICLE_IDS as readonly unknown[]).includes(value);
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
@@ -197,6 +251,26 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return typeof fields.item === 'string' && Object.hasOwn(ITEM_KINDS, fields.item) ? { type: 'buy', item: fields.item as ItemKind } : null;
     case 'pong':
       return { type: 'pong' };
+    case 'ready':
+      return typeof fields.ready === 'boolean' ? { type: 'ready', ready: fields.ready } : null;
+    case 'configure': {
+      const { courseId, vehicleId, timeOfDay, weather } = fields;
+      return isCourseId(courseId) && isVehicleId(vehicleId) && isTimeOfDay(timeOfDay) && isWeather(weather)
+        ? { type: 'configure', courseId, vehicleId, timeOfDay, weather }
+        : null;
+    }
+    case 'kick':
+      return typeof fields.playerId === 'string' && fields.playerId !== '' ? { type: 'kick', playerId: fields.playerId } : null;
+    case 'start':
+    case 'restartCheckpoint':
+    case 'restartCourse':
+    case 'toLobby':
+    case 'next':
+      return { type: fields.type };
+    case 'adminTool':
+      return typeof fields.tool === 'string' && (ADMIN_TOOLS as readonly string[]).includes(fields.tool)
+        ? { type: 'adminTool', tool: fields.tool as AdminTool }
+        : null;
     default:
       return null;
   }
@@ -288,7 +362,9 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         data.players.every(isLobbyPlayer) &&
         (data.adminId === null || isText(data.adminId)) &&
         isText(data.courseId) &&
-        isText(data.vehicleId)
+        isText(data.vehicleId) &&
+        isTimeOfDay(data.timeOfDay) &&
+        isWeather(data.weather)
         ? message
         : null;
     case 'snapshot':
@@ -308,6 +384,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         data.coinsLeft.length <= data.coinsTotal &&
         data.coinsCollected <= data.coinsTotal &&
         typeof data.won === 'boolean' &&
+        typeof data.assisted === 'boolean' &&
         typeof data.full === 'boolean' &&
         isVehicleState(data.vehicle) &&
         Array.isArray(data.players) &&
@@ -315,6 +392,28 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         Array.isArray(data.props) &&
         data.props.every(isPropSnapshot) &&
         isCableSnapshot(data.cable)
+        ? message
+        : null;
+    case 'results':
+      return isText(data.courseId) &&
+        isText(data.vehicleId) &&
+        isTimeOfDay(data.timeOfDay) &&
+        isWeather(data.weather) &&
+        finite(data.elapsed) &&
+        data.elapsed >= 0 &&
+        isCount(data.restarts) &&
+        isCount(data.respawns) &&
+        isCount(data.wallet) &&
+        isCount(data.coinsCollected) &&
+        isCount(data.coinsTotal) &&
+        data.coinsCollected <= data.coinsTotal &&
+        finite(data.finalTime) &&
+        data.finalTime >= 0 &&
+        Array.isArray(data.stars) &&
+        data.stars.length === 3 &&
+        data.stars.every((star) => typeof star === 'boolean') &&
+        typeof data.assisted === 'boolean' &&
+        (data.campaignTotal === undefined || (finite(data.campaignTotal) && data.campaignTotal >= 0))
         ? message
         : null;
     default:

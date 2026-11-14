@@ -157,6 +157,9 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
       case 'join':
         if (session.room) return refuse(session, 'bad_message');
         return join(session, message);
+      // The room's behaviour for the lobby and admin messages comes with the lobby step's room task.
+      default:
+        return refuse(session, 'bad_message');
     }
   };
 

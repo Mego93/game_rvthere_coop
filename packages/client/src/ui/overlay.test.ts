@@ -29,6 +29,8 @@ const lobby: LobbyMessage = {
   adminId: 'p1',
   courseId: 'test',
   vehicleId: 'rv',
+  timeOfDay: 'midday',
+  weather: 'clear',
 };
 
 const vehicle: VehicleState = {

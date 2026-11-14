@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { finalTime, stars } from './rules';
+import { finalTime, resultsOf, stars } from './rules';
+import type { WorldStatus } from './world';
 
 describe('S1: finalTime', () => {
   test('nothing added gives the elapsed time', () => {
@@ -33,5 +34,33 @@ describe('S2: stars', () => {
   });
   test('assisted gives all false', () => {
     expect(stars({ ...base, assisted: true })).toEqual([false, false, false]);
+  });
+});
+
+describe('L4: resultsOf', () => {
+  const status: WorldStatus = { state: 'won', elapsed: 100, restarts: 0, respawns: 1, wallet: 2, coinsCollected: 4, coinsTotal: 4, finalTime: 120, assisted: false };
+  const course = { id: 'test', targetTime: 150 };
+  const config = { vehicleId: 'rv', timeOfDay: 'sunset', weather: 'rain' } as const;
+  test('fills every field', () => {
+    expect(resultsOf(status, course, config)).toEqual({
+      courseId: 'test',
+      vehicleId: 'rv',
+      timeOfDay: 'sunset',
+      weather: 'rain',
+      elapsed: 100,
+      restarts: 0,
+      respawns: 1,
+      wallet: 2,
+      coinsCollected: 4,
+      coinsTotal: 4,
+      finalTime: 120,
+      stars: [true, true, true],
+      assisted: false,
+    });
+  });
+  test('assisted gives all stars false', () => {
+    const result = resultsOf({ ...status, assisted: true }, course, config);
+    expect(result.assisted).toBe(true);
+    expect(result.stars).toEqual([false, false, false]);
   });
 });

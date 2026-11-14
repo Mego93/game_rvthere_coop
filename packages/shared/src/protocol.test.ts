@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { ITEM_KINDS, PLAYER_COLOURS, PLAYER_COLOUR_PATTERN } from './constants';
 import {
   ERROR_REASONS,
@@ -167,7 +167,7 @@ const seated = { ...onFoot, playerId: 'p2', seat: 'driver' };
 const onVehicle = { ...onFoot, playerId: 'p3', ground: { bodyId: 'vehicle', localPos: { x: 0, y: 1, z: 0 } } };
 const crate = { id: 'crate-1', kind: 'crate', pos: { x: 1, y: 0.3, z: 2 }, rot: { x: 0, y: 0, z: 0, w: 1 } };
 const cable = { state: 'attached', holderId: null, anchorId: 'anchor-1', hookPos: { x: 1, y: 0.5, z: -20 }, length: 12.5, reel: 1 };
-const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle, players: [onFoot], props: [crate], cable, elapsed: 0.5, checkpoint: 0, checkpointCount: 2, restarts: 0, respawns: 0, won: false, coinsLeft: ['coin-1'], wallet: 0, coinsCollected: 1, coinsTotal: 2 };
+const snapshot = { type: 'snapshot', tick: 30, ackSeq: 7, full: false, vehicle, players: [onFoot], props: [crate], cable, elapsed: 0.5, checkpoint: 0, checkpointCount: 2, restarts: 0, respawns: 0, won: false, coinsLeft: ['coin-1'], wallet: 0, coinsCollected: 1, coinsTotal: 2, assisted: false };
 const lobby = {
   type: 'lobby',
   room: 'camel',
@@ -176,6 +176,8 @@ const lobby = {
   adminId: 'p1',
   courseId: 'test',
   vehicleId: 'lodgy',
+  timeOfDay: 'midday',
+  weather: 'clear',
 };
 
 test.each<ServerMessage>([
@@ -204,6 +206,8 @@ test.each([
   ['a lobby player without a name', JSON.stringify({ ...lobby, players: [{ playerId: 'p1' }] })],
   ['a lobby with an unknown phase', JSON.stringify({ ...lobby, phase: 'paused' })],
   ['a lobby whose admin is a number', JSON.stringify({ ...lobby, adminId: 1 })],
+  ['a snapshot without assisted', JSON.stringify({ ...snapshot, assisted: undefined })],
+  ['a snapshot whose assisted is text', JSON.stringify({ ...snapshot, assisted: 'no' })],
   ['a snapshot without a vehicle', JSON.stringify({ ...snapshot, vehicle: undefined })],
   ['a snapshot whose tick is text', JSON.stringify({ ...snapshot, tick: '30' })],
   ['a snapshot whose tick is null', JSON.stringify({ ...snapshot, tick: null })],
@@ -277,7 +281,7 @@ test('S14: cannot_buy is an error reason the page can receive', () => {
 });
 
 test('parseServerMessage shows a reason it does not know as a general refusal', () => {
-  expect(parseServerMessage('{"type":"error","reason":"kicked"}')).toEqual({ type: 'error', reason: 'bad_message' });
+  expect(parseServerMessage('{"type":"error","reason":"banned"}')).toEqual({ type: 'error', reason: 'bad_message' });
 });
 
 test('parseServerMessage keeps fields it does not know, so a newer server can add to a message', () => {
@@ -412,6 +416,10 @@ test.each([
   ['adminId', 5],
   ['courseId', 5],
   ['vehicleId', 5],
+  ['timeOfDay', 'noon'],
+  ['weather', 'fog'],
+  ['timeOfDay', undefined],
+  ['weather', undefined],
   ['players', null],
   ['room', undefined],
   ['courseId', undefined],
@@ -539,4 +547,116 @@ test('parseServerMessage keeps unknown fields on a prop entry and accepts an emp
   const message = { ...snapshot, props: [{ ...crate, spin: 2 }] };
   expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
   expect(parseServerMessage(JSON.stringify({ ...snapshot, props: [] }))).not.toBeNull();
+});
+
+describe('L16: lobby messages', () => {
+  const COURSE = 'segment-demo';
+  const configure = { type: 'configure', courseId: COURSE, vehicleId: 'rv', timeOfDay: 'night', weather: 'sandstorm' };
+  const parse = (message: unknown) => parseClientMessage(JSON.stringify(message));
+
+  test.each<unknown>([
+    { type: 'ready', ready: true },
+    { type: 'ready', ready: false },
+    configure,
+    { type: 'kick', playerId: 'p2' },
+    { type: 'start' },
+    { type: 'restartCheckpoint' },
+    { type: 'restartCourse' },
+    { type: 'adminTool', tool: 'skipCheckpoint' },
+    { type: 'adminTool', tool: 'refill' },
+    { type: 'toLobby' },
+    { type: 'next' },
+  ])('parseClientMessage accepts %j', (message) => {
+    expect(parse(message)).toEqual(message);
+  });
+
+  test.each<unknown>([
+    { type: 'ready' },
+    { type: 'ready', ready: 'yes' },
+    { ...configure, courseId: 'nowhere' },
+    { ...configure, courseId: 5 },
+    { ...configure, vehicleId: 'tank' },
+    { ...configure, timeOfDay: 'noon' },
+    { ...configure, weather: 'fog' },
+    { ...configure, weather: undefined },
+    { type: 'kick' },
+    { type: 'kick', playerId: 5 },
+    { type: 'kick', playerId: '' },
+    { type: 'adminTool' },
+    { type: 'adminTool', tool: 'godmode' },
+  ])('parseClientMessage rejects %j', (message) => {
+    expect(parse(message)).toBeNull();
+  });
+
+  const results = {
+    type: 'results',
+    courseId: 'test',
+    vehicleId: 'lodgy',
+    timeOfDay: 'midday',
+    weather: 'clear',
+    elapsed: 61.5,
+    restarts: 1,
+    respawns: 0,
+    wallet: 2,
+    coinsCollected: 3,
+    coinsTotal: 4,
+    finalTime: 111.5,
+    stars: [false, true, false],
+    assisted: false,
+  };
+
+  test.each<unknown>([results, { ...results, campaignTotal: 250.5 }, { ...results, assisted: true, stars: [false, false, false] }])(
+    'parseServerMessage accepts the results %j',
+    (message) => {
+      expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
+    },
+  );
+
+  test.each<[string, unknown]>([
+    ['courseId', 5],
+    ['vehicleId', undefined],
+    ['timeOfDay', 'noon'],
+    ['weather', undefined],
+    ['elapsed', -1],
+    ['elapsed', 'x'],
+    ['restarts', 1.5],
+    ['respawns', -1],
+    ['wallet', null],
+    ['coinsCollected', 5],
+    ['coinsTotal', 'x'],
+    ['finalTime', -2],
+    ['stars', [true, true]],
+    ['stars', [true, true, 1]],
+    ['stars', 'all'],
+    ['assisted', undefined],
+    ['assisted', 1],
+    ['campaignTotal', 'x'],
+    ['campaignTotal', null],
+  ])('parseServerMessage rejects results whose %s is %j', (field, value) => {
+    expect(parseServerMessage(JSON.stringify({ ...results, [field]: value }))).toBeNull();
+  });
+
+  test('results with a non-finite time is rejected', () => {
+    expect(parseServerMessage(JSON.stringify(results).replace('"finalTime":111.5', '"finalTime":1e999'))).toBeNull();
+  });
+});
+
+describe('L14: the name rule', () => {
+  const create = (name: string) => parseClientMessage(JSON.stringify({ type: 'create', name, token: TOKEN }));
+  const join = (name: string) => parseClientMessage(JSON.stringify({ type: 'join', room: 'camel', name, token: TOKEN }));
+
+  test.each(['a\u0000b', 'a\nb', 'a\u200bb', 'a\u2028b', 'a\u2029b', 'a\ue000b', 'a\u0378b'])('create and join refuse %j', (name) => {
+    expect(create(name)).toBeNull();
+    expect(join(name)).toBeNull();
+    expect(cleanName(name)).toBeNull();
+  });
+
+  test('a name of only a space is trimmed away', () => {
+    expect(cleanName(' ')).toBeNull();
+  });
+
+  test.each(['Amal', 'Ünal'])('create and join accept %s', (name) => {
+    expect(create(name)).toMatchObject({ name });
+    expect(join(name)).toMatchObject({ name });
+  });
 });

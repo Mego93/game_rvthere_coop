@@ -1,4 +1,6 @@
 import {
+  DEFAULT_TIME_OF_DAY,
+  DEFAULT_WEATHER,
   PLAYER_COLOURS,
   SERVER_MAX_CATCHUP_STEPS,
   PROP_MOVED_EPSILON,
@@ -94,6 +96,8 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       adminId,
       courseId: config.courseId,
       vehicleId: config.vehicleId,
+      timeOfDay: DEFAULT_TIME_OF_DAY,
+      weather: DEFAULT_WEATHER,
     };
     const data = JSON.stringify(message);
     for (const player of players) player.connection.send(data);
