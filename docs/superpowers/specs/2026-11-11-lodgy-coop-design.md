@@ -326,7 +326,10 @@ world.step(inputsByPlayer);        // advances one fixed tick; returns the tick'
 world.buy(playerId, item);         // shop purchase; returns 'ok' or 'cannot_buy'; the room sends `error cannot_buy` to that client, and the page shows it in the shop menu, never on the home page
 world.restartCheckpoint();         // the admin's manual restart; not an admin tool
 world.adminTool(tool);             // 'skipCheckpoint' | 'refill'; marks the run assisted
-world.snapshot();                  // serialisable state
+world.recordStart();               // re-records the course start with the players present (the room calls it at start)
+world.removePlayer(id, mode);      // 'leave' drops the inventory; 'hold' keeps health, downed and inventory for a rejoin
+world.forgetHeld(id);              // a held slot expired: its inventory drops at a spawn slot
+world.snapshot();                  // serialisable state, including `assisted`
 world.status();                    // { state: 'running' | 'won', elapsed, restarts, respawns, wallet, coinsCollected, coinsTotal, finalTime }
 
 const predictor = createPredictor(rapier, builtCourse, vehicleConfig);   // used by the client only
@@ -409,7 +412,7 @@ The `room` layer holds all room, lobby and simulation-loop logic. It talks to an
 
 - **Rooms.** A room's identity is a unique noun, drawn at creation from a built-in word list and unused by any live room (for example `tagine`, `camel`). If the list is exhausted, a number is appended. No noun matches a static file path. The room lives at `/<noun>`.
 - **Phases.** `lobby → playing → results → lobby`.
-- **Players.** Up to 6 slots. Display names are trimmed, 1–16 characters, and unique within a room ignoring case; a taken name is refused.
+- **Players.** Up to 6 slots. Display names are trimmed, 1–16 characters, contain no control, format, private-use, unassigned or line/paragraph-separator characters, and are unique within a room ignoring case; a taken name is refused.
 - **Player id.** The server assigns each slot a `playerId`, stable across a rejoin, and tells the client in `welcome`.
 - **Session token.** Each client generates a random token with `crypto.getRandomValues` (not `randomUUID`, which browsers disable on plain `http` LAN addresses) and keeps it in session storage. Each tab is therefore a separate player, and a reload keeps its identity. A token is never sent to any other client.
 - **Held slots.** When a player disconnects, their character is removed at once: what was in their hands drops, and a vacated driver seat frees. The slot (name, colour, admin status, health, downed state, inventory) is held for 30 s, still counts toward the 6, and keeps its name reserved.
@@ -690,7 +693,7 @@ Each step ends in something runnable. Progress is tracked in `ROADMAP.md`. Each 
 
 Steps 1 to 15 run on a flat test ground with a ramp, reference slopes, a sand patch, an anchor, a heavy obstacle, a few props, a fuel station with a shop, a garage, a few coins, two checkpoints and a finish. Each of these is added to the test ground by the step that first simulates it.
 
-Until the lobby exists (step 11), creating a room starts a run on the test ground at once, with the Lodgy, and anyone opening the link joins it. Starting the server with `VEHICLE=rv` uses the RV instead. Until then the `lobby` message has no `timeOfDay` or `weather`, a disconnected player's slot is freed at once, and a reload usually joins as a new player (a join with the token of a slot whose old connection the server has not yet seen close still takes that slot over).
+Since step 11 a room starts in the lobby, and the course, vehicle, time of day and weather are the admin's choice there. The campaign is `['test', 'segment-demo']` (`CAMPAIGN` in `constants.ts`) until step 16 builds the real courses.
 
 | # | Step | Sign-off |
 |---|---|---|
