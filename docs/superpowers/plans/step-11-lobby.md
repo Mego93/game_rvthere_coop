@@ -489,3 +489,10 @@ N18 (minor).
 - Assisted runs count toward `campaignTotal`.
 - `WorldOptions` gains `weather` at step 13, not now.
 - Task 5's spec edits also rewrite the build-order note about `VEHICLE=rv` before the lobby.
+
+N19 (found in the branch review: rebuilding the world without limit).
+- New constant `WORLD_REBUILD_COOLDOWN = 1`, in s.
+- A `start` or `restartCourse` that arrives less than that long after the room last built a world is refused with `bad_phase`.
+- `configure` with no change in its settings, and `ready` with no change, do not broadcast `lobby`.
+
+Without this, an admin could rebuild a world (0.8–1.7 ms each) at up to 120 messages per second.
