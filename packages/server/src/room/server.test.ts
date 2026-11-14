@@ -295,6 +295,17 @@ test('a takeover finds the session by player, whatever the order of sessions', (
   expect(amal.last('lobby').players).toHaveLength(3);
 });
 
+test('the replaced connection is told error replaced before it is closed', () => {
+  const { host, guest, connect } = setup();
+  const { room } = host('Amal');
+  const badr = guest(room, 2, 'Badr');
+  const badrAgain = connect();
+  badrAgain.send({ type: 'join', room, name: 'Badr', token: token(2) });
+  expect(badr.ofType('error')).toEqual([{ type: 'error', reason: 'replaced' }]);
+  expect(badr.closedByServer).toBe(true);
+  expect(badrAgain.ofType('error')).toEqual([]);
+});
+
 // --- room creation per address and solo rooms ---
 
 test('the sixth create from one address within 60 s is refused; another address can create; after 60 s the first can again', () => {

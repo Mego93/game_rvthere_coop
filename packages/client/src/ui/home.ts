@@ -11,6 +11,7 @@ const ERROR_TEXT: Record<ErrorReason, string> = {
   not_admin: 'Only the admin can do that.',
   not_ready: 'Not everyone is ready.',
   bad_phase: 'That cannot be done now.',
+  replaced: 'This room was opened in another tab.',
 };
 
 export const errorText = (reason: ErrorReason): string => ERROR_TEXT[reason];

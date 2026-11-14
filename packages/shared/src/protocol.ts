@@ -74,7 +74,7 @@ export interface RoomSettings {
 export type Phase = 'lobby' | 'playing' | 'results';
 
 // The type comes from the list, so a reason cannot be added to one and forgotten in the other.
-export const ERROR_REASONS = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full', 'cannot_buy', 'kicked', 'not_admin', 'not_ready', 'bad_phase'] as const;
+export const ERROR_REASONS = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full', 'cannot_buy', 'kicked', 'not_admin', 'not_ready', 'bad_phase', 'replaced'] as const;
 export type ErrorReason = (typeof ERROR_REASONS)[number];
 
 export interface LobbyPlayer {

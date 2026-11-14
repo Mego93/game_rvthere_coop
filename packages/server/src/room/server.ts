@@ -110,6 +110,8 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
         other.player = null;
         sessions.delete(other);
         sessionOf.delete(existing);
+        // Told before rejoin closes it, so the page does not fight back for the slot.
+        send(other.connection, { type: 'error', reason: 'replaced' });
       }
       room.rejoin(existing, session.connection, now)?.close();
       admit(session, room, existing);
