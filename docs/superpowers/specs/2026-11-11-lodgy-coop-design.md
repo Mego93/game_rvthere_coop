@@ -305,6 +305,7 @@ Every package follows these, so that code written separately agrees.
 - Units: metres, seconds, kilograms, radians.
 - Axes: right-handed, +Y up. Forward is −Z and right is +X in a vehicle's or player's local frame.
 - Yaw: rotation about +Y. Yaw 0 faces −Z; positive yaw turns left. Pitch: positive looks up.
+- Compass: in the world frame, north is −Z and east is +X (the sun rises in the east; the HUD compass uses the same).
 - A player's aim is a ray from a fixed eye offset above the player's position, along yaw and pitch. The server and the client compute it the same way; the camera's actual position plays no part.
 - "In range" of a box-shaped object (vehicle, obstacle, counter) is measured to the nearest point of the box, not its centre.
 - The simulation tick is fixed at 1/60 s on the server and in client prediction. The client advances its simulation with a fixed-step accumulator, independent of frame rate, with at most 5 catch-up steps per frame.
@@ -319,7 +320,7 @@ Every package follows these, so that code written separately agrees.
 The simulation is a pure module with no network or rendering code. The caller initialises Rapier and passes it in, so `shared` never loads WebAssembly itself.
 
 ```ts
-const world = createWorld(rapier, { courseId, vehicleId, weather }, builtCourse?);   // the optional course replaces the id's, for tests
+const world = createWorld(rapier, { courseId, vehicleId, weather? }, builtCourse?);   // weather defaults to clear; rain multiplies tyre grip by RAIN_GRIP   // the optional course replaces the id's, for tests
 world.addPlayer(id);               // a new player at 100 health, or a held entry restored (a downed one rejoins as a counted respawn)
 world.teleportPlayer(id, pos);     // places a player; used by tests and checkpoint restarts
 world.step(inputsByPlayer);        // advances one fixed tick; returns the tick's events
