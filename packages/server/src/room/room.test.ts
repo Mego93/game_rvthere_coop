@@ -29,7 +29,7 @@ function course(lift: number, extra: BuiltCourse['props'] = []): BuiltCourse {
 }
 
 function setup(testCourse: BuiltCourse) {
-  const room = createRoom(RAPIER, { noun: 'test', courses: { test: testCourse } }, 0);
+  const room = createRoom(RAPIER, { noun: 'test', campaign: ['test', 'segment-demo'], courses: { test: testCourse } }, 0);
   let time = 0;
   const joined: RoomPlayer[] = [];
   const join = (n: number) => {

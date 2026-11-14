@@ -51,11 +51,14 @@ test('L18: seconds below ten are padded', () => {
   expect(resultsView(message({ finalTime: 65.0 }), false).lines[0]).toBe('Final time 1:05.0');
 });
 
+const TWO = ['test', 'segment-demo'];
+
 test('L18: Next only for the admin and a course that is not the last; Back to lobby for the admin', () => {
-  expect(resultsView(message({ courseId: 'test' }), true)).toMatchObject({ showNext: true, showLobby: true });
-  expect(resultsView(message({ courseId: 'segment-demo' }), true)).toMatchObject({ showNext: false, showLobby: true });
-  expect(resultsView(message({ courseId: 'elsewhere' }), true)).toMatchObject({ showNext: false, showLobby: true });
-  expect(resultsView(message({ courseId: 'test' }), false)).toMatchObject({ showNext: false, showLobby: false });
+  expect(resultsView(message({ courseId: 'test' }), true, TWO)).toMatchObject({ showNext: true, showLobby: true });
+  expect(resultsView(message({ courseId: 'segment-demo' }), true, TWO)).toMatchObject({ showNext: false, showLobby: true });
+  expect(resultsView(message({ courseId: 'elsewhere' }), true, TWO)).toMatchObject({ showNext: false, showLobby: true });
+  expect(resultsView(message({ courseId: 'test' }), false, TWO)).toMatchObject({ showNext: false, showLobby: false });
+  expect(resultsView(message({ courseId: 'airport' }), true)).toMatchObject({ showNext: false, showLobby: true });
 });
 
 const server = { courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'clear' } as const;
@@ -74,4 +77,10 @@ test('mergeSettings: a confirmed change is dropped and the server wins', () => {
 
 test('mergeSettings: with nothing pending the server wins', () => {
   expect(mergeSettings({ ...server, weather: 'rain' }, {}, server).settings).toEqual(server);
+});
+
+test('C9: resultsView takes the campaign: one course shows no Next, two courses show it on the first', () => {
+  expect(resultsView(message({ courseId: 'test' }), true, ['test'])).toMatchObject({ showNext: false, showLobby: true });
+  expect(resultsView(message({ courseId: 'test' }), true, ['test', 'other'])).toMatchObject({ showNext: true });
+  expect(resultsView(message({ courseId: 'other' }), true, ['test', 'other'])).toMatchObject({ showNext: false });
 });

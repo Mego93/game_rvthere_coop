@@ -27,7 +27,7 @@ import { buildUseContext } from './useContext';
 const FORWARD = vec3(0, 0, -1);
 const percent = (fraction: number) => `${Math.floor(fraction * 100 + 1e-9)}%`;
 // Floors to tenths, so the display never runs ahead of the clock.
-const clock = (seconds: number) => {
+export const clock = (seconds: number) => {
   const tenths = Math.floor(seconds * 10 + 1e-6);
   const minutes = Math.floor(tenths / 600);
   return `${minutes}:${((tenths % 600) / 10).toFixed(1).padStart(4, '0')}`;
@@ -145,6 +145,23 @@ export function interactHint(
   return null;
 }
 
+// What using the selected item would do for the local player, as words (without the line prefix), or null if nothing.
+export function useHint({ lobby, config, vehicle, players, localId, aim }: OverlayData): string | null {
+  const local = players.find((player) => player.playerId === localId);
+  if (!vehicle || !local) return null;
+  const selected = local.inventory[local.slot];
+  const context = buildUseContext(local, players, vehicle, config, aim);
+  const target = local.seat === null && local.downed === null ? useTarget(selected ?? null, context) : null;
+  if (!target) return null;
+  if (selected === 'jerrycan') return 'Hold F to refuel';
+  if (selected === 'toolbox') return 'Hold F to repair';
+  if (selected !== 'healthKit') return null;
+  const mate = context.players.find((other) => other.id === target);
+  if (!mate) return 'Hold F to heal yourself';
+  const name = lobby.players.find((info) => info.playerId === mate.id)?.name ?? mate.id;
+  return `Hold F to ${mate.downed !== null ? 'revive' : 'heal'} ${name}`;
+}
+
 // The debug text shown until the real HUD exists.
 export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses, cable, anchors, status, stops, targetTime, touch }: OverlayData): string {
   const names = lobby.players.map((player) => {
@@ -188,22 +205,8 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
       lines.push(`health   ${local.health}`);
       if (local.downed !== null) lines.push(`DOWNED   ${Math.ceil(local.downed - 1e-9)}s`);
       if (local.hold) lines.push(`hold     ${percent(local.hold.progress)}`);
-      const selected = local.inventory[local.slot];
-      const context = buildUseContext(local, players, vehicle, config, aim);
-      const others = context.players;
-      const target = local.seat === null && local.downed === null ? useTarget(selected ?? null, context) : null;
-      if (target) {
-        if (selected === 'jerrycan') lines.push('hint     Hold F to refuel');
-        else if (selected === 'toolbox') lines.push('hint     Hold F to repair');
-        else if (selected === 'healthKit') {
-          const mate = others.find((other) => other.id === target);
-          if (!mate) lines.push('hint     Hold F to heal yourself');
-          else {
-            const name = lobby.players.find((info) => info.playerId === mate.id)?.name ?? mate.id;
-            lines.push(`hint     Hold F to ${mate.downed !== null ? 'revive' : 'heal'} ${name}`);
-          }
-        }
-      }
+      const use = useHint({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses, cable, anchors, status, stops, targetTime, touch });
+      if (use) lines.push(`hint     ${use}`);
     }
   } else {
     lines.push('waiting for the server…');

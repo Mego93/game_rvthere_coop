@@ -276,7 +276,7 @@ Surface types affect tyre grip and rolling resistance: road, sand, riverbed, gra
 
 Course 1 uses every spec 1 segment type and has one fuel station with its shop and one garage. Anchors are palm trunks, boulders and stone milestones, each visibly marked. Palette: ochre walls, red earth, green palms.
 
-The landmarks, the segment list, and all lengths, gradients and counts for course 1 are set with the owner in a course design pass, once the vehicles drive.
+The landmarks, the segment list, and all lengths, gradients and counts for course 1 were first set without the owner (decision D-C1 in `ROADMAP.md`), from this description and measurements of both vehicles; the owner adjusts them after playing it. The list is data in `packages/shared/src/courses/airport.ts`.
 
 ### Collision
 
@@ -569,7 +569,7 @@ Binary encoding is deferred until snapshot size is measured as a problem. Snapsh
 
 A downed teammate shows a marker above them with their remaining time, visible through walls. A downed player sees their own timer in the centre.
 
-On touch devices the joystick floats over the left half and the action buttons sit beside the inventory slots. The exact arrangement on both devices is settled in a mock-up pass with the owner at the start of the HUD step. Until then, a plain text overlay shows the same values.
+On touch devices the joystick floats over the left half and the action buttons sit beside the inventory slots. The arrangement above was built without a mock-up pass (decision D-HUD1 in `ROADMAP.md`) and is adjusted at the owner's sign-off. A plain text debug overlay with the same values stays, hidden unless `F3` is pressed or `localStorage` `lodgy.debug` is `1`.
 
 ### Sound
 
@@ -709,11 +709,11 @@ Since step 11 a room starts in the lobby, and the course, vehicle, time of day a
 | 9 | Player health, damage, downed state, health kits, revival and respawn. | Tests |
 | 10 | Service stops, coins, shops and shop menu, final time and side objectives. | Tests |
 | 11 | Lobby: ready states, configuration, kick, in-run menu, admin tools, results, next course and campaign total, held slots and rejoin. Weather and time of day are selectable and carried to the run; their effects come at step 13. | Tests |
-| 12 | HUD: mock-up pass with the owner, then compass, minimap, gauges, slots, prompts and downed markers. | Owner, visual check |
+| 12 | HUD: compass, minimap, gauges, slots, prompts and downed markers. | Owner, visual check |
 | 13 | Conditions: rain grip, and the visuals for time of day and weather. | Owner, visual check |
 | 14 | Touch input source, floating joystick, touch UI, landscape and safe-area layout, web app manifest. | Owner, on a real iPhone |
 | 15 | Segment system: the six segment builders and the course builder. | Tests |
 | 16 | Course design pass with the owner, then course 1. Snapshot size is measured. | Owner, by playing it |
-| 17 | The RV: mesh and handling pass over course 1. | Owner, by playing it |
+| 17 | The RV: mesh and handling pass over course 1 (built as a mesh and measurements; no handling constant changed). | Owner, by playing it |
 | 18 | Sound effects. | Owner |
 | 19 | Reconnect polish, WebGL context-loss reload, Cloudflare Tunnel setup with a documented one-command start, and the always-on hosting decision. | Owner |

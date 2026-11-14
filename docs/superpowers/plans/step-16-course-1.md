@@ -1,0 +1,94 @@
+# Step 16: Course 1 (to the airport)
+
+Spec: `docs/superpowers/specs/2026-11-11-lodgy-coop-design.md`. Read "Courses and segments", "Collision", "Conventions", and "Service stops". Code: `packages/shared/src/segments.ts` (`SegmentDef`, `buildRoad`, `addExtras`), `courses/build.ts` (`CourseDef`, `buildCourse`), `courses/demo.ts` and `courses/demo.test.ts` (checks B2 to B8 and "the sand" that already run over the segment demo), `testRig.ts`, `constants.ts` (`CAMPAIGN`, `SAND_APRON`, `SEGMENT_SPAWN_INSET`, `ROAD_WIDTH`, `FORD_ROCK_LATERAL`), `packages/server/src/room/room.ts` (`CAMPAIGN` use), `packages/client/src/ui/results.ts`.
+
+This plan fixes constants, rules and test cases. Implementers write the tests first. Where the plan and the spec disagree, or neither answers a question, stop and report. This step ends at `needs sign-off`: whether the course is fun is the owner's call, by playing it.
+
+## Course design pass
+
+The spec says the segment list and its numbers are set with the owner in a course design pass. The owner was not available, so this plan fixes a first version from the spec's description (rural track, palm grove, an oued, the city's edge, the airport road; flat; every spec-1 segment type; one fuel station with its shop and one garage; about 10 minutes). The segment list is data in one file, so the owner retunes it without touching code. Decision D-C1 in `ROADMAP.md` records this. The tests are written over any registered course, not over these numbers, so a retune does not break them.
+
+## Builder limits that shape the list (from the code)
+
+- A segment with a `stop` must be a straight, flat road (`curve` 0, `slope` 0).
+- A road cannot both curve and slope; a curved road may not neighbour a sloped one.
+- Every checkpoint spawn is 8 m (`SEGMENT_SPAWN_INSET`) into its segment. A sand segment starts with 50 m (`SAND_APRON`) of road, so its spawn is on road with 42 m of run-up. A ford has no approach, so its spawn is on riverbed.
+- Ford rocks sit at lateral ±`FORD_ROCK_LATERAL` (1 m). Roadworks barriers are 2 m wide at lateral -3, 0, 3 with fences at ±5, so the gaps are 1 m: the passage is by pushing a barrier (step 5), never by driving through a gap.
+
+## Files
+
+- Create `packages/shared/src/courses/airport.ts`: `export const airport: CourseDef`, with a small local helper `coinsAlong(count, length)` (evenly spaced `along` from 15 to `length - 15`, `lateral` alternating -2.5 and 2.5; used only for segments of at least 60 m).
+- `courses/index.ts`: register `airport`, built once.
+- `constants.ts`: `CAMPAIGN = ['airport']`. `test` and `segment-demo` stay registered as development courses.
+- `packages/server/src/room/room.ts` and the `createRoomServer` options: add `campaign?: readonly string[]` to the room config, defaulting to `CAMPAIGN`; the room uses it for the default course (`campaign[0]`), `next` and `campaignTotal` instead of the constant. `packages/client/src/ui/results.ts`: `resultsView(message, isAdmin, campaign = CAMPAIGN)`.
+- Rename `courses/demo.test.ts` to `courses/courses.test.ts`, run the structural cases (B2 to B8) over `['segment-demo', 'airport']` with `describe.each`; the registry cases that name the demo's ids stay demo-specific.
+- Tests changed because the default course and campaign change (the implementer greps `CAMPAIGN`, `'segment-demo'`, `courseId: 'test'` and `courseIds` in `packages/*/src` and `e2e`, runs the whole suite, and lists every test it changed; this list is the starting point and may be incomplete): server `room/lobby.test.ts` (the `setup(true)` helper and every test that starts without configuring a course, the L12 campaign-total tests and the `bad_phase` test after them, tests asserting `courseId: 'test'`), `room/room.test.ts` (L32 injects `courses.test`), `room/events.test.ts`, `room/server.test.ts` (expects `courseId: 'test'`), `node/server.test.ts` (L197 to L230, drives to the finish on the test ground), `room/roomFailure.test.ts` and `room/roomBuildFailure.test.ts` (check), shared `courses/demo.test.ts` (the `courseIds` list), client `ui/results.test.ts` (`showNext` for `test`), `e2e/smoke.spec.ts` (the "props 8" assertion at about L239). Server test helpers pass `campaign: ['test', 'segment-demo']`, so the existing campaign tests keep their meaning; node `server.test.ts` sends `configure courseId: 'test'` before starting where it needs the test ground. e2e specs that need the test ground choose it through the lobby, the way they select a vehicle today.
+- `ROADMAP.md` and the spec's course table (row 1 reads as built).
+
+## The course (first version; data only)
+
+Lengths in metres. Straight roads carry stops; curved roads never do.
+
+| # | Segment | Parameters | Extras |
+|---|---|---|---|
+| 0 | road | length 120 | start; pickups: jerrycan (along 30, lateral -3), toolbox (30, 3), healthKit (40, 0), clear of the spawn slots; `coinsAlong(4, 120)` |
+| 1 | road | length 360, curve +0.35, debris 4 | `coinsAlong(6, 360)` |
+| 2 | road | length 300, curve -0.5, debris 3 | |
+| 3 | road | length 200 | fuel stop (side 1, along 100) with its shop |
+| 4 | sand | length 30, palms 4 | coins `[{ along: 58, lateral: -2.5 }, { along: 70, lateral: 2.5 }]` (`along` counts the 50 m apron); pickup jerrycan on the apron (along 20, lateral -3) |
+| 5 | road | length 260, curve +0.4 | `coinsAlong(4, 260)` |
+| 6 | ford | width 24, rocks 8 | the oued; coins `[{ along: 18, lateral: -2.5 }, { along: 21, lateral: 2.5 }]` (the helper needs a length of at least 60) |
+| 7 | road | length 60, slope 4 | |
+| 8 | bank | height 3, gradient 15, anchors 3 | the city's edge |
+| 9 | alley | length 160, clutter 0.7 | `coinsAlong(4, 160)` |
+| 10 | roadworks | length 120, obstacles 6 | pickup toolbox (along 10, lateral 3) |
+| 11 | road | length 300 | garage stop (side -1, along 150) |
+| 12 | road | length 300, curve +0.3 | |
+| 13 | road | length 220 | the airport road; the builder adds the finish pad |
+
+`targetTime` 600 s. Total about 2,600 m before the pad: about 9 to 10 minutes at 5 m/s. The owner tunes by playing. If `buildCourse` rejects any row, stop and report the error instead of changing the list.
+
+## Behaviour rules
+
+C1. Course 1 uses all six segment types; has exactly one fuel station (with its shop counter) and exactly one garage; has coins; has at least one pickup of each item kind.
+C2. No checkpoint spawn is on sand. (The ford's spawn is on riverbed, which is allowed.) The sand segment's spawn is on its apron.
+C3. Both vehicles complete the course, tested on the terrain only (`createRig`: ground and walls, no props). A driver controller in the test drives each vehicle: pure pursuit with a 12 m lookahead along `course.route`, steering proportional to the heading error, full throttle. The implementer calibrates the controller (gain, lookahead), never the vehicle. For each segment, from its checkpoint spawn, the vehicle's centre must enter the next checkpoint's trigger box (the finish box for the last segment) within `15 + routeLength / (0.3 × maxSpeed)` seconds, where `routeLength` is that segment's route length and `maxSpeed` is the vehicle's config value. The roadworks segment is excluded (it blocks by design, C4). If the RV fails a segment, stop and report the segment, the time and the speed trace; do not retune the vehicle or the limit.
+C4. Roadworks: structural only. Its barriers, fences and pickup are placed, the barriers are heavy obstacles, and the lane left of the barriers at lateral ±4 is closed by the fences (that is, no free lane of the RV's width exists), so the passage is pushing, covered by the step 5 tests. The ford: a lane at lateral ±3 m along the segment has no rock centre within the RV's half width plus 0.5 m (the existing B4 excludes rocks).
+C5. Fuel: a continuous drive from the fuel-stop segment's checkpoint spawn to the finish, with the C3 controller and a full tank, leaves more than 5% fuel for each vehicle. Also a drive from the start to the fuel stop with a full tank leaves more than 20%. If the RV fails either, stop and report the numbers (the station may move); do not tune the drain. This test drives each leg as one continuous run (not per segment) so it includes the standing starts only once.
+C6. Snapshot size: a test encodes one full `snapshot` message with 6 players on this course (as the room sends it) and reports its byte length; it asserts under 4 KB. It also reports the average cost of `world.step` for 6 players over 300 ticks and asserts under 4 ms. If either is over, stop and report the number.
+C7. The structural checks B2 to B8 pass on `airport` (ground under every route point, no steps, lane free of walls and props, checkpoints, stops, unique and deterministic ids, a working world), including that pickups and coins keep clear of every checkpoint's spawn slots.
+C8. The client needs no change: the compass, the minimap and the lobby read the built course.
+C9. With a one-course campaign, `next` returns `bad_phase`, every finish sets `campaignTotal` to that run's final time, and `resultsView` shows no Next button. The lobby already lists every registered course to everyone and only the admin can change it; that does not change.
+
+## Tests (numbered)
+
+T1 C1: type set, stops, coins, pickup kinds on `airport`.
+T2 C2: no checkpoint spawn surface (from `groundProbe`) is `sand`.
+T3 C3: drive test per segment and per vehicle (both configs), parametrised.
+T4 C4: roadworks structure; ford lane.
+T5 C5: fuel margins.
+T6 C6: snapshot size and tick cost.
+T7 C7: the structural cases over both courses.
+T8 C9: server tests with `campaign: ['airport']` (finish gives `campaignTotal` equal to the final time, `next` is `bad_phase`) and the existing two-course campaign tests with `campaign: ['test', 'segment-demo']`; `resultsView` with a one-course and a two-course campaign.
+T9 e2e: `smoke.spec.ts` and the other specs pass with the default course `airport` (the keyboard drive case still drives; the "props 8" assertion adapts).
+
+## Tasks
+
+1. `campaign` option on the room and `resultsView`, fixing every test that depended on the old campaign (T8). The whole suite passes before the course is added.
+2. The `airport` file, registration, `CAMPAIGN` change, the structural tests over both courses (T1, T2, T7), and the e2e (T9).
+3. The drive test (T3, T4) with the controller in the test code.
+4. Fuel and cost measurements (T5, T6).
+5. `ROADMAP.md`, spec row, decision D-C1, the "Six-player cost" working note; run every check.
+
+Review after each task by a Sonnet reviewer; Opus reviews the whole branch at the end.
+
+## Amendments after the first implementation run (binding)
+
+A1. The ford's coins are explicit (table row 6), because `coinsAlong` on a 24 m segment put a coin on a spawn slot at the checkpoint 8 m in.
+A2. The "no steps, joins included" structural test samples 2.6 km at 0.05 m and may take a 120 s timeout. `groundProbe.ts` gains a test helper `groundSurfaceAt` for T2.
+
+A3. After the first drive run (Lodgy passes everything; RV stalls on the sand and on the bank), binding decisions: the sand segment is shortened to 110 m (50 m apron plus 60 m of sand, palms 4, coins `coinsAlong(4, 110)`), because the RV decelerates about 0.45 m/s² on sand and stops about 86 m after reaching 8.8 m/s, so 140 m was unreachable; the spec requires the RV to complete every segment. The bank is excluded from the RV's drive test, because the spec says the RV fails a medium slope unaided and needs the winch (the bank has three anchors for it); the Lodgy's drive of the bank stays. Both are recorded in `ROADMAP.md` (decision D-C1 and a note that the RV needs the winch on the bank, for the owner to confirm). The drive test's `RV_STALLS` filter becomes `RV_NEEDS_WINCH = new Set([8])` with the reason in a one-line comment.
+
+A4 (supersedes the sand part of A3). A sand segment's `length` is the sand only; the 50 m apron comes before it. Measured: the RV, with the 42 m run-up, reaches 8.8 m/s, then stalls about 38 m into the sand (the same trace at any longer length). The sand is therefore 30 m, the length the existing demo test already proves the RV crosses, with palms 4 and the coins above. A longer sand needs more run-up, which is a design change for the owner. The bank rule of A3 stands.
+
+A5 (replaces the 4 KB limit of C6). Measured on the airport with 6 players and 36 props: a full `snapshot` message is 10,268 bytes of JSON (props 7,668, players 1,723, vehicle 206, cable 135); with no props about 2,600. The room sends the full message on join, after a vehicle loss and after a checkpoint skip, and only the moved props otherwise. The test therefore asserts: the steady-state message (no moved props) under 4,096 bytes, and the full message under 12,288 bytes, and prints both. Slimming the encoding is not part of this step; `ROADMAP.md` records the numbers, the roughly 340 KB/s per room to six clients at 20 Hz for a steady state with few moved props, and a known issue for the hosting decision. Tick cost passed at 0.39 ms per tick (limit 4 ms). Fuel margins (C5, summed per leg, skipped segments teleported over, fuel-stop measured at segment 3's checkpoint trigger): Lodgy 80.7% left at the stop and 58.0% from the stop to the finish; RV 60.7% and 12.3% (not including the roadworks and the bank, which it needs pushing and the winch for).

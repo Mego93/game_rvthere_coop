@@ -16,7 +16,7 @@ import {
 } from '@lodgy/shared';
 import { describe, expect, test } from 'vitest';
 import type { RunStatus } from '../net/snapshotBuffer';
-import { interactAction, interactHint, overlayText } from './overlay';
+import { clock, interactAction, interactHint, overlayText, useHint, type OverlayData } from './overlay';
 
 const lobby: LobbyMessage = {
   type: 'lobby',
@@ -416,4 +416,36 @@ test('W5: the weather line comes directly after the tick line', () => {
   const lines = overlayText({ lobby: { ...lobby, timeOfDay: 'night', weather: 'rain' }, config: rv, tick: 3, fps: 60, vehicle: null, players: [], localId: 'p1', predicted: null, server: null, ...noAim }).split('\n');
   expect(lines[lines.findIndex((line) => line.startsWith('tick')) + 1]).toBe('weather  night rain');
   expect(call([])).toContain('weather  midday clear');
+});
+
+describe('useHint', () => {
+  const data = (players: PlayerSnapshot[], v: VehicleState | null = vehicle, changes: Partial<OverlayData> = {}): OverlayData => ({
+    lobby, config: rv, tick: 1, fps: 60, vehicle: v, players, localId: 'p1', predicted: null, server: null, ...noAim, aim: { yaw: 0, pitch: -0.45 }, ...changes,
+  });
+  const low = { ...vehicle, fuel: 0.3, health: 0.5 };
+  const kit = (changes: Partial<PlayerSnapshot> = {}) => holding({ inventory: ['healthKit', null, null], ...changes });
+  const mate = (changes: Partial<PlayerSnapshot> = {}) => ({ ...player('p2', nearDoor.pos.x, nearDoor.pos.z - 1.5), ...changes });
+
+  test('names the jerrycan and toolbox actions without the line prefix', () => {
+    expect(useHint(data([holding({ inventory: ['jerrycan', null, null] })], low))).toBe('Hold F to refuel');
+    expect(useHint(data([holding({ inventory: ['toolbox', null, null] })], low))).toBe('Hold F to repair');
+  });
+
+  test('health kit: heal yourself, heal or revive a teammate by name', () => {
+    expect(useHint(data([kit({ health: 60 }), mate()]))).toBe('Hold F to heal yourself');
+    expect(useHint(data([kit(), mate({ health: 40 })]))).toBe('Hold F to heal Badr');
+    expect(useHint(data([kit(), mate({ health: 0, downed: 20 })]))).toBe('Hold F to revive Badr');
+  });
+
+  test('null without a vehicle, a local player, a target or while downed', () => {
+    expect(useHint(data([kit({ health: 60 })], null))).toBeNull();
+    expect(useHint(data([], low))).toBeNull();
+    expect(useHint(data([holding({ inventory: ['jerrycan', null, null] })]))).toBeNull();
+    expect(useHint(data([kit({ health: 0, downed: 20 }), mate({ health: 40 })]))).toBeNull();
+  });
+});
+
+test('clock floors to tenths', () => {
+  expect(clock(61.99)).toBe('1:01.9');
+  expect(clock(0)).toBe('0:00.0');
 });

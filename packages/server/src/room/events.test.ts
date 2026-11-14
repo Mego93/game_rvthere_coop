@@ -17,7 +17,7 @@ const finishAtStart = (id: string): BuiltCourse => {
 
 function setup(finishing = false) {
   const fake = createFakeDeps(RAPIER);
-  const server = createRoomServer(fake.deps, finishing ? { courses: { test: finishAtStart('test') } } : {});
+  const server = createRoomServer(fake.deps, { campaign: ['test', 'segment-demo'], ...(finishing ? { courses: { test: finishAtStart('test') } } : {}) });
   const host = () => {
     const client = connectFakeClient(server);
     client.send({ type: 'create', name: 'Amal', token: token(1) });

@@ -17,7 +17,8 @@
     "build": "npm run build -w @lodgy/client",
     "start": "npm run build && npm run start -w @lodgy/server",
     "e2e": "playwright test",
-    "experiment:cable": "vitest run --config experiments/vitest.config.ts --reporter=verbose"
+    "experiment:cable": "vitest run --config experiments/vitest.config.ts --reporter=verbose experiments/cable",
+    "experiment:rv": "vitest run --config experiments/vitest.config.ts --reporter=verbose experiments/rv"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",

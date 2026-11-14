@@ -1,4 +1,5 @@
 import type { BuiltCourse } from '../course';
+import { airport } from './airport';
 import { buildCourse } from './build';
 import { segmentDemo } from './demo';
 import { testGround } from './testGround';
@@ -6,6 +7,7 @@ import { testGround } from './testGround';
 const COURSES: Record<string, BuiltCourse> = {
   [testGround.id]: testGround,
   [segmentDemo.id]: buildCourse(segmentDemo),
+  [airport.id]: buildCourse(airport),
 };
 
 export function courseIds(): string[] {
