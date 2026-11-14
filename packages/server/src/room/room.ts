@@ -10,6 +10,7 @@ import {
   TICK_RATE,
   createWorld,
   resultsOf,
+  type AdminTool,
   type BuiltCourse,
   type ErrorReason,
   type InputFields,
@@ -62,8 +63,12 @@ export interface Room {
   setReady(player: RoomPlayer, ready: boolean): ErrorReason | null;
   configure(by: RoomPlayer, settings: RoomSettings): ErrorReason | null;
   start(by: RoomPlayer): ErrorReason | null;
+  restartCheckpoint(by: RoomPlayer): ErrorReason | null;
   restartCourse(by: RoomPlayer): ErrorReason | null;
+  adminTool(by: RoomPlayer, tool: AdminTool): ErrorReason | null;
   toLobby(by: RoomPlayer): ErrorReason | null;
+  // Selects the next campaign course and enters the lobby; refused on the last course or one outside the campaign.
+  next(by: RoomPlayer): ErrorReason | null;
   pushInput(player: RoomPlayer, input: PlayerInput): void;
   // Spends the crew's coins on an item at a fuel station's counter; applies at once.
   buy(player: RoomPlayer, item: ItemKind): 'ok' | 'cannot_buy';
@@ -99,6 +104,8 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   let world: World | null = null;
   let settings: RoomSettings = { courseId: CAMPAIGN[0]!, vehicleId: 'lodgy', timeOfDay: DEFAULT_TIME_OF_DAY, weather: DEFAULT_WEATHER };
   let lastResults: ResultsMessage | null = null;
+  // The latest final time of each course finished since the room was created.
+  const finished = new Map<string, number>();
   // Kept in the order players joined.
   const players: RoomPlayer[] = [];
   let nextPlayerNumber = 1;
@@ -168,14 +175,22 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   // A world for the room's configuration, with every player in it and cp-0 recorded.
   const createRunWorld = (): World => {
     const next = createWorld(rapier, { courseId: settings.courseId, vehicleId: settings.vehicleId }, config.courses?.[settings.courseId]);
-    for (const player of players) next.addPlayer(player.playerId);
-    next.recordStart();
+    try {
+      for (const player of players) next.addPlayer(player.playerId);
+      next.recordStart();
+    } catch (error) {
+      next.dispose();
+      throw error;
+    }
     return next;
   };
 
   const enterResults = (current: World) => {
     phase = 'results';
-    lastResults = { type: 'results', ...resultsOf(current.status(), { id: settings.courseId, targetTime: current.course.targetTime }, settings) };
+    const results = resultsOf(current.status(), { id: settings.courseId, targetTime: current.course.targetTime }, settings);
+    finished.set(settings.courseId, results.finalTime);
+    lastResults = { type: 'results', ...results };
+    if (CAMPAIGN.every((id) => finished.has(id))) lastResults.campaignTotal = CAMPAIGN.reduce((sum, id) => sum + finished.get(id)!, 0);
     // The snapshot goes out at once, outside the cadence, so that clients see the win.
     broadcastSnapshot(current);
     broadcastLobby();
@@ -200,6 +215,15 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   const refusal = (by: RoomPlayer, ...allowed: Phase[]): ErrorReason | null => {
     if (by.playerId !== adminId) return 'not_admin';
     return allowed.includes(phase) ? null : 'bad_phase';
+  };
+
+  const enterLobby = () => {
+    world?.dispose();
+    world = null;
+    lastResults = null;
+    phase = 'lobby';
+    for (const player of players) player.ready = false;
+    broadcastLobby();
   };
 
   return {
@@ -274,6 +298,8 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       const refused = refusal(by, 'lobby');
       if (refused) return refused;
       if (players.some((player) => player.playerId !== adminId && player.connected && !player.ready)) return 'not_ready';
+      // Built first: if it throws, the room is still in the lobby, untouched.
+      const fresh = createRunWorld();
       for (const player of players) {
         player.queue = createInputQueue();
         player.sentFull = false;
@@ -285,7 +311,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       tickOffset = 0;
       startTime = lastNow;
       lastResults = null;
-      world = createRunWorld();
+      world = fresh;
       phase = 'playing';
       broadcastLobby();
       return null;
@@ -294,24 +320,42 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       const refused = refusal(by, 'playing');
       if (refused) return refused;
       // The queues stay: the client's game keeps running and its seq keeps rising.
-      const next = createRunWorld();
-      world?.dispose();
-      world = next;
+      const fresh = createRunWorld();
+      const old = world;
+      world = fresh;
+      old?.dispose();
       tickOffset += worldTicks;
       worldTicks = 0;
       lastSent.clear();
       restarted = true;
       return null;
     },
+    restartCheckpoint(by) {
+      const refused = refusal(by, 'playing');
+      if (refused) return refused;
+      world?.restartCheckpoint();
+      return null;
+    },
+    adminTool(by, tool) {
+      const refused = refusal(by, 'playing');
+      if (refused) return refused;
+      // A skip moves the whole crew, so the next snapshot is full for everyone.
+      if (world?.adminTool(tool) && tool === 'skipCheckpoint') restarted = true;
+      return null;
+    },
     toLobby(by) {
       const refused = refusal(by, 'playing', 'results');
       if (refused) return refused;
-      world?.dispose();
-      world = null;
-      lastResults = null;
-      phase = 'lobby';
-      for (const player of players) player.ready = false;
-      broadcastLobby();
+      enterLobby();
+      return null;
+    },
+    next(by) {
+      const refused = refusal(by, 'results');
+      if (refused) return refused;
+      const index = CAMPAIGN.indexOf(settings.courseId);
+      if (index === -1 || index === CAMPAIGN.length - 1) return 'bad_phase';
+      settings = { ...settings, courseId: CAMPAIGN[index + 1]! };
+      enterLobby();
       return null;
     },
     pushInput(player, input) {

@@ -167,11 +167,17 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
       }
       case 'start':
         return command(session, (room, player) => room.start(player));
+      case 'restartCheckpoint':
+        return command(session, (room, player) => room.restartCheckpoint(player));
+      case 'adminTool':
+        return command(session, (room, player) => room.adminTool(player, message.tool));
+      case 'next':
+        return command(session, (room, player) => room.next(player));
       case 'restartCourse':
         return command(session, (room, player) => room.restartCourse(player));
       case 'toLobby':
         return command(session, (room, player) => room.toLobby(player));
-      // kick (task 3), restartCheckpoint, adminTool and next (task 2b) are not wired yet.
+      // kick is wired in task 3.
       default:
         return refuse(session, 'bad_message');
     }

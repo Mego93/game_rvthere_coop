@@ -386,3 +386,264 @@ test('colours and names in the lobby message are unchanged by the phase', () => 
     { playerId: 'p2', name: 'Badr', colour: PLAYER_COLOURS[1], ready: false, connected: true },
   ]);
 });
+
+// --- L6 (task 2b): the remaining refusal rows ---
+
+test('L6: a non-admin restartCheckpoint, adminTool or next gets not_admin, and has no effect', () => {
+  const { host, guest, advance, server } = setup(true);
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  ready(badr);
+  startRun(client);
+  const world = server.debugWorld(room)!;
+  badr.send({ type: 'restartCheckpoint' });
+  badr.send({ type: 'adminTool', tool: 'refill' });
+  badr.send({ type: 'adminTool', tool: 'skipCheckpoint' });
+  advance(0.1);
+  expect(client.last('lobby').phase).toBe('results');
+  badr.send({ type: 'next' });
+  expect(reasons(badr)).toEqual(['not_admin', 'not_admin', 'not_admin', 'not_admin']);
+  expect(world.status().assisted).toBe(false);
+  expect(world.status().restarts).toBe(0);
+  expect(client.last('lobby').phase).toBe('results');
+  expect(reasons(client)).toEqual([]);
+});
+
+test('L6: restartCheckpoint, adminTool and next in the wrong phase get bad_phase', () => {
+  const { host, guest, advance } = setup(true);
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  // Lobby: no run to act on, and no results to leave.
+  client.send({ type: 'restartCheckpoint' });
+  client.send({ type: 'adminTool', tool: 'refill' });
+  client.send({ type: 'next' });
+  expect(reasons(client)).toEqual(['bad_phase', 'bad_phase', 'bad_phase']);
+  ready(badr);
+  startRun(client);
+  // Playing: next belongs to the results.
+  client.send({ type: 'next' });
+  // Results: the run commands have nothing left to act on.
+  advance(0.1);
+  client.send({ type: 'restartCheckpoint' });
+  client.send({ type: 'adminTool', tool: 'skipCheckpoint' });
+  expect(reasons(client)).toEqual(Array(6).fill('bad_phase'));
+  // not_admin still comes first.
+  badr.send({ type: 'restartCheckpoint' });
+  expect(reasons(badr)).toEqual(['not_admin']);
+});
+
+test('L6: malformed restartCheckpoint, adminTool and next messages get bad_message', () => {
+  const { host } = setup();
+  const { client } = host();
+  client.sendRaw(JSON.stringify({ type: 'adminTool', tool: 'teleport' }));
+  client.sendRaw(JSON.stringify({ type: 'adminTool' }));
+  expect(reasons(client)).toEqual(['bad_message', 'bad_message']);
+  const stranger = connectFakeClient(setup().server);
+  for (const message of [{ type: 'restartCheckpoint' }, { type: 'adminTool', tool: 'refill' }, { type: 'next' }] as ClientMessage[]) stranger.send(message);
+  expect(reasons(stranger)).toEqual(['bad_message', 'bad_message', 'bad_message']);
+});
+
+// --- L12: results and the campaign total ---
+
+// Wins the run by carrying the vehicle into the finish box; returns once results are shown.
+function finishRun(server: ReturnType<typeof setup>['server'], room: string, advance: (seconds: number) => void) {
+  const world = server.debugWorld(room)!;
+  const { center } = world.course.finish;
+  world.debugBody('vehicle')!.setTranslation({ x: center.x, y: center.y, z: center.z }, true);
+  advance(0.1);
+}
+
+test('L12: finishing test gives no campaign total; next selects segment-demo; finishing it gives the sum; finishing test again replaces its entry', () => {
+  const { host, advance, server } = setup();
+  const { client, room } = host();
+  startRun(client);
+  advance(0.5);
+  finishRun(server, room, advance);
+  const first = client.last('results');
+  expect(first).toMatchObject({ courseId: 'test', assisted: false });
+  expect(first.campaignTotal).toBeUndefined();
+
+  client.send({ type: 'next' });
+  expect(reasons(client)).toEqual([]);
+  expect(client.last('lobby')).toMatchObject({ phase: 'lobby', courseId: 'segment-demo' });
+  expect(server.debugWorld(room)).toBeNull();
+
+  startRun(client);
+  advance(1);
+  finishRun(server, room, advance);
+  const second = client.last('results');
+  expect(second.courseId).toBe('segment-demo');
+  expect(second.campaignTotal).toBeCloseTo(first.finalTime + second.finalTime, 9);
+
+  // The latest time of a course counts, not the first: test again, slower.
+  client.send({ type: 'toLobby' });
+  client.send({ ...settings, courseId: 'test', vehicleId: 'lodgy' });
+  startRun(client);
+  advance(2);
+  finishRun(server, room, advance);
+  const third = client.last('results');
+  expect(third.courseId).toBe('test');
+  expect(third.finalTime).toBeGreaterThan(first.finalTime);
+  expect(third.campaignTotal).toBeCloseTo(third.finalTime + second.finalTime, 9);
+});
+
+test('L12: an assisted run still counts toward the campaign total', () => {
+  const { host, advance, server } = setup();
+  const { client, room } = host();
+  startRun(client);
+  client.send({ type: 'adminTool', tool: 'refill' });
+  finishRun(server, room, advance);
+  const only = client.last('results');
+  expect(only.assisted).toBe(true);
+  client.send({ type: 'next' });
+  startRun(client);
+  finishRun(server, room, advance);
+  const last = client.last('results');
+  expect(last.campaignTotal).toBeCloseTo(only.finalTime + last.finalTime, 9);
+});
+
+test('L12: next on the last campaign course, or on a course outside the campaign, gets bad_phase', () => {
+  const { host, advance, server } = setup(true);
+  const { client, room } = host();
+  client.send({ ...settings, vehicleId: 'lodgy' });
+  startRun(client);
+  advance(0.1);
+  expect(client.last('lobby').phase).toBe('results');
+  client.send({ type: 'next' });
+  expect(reasons(client)).toEqual(['bad_phase']);
+  expect(client.last('lobby').phase).toBe('results');
+  expect(server.debugWorld(room)).not.toBeNull();
+});
+
+test('L12: next resets readiness and the admin may start the next course', () => {
+  const { host, guest, advance, server } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  ready(badr);
+  startRun(client);
+  finishRun(server, room, advance);
+  client.send({ type: 'next' });
+  expect(client.last('lobby').players.map((player) => player.ready)).toEqual([false, false]);
+  startRun(client);
+  expect(reasons(client)).toEqual(['not_ready']);
+});
+
+// --- L13: restarts and admin tools through the room ---
+
+test('L13: restartCheckpoint puts the vehicle back, counts the restart and makes the next snapshot full', () => {
+  const { host, advance, server } = setup();
+  const { client, room } = host();
+  startRun(client);
+  advance(0.5);
+  server.debugWorld(room)!.debugBody('vehicle')!.setTranslation({ x: 0, y: 1, z: -20 }, true);
+  advance(0.2);
+  expect(client.last('snapshot').vehicle.pos.z).toBeLessThan(-10);
+  client.received.length = 0;
+  client.send({ type: 'restartCheckpoint' });
+  expect(reasons(client)).toEqual([]);
+  advance(0.2);
+  const [first] = client.ofType('snapshot');
+  expect(first!.full).toBe(true);
+  expect(first!.restarts).toBe(1);
+  expect(first!.vehicle.pos.z).toBeGreaterThan(-5);
+});
+
+test('L13: adminTool refill sets assisted and refills; skipCheckpoint moves the crew and the next snapshot is full for everyone', () => {
+  const { host, guest, advance, server } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  ready(badr);
+  startRun(client);
+  advance(0.5);
+  const world = server.debugWorld(room)!;
+  world.debugVehicle().addFuel(-0.5);
+  client.send({ type: 'adminTool', tool: 'refill' });
+  expect(world.status().assisted).toBe(true);
+  expect(world.debugVehicle().fuel()).toBe(1);
+
+  advance(0.5);
+  client.received.length = 0;
+  badr.received.length = 0;
+  client.send({ type: 'adminTool', tool: 'skipCheckpoint' });
+  expect(reasons(client)).toEqual([]);
+  advance(0.2);
+  for (const player of [client, badr]) {
+    const [first] = player.ofType('snapshot');
+    expect(first!.full).toBe(true);
+    expect(first!.checkpoint).toBe(1);
+    expect(first!.assisted).toBe(true);
+    expect(first!.vehicle.pos.z).toBeLessThan(-30);
+  }
+});
+
+test('L13: an admin tool that does nothing is not an error and keeps snapshots partial', () => {
+  const { host, advance, server } = setup();
+  const { client, room } = host();
+  startRun(client);
+  advance(0.5);
+  // The last checkpoint has nothing after it.
+  const world = server.debugWorld(room)!;
+  while (world.adminTool('skipCheckpoint'));
+  advance(0.3);
+  const sent = client.ofType('snapshot').length;
+  client.send({ type: 'adminTool', tool: 'skipCheckpoint' });
+  advance(0.3);
+  expect(reasons(client)).toEqual([]);
+  expect(client.ofType('snapshot').slice(sent).every((snapshot) => !snapshot.full)).toBe(true);
+});
+
+test('L13: restartCourse resets restarts, respawns, coins and assisted', () => {
+  const { host, advance, server } = setup();
+  const { client, room } = host();
+  startRun(client);
+  advance(0.3);
+  const world = server.debugWorld(room)!;
+  const coin = world.course.coins[0]!;
+  client.send({ type: 'restartCheckpoint' });
+  client.send({ type: 'adminTool', tool: 'refill' });
+  advance(0.1);
+  world.teleportPlayer('p1', coin.pose.pos);
+  advance(0.2);
+  const dirty = client.last('snapshot');
+  expect(dirty).toMatchObject({ restarts: 1, assisted: true });
+  expect(dirty.coinsCollected).toBe(1);
+
+  client.send({ type: 'restartCourse' });
+  advance(0.3);
+  expect(client.last('snapshot')).toMatchObject({ restarts: 0, respawns: 0, wallet: 0, coinsCollected: 0, assisted: false, checkpoint: 0 });
+});
+
+// --- Task 2a review: takeover and joiners across a restart ---
+
+test('a takeover during playing after restartCourse gets a full snapshot, and its inputs count from seq 1', () => {
+  const { host, advance, server } = setup();
+  const { client, room } = host();
+  startRun(client);
+  advance(0.5);
+  client.send({ type: 'input', ...NEUTRAL_INPUT, seq: 40 });
+  advance(0.2);
+  client.send({ type: 'restartCourse' });
+  advance(0.2);
+
+  const again = connectFakeClient(server);
+  again.send({ type: 'join', room, name: 'Amal', token: token(1) });
+  again.send({ type: 'input', ...NEUTRAL_INPUT, seq: 1 });
+  advance(0.2);
+  const first = again.ofType('snapshot')[0]!;
+  expect(first.full).toBe(true);
+  expect(first.players.map((player) => player.playerId)).toEqual(['p1']);
+  expect(again.last('snapshot').ackSeq).toBe(1);
+  expect(server.debugWorld(room)!.snapshot().players).toHaveLength(1);
+});
+
+test('a player who joined in the lobby has a character in the world after start', () => {
+  const { host, guest, advance, server } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  ready(badr);
+  expect(server.debugWorld(room)).toBeNull();
+  startRun(client);
+  expect(server.debugWorld(room)!.snapshot().players.map((player) => player.playerId)).toEqual(['p1', 'p2']);
+  advance(0.2);
+  expect(badr.ofType('snapshot')[0]!.players.map((player) => player.playerId)).toEqual(['p1', 'p2']);
+});

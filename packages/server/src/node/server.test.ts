@@ -190,3 +190,44 @@ test('a binary message or an oversized message closes the connection', async () 
   oversized.socket.send('x'.repeat(5000));
   await oversized.closed;
 });
+
+test('L22: two clients ready up, start, board, and drive the Lodgy to the finish until the results arrive', { timeout: 30_000 }, async () => {
+  const amal = await connect();
+  amal.send({ type: 'create', name: 'Amal', token: 'finish-token-amal-123' });
+  const { room } = await amal.waitFor((message): message is Welcome => isWelcome(message));
+  const badr = await connect();
+  badr.send({ type: 'join', room, name: 'Badr', token: 'finish-token-badr-123' });
+  await badr.waitFor((message): message is Welcome => isWelcome(message));
+  // The run outlasts the silence timeout, and Badr sends no inputs, so he answers the pings.
+  badr.socket.on('message', (data) => {
+    if ((JSON.parse(data.toString()) as ServerMessage).type === 'ping') badr.send({ type: 'pong' });
+  });
+  badr.send({ type: 'ready', ready: true });
+  await amal.waitFor((message): message is Extract<ServerMessage, { type: 'lobby' }> => message.type === 'lobby' && message.players.every((player) => player.ready || player.playerId === 'p1'));
+  amal.send({ type: 'start' });
+
+  amal.send({ type: 'input', ...NEUTRAL_INPUT, interact: true, seq: 1 });
+  await amal.waitFor(
+    (message): message is Snapshot =>
+      isSnapshot(message) && message.players.some((player) => player.playerId === 'p1' && player.seat === 'driver'),
+  );
+  let seq = 1;
+  const driving = setInterval(() => {
+    seq += 1;
+    amal.send({ type: 'input', ...NEUTRAL_INPUT, moveY: 1, seq });
+  }, TICK_DT * 1000);
+  const isResults = (message: ServerMessage): message is Extract<ServerMessage, { type: 'results' }> => message.type === 'results';
+  try {
+    const [results, seenByBadr] = await Promise.all([amal.waitFor(isResults), badr.waitFor(isResults)]);
+    expect(results).toMatchObject({ courseId: 'test', vehicleId: 'lodgy', assisted: false, restarts: 0 });
+    expect(results.elapsed).toBeGreaterThan(3);
+    expect(seenByBadr).toEqual(results);
+    expect(results.campaignTotal).toBeUndefined();
+    const lobby = amal.received.filter((message) => message.type === 'lobby').at(-1);
+    expect(lobby).toMatchObject({ phase: 'results' });
+  } finally {
+    clearInterval(driving);
+    amal.socket.close();
+    badr.socket.close();
+  }
+});
