@@ -1,5 +1,6 @@
 import {
   CAMPAIGN,
+  HELD_SLOT_TIMEOUT,
   DEFAULT_TIME_OF_DAY,
   DEFAULT_WEATHER,
   PLAYER_COLOURS,
@@ -39,8 +40,12 @@ export interface RoomPlayer {
   // Whether this connection has been sent a full snapshot yet.
   sentFull: boolean;
   ready: boolean;
-  // False while the slot is held for a dropped connection; nothing holds slots yet.
+  // False while the slot is held for a dropped connection.
   connected: boolean;
+  // When the current connection joined or rejoined; the admin role passes to the smallest.
+  connectedSince: number;
+  // When the connection dropped, or null while connected.
+  heldSince: number | null;
 }
 
 export interface Room {
@@ -48,13 +53,19 @@ export interface Room {
   phase(): Phase;
   playerCount(): number;
   findByToken(token: string): RoomPlayer | undefined;
+  findById(playerId: string): RoomPlayer | undefined;
   // Names are compared ignoring case.
   nameTaken(name: string): boolean;
   // add and replaceConnection do not announce; the caller sends welcome first, then calls announce.
-  add(name: string, token: string, connection: Connection): RoomPlayer;
-  // Hands a player's slot to a new connection and returns the old one.
-  replaceConnection(player: RoomPlayer, connection: Connection): Connection;
-  remove(player: RoomPlayer, now: number): void;
+  add(name: string, token: string, connection: Connection, now?: number): RoomPlayer;
+  // Hands a held or connected slot to a new connection and returns the old connection, or null for a held slot.
+  rejoin(player: RoomPlayer, connection: Connection, now: number): Connection | null;
+  // A closed or dropped connection keeps its slot, marked disconnected, for HELD_SLOT_TIMEOUT.
+  hold(player: RoomPlayer, now: number): void;
+  // Frees the slots held for HELD_SLOT_TIMEOUT or more.
+  expireHeld(now: number): void;
+  // Frees the target's slot at once; on success the server tells a connected target and closes it. A target that is unknown or the admin itself is bad_message.
+  kick(by: RoomPlayer, playerId: string): ErrorReason | null;
   // Sends the lobby message to every player.
   announce(): void;
   // After the lobby message to a joiner: sends the last results to a player who joins while they are shown.
@@ -176,7 +187,8 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   const createRunWorld = (): World => {
     const next = createWorld(rapier, { courseId: settings.courseId, vehicleId: settings.vehicleId }, config.courses?.[settings.courseId]);
     try {
-      for (const player of players) next.addPlayer(player.playerId);
+      // Held slots join the world when they rejoin.
+      for (const player of players) if (player.connected) next.addPlayer(player.playerId);
       next.recordStart();
     } catch (error) {
       next.dispose();
@@ -200,7 +212,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   // Returns true when this tick won the run.
   const stepOnce = (current: World): boolean => {
     const inputs = new Map<string, InputFields>();
-    for (const player of players) inputs.set(player.playerId, player.queue.next().input);
+    for (const player of players) if (player.connected) inputs.set(player.playerId, player.queue.next().input);
     if (current.step(inputs).some((event) => event.kind === 'vehicleLost')) restarted = true;
     tick += 1;
     worldTicks += 1;
@@ -226,16 +238,31 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     broadcastLobby();
   };
 
+  const connectedCount = () => players.filter((player) => player.connected).length;
+
+  // Takes the slot out of the list; the role passes to the longest-connected player, or to the next to join if nobody is connected.
+  const freeSlot = (player: RoomPlayer) => {
+    const index = players.indexOf(player);
+    if (index === -1) return;
+    players.splice(index, 1);
+    if (adminId === player.playerId) {
+      let longest: RoomPlayer | null = null;
+      for (const candidate of players) if (candidate.connected && (!longest || candidate.connectedSince < longest.connectedSince)) longest = candidate;
+      adminId = longest?.playerId ?? null;
+    }
+  };
+
   return {
     noun: config.noun,
     phase: () => phase,
     playerCount: () => players.length,
     findByToken: (token) => players.find((player) => player.token === token),
+    findById: (playerId) => players.find((player) => player.playerId === playerId),
     nameTaken(name) {
       const wanted = name.toLowerCase();
       return players.some((player) => player.name.toLowerCase() === wanted);
     },
-    add(name, token, connection) {
+    add(name, token, connection, now = lastNow) {
       const colour = PLAYER_COLOURS.find((candidate) => !players.some((player) => player.colour === candidate));
       const player: RoomPlayer = {
         playerId: `p${nextPlayerNumber}`,
@@ -247,6 +274,8 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
         sentFull: false,
         ready: false,
         connected: true,
+        connectedSince: now,
+        heldSince: null,
       };
       nextPlayerNumber += 1;
       creatorToken ??= token;
@@ -258,23 +287,48 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       emptySince = null;
       return player;
     },
-    replaceConnection(player, connection) {
-      const old = player.connection;
+    rejoin(player, connection, now) {
+      const wasHeld = !player.connected;
+      const old = wasHeld ? null : player.connection;
       player.connection = connection;
+      player.connected = true;
+      player.connectedSince = now;
+      player.heldSince = null;
       // The new connection numbers its inputs from 1 again and has seen no snapshot.
       player.queue = createInputQueue();
       player.sentFull = false;
+      if (wasHeld && phase === 'playing') world?.addPlayer(player.playerId);
+      adminId ??= player.playerId;
+      emptySince = null;
       return old;
     },
-    remove(player, now) {
-      const index = players.indexOf(player);
-      if (index === -1) return;
-      players.splice(index, 1);
-      world?.removePlayer(player.playerId);
-      // The role passes to the longest-connected player, or to the next to join if nobody is left.
-      if (adminId === player.playerId) adminId = players[0]?.playerId ?? null;
-      if (players.length === 0) emptySince = now;
+    hold(player, now) {
+      if (!player.connected || !players.includes(player)) return;
+      player.connected = false;
+      player.heldSince = now;
+      world?.removePlayer(player.playerId, 'hold');
+      if (connectedCount() === 0) emptySince = now;
       broadcastLobby();
+    },
+    expireHeld(now) {
+      // The small allowance stops a slot outliving its timeout when floating-point error leaves the difference just short.
+      const expired = players.filter((player) => player.heldSince !== null && now - player.heldSince >= HELD_SLOT_TIMEOUT - 1e-6);
+      if (expired.length === 0) return;
+      for (const player of expired) {
+        freeSlot(player);
+        world?.forgetHeld(player.playerId);
+      }
+      broadcastLobby();
+    },
+    kick(by, playerId) {
+      const refused = refusal(by, 'lobby', 'playing', 'results');
+      if (refused) return refused;
+      const target = players.find((player) => player.playerId === playerId);
+      if (!target || target === by) return 'bad_message';
+      freeSlot(target);
+      world?.removePlayer(target.playerId, 'leave');
+      broadcastLobby();
+      return null;
     },
     announce: broadcastLobby,
     catchUp(player) {
@@ -323,11 +377,11 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       const fresh = createRunWorld();
       const old = world;
       world = fresh;
-      old?.dispose();
       tickOffset += worldTicks;
       worldTicks = 0;
       lastSent.clear();
       restarted = true;
+      old?.dispose();
       return null;
     },
     restartCheckpoint(by) {
@@ -365,7 +419,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     update(now) {
       lastNow = now;
       if (phase !== 'playing' || !world) return;
-      if (players.length === 0) {
+      if (connectedCount() === 0) {
         // An empty room is paused: the world keeps its state and no time is owed when someone returns.
         startTime = now - tick * TICK_DT;
         return;

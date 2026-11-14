@@ -167,6 +167,19 @@ describe('L2: held players', () => {
     world.dispose();
   });
 
+  test("removePlayer(id, 'leave') on a held id forgets it and drops the held inventory", () => {
+    const world = fresh();
+    world.addPlayer('p1');
+    world.debugSetInventory('p1', ['jerrycan', 'toolbox', null]);
+    world.removePlayer('p1', 'hold');
+    const before = world.snapshot().props.length;
+    world.removePlayer('p1', 'leave');
+    expect(world.snapshot().props.length).toBe(before + 2);
+    world.addPlayer('p1');
+    expect(playerOf(world, 'p1')!.inventory).toEqual([null, null, null]);
+    world.dispose();
+  });
+
   test('forgetHeld of an id with no held entry does nothing', () => {
     const world = fresh();
     world.addPlayer('p1');

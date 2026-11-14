@@ -603,6 +603,13 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }
   };
 
+  const forgetHeld = (id: string) => {
+    const entry = held.get(id);
+    if (!entry) return;
+    held.delete(id);
+    dropInventory(id, entry.inventory);
+  };
+
   return {
     course,
     vehicleConfig,
@@ -720,6 +727,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     removePlayer(id, mode = 'leave') {
       releaseHook(id, 'drop');
       const leaving = players.get(id);
+      // A held id has no character; leaving it for good frees what it held.
+      if (!leaving && mode === 'leave') forgetHeld(id);
       if (leaving) {
         if (mode === 'hold') held.set(id, { health: leaving.health, downed: leaving.downed !== null, inventory: [...leaving.inventory] });
         else dropInventory(id, leaving.inventory);
@@ -727,12 +736,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       players.remove(id);
       previous.delete(id);
     },
-    forgetHeld(id) {
-      const entry = held.get(id);
-      if (!entry) return;
-      held.delete(id);
-      dropInventory(id, entry.inventory);
-    },
+    forgetHeld,
     recordStart: () => recordCheckpoint(0),
     adminTool(tool) {
       if (won) return false;

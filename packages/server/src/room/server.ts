@@ -55,7 +55,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     if (!sessions.delete(session)) return;
     if (session.room && session.player) {
       if (sessionOf.get(session.player) === session) sessionOf.delete(session.player);
-      session.room.remove(session.player, deps.clock());
+      session.room.hold(session.player, deps.clock());
     }
   };
 
@@ -92,7 +92,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     const room = createRoom(deps.rapier, { noun, courses: options.courses }, now);
     rooms.set(noun, room);
     creates.set(session.address, [...times, now]);
-    const player = room.add(message.name, message.token, session.connection);
+    const player = room.add(message.name, message.token, session.connection, now);
     admit(session, room, player);
     if (options.autostart) room.start(player);
   };
@@ -100,6 +100,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
   const join = (session: Session, message: Extract<ClientMessage, { type: 'join' }>) => {
     const room = rooms.get(message.room);
     if (!room) return refuse(session, 'unknown_room');
+    const now = deps.clock();
 
     const existing = room.findByToken(message.token);
     if (existing) {
@@ -111,14 +112,14 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
         sessions.delete(other);
         sessionOf.delete(existing);
       }
-      room.replaceConnection(existing, session.connection).close();
+      room.rejoin(existing, session.connection, now)?.close();
       admit(session, room, existing);
       return;
     }
 
     if (room.playerCount() >= MAX_PLAYERS) return refuse(session, 'room_full');
     if (room.nameTaken(message.name)) return refuse(session, 'name_taken');
-    admit(session, room, room.add(message.name, message.token, session.connection));
+    admit(session, room, room.add(message.name, message.token, session.connection, now));
   };
 
   // Runs a lobby or admin command; a connection that is not in a room gets bad_message.
@@ -127,6 +128,22 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     const reason = run(session.room, session.player);
     if (reason) refuse(session, reason);
   };
+
+  // The target is told it was kicked and its connection closed; a held slot has no connection to tell.
+  const kick = (session: Session, playerId: string) =>
+    command(session, (room, by) => {
+      const target = room.findById(playerId);
+      const reason = room.kick(by, playerId);
+      if (reason || !target) return reason;
+      const other = sessionOf.get(target);
+      if (other) {
+        sessions.delete(other);
+        sessionOf.delete(target);
+        send(other.connection, { type: 'error', reason: 'kicked' });
+        other.connection.close();
+      }
+      return null;
+    });
 
   const handle = (session: Session, raw: string) => {
     // A connection that failed is as good as gone; it is dropped at the next tick.
@@ -177,7 +194,8 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
         return command(session, (room, player) => room.restartCourse(player));
       case 'toLobby':
         return command(session, (room, player) => room.toLobby(player));
-      // kick is wired in task 3.
+      case 'kick':
+        return kick(session, message.playerId);
       default:
         return refuse(session, 'bad_message');
     }
@@ -225,6 +243,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     }
     for (const [noun, room] of rooms) {
       try {
+        room.expireHeld(now);
         room.update(now);
       } catch (error) {
         // A room whose simulation fails is closed, so that it cannot stop the other rooms.

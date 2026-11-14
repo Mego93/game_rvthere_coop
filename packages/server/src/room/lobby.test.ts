@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { IDENTITY, NEUTRAL_INPUT, PLAYER_COLOURS, TICK_RATE, getCourse, vec3, type BuiltCourse, type ClientMessage, type ServerMessage } from '@lodgy/shared';
+import { HELD_SLOT_TIMEOUT, IDENTITY, NEUTRAL_INPUT, PLAYER_COLOURS, PLAYER_REVIVE_HEALTH, TICK_RATE, getCourse, vec3, type BuiltCourse, type ClientMessage, type ServerMessage } from '@lodgy/shared';
 import { beforeAll, expect, test } from 'vitest';
 import { createRoom } from './room';
 import { createRoomServer } from './server';
@@ -329,8 +329,13 @@ test('L11: a joiner in results gets welcome, the lobby message, then the results
   expect(server.debugWorld(room)!.snapshot().players.map((player) => player.playerId)).toEqual(['p1']);
   advance(1);
   expect(badr.ofType('snapshot')).toEqual([]);
-  // Leaving again, though never in the world, is harmless.
+  // Leaving again, though never in the world, is harmless; the slot is held, then freed.
   badr.close();
+  expect(client.last('lobby').players.map((player) => player.connected)).toEqual([true, false]);
+  for (let elapsed = 0; elapsed < HELD_SLOT_TIMEOUT; elapsed += 1) {
+    client.send({ type: 'pong' });
+    advance(1);
+  }
   expect(client.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
 });
 
@@ -646,4 +651,317 @@ test('a player who joined in the lobby has a character in the world after start'
   expect(server.debugWorld(room)!.snapshot().players.map((player) => player.playerId)).toEqual(['p1', 'p2']);
   advance(0.2);
   expect(badr.ofType('snapshot')[0]!.players.map((player) => player.playerId)).toEqual(['p1', 'p2']);
+});
+
+// --- held slots, admin handover and kick (task 3) ---
+
+// Advances in one-second steps with the given clients answering pings, so that silence does not drop them.
+const wait = (advance: (seconds: number) => void, seconds: number, ...clients: FakeClient[]) => {
+  for (let elapsed = 0; elapsed < seconds; elapsed += 1) {
+    for (const client of clients) client.send({ type: 'pong' });
+    advance(1);
+  }
+};
+
+const rejoin = (server: ReturnType<typeof setup>['server'], room: string, n: number, name = 'Ignored') => {
+  const client = connectFakeClient(server);
+  client.send({ type: 'join', room, name, token: token(n) });
+  return client;
+};
+
+const playerOf = (server: ReturnType<typeof setup>['server'], room: string, id: string) => server.debugWorld(room)!.snapshot().players.find((player) => player.playerId === id);
+
+test('L8: a disconnect marks the slot connected: false and keeps ready, colour and name', () => {
+  const { host, guest } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2, 'Badr');
+  ready(badr);
+  badr.close();
+  expect(client.last('lobby').players[1]).toMatchObject({ playerId: 'p2', name: 'Badr', ready: true, connected: false, colour: PLAYER_COLOURS[1] });
+});
+
+test('L8: a rejoin within the hold keeps playerId, colour, ready state and name, ignoring the join name', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2, 'Badr');
+  ready(badr);
+  badr.close();
+  wait(advance, HELD_SLOT_TIMEOUT - 1, client);
+  const again = rejoin(server, room, 2, 'Someone else');
+  expect(again.received.map((message) => message.type)).toEqual(['welcome', 'lobby']);
+  expect(again.last('welcome').playerId).toBe('p2');
+  expect(again.last('lobby').players[1]).toMatchObject({ playerId: 'p2', name: 'Badr', ready: true, connected: true, colour: PLAYER_COLOURS[1] });
+  // The slot is not freed later.
+  wait(advance, 5, client, again);
+  expect(client.last('lobby').players).toHaveLength(2);
+});
+
+test('L8: the admin keeps the role through a hold and a rejoin', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  client.close();
+  wait(advance, 10, badr);
+  const again = rejoin(server, room, 1);
+  expect(again.last('welcome').playerId).toBe('p1');
+  expect(again.last('lobby').adminId).toBe('p1');
+});
+
+test('L8: in playing a rejoin restores health and inventory, and sends a full snapshot', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  ready(badr);
+  startRun(client);
+  advance(0.2);
+  const world = server.debugWorld(room)!;
+  world.debugSetInventory('p2', ['jerrycan', 'toolbox', null]);
+  world.debugHurt('p2', 30);
+  advance(0.2);
+  badr.close();
+  expect(playerOf(server, room, 'p2')).toBeUndefined();
+  wait(advance, 5, client);
+  const again = rejoin(server, room, 2);
+  expect(again.last('welcome').playerId).toBe('p2');
+  expect(playerOf(server, room, 'p2')).toMatchObject({ health: 70, inventory: ['jerrycan', 'toolbox', null] });
+  advance(0.2);
+  expect(again.ofType('snapshot')[0]!.full).toBe(true);
+  expect(again.ofType('snapshot')[0]!.players.map((player) => player.playerId)).toEqual(['p1', 'p2']);
+});
+
+
+test('L8: a downed player who rejoins has 50 health and respawns goes up by one', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  ready(badr);
+  startRun(client);
+  advance(0.2);
+  const world = server.debugWorld(room)!;
+  world.debugHurt('p2', 100);
+  advance(0.2);
+  badr.close();
+  const respawns = world.status().respawns;
+  rejoin(server, room, 2);
+  expect(playerOf(server, room, 'p2')).toMatchObject({ health: PLAYER_REVIVE_HEALTH, downed: null });
+  expect(world.status().respawns).toBe(respawns + 1);
+});
+
+test('L8: after the hold the slot is freed, the name can be taken again and the inventory drops in the world', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2, 'Badr');
+  ready(badr);
+  startRun(client);
+  advance(0.2);
+  const world = server.debugWorld(room)!;
+  world.debugSetInventory('p2', ['jerrycan', 'toolbox', null]);
+  badr.close();
+  const props = world.snapshot().props.length;
+  wait(advance, HELD_SLOT_TIMEOUT - 1, client);
+  expect(world.snapshot().props.length).toBe(props);
+  expect(reasons(guest(room, 3, 'badr'))).toEqual(['name_taken']);
+  wait(advance, 1, client);
+  expect(client.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
+  expect(world.snapshot().props.length).toBe(props + 2);
+  // A rejoin with the old token is now a new player.
+  const late = rejoin(server, room, 2, 'Badr');
+  expect(late.last('welcome').playerId).toBe('p3');
+  expect(late.last('lobby').players.map((player) => player.name)).toEqual(['Amal', 'Badr']);
+});
+
+test('L8: held slots count toward six and keep their names reserved', () => {
+  const { host, guest } = setup();
+  const { client, room } = host();
+  const others = [2, 3, 4, 5, 6].map((n) => guest(room, n));
+  for (const other of others) other.close();
+  expect(client.last('lobby').players).toHaveLength(6);
+  expect(reasons(guest(room, 7))).toEqual(['room_full']);
+  expect(reasons(guest(room, 8, 'guest2'))).toEqual(['room_full']);
+});
+
+test('L6: a held player who is not ready does not block start', () => {
+  const { host, guest } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  const chadi = guest(room, 3);
+  ready(chadi);
+  startRun(client);
+  expect(reasons(client)).toEqual(['not_ready']);
+  badr.close();
+  startRun(client);
+  expect(reasons(client)).toEqual(['not_ready']);
+  expect(client.last('lobby').phase).toBe('playing');
+});
+
+test('a held slot is not added to the world at start, and is added when it rejoins', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  badr.close();
+  startRun(client);
+  expect(server.debugWorld(room)!.snapshot().players.map((player) => player.playerId)).toEqual(['p1']);
+  advance(0.2);
+  expect(badr.ofType('snapshot')).toEqual([]);
+  rejoin(server, room, 2);
+  expect(playerOf(server, room, 'p2')).toMatchObject({ health: 100, inventory: [null, null, null] });
+});
+
+test('a room whose players are all held is paused and not deleted before the empty timeout', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  ready(badr);
+  startRun(client);
+  advance(0.5);
+  const tick = server.debugWorld(room)!.snapshot().tick;
+  client.close();
+  badr.close();
+  advance(10);
+  expect(server.debugWorld(room)!.snapshot().tick).toBe(tick);
+  expect(server.roomCount()).toBe(1);
+});
+
+// --- L9: admin handover ---
+
+test('L9: the admin hold expires and the longest-connected player becomes admin, not the earliest joiner', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  const chadi = guest(room, 3);
+  wait(advance, 2, client, badr, chadi);
+  // Badr drops and comes back later than Chadi joined.
+  badr.close();
+  wait(advance, 2, client, chadi);
+  const badrAgain = rejoin(server, room, 2);
+  wait(advance, 2, client, chadi, badrAgain);
+  client.close();
+  wait(advance, HELD_SLOT_TIMEOUT - 1, chadi, badrAgain);
+  expect(chadi.last('lobby').adminId).toBe('p1');
+  wait(advance, 1, chadi, badrAgain);
+  expect(chadi.last('lobby').adminId).toBe('p3');
+  expect(badrAgain.last('lobby').adminId).toBe('p3');
+});
+
+test('L9: with nobody connected the role waits for the next joiner, who may be a held player rejoining', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  client.close();
+  wait(advance, 10, badr);
+  badr.close();
+  // The admin slot expires while nobody is connected.
+  advance(HELD_SLOT_TIMEOUT - 10);
+  const again = rejoin(server, room, 2);
+  expect(again.last('lobby').players.map((player) => player.name)).toEqual(['Guest2']);
+  expect(again.last('lobby').adminId).toBe('p2');
+});
+
+// --- L10: kick ---
+
+test('L10: the target gets error kicked and is closed, and the slot is freed at once', () => {
+  const { host, guest } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2, 'Badr');
+  const chadi = guest(room, 3);
+  client.send({ type: 'kick', playerId: 'p2' });
+  expect(reasons(client)).toEqual([]);
+  expect(reasons(badr)).toEqual(['kicked']);
+  expect(badr.closedByServer).toBe(true);
+  for (const player of [client, chadi]) expect(player.last('lobby').players.map((entry) => entry.name)).toEqual(['Amal', 'Guest3']);
+  expect(chadi.closedByServer).toBe(false);
+  // The closed connection's late close changes nothing, and the name is free.
+  badr.close();
+  expect(guest(room, 4, 'Badr').last('welcome').playerId).toBe('p4');
+});
+
+test('L10: a kicked player in playing drops their items at a spawn slot', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  ready(badr);
+  startRun(client);
+  advance(0.2);
+  const world = server.debugWorld(room)!;
+  world.debugSetInventory('p2', ['jerrycan', 'toolbox', null]);
+  const props = world.snapshot().props.length;
+  client.send({ type: 'kick', playerId: 'p2' });
+  expect(world.snapshot().props.length).toBe(props + 2);
+  expect(playerOf(server, room, 'p2')).toBeUndefined();
+});
+
+test('L10: kicking a held slot frees it with no message, and drops its items', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  ready(badr);
+  startRun(client);
+  advance(0.2);
+  const world = server.debugWorld(room)!;
+  world.debugSetInventory('p2', ['jerrycan', null, null]);
+  badr.close();
+  const props = world.snapshot().props.length;
+  const before = badr.received.length;
+  client.send({ type: 'kick', playerId: 'p2' });
+  expect(reasons(client)).toEqual([]);
+  expect(badr.received.length).toBe(before);
+  expect(client.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
+  expect(world.snapshot().props.length).toBe(props + 1);
+});
+
+test('L10: kicking oneself or an unknown id gets bad_message, and a non-admin gets not_admin', () => {
+  const { host, guest } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  client.send({ type: 'kick', playerId: 'p1' });
+  client.send({ type: 'kick', playerId: 'p9' });
+  badr.send({ type: 'kick', playerId: 'p1' });
+  expect(reasons(client)).toEqual(['bad_message', 'bad_message']);
+  expect(reasons(badr)).toEqual(['not_admin']);
+  expect(client.last('lobby').players).toHaveLength(2);
+});
+
+test('L10: a kick works in every phase', () => {
+  const { host, guest, advance } = setup(true);
+  const { client, room } = host();
+  const names = (c: FakeClient) => c.last('lobby').players.map((player) => player.name);
+  guest(room, 2);
+  client.send({ type: 'kick', playerId: 'p2' });
+  expect(names(client)).toEqual(['Amal']);
+  const chadi = guest(room, 3, 'Chadi');
+  ready(chadi);
+  startRun(client);
+  expect(client.last('lobby').phase).toBe('playing');
+  guest(room, 4, 'Dina');
+  client.send({ type: 'kick', playerId: 'p4' });
+  expect(reasons(client)).toEqual([]);
+  expect(names(client)).toEqual(['Amal', 'Chadi']);
+  advance(0.1);
+  expect(client.last('lobby').phase).toBe('results');
+  client.send({ type: 'kick', playerId: 'p3' });
+  expect(reasons(client)).toEqual([]);
+  expect(chadi.closedByServer).toBe(true);
+  expect(names(client)).toEqual(['Amal']);
+});
+
+// --- L14: the name rule through create and join ---
+
+test('L14: names with control or invisible characters are refused on create and join; plain and accented names pass', () => {
+  const { server, host } = setup();
+  for (const name of ['a\u0000b', 'a\nb', 'a​b', 'a b', ' ']) {
+    const creator = connectFakeClient(server);
+    creator.send({ type: 'create', name, token: token(1) });
+    expect(reasons(creator)).toEqual(['bad_message']);
+    expect(creator.ofType('welcome')).toEqual([]);
+  }
+  expect(server.roomCount()).toBe(0);
+  const { room } = host('Amal');
+  for (const [n, name] of ['a\u0000b', 'a\nb', 'a​b', 'a b', ' '].entries()) {
+    const joiner = connectFakeClient(server);
+    joiner.send({ type: 'join', room, name, token: token(10 + n) });
+    expect(reasons(joiner)).toEqual(['bad_message']);
+  }
+  const unal = connectFakeClient(server);
+  unal.send({ type: 'join', room, name: 'Ünal', token: token(20) });
+  expect(unal.last('welcome').playerId).toBe('p2');
 });

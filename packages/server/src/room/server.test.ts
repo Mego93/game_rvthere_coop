@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import {
   CREATE_PER_MINUTE,
   EMPTY_ROOM_TIMEOUT,
+  HELD_SLOT_TIMEOUT,
   MAX_PLAYERS,
   MAX_ROOMS,
   NEUTRAL_INPUT,
@@ -72,6 +73,14 @@ function setup(options?: RoomServerOptions) {
   };
   return { ...fake, server, errors, sources, connect, host, guest, begin };
 }
+
+// Advances the clock in one-second steps, with the given clients answering pings, so that silence does not drop them.
+const wait = (advance: (seconds: number) => void, seconds: number, ...clients: FakeClient[]) => {
+  for (let elapsed = 0; elapsed < seconds; elapsed += 1) {
+    for (const client of clients) client.send({ type: 'pong' });
+    advance(1);
+  }
+};
 
 const reasons = (client: FakeClient) => client.ofType('error').map((message) => message.reason);
 
@@ -174,32 +183,43 @@ test('a malformed message gets bad_message and the connection stays usable', () 
 
 // --- leaving ---
 
-test('a player who disconnects leaves the room, and their colour and name become free', () => {
-  const { host, guest } = setup();
+test('a player who disconnects keeps a disconnected slot until the hold expires, then their colour and name become free', () => {
+  const { host, guest, advance } = setup();
   const { client: amal, room } = host('Amal');
   const badr = guest(room, 2, 'Badr');
   badr.close();
+  expect(amal.last('lobby').players.map((player) => [player.name, player.connected])).toEqual([['Amal', true], ['Badr', false]]);
+  expect(reasons(guest(room, 3, 'badr'))).toEqual(['name_taken']);
+  wait(advance, HELD_SLOT_TIMEOUT - 1, amal);
+  expect(amal.last('lobby').players).toHaveLength(2);
+  wait(advance, 1, amal);
   expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
   const again = guest(room, 3, 'Badr');
   expect(again.last('welcome').playerId).toBe('p3');
   expect(again.last('lobby').players[1]!.colour).toBe(PLAYER_COLOURS[1]);
 });
 
-test('the admin role passes to the longest-connected player', () => {
-  const { host, guest } = setup();
+test('the admin role passes to the longest-connected player only after the admin slot expires', () => {
+  const { host, guest, advance } = setup();
   const { client: amal, room } = host();
   const badr = guest(room, 2);
   const chadi = guest(room, 3);
   amal.close();
+  expect(badr.last('lobby').adminId).toBe('p1');
+  wait(advance, HELD_SLOT_TIMEOUT, badr, chadi);
   expect(badr.last('lobby').adminId).toBe('p2');
   expect(chadi.last('lobby').adminId).toBe('p2');
 });
 
-test('when everyone has left, the next player to join becomes admin', () => {
-  const { host, guest } = setup();
+test('when everyone has left, the next player to join becomes admin once the admin slot has expired', () => {
+  const { host, guest, advance } = setup();
   const { client: amal, room } = host();
+  // Someone else joined, so the room outlives the hold.
+  const badr = guest(room, 2);
   amal.close();
-  expect(guest(room, 2).last('lobby').adminId).toBe('p2');
+  badr.close();
+  wait(advance, HELD_SLOT_TIMEOUT);
+  expect(guest(room, 3).last('lobby').adminId).toBe('p3');
 });
 
 test('an empty room is deleted after the timeout, and not before', () => {
@@ -569,6 +589,8 @@ test('a connection that keeps answering stays; one that goes silent is dropped f
   }
   expect(amal.closedByServer).toBe(false);
   expect(badr.closedByServer).toBe(true);
+  expect(amal.last('lobby').players.map((player) => [player.name, player.connected])).toEqual([['Amal', true], ['Badr', false]]);
+  wait(advance, HELD_SLOT_TIMEOUT, amal);
   expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
 });
 
@@ -631,7 +653,7 @@ test('a connection that stays over the rate limit is closed and removed', () => 
     advance(0.1);
   }
   expect(badr.closedByServer).toBe(true);
-  expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
+  expect(amal.last('lobby').players.map((player) => [player.name, player.connected])).toEqual([['Amal', true], ['Badr', false]]);
 });
 
 test('a connection that floods in alternate seconds is closed on the strike count', () => {
@@ -698,7 +720,7 @@ test('a connection whose send throws is reported and dropped, and the others car
   expect(errors).toHaveLength(1);
   expect(sources).toEqual([`connection:${room}`]);
   expect(closed).toBe(true);
-  expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
+  expect(amal.last('lobby').players.map((player) => [player.name, player.connected])).toEqual([['Amal', true], ['Badr', false]]);
   // The tick was never interrupted: Amal missed no snapshot.
   expect(amal.ofType('snapshot').length - before).toBe(TICK_RATE / SNAPSHOT_EVERY_TICKS);
   expect(amal.closedByServer).toBe(false);
@@ -740,7 +762,7 @@ test('a connection whose close throws is still removed from its room', () => {
     amal.send({ type: 'pong' });
   }
   expect(errors).toHaveLength(1);
-  expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
+  expect(amal.last('lobby').players.map((player) => [player.name, player.connected])).toEqual([['Amal', true], ['Badr', false]]);
 });
 
 test('stop frees every room', () => {
