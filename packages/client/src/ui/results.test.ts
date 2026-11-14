@@ -75,3 +75,9 @@ test('mergeSettings: a confirmed change is dropped and the server wins', () => {
 test('mergeSettings: with nothing pending the server wins', () => {
   expect(mergeSettings({ ...server, weather: 'rain' }, {}, server).settings).toEqual(server);
 });
+
+test('C9: resultsView takes the campaign: one course shows no Next, two courses show it on the first', () => {
+  expect(resultsView(message({ courseId: 'test' }), true, ['test'])).toMatchObject({ showNext: false, showLobby: true });
+  expect(resultsView(message({ courseId: 'test' }), true, ['test', 'other'])).toMatchObject({ showNext: true });
+  expect(resultsView(message({ courseId: 'other' }), true, ['test', 'other'])).toMatchObject({ showNext: false });
+});
