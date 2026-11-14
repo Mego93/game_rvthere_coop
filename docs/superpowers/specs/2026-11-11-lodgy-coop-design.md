@@ -276,7 +276,7 @@ Surface types affect tyre grip and rolling resistance: road, sand, riverbed, gra
 
 Course 1 uses every spec 1 segment type and has one fuel station with its shop and one garage. Anchors are palm trunks, boulders and stone milestones, each visibly marked. Palette: ochre walls, red earth, green palms.
 
-The landmarks, the segment list, and all lengths, gradients and counts for course 1 are set with the owner in a course design pass, once the vehicles drive.
+The landmarks, the segment list, and all lengths, gradients and counts for course 1 were first set without the owner (decision D-C1 in `ROADMAP.md`), from this description and measurements of both vehicles; the owner adjusts them after playing it. The list is data in `packages/shared/src/courses/airport.ts`.
 
 ### Collision
 
