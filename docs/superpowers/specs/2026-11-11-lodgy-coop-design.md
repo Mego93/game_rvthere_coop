@@ -320,7 +320,7 @@ Every package follows these, so that code written separately agrees.
 The simulation is a pure module with no network or rendering code. The caller initialises Rapier and passes it in, so `shared` never loads WebAssembly itself.
 
 ```ts
-const world = createWorld(rapier, { courseId, vehicleId, weather? }, builtCourse?);   // weather defaults to clear; rain multiplies tyre grip by RAIN_GRIP   // the optional course replaces the id's, for tests
+const world = createWorld(rapier, { courseId, vehicleId, weather? }, builtCourse?);   // weather defaults to clear (rain multiplies tyre grip by RAIN_GRIP); the optional course replaces the id's, for tests
 world.addPlayer(id);               // a new player at 100 health, or a held entry restored (a downed one rejoins as a counted respawn)
 world.teleportPlayer(id, pos);     // places a player; used by tests and checkpoint restarts
 world.step(inputsByPlayer);        // advances one fixed tick; returns the tick's events
