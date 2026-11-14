@@ -209,6 +209,6 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
   }
   lines.push(`props    ${propPoses.length}`);
   if (cable) lines.push(`cable    ${cable.state} ${cable.length.toFixed(1)} m`);
-  lines.push('', touch ? 'joystick move   drag right half to look   buttons act' : 'WASD move   Space jump (brake when driving)   E board or leave   click to look');
+  lines.push('', touch ? 'joystick move   drag right half to look   buttons act' : 'WASD move   Space jump (brake when driving)   E board or leave   Esc menu   click to look');
   return lines.join('\n');
 }

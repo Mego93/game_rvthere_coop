@@ -315,3 +315,19 @@ test('the lobby: two players ready up, the admin starts, and both receive snapsh
     await expect.poll(() => tick(page)).toBeGreaterThan(before);
   }
 });
+
+test('the admin opens the run menu with Esc and sees the admin items @keyboard', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  await expect(page.locator('#run-menu')).toBeHidden();
+  // The pointer is not locked, so the Esc reaches the page.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#run-menu')).toBeVisible();
+  for (const id of ['resume', 'restart-checkpoint', 'restart-course', 'to-lobby', 'skip', 'refill']) await expect(page.locator(`#run-${id}`)).toBeVisible();
+  await page.locator('#run-resume').click();
+  await expect(page.locator('#run-menu')).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#run-menu')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#run-menu')).toBeHidden();
+});

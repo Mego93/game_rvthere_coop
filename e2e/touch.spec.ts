@@ -52,7 +52,7 @@ test('the touch UI appears with a run and shows the buttons and the slots', asyn
   await expect(page.locator('#touch-ui')).toHaveCount(0);
   await startRun(page);
   await expect(page.locator('#touch-ui')).toBeVisible();
-  for (const id of ['interact', 'jump', 'slot-0', 'slot-1', 'slot-2']) await expect(page.locator(`#touch-${id}`)).toBeVisible();
+  for (const id of ['interact', 'jump', 'menu', 'slot-0', 'slot-1', 'slot-2']) await expect(page.locator(`#touch-${id}`)).toBeVisible();
   for (const id of ['use', 'reel-in', 'reel-out', 'joystick']) await expect(page.locator(`#touch-${id}`)).toBeHidden();
   await expect(page.locator('#rotate-prompt')).toBeHidden();
   await expect(page.locator('#overlay')).toContainText('joystick move');

@@ -948,7 +948,7 @@ test('L10: a kick works in every phase', () => {
 
 test('L14: names with control or invisible characters are refused on create and join; plain and accented names pass', () => {
   const { server, host } = setup();
-  for (const name of ['a\u0000b', 'a\nb', 'a​b', 'a b', ' ']) {
+  for (const name of ['a\u0000b', 'a\nb', 'a\u200bb', 'a\u2028b', ' ']) {
     const creator = connectFakeClient(server);
     creator.send({ type: 'create', name, token: token(1) });
     expect(reasons(creator)).toEqual(['bad_message']);
@@ -956,7 +956,7 @@ test('L14: names with control or invisible characters are refused on create and 
   }
   expect(server.roomCount()).toBe(0);
   const { room } = host('Amal');
-  for (const [n, name] of ['a\u0000b', 'a\nb', 'a​b', 'a b', ' '].entries()) {
+  for (const [n, name] of ['a\u0000b', 'a\nb', 'a\u200bb', 'a\u2028b', ' '].entries()) {
     const joiner = connectFakeClient(server);
     joiner.send({ type: 'join', room, name, token: token(10 + n) });
     expect(reasons(joiner)).toEqual(['bad_message']);

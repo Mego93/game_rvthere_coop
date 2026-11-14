@@ -399,7 +399,7 @@ describe('C2: health kit hints', () => {
 });
 
 test('L6: the control line is the keyboard wording by default', () => {
-  expect(call([nearDoor]).endsWith('WASD move   Space jump (brake when driving)   E board or leave   click to look')).toBe(true);
+  expect(call([nearDoor]).endsWith('WASD move   Space jump (brake when driving)   E board or leave   Esc menu   click to look')).toBe(true);
 });
 
 test('L6: the control line has the touch wording on touch devices', () => {
