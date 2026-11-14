@@ -17,7 +17,7 @@ The spec says the segment list and its numbers are set with the owner in a cours
 
 ## Files
 
-- Create `packages/shared/src/courses/airport.ts`: `export const airport: CourseDef`, with a small local helper `coinsAlong(count, length)` (evenly spaced `along` from 15 to `length - 15`, `lateral` alternating -2.5 and 2.5).
+- Create `packages/shared/src/courses/airport.ts`: `export const airport: CourseDef`, with a small local helper `coinsAlong(count, length)` (evenly spaced `along` from 15 to `length - 15`, `lateral` alternating -2.5 and 2.5; used only for segments of at least 60 m).
 - `courses/index.ts`: register `airport`, built once.
 - `constants.ts`: `CAMPAIGN = ['airport']`. `test` and `segment-demo` stay registered as development courses.
 - `packages/server/src/room/room.ts` and the `createRoomServer` options: add `campaign?: readonly string[]` to the room config, defaulting to `CAMPAIGN`; the room uses it for the default course (`campaign[0]`), `next` and `campaignTotal` instead of the constant. `packages/client/src/ui/results.ts`: `resultsView(message, isAdmin, campaign = CAMPAIGN)`.
@@ -37,7 +37,7 @@ Lengths in metres. Straight roads carry stops; curved roads never do.
 | 3 | road | length 200 | fuel stop (side 1, along 100) with its shop |
 | 4 | sand | length 140, palms 6 | `coinsAlong(5, 140)`; pickup jerrycan on the apron (along 20, lateral -3) |
 | 5 | road | length 260, curve +0.4 | `coinsAlong(4, 260)` |
-| 6 | ford | width 24, rocks 8 | the oued; `coinsAlong(3, 24)` |
+| 6 | ford | width 24, rocks 8 | the oued; coins `[{ along: 18, lateral: -2.5 }, { along: 21, lateral: 2.5 }]` (the helper needs a length of at least 60) |
 | 7 | road | length 60, slope 4 | |
 | 8 | bank | height 3, gradient 15, anchors 3 | the city's edge |
 | 9 | alley | length 160, clutter 0.7 | `coinsAlong(4, 160)` |
@@ -81,3 +81,8 @@ T9 e2e: `smoke.spec.ts` and the other specs pass with the default course `airpor
 5. `ROADMAP.md`, spec row, decision D-C1, the "Six-player cost" working note; run every check.
 
 Review after each task by a Sonnet reviewer; Opus reviews the whole branch at the end.
+
+## Amendments after the first implementation run (binding)
+
+A1. The ford's coins are explicit (table row 6), because `coinsAlong` on a 24 m segment put a coin on a spawn slot at the checkpoint 8 m in.
+A2. The "no steps, joins included" structural test samples 2.6 km at 0.05 m and may take a 120 s timeout. `groundProbe.ts` gains a test helper `groundSurfaceAt` for T2.
