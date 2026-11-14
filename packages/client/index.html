@@ -4,7 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Lodgy Co-op</title>
-    <link rel="icon" href="data:," />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <style>
       html,
       body {
@@ -13,11 +17,16 @@
         overflow: hidden;
         background: #cfe6f5;
         font: 16px/1.4 system-ui, sans-serif;
+        overscroll-behavior: none;
       }
       #game {
         display: block;
         width: 100%;
         height: 100%;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
       }
       #overlay {
         position: fixed;
@@ -47,6 +56,45 @@
         filter: drop-shadow(0 0 1px #000);
       }
       #crosshair[hidden] {
+        display: none;
+      }
+      #results {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: grid;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        white-space: pre-line;
+        text-align: center;
+      }
+      #results button {
+        margin: 12px 6px 0;
+        padding: 8px 14px;
+        font: inherit;
+        color: #fff;
+        background: #2f6f9f;
+        border: 0;
+        border-radius: 6px;
+      }
+      #results [hidden],
+      #results[hidden] {
+        display: none;
+      }
+      #reconnect {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: grid;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font-size: 20px;
+        /* Takes pointer input so nothing underneath can be pressed while the connection is down. */
+        pointer-events: auto;
+      }
+      #reconnect[hidden] {
         display: none;
       }
       #overlay:empty {
@@ -119,6 +167,8 @@
     <canvas id="game"></canvas>
     <pre id="overlay"></pre>
     <div id="crosshair" hidden></div>
+    <div id="results" hidden></div>
+    <div id="reconnect" role="status" hidden>Reconnecting…</div>
     <div id="home" hidden>
       <form id="home-form" novalidate>
         <h1 id="home-title">Lodgy Co-op</h1>

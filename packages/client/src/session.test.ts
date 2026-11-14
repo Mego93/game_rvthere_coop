@@ -1,6 +1,6 @@
 import { parseClientMessage } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { createMemoryStore, saveName, savedName, sessionToken } from './session';
+import { autoReloadAllowed, createMemoryStore, lastAutoReload, markAutoReload, saveMuted, saveName, savedMuted, savedName, saveRejoin, sessionToken, takeRejoin } from './session';
 
 const countUp = (bytes: Uint8Array) => bytes.forEach((_, index) => (bytes[index] = index * 17));
 
@@ -49,4 +49,56 @@ test('a store that refuses writes still gives a token, and saving a name does no
   };
   expect(sessionToken(refusing, countUp)).toBe('00112233445566778899aabbccddeeff');
   expect(() => saveName(refusing, 'Amal')).not.toThrow();
+});
+
+test('S1: a saved rejoin is taken once, with the name', () => {
+  const store = createMemoryStore();
+  saveRejoin(store, { room: 'camel', name: 'Badr', playerId: 'p2', at: 5 });
+  expect(takeRejoin(store, 'camel')).toEqual({ name: 'Badr', playerId: 'p2' });
+  expect(takeRejoin(store, 'camel')).toBeNull();
+});
+
+test('S2: a rejoin for another room, or from a page with no room, returns null and is cleared', () => {
+  const store = createMemoryStore();
+  saveRejoin(store, { room: 'camel', name: 'Badr', playerId: 'p2', at: 5 });
+  expect(takeRejoin(store, 'tent')).toBeNull();
+  expect(takeRejoin(store, 'camel')).toBeNull();
+  saveRejoin(store, { room: 'camel', name: 'Badr', playerId: 'p2', at: 5 });
+  expect(takeRejoin(store, null)).toBeNull();
+  expect(store.getItem('lodgy.rejoin')).toBe('');
+});
+
+test('S3: malformed values return null', () => {
+  for (const bad of ['{', 'null', '[]', '{"room":"camel"}', '{"room":1,"name":"A"}', '{"room":"camel","name":""}', '{"room":"camel","name":"Badr","at":1}', '{"room":"camel","name":"Badr","playerId":"","at":1}']) {
+    const store = createMemoryStore();
+    store.setItem('lodgy.rejoin', bad);
+    expect(takeRejoin(store, 'camel')).toBeNull();
+  }
+});
+
+test('S4: the reload time survives taking the rejoin', () => {
+  const store = createMemoryStore();
+  expect(lastAutoReload(store)).toBeNull();
+  markAutoReload(store, 1234);
+  saveRejoin(store, { room: 'camel', name: 'Badr', playerId: 'p2', at: 1234 });
+  takeRejoin(store, 'camel');
+  expect(lastAutoReload(store)).toBe(1234);
+});
+
+test('the reload guard allows a first reload, blocks a quick second, and treats a mark from the future as stale', () => {
+  const store = createMemoryStore();
+  expect(autoReloadAllowed(store, 1000, 10_000)).toBe(true);
+  markAutoReload(store, 1000);
+  expect(autoReloadAllowed(store, 5000, 10_000)).toBe(false);
+  expect(autoReloadAllowed(store, 11_000, 10_000)).toBe(true);
+  expect(autoReloadAllowed(store, 500, 10_000)).toBe(true);
+});
+
+test('the mute setting is off by default and is remembered', () => {
+  const store = createMemoryStore();
+  expect(savedMuted(store)).toBe(false);
+  saveMuted(store, true);
+  expect(savedMuted(store)).toBe(true);
+  saveMuted(store, false);
+  expect(savedMuted(store)).toBe(false);
 });

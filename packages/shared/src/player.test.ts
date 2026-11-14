@@ -6,7 +6,9 @@ import {
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
   PLAYER_WALK_SPEED,
+  HOLD_OFFSET,
   SEAT_EXIT_DISTANCE,
+  THROW_SPEED,
   TICK_DT,
   TICK_RATE,
 } from './constants';
@@ -14,6 +16,7 @@ import { testGround, slopePose } from './courses/testGround';
 import type { BuiltCourse } from './course';
 import { IDENTITY, quatFromAxisAngle, rotate, vec3, yawOf, AXIS_Y, type Pose, type Quat, type Vec3 } from './math';
 import { aimRay, createPlayers, wishVelocity } from './player';
+import { createProps } from './props';
 import { NEUTRAL_INPUT, type InputFields } from './protocol';
 import { createRig, withBoxes } from './testRig';
 import { getVehicleConfig } from './vehicles';
@@ -28,7 +31,8 @@ const ORIGIN: Pose = { pos: vec3(0, 0, 0), rot: IDENTITY };
 function harness(course: BuiltCourse = testGround, spawn: Pose = ORIGIN) {
   const rig = createRig(RAPIER, 'lodgy', spawn, course);
   rig.run(1);
-  const players = createPlayers(RAPIER, rig.world, rig.vehicle, course);
+  const props = createProps(RAPIER, rig.world, course);
+  const players = createPlayers(RAPIER, rig.world, rig.vehicle, props, course);
   const previous = new Map<string, InputFields>();
   const vehicleRun = { controls: { throttle: 0, steer: 0, brake: false }, beforePhysics: () => {} };
   const tick = (inputs: Record<string, Partial<InputFields>> = {}) => {
@@ -54,7 +58,7 @@ function harness(course: BuiltCourse = testGround, spawn: Pose = ORIGIN) {
   const run = (ticks: number, inputs: Record<string, Partial<InputFields>> = {}) => {
     for (let i = 0; i < ticks; i++) tick(inputs);
   };
-  return { rig, players, tick, run, vehicleRun };
+  return { rig, players, props, tick, run, vehicleRun };
 }
 
 describe('wishVelocity', () => {
@@ -745,5 +749,507 @@ describe('a player on the roof during a suspension bounce', () => {
       expect(player.ground).toBeNull();
       expect(capsuleHitsChassis(body, player.pos)).toBe(false);
     });
+  });
+});
+
+describe('standing on props', () => {
+  const BARRIER_TOP = 1.0;
+  const CRATE_TOP = 0.6;
+  // Gravity off, so a crate given a velocity keeps it and does not tumble.
+  const glide = (rig: ReturnType<typeof harness>['rig'], props: ReturnType<typeof harness>['props'], id: string, v: Vec3) => {
+    const body = props.get(id)!.body;
+    body.setGravityScale(0, true);
+    body.setLinvel(v, true);
+    return body;
+  };
+
+  test('a player teleported onto the barrier stands on it', () => {
+    const { players, run } = harness();
+    const player = players.add('p1');
+    players.teleport('p1', vec3(-10, BARRIER_TOP + 0.1, 10));
+    run(30);
+    expect(player.grounded).toBe(true);
+    expect(player.ground?.bodyId).toBe('barrier-1');
+    expect(player.pos.y).toBeCloseTo(BARRIER_TOP + 0.02, 1);
+  });
+
+  test('a player on a crate that glides moves with it, in its frame', () => {
+    const { rig, players, props, run } = harness();
+    const player = players.add('p1');
+    players.teleport('p1', vec3(10, CRATE_TOP + 0.1, 8));
+    run(30);
+    expect(player.ground?.bodyId).toBe('crate-1');
+    const before = { ...player.ground!.localPos };
+    const body = glide(rig, props, 'crate-1', vec3(0, 0, -3));
+    run(60);
+    expect(player.ground?.bodyId).toBe('crate-1');
+    expect(player.ground!.localPos.x).toBeCloseTo(before.x, 1);
+    expect(player.ground!.localPos.z).toBeCloseTo(before.z, 1);
+    expect(body.translation().z).toBeLessThan(8 - 2.5);
+    expect(player.pos.z).toBeCloseTo(body.translation().z + before.z, 1);
+  });
+
+  test('walking off a moving crate keeps its velocity on take-off', () => {
+    const { rig, players, props, tick, run } = harness();
+    const player = players.add('p1');
+    players.teleport('p1', vec3(10, CRATE_TOP + 0.1, 8));
+    run(30);
+    glide(rig, props, 'crate-1', vec3(0, 0, -3));
+    run(5);
+    let left = false;
+    for (let i = 0; i < 60 && !left; i++) {
+      tick({ p1: { moveX: 1 } });
+      if (player.ground === null) left = true;
+    }
+    expect(left).toBe(true);
+    expect(player.carry.z).toBeLessThan(-2.8);
+    expect(player.carry.z).toBeGreaterThan(-3.2);
+    expect(Math.abs(player.carry.x)).toBeLessThan(0.2);
+  });
+
+  test('a crate on the move shoves a standing player out horizontally and the player is never inside it', () => {
+    const { rig, players, props, tick, run } = harness();
+    const player = players.add('p1');
+    players.teleport('p1', vec3(10, 0.02, 5.5));
+    run(10);
+    const body = glide(rig, props, 'crate-1', vec3(0, 0, -4));
+    let pushed = false;
+    for (let i = 0; i < 90; i++) {
+      body.setLinvel({ x: 0, y: 0, z: -4 }, true);
+      tick({});
+      const crate = body.translation();
+      expect(Number.isFinite(player.pos.x + player.pos.y + player.pos.z)).toBe(true);
+      expect(player.pos.y).toBeLessThan(0.1);
+      expect(Math.hypot(Math.max(Math.abs(player.pos.x - crate.x) - 0.3, 0), Math.max(Math.abs(player.pos.z - crate.z) - 0.3, 0))).toBeGreaterThanOrEqual(PLAYER_RADIUS - 0.06);
+      if (player.pos.z < 5.5 - 0.3) pushed = true;
+    }
+    expect(pushed).toBe(true);
+  });
+
+  test('with a wall behind the player there is no room, so the player goes to a spawn slot and never into the wall', () => {
+    const course = withBoxes(testGround, {
+      walls: [{ center: vec3(10, 1, 5.5 - 0.45 - 3), halfExtents: vec3(3, 1, 3), rot: IDENTITY }],
+    });
+    const { rig, players, props, tick, run } = harness(course);
+    const player = players.add('p1');
+    players.teleport('p1', vec3(10, 0.02, 5.5));
+    run(10);
+    const body = glide(rig, props, 'crate-1', vec3(0, 0, -4));
+    player.hold = { action: 'useItem', targetId: 'vehicle', slot: 0, item: 'jerrycan', progress: 0.5 };
+    let relocated = false;
+    for (let i = 0; i < 90; i++) {
+      body.setLinvel({ x: 0, y: 0, z: -4 }, true);
+      tick({});
+      expect(Number.isFinite(player.pos.x + player.pos.y + player.pos.z)).toBe(true);
+      if (relocated) expect(player.hold).toBeNull();
+      const gap = Math.hypot(Math.max(Math.abs(player.pos.x - 10) - 3, 0), Math.max(5.5 - 0.45 - 6 - player.pos.z, player.pos.z - (5.5 - 0.45), 0));
+      expect(gap).toBeGreaterThanOrEqual(PLAYER_RADIUS - 0.06);
+      if (Math.abs(player.pos.x - rig.vehicle.body.translation().x) < 3) relocated = true;
+    }
+    expect(relocated).toBe(true);
+  });
+
+  test('feet within step height below the barrier top are lifted onto it, and feet well below are shoved out', () => {
+    const lifted = harness();
+    const a = lifted.players.add('p1');
+    lifted.players.teleport('p1', vec3(-10, BARRIER_TOP - 0.2, 10));
+    lifted.tick({});
+    expect(a.ground?.bodyId).toBe('barrier-1');
+    expect(a.pos.y).toBeGreaterThan(BARRIER_TOP - 0.01);
+    expect(a.pos.y).toBeLessThan(BARRIER_TOP + 0.1);
+
+    const shoved = harness();
+    const b = shoved.players.add('p1');
+    shoved.players.teleport('p1', vec3(-10, BARRIER_TOP - 0.7, 10));
+    shoved.tick({});
+    expect(b.ground).toBeNull();
+    const barrier = shoved.props.get('barrier-1')!.body.translation();
+    expect(Math.hypot(Math.max(Math.abs(b.pos.x - barrier.x) - 1.0, 0), Math.max(Math.abs(b.pos.z - barrier.z) - 0.4, 0))).toBeGreaterThanOrEqual(PLAYER_RADIUS - 0.06);
+  });
+
+  test('a held prop shoves nobody and cannot be stood on', () => {
+    const { players, props, tick, run } = harness();
+    const inside = players.add('p1');
+    const above = players.add('p2');
+    props.hold('crate-1', 'p3');
+    players.teleport('p1', vec3(10, 0.02, 8));
+    players.teleport('p2', vec3(10, CRATE_TOP + 0.1, 8));
+    tick({});
+    expect(inside.pos.x).toBeCloseTo(10, 4);
+    expect(inside.pos.z).toBeCloseTo(8, 4);
+    run(30);
+    expect(above.ground).toBeNull();
+    expect(above.pos.y).toBeLessThan(0.1);
+  });
+
+  test('a prop that becomes held under a player clears the ground', () => {
+    const { players, props, tick, run } = harness();
+    const player = players.add('p1');
+    players.teleport('p1', vec3(10, CRATE_TOP + 0.1, 8));
+    run(30);
+    expect(player.ground?.bodyId).toBe('crate-1');
+    props.hold('crate-1', 'p2');
+    tick({});
+    expect(player.ground).toBeNull();
+  });
+
+  test('a prop below the kill plane clears the ground before it is reset', () => {
+    const { players, props, tick, run } = harness();
+    const player = players.add('p1');
+    players.teleport('p1', vec3(10, CRATE_TOP + 0.1, 8));
+    run(30);
+    props.get('crate-1')!.body.setTranslation({ x: 10, y: testGround.killPlaneY - 5, z: 8 }, true);
+    tick({});
+    expect(player.ground).toBeNull();
+  });
+});
+
+describe('hands', () => {
+  const OPEN = vec3(30, 0.02, 20);
+  const CRATE_1_CENTRE = vec3(10, 0.3, 8);
+  const holdPoint = (feet: Vec3, yaw: number) => ({
+    pos: vec3(feet.x, feet.y, feet.z),
+    rot: quatFromAxisAngle(AXIS_Y, yaw),
+  });
+
+  // A player in open ground holding crate-1.
+  function holder(course: BuiltCourse = testGround) {
+    const h = harness(course);
+    const player = h.players.add('p1');
+    h.players.teleport('p1', OPEN);
+    h.run(30);
+    expect(h.players.pickUp('p1', 'crate-1')).toBe(true);
+    h.run(1);
+    return { ...h, player };
+  }
+
+  test('pickUp sets the hands and holds the prop; a second pickUp, a held prop and a heavy one are refused', () => {
+    const { players, props } = harness();
+    const player = players.add('p1');
+    const other = players.add('p2');
+    expect(players.pickUp('p1', 'crate-1')).toBe(true);
+    expect(player.hands).toBe('crate-1');
+    expect(props.get('crate-1')!.heldBy).toBe('p1');
+    expect(players.pickUp('p1', 'crate-2')).toBe(false);
+    expect(players.pickUp('p2', 'crate-1')).toBe(false);
+    expect(players.pickUp('p2', 'barrier-1')).toBe(false);
+    expect(players.pickUp('p2', 'nothing')).toBe(false);
+    expect(other.hands).toBeNull();
+    players.setSeat('p2', 'driver');
+    expect(players.pickUp('p2', 'crate-2')).toBe(false);
+  });
+
+  test('the held prop is placed at the hold pose after every tick of walking', () => {
+    const { player, players, props, tick } = holder();
+    let yaw = 0;
+    for (let i = 0; i < 60; i++) {
+      yaw += 0.03;
+      tick({ p1: { moveY: 1, yaw } });
+      const pose = players.holdPose('p1')!;
+      const turn = holdPoint(player.pos, yaw).rot;
+      const expected = rotate(turn, HOLD_OFFSET);
+      expect(pose.pos.x).toBeCloseTo(player.pos.x + expected.x, 9);
+      expect(pose.pos.y).toBeCloseTo(player.pos.y + HOLD_OFFSET.y, 9);
+      expect(pose.pos.z).toBeCloseTo(player.pos.z + expected.z, 9);
+      const centre = props.get('crate-1')!.body.translation();
+      expect(centre.x).toBeCloseTo(pose.pos.x, 4);
+      expect(centre.y).toBeCloseTo(pose.pos.y, 4);
+      expect(centre.z).toBeCloseTo(pose.pos.z, 4);
+      expect(yawOf(props.get('crate-1')!.body.rotation())).toBeCloseTo(yaw, 4);
+    }
+    expect(Math.hypot(player.pos.x - OPEN.x, player.pos.z - OPEN.z)).toBeGreaterThan(2);
+  });
+
+  test('holdPose is null with empty hands', () => {
+    const { players } = harness();
+    players.add('p1');
+    expect(players.holdPose('p1')).toBeNull();
+  });
+
+  test('a throw leaves along the aim at THROW_SPEED and the crate lands more than 3 m from the feet', () => {
+    const { player, players, props, tick } = holder();
+    const feet = { ...player.pos };
+    players.throwHeld('p1', Math.PI / 2, 0);
+    const body = props.get('crate-1')!.body;
+    expect(player.hands).toBeNull();
+    expect(props.get('crate-1')!.heldBy).toBeNull();
+    const v = body.linvel();
+    // Yaw pi/2 faces -X.
+    expect(v.x).toBeCloseTo(-THROW_SPEED, 5);
+    expect(v.y).toBeCloseTo(0, 5);
+    expect(v.z).toBeCloseTo(0, 5);
+    let landed = false;
+    for (let i = 0; i < 120 && !landed; i++) {
+      tick({});
+      landed = body.translation().y < 0.31;
+    }
+    expect(landed).toBe(true);
+    expect(Math.hypot(body.translation().x - feet.x, body.translation().z - feet.z)).toBeGreaterThan(3);
+  });
+
+  test('a throw upward at pitch 45 degrees has the matching vertical speed', () => {
+    const { players, props } = holder();
+    players.throwHeld('p1', 0, Math.PI / 4);
+    const v = props.get('crate-1')!.body.linvel();
+    expect(v.y).toBeCloseTo(THROW_SPEED * Math.SQRT1_2, 5);
+    expect(v.z).toBeCloseTo(-THROW_SPEED * Math.SQRT1_2, 5);
+  });
+
+  test('R13: the thrower\'s own velocity is added: walking on foot, and standing on the moving vehicle', () => {
+    const walking = holder();
+    walking.run(20, { p1: { moveY: 1 } });
+    expect(walking.player.walk.z).toBeCloseTo(-PLAYER_WALK_SPEED, 3);
+    walking.players.throwHeld('p1', 0, 0);
+    expect(walking.props.get('crate-1')!.body.linvel().z).toBeCloseTo(-(THROW_SPEED + PLAYER_WALK_SPEED), 4);
+
+    const { rig, players, props, tick, run } = harness();
+    const player = players.add('p1');
+    const body = rig.vehicle.body.translation();
+    players.teleport('p1', vec3(body.x, body.y + LODGY.halfExtents.y + 0.1, body.z));
+    run(30);
+    players.pickUp('p1', 'crate-1');
+    rig.vehicle.body.setLinvel({ x: 0, y: 0, z: -5 }, true);
+    tick({});
+    expect(player.ground?.bodyId).toBe('vehicle');
+    players.throwHeld('p1', 0, 0);
+    expect(props.get('crate-1')!.body.linvel().z).toBeCloseTo(-(THROW_SPEED + 5), 0);
+  });
+
+  test('K3: with a wall in the way of the hold pose the prop is released above the head instead', () => {
+    const wall = { center: vec3(OPEN.x, 1.5, OPEN.z - 0.8), halfExtents: vec3(3, 1.5, 0.3), rot: IDENTITY };
+    const { player, players, props } = holder(withBoxes(testGround, { walls: [wall] }));
+    players.throwHeld('p1', 0, 0);
+    const centre = props.get('crate-1')!.body.translation();
+    expect(centre.x).toBeCloseTo(player.pos.x, 6);
+    expect(centre.z).toBeCloseTo(player.pos.z, 6);
+    expect(centre.y).toBeCloseTo(player.pos.y + PLAYER_HEIGHT + 0.3 + 0.05, 6);
+    expect(props.get('crate-1')!.body.linvel().z).toBeCloseTo(-THROW_SPEED, 5);
+  });
+
+  test('K3: with free space the throw starts at the hold pose', () => {
+    const { player, players, props } = holder();
+    players.throwHeld('p1', 0, 0);
+    const centre = props.get('crate-1')!.body.translation();
+    expect(centre.x).toBeCloseTo(player.pos.x, 6);
+    expect(centre.y).toBeCloseTo(player.pos.y + HOLD_OFFSET.y, 6);
+    expect(centre.z).toBeCloseTo(player.pos.z + HOLD_OFFSET.z, 6);
+  });
+
+  test('throwing with empty hands does nothing', () => {
+    const { players, props } = harness();
+    players.add('p1');
+    players.throwHeld('p1', 0, 0);
+    expect(props.get('crate-1')!.heldBy).toBeNull();
+  });
+
+  test('K5 (R3): seating a player who holds a prop drops it at the hold pose, at rest, dynamic again', () => {
+    const { player, players, props, tick } = holder();
+    const pose = players.holdPose('p1')!;
+    players.setSeat('p1', 'driver');
+    expect(player.seat).toBe('driver');
+    expect(player.hands).toBeNull();
+    const prop = props.get('crate-1')!;
+    expect(prop.heldBy).toBeNull();
+    expect(prop.body.isDynamic()).toBe(true);
+    expect(prop.body.translation().y).toBeCloseTo(pose.pos.y, 6);
+    expect(prop.body.linvel()).toEqual({ x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 60; i++) tick({});
+    expect(prop.body.translation().y).toBeLessThan(0.35);
+  });
+
+  test('K6: removing the holder releases the prop at the hold pose with zero velocity', () => {
+    const { players, props } = holder();
+    const pose = players.holdPose('p1')!;
+    players.remove('p1');
+    const prop = props.get('crate-1')!;
+    expect(prop.heldBy).toBeNull();
+    expect(prop.body.isDynamic()).toBe(true);
+    expect(prop.body.translation().x).toBeCloseTo(pose.pos.x, 6);
+    expect(prop.body.translation().y).toBeCloseTo(pose.pos.y, 6);
+    expect(prop.body.linvel()).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  test('K6: resetHeld sends the prop home and empties the hands; teleporting keeps it', () => {
+    const { player, players, props, tick } = holder();
+    players.teleport('p1', vec3(40, 0.02, 25));
+    expect(player.hands).toBe('crate-1');
+    tick({});
+    expect(props.get('crate-1')!.body.translation().x).toBeCloseTo(40, 6);
+    players.resetHeld('p1');
+    expect(player.hands).toBeNull();
+    const prop = props.get('crate-1')!;
+    expect(prop.heldBy).toBeNull();
+    expect(prop.body.translation().x).toBeCloseTo(CRATE_1_CENTRE.x, 6);
+    expect(prop.body.translation().y).toBeCloseTo(CRATE_1_CENTRE.y, 6);
+    expect(prop.body.translation().z).toBeCloseTo(CRATE_1_CENTRE.z, 6);
+  });
+
+  test('V6: with the hook in the hands, throw and reset do nothing, pickUp is refused, and remove does not touch props', () => {
+    const { players, props, tick } = harness();
+    players.add('p1');
+    players.teleport('p1', OPEN);
+    players.setHands('p1', 'hook');
+    tick({});
+    expect(players.pickUp('p1', 'crate-1')).toBe(false);
+    players.throwHeld('p1', 0, 0);
+    expect(players.get('p1')!.hands).toBe('hook');
+    players.resetHeld('p1');
+    expect(players.get('p1')!.hands).toBe('hook');
+    expect(players.holdPose('p1')).not.toBeNull();
+    expect(props.get('crate-1')!.heldBy).toBeNull();
+    players.remove('p1');
+    expect(props.get('crate-1')!.heldBy).toBeNull();
+    expect(props.get('crate-1')!.body.isDynamic()).toBe(true);
+  });
+});
+
+describe('what is a hit (rules H4, J2, J9)', () => {
+  const CRATE = 'crate-1';
+  const stand = (h: ReturnType<typeof harness>, id: string, at: Vec3) => {
+    const player = h.players.add(id);
+    h.players.teleport(id, at);
+    h.run(30);
+    return player;
+  };
+  // The crate comes at the player's chest from +x at 12 m/s.
+  const shoot = (h: ReturnType<typeof harness>, feet: Vec3) => {
+    const body = h.props.get(CRATE)!.body;
+    body.setTranslation(vec3(feet.x + 1.5, feet.y + 0.98, feet.z), true);
+    body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    body.setLinvel(vec3(-12, 0, 0), true);
+    body.setAngvel(vec3(0, 0, 0), true);
+  };
+  const stash = (h: ReturnType<typeof harness>) => {
+    const body = h.props.get(CRATE)!.body;
+    body.setTranslation(vec3(-50, 0.5, 50), true);
+    body.setLinvel(vec3(0, 0, 0), true);
+    body.setAngvel(vec3(0, 0, 0), true);
+  };
+  // The damage found over some ticks, and the largest cooldown map seen.
+  const watch = (h: ReturnType<typeof harness>, id: string, ticks: number, inputs: Record<string, Partial<InputFields>> = {}) => {
+    let amounts: number[] = [];
+    let entries = 0;
+    for (let i = 0; i < ticks; i++) {
+      h.tick(inputs);
+      amounts = amounts.concat(h.players.takeDamage().filter((d) => d.playerId === id).map((d) => d.amount));
+      entries = Math.max(entries, h.players.get(id)!.hitCooldown.size);
+    }
+    return { amounts, entries };
+  };
+
+  test('J9: a downed player is not hit and gets no cooldown entry; the same shot hurts a standing one', () => {
+    const h = harness();
+    const feet = vec3(10, 0.02, 20);
+    stand(h, 'p1', feet);
+    shoot(h, feet);
+    const live = watch(h, 'p1', 15);
+    expect(live.amounts).toHaveLength(1);
+    expect(live.entries).toBe(1);
+    stash(h);
+    watch(h, 'p1', 40);
+    expect(h.players.get('p1')!.hitCooldown.size).toBe(0);
+    h.players.setDowned('p1');
+    shoot(h, h.players.get('p1')!.pos);
+    const down = watch(h, 'p1', 15);
+    expect(down.amounts).toEqual([]);
+    expect(down.entries).toBe(0);
+  });
+
+  test('J2: a player on the roof of a vehicle that drives and brakes hard is not hit by it', () => {
+    const h = harness();
+    const body = h.rig.vehicle.body;
+    const player = h.players.add('p1');
+    const at = body.translation();
+    h.players.teleport('p1', vec3(at.x, at.y + LODGY.halfExtents.y + 0.1, at.z));
+    h.run(30);
+    expect(player.ground?.bodyId).toBe('vehicle');
+    h.vehicleRun.beforePhysics = () => body.setLinvel(vec3(0, 0, -8), true);
+    const driving = watch(h, 'p1', 60);
+    h.vehicleRun.beforePhysics = () => body.setLinvel(vec3(0, 0, 0), true);
+    const braking = watch(h, 'p1', 60);
+    expect(driving.amounts.concat(braking.amounts)).toEqual([]);
+    expect(driving.entries + braking.entries).toBe(0);
+    expect(player.ground?.bodyId).toBe('vehicle');
+  });
+
+  test('J2: landing on the roof of a moving vehicle is not a hit', () => {
+    const h = harness();
+    const body = h.rig.vehicle.body;
+    const player = h.players.add('p1');
+    h.vehicleRun.beforePhysics = () => body.setLinvel(vec3(0, 0, -8), true);
+    h.run(10);
+    const at = body.translation();
+    // The vehicle drives 8 m/s for the 0.71 s of the fall, so the player is dropped that far ahead.
+    h.players.teleport('p1', vec3(at.x, at.y + LODGY.halfExtents.y + 2.5, at.z - 5.7));
+    const landing = watch(h, 'p1', 90);
+    expect(player.ground?.bodyId).toBe('vehicle');
+    expect(landing.amounts).toEqual([]);
+    expect(landing.entries).toBe(0);
+  });
+
+  test('J2: landing on two props side by side is not a hit', () => {
+    const h = harness();
+    const second = h.props.get('crate-3')!.body;
+    second.setTranslation(vec3(10, 0.3, 10.1), true);
+    h.run(30);
+    const player = h.players.add('p1');
+    h.players.teleport('p1', vec3(10, 3.6, 9.8));
+    const landing = watch(h, 'p1', 90);
+    expect(player.ground).not.toBeNull();
+    expect(landing.amounts).toEqual([]);
+    expect(landing.entries).toBe(0);
+  });
+
+  test('J2: a player riding the vehicle is not hit by a prop moving with it, but is by the same prop moving relative to the ground', () => {
+    const run = (propSpeed: number) => {
+      const h = harness();
+      const body = h.rig.vehicle.body;
+      const crate = h.props.get(CRATE)!.body;
+      const player = h.players.add('p1');
+      const at = body.translation();
+      // The player stands on the roof with the crate just behind, and walks back into it.
+      h.players.teleport('p1', vec3(at.x, at.y + LODGY.halfExtents.y + 0.1, at.z));
+      h.run(30);
+      h.vehicleRun.beforePhysics = () => {
+        body.setLinvel(vec3(0, 0, -10), true);
+        crate.setLinvel(vec3(0, 0, -propSpeed), true);
+      };
+      const start = player.pos;
+      crate.setTranslation(vec3(start.x, start.y + 0.31, start.z + 0.62), true);
+      crate.setAngvel(vec3(0, 0, 0), true);
+      return { h, player, ...watch(h, 'p1', 30, { p1: { moveY: -1 } }) };
+    };
+    const together = run(10);
+    expect(together.player.ground?.bodyId).toBe('vehicle');
+    expect(together.amounts).toEqual([]);
+    const sliding = run(24);
+    expect(sliding.amounts.length).toBeGreaterThan(0);
+  });
+
+  test('H4: a failed shove-out that falls back to a spawn slot does not count as a hit', () => {
+    const probe = harness();
+    const zp = probe.rig.vehicle.body.translation().z - LODGY.halfExtents.z - 1.5;
+    const course = withBoxes(testGround, { walls: [{ center: vec3(0, 1, zp - 3.1), halfExtents: vec3(3, 1, 3), rot: IDENTITY }] });
+    const h = harness(course);
+    const body = h.rig.vehicle.body;
+    const player = h.players.add('p1');
+    h.players.teleport('p1', vec3(body.translation().x, 0.02, zp));
+    h.run(10);
+    h.vehicleRun.beforePhysics = () => body.setLinvel(vec3(0, 0, -10), true);
+    let relocated = false;
+    let last = { ...player.pos };
+    let all: number[] = [];
+    let seen = 0;
+    // Up to ten ticks after the move: the vehicle later wanders back into the player, which is an ordinary contact.
+    for (let i = 0; i < 90 && seen < 10; i++) {
+      h.tick({});
+      all = all.concat(h.players.takeDamage().map((d) => d.amount));
+      if (relocated) seen += 1;
+      if (Math.hypot(player.pos.x - last.x, player.pos.z - last.z) > 0.5) relocated = true;
+      last = { ...player.pos };
+    }
+    expect(relocated).toBe(true);
+    expect(all).toEqual([]);
+    expect(player.hitCooldown.size).toBe(0);
   });
 });

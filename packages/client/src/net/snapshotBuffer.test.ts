@@ -7,13 +7,22 @@ import {
   vec3,
   yawOf,
   type PlayerSnapshot,
-  type WorldSnapshot,
+  type PropSnapshot,
+  type SnapshotMessage,
 } from '@lodgy/shared';
 import { expect, test } from 'vitest';
 import { createSnapshotBuffer } from './snapshotBuffer';
 
 // A snapshot at `tick` whose vehicle sits at z = -tick, has yaw tick / 100 and throttle tick.
-const snapshot = (tick: number, players: PlayerSnapshot[] = []): WorldSnapshot => ({
+const snapshot = (
+  tick: number,
+  players: PlayerSnapshot[] = [],
+  props: PropSnapshot[] = [],
+  full = false,
+): SnapshotMessage => ({
+  type: 'snapshot',
+  ackSeq: 0,
+  full,
   tick,
   vehicle: {
     pos: vec3(0, 1, -tick),
@@ -21,8 +30,23 @@ const snapshot = (tick: number, players: PlayerSnapshot[] = []): WorldSnapshot =
     linvel: vec3(0, 0, -tick),
     throttle: tick,
     steer: 0,
+    fuel: 1,
+    health: 1,
   },
   players,
+  props,
+  cable: { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 1, -tick), length: 0, reel: 0 },
+  elapsed: tick / 60,
+  checkpoint: 0,
+  checkpointCount: 2,
+  restarts: 0,
+  respawns: 0,
+  won: false,
+  coinsLeft: ['coin-1', 'coin-2'],
+  wallet: 0,
+  coinsCollected: 0,
+  coinsTotal: 2,
+  assisted: false,
 });
 
 // Snapshots every 3 ticks, each arriving exactly when the server's clock reads its tick time plus `latency`.
@@ -31,6 +55,33 @@ function filled(ticks: number[], latency = 0) {
   for (const tick of ticks) buffer.push(snapshot(tick), tick * TICK_DT + latency);
   return buffer;
 }
+
+test('copies the cable into the sample and the latest', () => {
+  const buffer = filled([0, 3, 6]);
+  expect(buffer.sample(3 * TICK_DT + INTERPOLATION_DELAY)?.cable.state).toBe('stowed');
+  expect(buffer.latestCable()?.hookPos).toEqual(vec3(0, 1, -6));
+  expect(createSnapshotBuffer().latestCable()).toBeNull();
+});
+
+test('blends the hook and the length within one state, and takes the newer across a change', () => {
+  const at = (tick: number, state: SnapshotMessage['cable']['state'], length: number): SnapshotMessage => ({
+    ...snapshot(tick),
+    cable: { state, holderId: null, anchorId: null, hookPos: vec3(0, 1, -tick), length, reel: 0 },
+  });
+  const same = createSnapshotBuffer();
+  same.push(at(3, 'ground', 2), 3 * TICK_DT);
+  same.push(at(9, 'ground', 8), 9 * TICK_DT);
+  const mid = same.sample(6 * TICK_DT + INTERPOLATION_DELAY)!.cable;
+  expect(mid.hookPos.z).toBeCloseTo(-6, 6);
+  expect(mid.length).toBeCloseTo(5, 6);
+  const changed = createSnapshotBuffer();
+  changed.push(at(3, 'held', 2), 3 * TICK_DT);
+  changed.push(at(9, 'ground', 8), 9 * TICK_DT);
+  const jump = changed.sample(6 * TICK_DT + INTERPOLATION_DELAY)!.cable;
+  expect(jump.state).toBe('ground');
+  expect(jump.hookPos.z).toBe(-9);
+  expect(jump.length).toBe(8);
+});
 
 test('gives nothing before the first snapshot', () => {
   const buffer = createSnapshotBuffer();
@@ -104,7 +155,17 @@ const player = (playerId: string, x: number, yaw: number): PlayerSnapshot => ({
   pos: vec3(x, 0, 0),
   yaw,
   seat: null,
+  hands: null,
   ground: null,
+  walk: { x: 0, z: 0 },
+  carry: { x: 0, z: 0 },
+  vy: 0,
+  grounded: true,
+  inventory: [null, null, null],
+  slot: 0,
+  hold: null,
+  health: 100,
+  downed: null,
 });
 
 // Two snapshots (ticks 6 and 12) that arrive on time; sampled at `tick` the view is that tick minus the delay.
@@ -152,6 +213,25 @@ test('seat and ground come from the newer snapshot', () => {
   const view = pair([seated], [standing]).sample((9 + DELAY_TICKS) * TICK_DT)!;
   expect(view.players[0]!.seat).toBeNull();
   expect(view.players[0]!.ground).toEqual({ bodyId: 'vehicle', localPos: vec3(1, 2, 3) });
+});
+
+test('hands come from the newer snapshot', () => {
+  const holding = { ...player('a', 0, 0), hands: 'crate-1' };
+  const view = pair([player('a', 0, 0)], [holding]).sample((9 + DELAY_TICKS) * TICK_DT)!;
+  expect(view.players[0]!.hands).toBe('crate-1');
+  expect(pair([holding], [player('a', 0, 0)]).sample((9 + DELAY_TICKS) * TICK_DT)!.players[0]!.hands).toBeNull();
+});
+
+test('walk, carry, vy and grounded come from the newer snapshot, as new objects', () => {
+  const newer = { ...player('a', 10, 0), walk: { x: 1, z: 2 }, carry: { x: 3, z: 4 }, vy: 5, grounded: false };
+  const buffer = pair([player('a', 0, 0)], [newer]);
+  for (const now of [100, (9 + DELAY_TICKS) * TICK_DT]) {
+    const view = buffer.sample(now)!.players[0]!;
+    expect(view).toMatchObject({ walk: { x: 1, z: 2 }, carry: { x: 3, z: 4 }, vy: 5, grounded: false });
+    view.walk.x = 999;
+    view.carry.z = 999;
+    expect(buffer.sample(now)!.players[0]).toMatchObject({ walk: { x: 1, z: 2 }, carry: { x: 3, z: 4 } });
+  }
 });
 
 test('the result does not alias stored snapshots', () => {
@@ -215,4 +295,93 @@ test('player yaw stays in (-pi, pi] after blending', () => {
     expect(yaw).toBeGreaterThan(-Math.PI);
     expect(yaw).toBeLessThanOrEqual(Math.PI);
   }
+});
+
+const prop = (id: string, x: number): PropSnapshot => ({ id, kind: 'crate', pos: vec3(x, 0.3, 0), rot: quatFromAxisAngle(AXIS_Y, 0) });
+
+test('a partial snapshot is merged into the props already known', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(snapshot(3, [], [prop('a', 1), prop('b', 2)], true), 3 * TICK_DT);
+  buffer.push(snapshot(6, [], [prop('b', 5)]), 6 * TICK_DT);
+  const props = buffer.sample(100)!.props;
+  expect(props.map((p) => [p.id, p.pos.x])).toEqual([['a', 1], ['b', 5]]);
+  expect(buffer.latestProps().map((p) => [p.id, p.pos.x])).toEqual([['a', 1], ['b', 5]]);
+});
+
+test('a prop is blended between its two positions', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(snapshot(3, [], [prop('a', 0)], true), 3 * TICK_DT);
+  buffer.push(snapshot(6, [], [prop('a', 6)]), 6 * TICK_DT);
+  // The view is at tick 4.5, halfway between the two.
+  const props = buffer.sample(10.5 * TICK_DT)!.props;
+  expect(props).toHaveLength(1);
+  expect(props[0]!.pos.x).toBeCloseTo(3, 6);
+});
+
+test('a prop that did not move is drawn where it was told', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(snapshot(3, [], [prop('a', 1), prop('b', 2)], true), 3 * TICK_DT);
+  buffer.push(snapshot(6, [], [prop('b', 4)]), 6 * TICK_DT);
+  const props = buffer.sample(10.5 * TICK_DT)!.props;
+  expect(props.find((p) => p.id === 'a')!.pos.x).toBe(1);
+  expect(props.find((p) => p.id === 'b')!.pos.x).toBeCloseTo(3, 6);
+});
+
+test('a full snapshot replaces the props: one missing from it is gone', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(snapshot(3, [], [prop('a', 1), prop('b', 2)], true), 3 * TICK_DT);
+  buffer.push(snapshot(6, [], [prop('b', 3)], true), 6 * TICK_DT);
+  expect(buffer.latestProps().map((p) => p.id)).toEqual(['b']);
+  expect(buffer.sample(100)!.props.map((p) => p.id)).toEqual(['b']);
+});
+
+test('copies the health and the downed timer of a player', () => {
+  const hurt: PlayerSnapshot = { ...player('a', 0, 0), health: 37, downed: 12.5 };
+  const buffer = pair([player('a', 0, 0)], [hurt]);
+  const view = buffer.sample((9 + DELAY_TICKS) * TICK_DT)!;
+  expect(view.players[0]!.health).toBe(37);
+  expect(view.players[0]!.downed).toBe(12.5);
+});
+
+test('before any snapshot there are no props', () => {
+  expect(createSnapshotBuffer().latestProps()).toEqual([]);
+});
+
+test('copies the inventory, slot and hold of a player and the fuel and health of the vehicle', () => {
+  const holding: PlayerSnapshot = {
+    ...player('a', 0, 0),
+    inventory: ['jerrycan', null, 'toolbox'],
+    slot: 2,
+    hold: { action: 'useItem', targetId: 'vehicle', progress: 0.5 },
+  };
+  const buffer = pair([player('a', 0, 0)], [holding]);
+  const view = buffer.sample((9 + DELAY_TICKS) * TICK_DT)!;
+  expect(view.players[0]!.inventory).toEqual(['jerrycan', null, 'toolbox']);
+  expect(view.players[0]!.slot).toBe(2);
+  expect(view.players[0]!.hold).toEqual({ action: 'useItem', targetId: 'vehicle', progress: 0.5 });
+  expect(view.players[0]!.inventory).not.toBe(holding.inventory);
+  expect(view.players[0]!.hold).not.toBe(holding.hold);
+  expect(view.vehicle.fuel).toBe(1);
+  expect(view.vehicle.health).toBe(1);
+});
+
+test('latestStatus is null before any snapshot and then the newest snapshot\'s fields', () => {
+  expect(createSnapshotBuffer().latestStatus()).toBeNull();
+  const buffer = createSnapshotBuffer();
+  buffer.push(snapshot(3), 0);
+  buffer.push({ ...snapshot(6), checkpoint: 1, restarts: 2, respawns: 3, won: true, wallet: 1, coinsCollected: 2, coinsTotal: 2, assisted: true }, 0.05);
+  expect(buffer.latestStatus()).toEqual({ elapsed: 6 / 60, checkpoint: 1, checkpointCount: 2, restarts: 2, respawns: 3, won: true, wallet: 1, coinsCollected: 2, coinsTotal: 2, assisted: true });
+  buffer.push(snapshot(4), 0.06);
+  expect(buffer.latestStatus()?.elapsed).toBe(6 / 60);
+});
+
+test('latestCoinsLeft is empty before any snapshot, then the newest snapshot\'s ids as a copy', () => {
+  const buffer = createSnapshotBuffer();
+  expect(buffer.latestCoinsLeft()).toEqual([]);
+  buffer.push(snapshot(3), 0);
+  buffer.push({ ...snapshot(6), coinsLeft: ['coin-2'] }, 0.05);
+  const left = buffer.latestCoinsLeft();
+  expect(left).toEqual(['coin-2']);
+  left.push('x');
+  expect(buffer.latestCoinsLeft()).toEqual(['coin-2']);
 });

@@ -1,4 +1,4 @@
-import { cleanToken } from '@lodgy/shared';
+import { cleanName, cleanRoom, cleanToken } from '@lodgy/shared';
 
 const TOKEN_KEY = 'lodgy.token';
 const NAME_KEY = 'lodgy.name';
@@ -44,3 +44,44 @@ export function sessionToken(store: KeyValueStore, fillRandom: (bytes: Uint8Arra
 export const savedName = (store: KeyValueStore): string => store.getItem(NAME_KEY) ?? '';
 
 export const saveName = (store: KeyValueStore, name: string): void => remember(store, NAME_KEY, name);
+
+const MUTED_KEY = 'lodgy.muted';
+
+export const savedMuted = (store: KeyValueStore): boolean => store.getItem(MUTED_KEY) === '1';
+
+export const saveMuted = (store: KeyValueStore, muted: boolean): void => remember(store, MUTED_KEY, muted ? '1' : '0');
+
+const REJOIN_KEY = 'lodgy.rejoin';
+const RELOADED_KEY = 'lodgy.reloadedAt';
+
+export const saveRejoin = (store: KeyValueStore, rejoin: { room: string; name: string; playerId: string; at: number }): void =>
+  remember(store, REJOIN_KEY, JSON.stringify(rejoin));
+
+// Reads the saved rejoin and clears it, so a failed rejoin is not tried again on the next load.
+export function takeRejoin(store: KeyValueStore, room: string | null): { name: string; playerId: string } | null {
+  const raw = store.getItem(REJOIN_KEY);
+  if (!raw) return null;
+  remember(store, REJOIN_KEY, '');
+  try {
+    const value = JSON.parse(raw) as { room?: unknown; name?: unknown; playerId?: unknown };
+    if (typeof value.room !== 'string' || typeof value.name !== 'string' || typeof value.playerId !== 'string' || value.playerId === '') return null;
+    if (room === null || cleanRoom(value.room) !== room) return null;
+    const name = cleanName(value.name);
+    return name ? { name, playerId: value.playerId } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function lastAutoReload(store: KeyValueStore): number | null {
+  const value = Number(store.getItem(RELOADED_KEY));
+  return store.getItem(RELOADED_KEY) !== null && Number.isFinite(value) ? value : null;
+}
+
+// A mark from the future (the clock went backwards) is stale.
+export function autoReloadAllowed(store: KeyValueStore, at: number, guard: number): boolean {
+  const last = lastAutoReload(store);
+  return last === null || at < last || at - last >= guard;
+}
+
+export const markAutoReload = (store: KeyValueStore, at: number): void => remember(store, RELOADED_KEY, String(at));

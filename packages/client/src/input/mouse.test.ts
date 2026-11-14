@@ -122,3 +122,15 @@ test('a rejected pointer-lock promise causes no unhandled rejection', async () =
   process.off('unhandledRejection', onUnhandled);
   expect(unhandled).toEqual([]);
 });
+
+test('a click does not request pointer lock while the gate is blocked, and does again once it opens', () => {
+  const canvas = Object.assign(new EventTarget(), { requestPointerLock: () => (canvas.requests += 1), requests: 0 });
+  const doc = Object.assign(new EventTarget(), { pointerLockElement: null as unknown });
+  const gate = { blocked: true };
+  createMouseLook(canvas as unknown as HTMLElement, doc as unknown as Document, gate);
+  canvas.dispatchEvent(new Event('click'));
+  expect(canvas.requests).toBe(0);
+  gate.blocked = false;
+  canvas.dispatchEvent(new Event('click'));
+  expect(canvas.requests).toBe(1);
+});

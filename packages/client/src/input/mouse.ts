@@ -1,14 +1,5 @@
-import { LOOK_SENSITIVITY, clamp } from '@lodgy/shared';
-
-const PITCH_LIMIT = Math.PI / 2 - 0.05;
-const TAU = 2 * Math.PI;
-
-// Into (-pi, pi].
-function wrap(yaw: number): number {
-  if (yaw > Math.PI) return yaw - TAU * Math.ceil((yaw - Math.PI) / TAU);
-  if (yaw <= -Math.PI) return yaw + TAU * (Math.floor((-Math.PI - yaw) / TAU) + 1);
-  return yaw;
-}
+import { LOOK_SENSITIVITY } from '@lodgy/shared';
+import { createLook } from './look';
 
 export interface MouseLook {
   yaw(): number;
@@ -17,13 +8,13 @@ export interface MouseLook {
   dispose(): void;
 }
 
-export function createMouseLook(canvas: HTMLElement, doc: Document): MouseLook {
-  let yaw = 0;
-  let pitch = 0;
+// While `blocked` is true a click does not ask for pointer lock; the game sets it with a menu open.
+export function createMouseLook(canvas: HTMLElement, doc: Document, gate: { blocked: boolean } = { blocked: false }): MouseLook {
+  const look = createLook();
   const locked = () => doc.pointerLockElement === canvas;
 
   const onClick = () => {
-    if (locked()) return;
+    if (locked() || gate.blocked) return;
     // iOS Safari has no requestPointerLock and Chrome's promise can reject.
     const request: unknown = canvas.requestPointerLock?.();
     if (request instanceof Promise) request.catch(() => {});
@@ -31,16 +22,15 @@ export function createMouseLook(canvas: HTMLElement, doc: Document): MouseLook {
   const onMove = (event: Event) => {
     if (!locked()) return;
     const { movementX, movementY } = event as MouseEvent;
-    yaw = wrap(yaw - movementX * LOOK_SENSITIVITY);
-    pitch = clamp(pitch - movementY * LOOK_SENSITIVITY, -PITCH_LIMIT, PITCH_LIMIT);
+    look.apply(movementX, movementY, LOOK_SENSITIVITY);
   };
 
   canvas.addEventListener('click', onClick);
   doc.addEventListener('mousemove', onMove);
 
   return {
-    yaw: () => yaw,
-    pitch: () => pitch,
+    yaw: look.yaw,
+    pitch: look.pitch,
     locked,
     dispose() {
       canvas.removeEventListener('click', onClick);

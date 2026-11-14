@@ -36,6 +36,8 @@ export interface VehicleConfig {
   reverseSpeed: number;
   brakeForce: number;
   maxSteer: number;
+  // Fraction of a full tank burnt per second at full throttle.
+  fuelBurn: number;
   // Front bumper point where the winch cable leaves the vehicle, relative to the chassis centre.
   winchMount: Vec3;
   // seats[0] is the driver seat.
@@ -67,6 +69,7 @@ export const VEHICLES: Record<VehicleId, VehicleConfig> = deepFreeze({
     reverseSpeed: 6,
     brakeForce: 12000,
     maxSteer: 0.55,
+    fuelBurn: 1 / 240,
     winchMount: vec3(0, -0.3, -2.25),
     seats: [
       { id: 'driver', pos: vec3(-0.4, 0.1, -0.7), side: -1 },
@@ -107,6 +110,7 @@ export const VEHICLES: Record<VehicleId, VehicleConfig> = deepFreeze({
     reverseSpeed: 5,
     brakeForce: 24000,
     maxSteer: 0.45,
+    fuelBurn: 1 / 160,
     winchMount: vec3(0, -0.9, -3.4),
     seats: [
       { id: 'driver', pos: vec3(-0.55, 0.0, -2.2), side: -1 },
@@ -132,3 +136,5 @@ export function getVehicleConfig(id: string): VehicleConfig {
   if (!config) throw new Error(`Unknown vehicle: ${id}`);
   return config;
 }
+
+export const VEHICLE_IDS = Object.keys(VEHICLES) as VehicleId[];

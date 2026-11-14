@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -120,20 +120,6 @@ test('never serves a file outside the client folder', async () => {
   expect(resolveStaticPath('/srv/dist', '/%E0%A4%A')).toBeNull();
 });
 
-test('a file that cannot be read ends that response and leaves the server running', async () => {
-  const locked = path.join(clientDir, 'assets', 'locked.js');
-  await writeFile(locked, 'console.log("locked")');
-  await chmod(locked, 0o000);
-  // The headers are sent before the file is opened, so the failure shows as a broken response.
-  const body = await fetch(url('/assets/locked.js'))
-    .then((response) => response.text())
-    .catch(() => 'failed');
-  // As root the file is still readable; either way the server must survive.
-  expect(['failed', 'console.log("locked")']).toContain(body);
-  await chmod(locked, 0o644);
-  expect((await fetch(url('/'))).status).toBe(200);
-});
-
 test('starting on a port that is already in use is refused', async () => {
   await expect(startServer({ port: server.port, clientDir })).rejects.toThrow(/EADDRINUSE/);
   expect((await fetch(url('/'))).status).toBe(200);
@@ -142,6 +128,10 @@ test('starting on a port that is already in use is refused', async () => {
 test('knows the content types the client needs', () => {
   expect(contentType('a/b/index.html')).toBe('text/html; charset=utf-8');
   expect(contentType('x.wasm')).toBe('application/wasm');
+  expect(contentType('x.wav')).toBe('audio/wav');
+  expect(contentType('x.md')).toBe('text/markdown; charset=utf-8');
+  expect(contentType('x.mp3')).toBe('audio/mpeg');
+  expect(contentType('x.webmanifest')).toBe('application/manifest+json; charset=utf-8');
   expect(contentType('x.unknown')).toBe('application/octet-stream');
 });
 
@@ -154,6 +144,11 @@ test('two clients share a room, and the one who boards the driver seat drives th
   badr.send({ type: 'join', room, name: 'Badr', token: 'integration-token-badr' });
   const welcome = await badr.waitFor((message): message is Welcome => isWelcome(message));
   expect(welcome).toEqual({ type: 'welcome', playerId: 'p2', room });
+
+  // Badr readies up and Amal starts the run.
+  badr.send({ type: 'ready', ready: true });
+  await amal.waitFor((message): message is Extract<ServerMessage, { type: 'lobby' }> => message.type === 'lobby' && message.players.every((player) => player.ready || player.playerId === 'p1'));
+  amal.send({ type: 'start' });
 
   // Amal starts at the driver door: she presses interact to board, and drives once the snapshots show her seated.
   amal.send({ type: 'input', ...NEUTRAL_INPUT, interact: true, seq: 1 });
@@ -197,4 +192,45 @@ test('a binary message or an oversized message closes the connection', async () 
   const oversized = await connect();
   oversized.socket.send('x'.repeat(5000));
   await oversized.closed;
+});
+
+test('L22: two clients ready up, start, board, and drive the Lodgy to the finish until the results arrive', { timeout: 30_000 }, async () => {
+  const amal = await connect();
+  amal.send({ type: 'create', name: 'Amal', token: 'finish-token-amal-123' });
+  const { room } = await amal.waitFor((message): message is Welcome => isWelcome(message));
+  const badr = await connect();
+  badr.send({ type: 'join', room, name: 'Badr', token: 'finish-token-badr-123' });
+  await badr.waitFor((message): message is Welcome => isWelcome(message));
+  // The run outlasts the silence timeout, and Badr sends no inputs, so he answers the pings.
+  badr.socket.on('message', (data) => {
+    if ((JSON.parse(data.toString()) as ServerMessage).type === 'ping') badr.send({ type: 'pong' });
+  });
+  badr.send({ type: 'ready', ready: true });
+  await amal.waitFor((message): message is Extract<ServerMessage, { type: 'lobby' }> => message.type === 'lobby' && message.players.every((player) => player.ready || player.playerId === 'p1'));
+  amal.send({ type: 'start' });
+
+  amal.send({ type: 'input', ...NEUTRAL_INPUT, interact: true, seq: 1 });
+  await amal.waitFor(
+    (message): message is Snapshot =>
+      isSnapshot(message) && message.players.some((player) => player.playerId === 'p1' && player.seat === 'driver'),
+  );
+  let seq = 1;
+  const driving = setInterval(() => {
+    seq += 1;
+    amal.send({ type: 'input', ...NEUTRAL_INPUT, moveY: 1, seq });
+  }, TICK_DT * 1000);
+  const isResults = (message: ServerMessage): message is Extract<ServerMessage, { type: 'results' }> => message.type === 'results';
+  try {
+    const [results, seenByBadr] = await Promise.all([amal.waitFor(isResults), badr.waitFor(isResults)]);
+    expect(results).toMatchObject({ courseId: 'test', vehicleId: 'lodgy', assisted: false, restarts: 0 });
+    expect(results.elapsed).toBeGreaterThan(3);
+    expect(seenByBadr).toEqual(results);
+    expect(results.campaignTotal).toBeUndefined();
+    const lobby = amal.received.filter((message) => message.type === 'lobby').at(-1);
+    expect(lobby).toMatchObject({ phase: 'results' });
+  } finally {
+    clearInterval(driving);
+    amal.socket.close();
+    badr.socket.close();
+  }
 });

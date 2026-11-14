@@ -2,7 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { EMPTY_ROOM_TIMEOUT, SNAPSHOT_EVERY_TICKS, TICK_RATE } from '@lodgy/shared';
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { createRoomServer } from './server';
-import { connectFakeClient, createFakeDeps, type FakeClient } from './testing';
+import { connectFakeClient, createFakeDeps, startRun, type FakeClient } from './testing';
 
 // The nouns of the rooms whose simulation, or whose disposal, is made to fail, and the nouns of the rooms disposed so far.
 const failing = vi.hoisted(() => new Set<string>());
@@ -63,11 +63,19 @@ function setup() {
 test('a room whose update throws is closed and reported, and the other rooms carry on', () => {
   const fake = createFakeDeps(RAPIER);
   const errors: unknown[] = [];
-  const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) });
+  const sources: string[] = [];
+  const server = createRoomServer({
+    ...fake.deps,
+    onError: (error, source) => {
+      errors.push(error);
+      sources.push(source);
+    },
+  });
   const amal = connectFakeClient(server);
   amal.send({ type: 'create', name: 'Amal', token: 'token-1-abcdefghij' });
   const badr = connectFakeClient(server);
   badr.send({ type: 'create', name: 'Badr', token: 'token-2-abcdefghij' });
+  startRun(badr);
   fake.advance(1);
   expect(server.roomCount()).toBe(2);
 
@@ -77,6 +85,7 @@ test('a room whose update throws is closed and reported, and the other rooms car
   fake.advance(1);
 
   expect(errors).toHaveLength(1);
+  expect(sources).toEqual([`room:${amal.last('welcome').room}`]);
   expect(server.roomCount()).toBe(1);
   expect(amal.closedByServer).toBe(true);
   expect(badr.closedByServer).toBe(false);
@@ -108,6 +117,7 @@ test('a room whose disposal throws is still deleted, and is reported once', () =
   const { server, advance, errors, host, wait } = setup();
   const amal = host('Amal', 1);
   const badr = host('Badr', 2);
+  startRun(badr.client);
   failingDispose.add(amal.room);
   amal.client.close();
   wait(EMPTY_ROOM_TIMEOUT, badr.client);

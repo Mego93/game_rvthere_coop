@@ -1,6 +1,6 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { GRAVITY, TICK_DT, TICK_RATE } from './constants';
-import type { Box, BuiltCourse, GroundBox } from './course';
+import type { Box, BuiltCourse, GroundBox, Placed } from './course';
 import { getCourse } from './courses/index';
 import { deepFreeze, type Pose } from './math';
 import type { Rapier } from './rapier';
@@ -28,6 +28,7 @@ export function createRig(rapier: Rapier, vehicleId: VehicleId, spawn: Pose, cou
       for (let i = 0; i < Math.round(seconds * TICK_RATE); i++) {
         vehicle.step({ throttle: 0, steer: 0, brake: false, ...controls });
         world.step();
+        vehicle.afterPhysics();
       }
     },
   };
@@ -40,4 +41,9 @@ export function withBoxes(course: BuiltCourse, extra: { ground?: GroundBox[]; wa
     ground: [...course.ground, ...(extra.ground ?? [])],
     walls: [...course.walls, ...(extra.walls ?? [])],
   });
+}
+
+// A new, frozen course with the props added after the course's own.
+export function withProps(course: BuiltCourse, props: Placed[]): BuiltCourse {
+  return deepFreeze({ ...course, props: [...course.props, ...props] });
 }

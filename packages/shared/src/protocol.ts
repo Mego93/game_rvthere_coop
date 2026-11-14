@@ -1,6 +1,10 @@
-import { NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN } from './constants';
+import { ITEM_KINDS, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, TIMES_OF_DAY, WEATHERS, type ItemKind, type TimeOfDay, type Weather } from './constants';
+import { courseIds } from './courses/index';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
+import type { PropSnapshot } from './props';
 import type { VehicleState } from './vehicle';
+import { VEHICLE_IDS } from './vehicles';
+import type { CableSnapshot } from './winch';
 import type { WorldSnapshot } from './world';
 
 export interface PlayerInput {
@@ -45,12 +49,32 @@ export type ClientMessage =
   | { type: 'create'; name: string; token: string }
   | { type: 'join'; room: string; name: string; token: string }
   | ({ type: 'input' } & PlayerInput)
-  | { type: 'pong' };
+  | { type: 'buy'; item: ItemKind }
+  | { type: 'pong' }
+  | { type: 'ready'; ready: boolean }
+  | ({ type: 'configure' } & RoomSettings)
+  | { type: 'kick'; playerId: string }
+  | { type: 'start' }
+  | { type: 'restartCheckpoint' }
+  | { type: 'restartCourse' }
+  | { type: 'adminTool'; tool: AdminTool }
+  | { type: 'toLobby' }
+  | { type: 'next' };
+
+export const ADMIN_TOOLS = ['skipCheckpoint', 'refill'] as const;
+export type AdminTool = (typeof ADMIN_TOOLS)[number];
+
+export interface RoomSettings {
+  courseId: string;
+  vehicleId: string;
+  timeOfDay: TimeOfDay;
+  weather: Weather;
+}
 
 export type Phase = 'lobby' | 'playing' | 'results';
 
 // The type comes from the list, so a reason cannot be added to one and forgotten in the other.
-export const ERROR_REASONS = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full'] as const;
+export const ERROR_REASONS = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full', 'cannot_buy', 'kicked', 'not_admin', 'not_ready', 'bad_phase', 'replaced'] as const;
 export type ErrorReason = (typeof ERROR_REASONS)[number];
 
 export interface LobbyPlayer {
@@ -69,6 +93,27 @@ export interface LobbyMessage {
   adminId: string | null;
   courseId: string;
   vehicleId: string;
+  timeOfDay: TimeOfDay;
+  weather: Weather;
+}
+
+export interface ResultsMessage {
+  type: 'results';
+  courseId: string;
+  vehicleId: string;
+  timeOfDay: TimeOfDay;
+  weather: Weather;
+  elapsed: number;
+  restarts: number;
+  respawns: number;
+  wallet: number;
+  coinsCollected: number;
+  coinsTotal: number;
+  finalTime: number;
+  stars: [boolean, boolean, boolean];
+  assisted: boolean;
+  // Present once every campaign course has a final time.
+  campaignTotal?: number;
 }
 
 export interface PlayerSnapshot {
@@ -77,11 +122,39 @@ export interface PlayerSnapshot {
   pos: Vec3;
   yaw: number;
   seat: string | null;
+  // The id of the prop in the hands.
+  hands: string | null;
   ground: { bodyId: string; localPos: Vec3 } | null;
+  // The state the local client's predictor resets to.
+  walk: { x: number; z: number };
+  carry: { x: number; z: number };
+  vy: number;
+  grounded: boolean;
+  inventory: [ItemKind | null, ItemKind | null, ItemKind | null];
+  slot: 0 | 1 | 2;
+  // The item use in progress; progress is 0..1.
+  hold: { action: string; targetId: string; progress: number } | null;
+  // The server's health rounded down, 0..100.
+  health: number;
+  // Seconds left before respawn while downed.
+  downed: number | null;
+}
+
+export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn'] as const;
+export type EventKind = (typeof EVENT_KINDS)[number];
+
+export interface EventMessage {
+  type: 'event';
+  kind: EventKind;
+  tick: number;
+  playerId?: string;
+  pos?: Vec3;
 }
 
 export interface SnapshotMessage extends WorldSnapshot {
   type: 'snapshot';
+  // The props that moved since the last one sent to this room's clients, or every prop when `full`.
+  props: PropSnapshot[];
   // The last input sequence number the server consumed for the receiving client; 0 before any.
   ackSeq: number;
   full: boolean;
@@ -91,17 +164,25 @@ export type ServerMessage =
   | { type: 'welcome'; playerId: string; room: string }
   | LobbyMessage
   | SnapshotMessage
+  | EventMessage
+  | ResultsMessage
   | { type: 'error'; reason: ErrorReason }
   | { type: 'ping' };
 
 const ROOM_PATTERN = /^[a-z0-9]{1,24}$/;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
 
-// A trimmed display name, or null if it is not 1 to 16 characters.
+// Control, format, private-use, unassigned and line or paragraph separator characters; look-alike letters still pass (known limit).
+const FORBIDDEN_NAME_CHARACTERS = /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Zl}\p{Zp}]/u;
+
+export const hasForbiddenNameCharacter = (value: string): boolean => FORBIDDEN_NAME_CHARACTERS.test(value);
+
+// A trimmed display name, or null if it is not 1 to 16 characters or has a forbidden character.
 export function cleanName(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const name = value.trim();
-  return name.length >= 1 && name.length <= NAME_MAX_LENGTH ? name : null;
+  if (name.length < 1 || name.length > NAME_MAX_LENGTH) return null;
+  return hasForbiddenNameCharacter(name) ? null : name;
 }
 
 // A room noun in lower case, or null if it is not a valid one.
@@ -115,6 +196,11 @@ export function cleanRoom(value: unknown): string | null {
 export const cleanToken = (value: unknown): string | null =>
   typeof value === 'string' && TOKEN_PATTERN.test(value) ? value : null;
 
+const isTimeOfDay = (value: unknown): value is TimeOfDay => (TIMES_OF_DAY as readonly unknown[]).includes(value);
+const isWeather = (value: unknown): value is Weather => (WEATHERS as readonly unknown[]).includes(value);
+const isCourseId = (value: unknown): value is string => typeof value === 'string' && courseIds().includes(value);
+const isVehicleId = (value: unknown): value is string => (VEHICLE_IDS as readonly unknown[]).includes(value);
+
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
 // Brings an angle into (-PI, PI].
@@ -125,6 +211,17 @@ function wrapAngle(angle: number): number {
   return wrapped;
 }
 
+// Clamps the axes and pitch and wraps the yaw; the server and the predictor use the same.
+export function sanitiseInput(fields: InputFields): InputFields {
+  return {
+    ...fields,
+    moveX: clamp(fields.moveX, -1, 1),
+    moveY: clamp(fields.moveY, -1, 1),
+    yaw: wrapAngle(fields.yaw),
+    pitch: clamp(fields.pitch, -Math.PI / 2, Math.PI / 2),
+  };
+}
+
 function parseInput(data: Record<string, unknown>): PlayerInput | null {
   const { seq, moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop } = data;
   if (!Number.isSafeInteger(seq) || (seq as number) < 1) return null;
@@ -133,19 +230,7 @@ function parseInput(data: Record<string, unknown>): PlayerInput | null {
   if (typeof use !== 'boolean' || typeof drop !== 'boolean') return null;
   if (reel !== -1 && reel !== 0 && reel !== 1) return null;
   if (slot !== 0 && slot !== 1 && slot !== 2) return null;
-  return {
-    seq: seq as number,
-    moveX: clamp(moveX, -1, 1),
-    moveY: clamp(moveY, -1, 1),
-    yaw: wrapAngle(yaw),
-    pitch: clamp(pitch, -Math.PI / 2, Math.PI / 2),
-    jump,
-    interact,
-    use,
-    reel,
-    slot,
-    drop,
-  };
+  return { seq: seq as number, ...sanitiseInput({ moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop }) };
 }
 
 // Validates one message from a client. Returns null for anything malformed.
@@ -174,8 +259,30 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const input = parseInput(fields);
       return input ? { type: 'input', ...input } : null;
     }
+    case 'buy':
+      return typeof fields.item === 'string' && Object.hasOwn(ITEM_KINDS, fields.item) ? { type: 'buy', item: fields.item as ItemKind } : null;
     case 'pong':
       return { type: 'pong' };
+    case 'ready':
+      return typeof fields.ready === 'boolean' ? { type: 'ready', ready: fields.ready } : null;
+    case 'configure': {
+      const { courseId, vehicleId, timeOfDay, weather } = fields;
+      return isCourseId(courseId) && isVehicleId(vehicleId) && isTimeOfDay(timeOfDay) && isWeather(weather)
+        ? { type: 'configure', courseId, vehicleId, timeOfDay, weather }
+        : null;
+    }
+    case 'kick':
+      return typeof fields.playerId === 'string' && fields.playerId !== '' ? { type: 'kick', playerId: fields.playerId } : null;
+    case 'start':
+    case 'restartCheckpoint':
+    case 'restartCourse':
+    case 'toLobby':
+    case 'next':
+      return { type: fields.type };
+    case 'adminTool':
+      return typeof fields.tool === 'string' && (ADMIN_TOOLS as readonly string[]).includes(fields.tool)
+        ? { type: 'adminTool', tool: fields.tool as AdminTool }
+        : null;
     default:
       return null;
   }
@@ -188,20 +295,48 @@ const isCount = (value: unknown): value is number => Number.isSafeInteger(value)
 const isVec3 = (value: unknown): value is Vec3 =>
   isRecord(value) && finite(value.x) && finite(value.y) && finite(value.z);
 const isQuat = (value: unknown): value is Quat => isRecord(value) && finite(value.w) && isVec3(value);
+const isVec2 = (value: unknown): value is { x: number; z: number } =>
+  isRecord(value) && finite(value.x) && finite(value.z);
 const isVehicleState = (value: unknown): value is VehicleState =>
   isRecord(value) &&
   isVec3(value.pos) &&
   isQuat(value.rot) &&
   isVec3(value.linvel) &&
   finite(value.throttle) &&
-  finite(value.steer);
+  finite(value.steer) &&
+  finite(value.fuel) &&
+  finite(value.health);
 const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   isRecord(value) &&
   isText(value.playerId) &&
   isVec3(value.pos) &&
   finite(value.yaw) &&
   (value.seat === null || isText(value.seat)) &&
-  (value.ground === null || (isRecord(value.ground) && isText(value.ground.bodyId) && isVec3(value.ground.localPos)));
+  (value.hands === null || isText(value.hands)) &&
+  (value.ground === null || (isRecord(value.ground) && isText(value.ground.bodyId) && isVec3(value.ground.localPos))) &&
+  isVec2(value.walk) &&
+  isVec2(value.carry) &&
+  finite(value.vy) &&
+  typeof value.grounded === 'boolean' &&
+  Array.isArray(value.inventory) &&
+  value.inventory.length === 3 &&
+  value.inventory.every((slot) => slot === null || isText(slot)) &&
+  (value.slot === 0 || value.slot === 1 || value.slot === 2) &&
+  finite(value.health) &&
+  value.health >= 0 &&
+  value.health <= 100 &&
+  (value.downed === null || (finite(value.downed) && value.downed >= 0)) &&
+  (value.hold === null || (isRecord(value.hold) && isText(value.hold.action) && isText(value.hold.targetId) && finite(value.hold.progress)));
+const isPropSnapshot = (value: unknown): value is PropSnapshot =>
+  isRecord(value) && isText(value.id) && isText(value.kind) && isVec3(value.pos) && isQuat(value.rot);
+const isCableSnapshot = (value: unknown): value is CableSnapshot =>
+  isRecord(value) &&
+  (value.state === 'stowed' || value.state === 'held' || value.state === 'ground' || value.state === 'attached') &&
+  (value.holderId === null || isText(value.holderId)) &&
+  (value.anchorId === null || isText(value.anchorId)) &&
+  isVec3(value.hookPos) &&
+  finite(value.length) &&
+  (value.reel === -1 || value.reel === 0 || value.reel === 1);
 const isLobbyPlayer = (value: unknown): value is LobbyPlayer =>
   isRecord(value) &&
   isText(value.playerId) &&
@@ -239,16 +374,65 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         data.players.every(isLobbyPlayer) &&
         (data.adminId === null || isText(data.adminId)) &&
         isText(data.courseId) &&
-        isText(data.vehicleId)
+        isText(data.vehicleId) &&
+        isTimeOfDay(data.timeOfDay) &&
+        isWeather(data.weather)
         ? message
         : null;
     case 'snapshot':
       return isCount(data.tick) &&
         isCount(data.ackSeq) &&
+        finite(data.elapsed) &&
+        data.elapsed >= 0 &&
+        isCount(data.checkpoint) &&
+        isCount(data.checkpointCount) &&
+        isCount(data.restarts) &&
+        isCount(data.respawns) &&
+        Array.isArray(data.coinsLeft) &&
+        data.coinsLeft.every(isText) &&
+        isCount(data.wallet) &&
+        isCount(data.coinsCollected) &&
+        isCount(data.coinsTotal) &&
+        data.coinsLeft.length <= data.coinsTotal &&
+        data.coinsCollected <= data.coinsTotal &&
+        typeof data.won === 'boolean' &&
+        typeof data.assisted === 'boolean' &&
         typeof data.full === 'boolean' &&
         isVehicleState(data.vehicle) &&
         Array.isArray(data.players) &&
-        data.players.every(isPlayerSnapshot)
+        data.players.every(isPlayerSnapshot) &&
+        Array.isArray(data.props) &&
+        data.props.every(isPropSnapshot) &&
+        isCableSnapshot(data.cable)
+        ? message
+        : null;
+    case 'event':
+      return (EVENT_KINDS as readonly unknown[]).includes(data.kind) &&
+        isCount(data.tick) &&
+        (data.playerId === undefined || isText(data.playerId)) &&
+        (data.pos === undefined || isVec3(data.pos))
+        ? message
+        : null;
+    case 'results':
+      return isText(data.courseId) &&
+        isText(data.vehicleId) &&
+        isTimeOfDay(data.timeOfDay) &&
+        isWeather(data.weather) &&
+        finite(data.elapsed) &&
+        data.elapsed >= 0 &&
+        isCount(data.restarts) &&
+        isCount(data.respawns) &&
+        isCount(data.wallet) &&
+        isCount(data.coinsCollected) &&
+        isCount(data.coinsTotal) &&
+        data.coinsCollected <= data.coinsTotal &&
+        finite(data.finalTime) &&
+        data.finalTime >= 0 &&
+        Array.isArray(data.stars) &&
+        data.stars.length === 3 &&
+        data.stars.every((star) => typeof star === 'boolean') &&
+        typeof data.assisted === 'boolean' &&
+        (data.campaignTotal === undefined || (finite(data.campaignTotal) && data.campaignTotal >= 0))
         ? message
         : null;
     default:

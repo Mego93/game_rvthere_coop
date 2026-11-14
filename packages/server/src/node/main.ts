@@ -9,8 +9,25 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 }
 
 const clientDir = fileURLToPath(new URL('../../../client/dist', import.meta.url));
-// VEHICLE=rv runs every room with the RV until the lobby (step 11) lets the admin choose.
-const server = await startServer({ port, clientDir, vehicleId: process.env.VEHICLE });
+// Optional overrides of the connection and create limits; the end-to-end run raises them.
+const positiveInteger = (name: string): number | undefined => {
+  const raw = process.env[name];
+  if (raw === undefined) return undefined;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    console.error(`${name} must be a whole number of at least 1, not "${raw}".`);
+    process.exit(1);
+  }
+  return value;
+};
+const limits = {
+  createPerMinute: positiveInteger('CREATE_PER_MINUTE'),
+  perAddress: positiveInteger('MAX_CONNECTIONS_PER_ADDRESS'),
+};
+// TRUST_PROXY=1 behind the Cloudflare Tunnel: the client address then comes from CF-Connecting-IP.
+const trustProxy = process.env.TRUST_PROXY === '1';
+const server = await startServer({ port, clientDir, trustProxy, limits });
+console.log(`Proxy trust is ${trustProxy ? 'on (CF-Connecting-IP decides the client address)' : 'off'}.`);
 
 if (process.env.LODGY_DEV) {
   // Under "npm run dev" the page comes from Vite, which prints its own addresses.

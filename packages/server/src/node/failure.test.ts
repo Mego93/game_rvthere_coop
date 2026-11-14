@@ -16,8 +16,8 @@ vi.mock('../room/server', async (importOriginal) => {
     });
     return {
       ...server,
-      connect(connection) {
-        const handle = server.connect(connection);
+      connect(connection, address) {
+        const handle = server.connect(connection, address);
         return {
           message(data) {
             if (data === 'throw') throw new Error('message failed');

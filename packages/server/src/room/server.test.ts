@@ -1,6 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import {
+  CREATE_PER_MINUTE,
   EMPTY_ROOM_TIMEOUT,
+  HELD_SLOT_TIMEOUT,
   MAX_PLAYERS,
   MAX_ROOMS,
   NEUTRAL_INPUT,
@@ -8,8 +10,11 @@ import {
   PLAYER_COLOURS,
   RATE_LIMIT_CLOSE_AFTER,
   RATE_LIMIT_PER_SECOND,
+  RATE_LIMIT_STRIKES,
   SERVER_MAX_CATCHUP_STEPS,
   SILENCE_TIMEOUT,
+  SOLO_ROOM_TIMEOUT,
+  STALL_GRACE,
   SNAPSHOT_EVERY_TICKS,
   TICK_RATE,
   type ClientMessage,
@@ -18,7 +23,7 @@ import {
 import { beforeAll, expect, test } from 'vitest';
 import { NOUNS } from './nouns';
 import { createRoomServer } from './server';
-import { connectFakeClient, createFakeDeps, type FakeClient } from './testing';
+import { connectFakeClient, createFakeDeps, startRun, type FakeClient } from './testing';
 import type { RoomServerOptions } from './types';
 
 beforeAll(async () => {
@@ -37,8 +42,18 @@ function setup(options?: RoomServerOptions) {
   const fake = createFakeDeps(RAPIER);
   // Everything the server reports through onError, oldest first.
   const errors: unknown[] = [];
-  const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) }, options);
-  const connect = () => connectFakeClient(server);
+  const sources: string[] = [];
+  const server = createRoomServer(
+    {
+      ...fake.deps,
+      onError: (error, source) => {
+        errors.push(error);
+        sources.push(source);
+      },
+    },
+    options,
+  );
+  const connect = (address?: string) => connectFakeClient(server, address);
   // Connects a client and creates a room with it.
   const host = (name = 'Amal') => {
     const client = connect();
@@ -51,8 +66,21 @@ function setup(options?: RoomServerOptions) {
     client.send({ type: 'join', room, name, token: token(n) });
     return client;
   };
-  return { ...fake, server, errors, connect, host, guest };
+  // Starts the run: the guests ready up, then the host presses Start.
+  const begin = (hostClient: FakeClient, ...guests: FakeClient[]) => {
+    for (const client of guests) client.send({ type: 'ready', ready: true });
+    startRun(hostClient);
+  };
+  return { ...fake, server, errors, sources, connect, host, guest, begin };
 }
+
+// Advances the clock in one-second steps, with the given clients answering pings, so that silence does not drop them.
+const wait = (advance: (seconds: number) => void, seconds: number, ...clients: FakeClient[]) => {
+  for (let elapsed = 0; elapsed < seconds; elapsed += 1) {
+    for (const client of clients) client.send({ type: 'pong' });
+    advance(1);
+  }
+};
 
 const reasons = (client: FakeClient) => client.ofType('error').map((message) => message.reason);
 
@@ -67,11 +95,13 @@ test('create makes a room and welcomes its creator, then announces the lobby', (
   expect(client.received[1]).toEqual({
     type: 'lobby',
     room,
-    phase: 'playing',
+    phase: 'lobby',
     players: [{ playerId: 'p1', name: 'Amal', colour: PLAYER_COLOURS[0], ready: false, connected: true }],
     adminId: 'p1',
     courseId: 'test',
     vehicleId: 'lodgy',
+    timeOfDay: 'midday',
+    weather: 'clear',
   });
 });
 
@@ -85,17 +115,6 @@ test('the random source chooses the noun', () => {
   const { host, randomValues } = setup();
   randomValues.push(0.5);
   expect(host().room).toBe(NOUNS[Math.floor(NOUNS.length / 2)]);
-});
-
-test('the room runs the configured vehicle', () => {
-  const { host } = setup({ vehicleId: 'rv' });
-  expect(host().client.last('lobby').vehicleId).toBe('rv');
-});
-
-test('an unknown course or vehicle is refused when the server is created', () => {
-  const fake = createFakeDeps(RAPIER);
-  expect(() => createRoomServer(fake.deps, { vehicleId: 'bus' })).toThrow('Unknown vehicle: bus');
-  expect(() => createRoomServer(fake.deps, { courseId: 'moon' })).toThrow('Unknown course: moon');
 });
 
 test('join welcomes the newcomer and announces the lobby to everyone', () => {
@@ -164,51 +183,66 @@ test('a malformed message gets bad_message and the connection stays usable', () 
 
 // --- leaving ---
 
-test('a player who disconnects leaves the room, and their colour and name become free', () => {
-  const { host, guest } = setup();
+test('a player who disconnects keeps a disconnected slot until the hold expires, then their colour and name become free', () => {
+  const { host, guest, advance } = setup();
   const { client: amal, room } = host('Amal');
   const badr = guest(room, 2, 'Badr');
   badr.close();
+  expect(amal.last('lobby').players.map((player) => [player.name, player.connected])).toEqual([['Amal', true], ['Badr', false]]);
+  expect(reasons(guest(room, 3, 'badr'))).toEqual(['name_taken']);
+  wait(advance, HELD_SLOT_TIMEOUT - 1, amal);
+  expect(amal.last('lobby').players).toHaveLength(2);
+  wait(advance, 1, amal);
   expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
   const again = guest(room, 3, 'Badr');
   expect(again.last('welcome').playerId).toBe('p3');
   expect(again.last('lobby').players[1]!.colour).toBe(PLAYER_COLOURS[1]);
 });
 
-test('the admin role passes to the longest-connected player', () => {
-  const { host, guest } = setup();
+test('the admin role passes to the longest-connected player only after the admin slot expires', () => {
+  const { host, guest, advance } = setup();
   const { client: amal, room } = host();
   const badr = guest(room, 2);
   const chadi = guest(room, 3);
   amal.close();
+  expect(badr.last('lobby').adminId).toBe('p1');
+  wait(advance, HELD_SLOT_TIMEOUT, badr, chadi);
   expect(badr.last('lobby').adminId).toBe('p2');
   expect(chadi.last('lobby').adminId).toBe('p2');
 });
 
-test('when everyone has left, the next player to join becomes admin', () => {
-  const { host, guest } = setup();
+test('when everyone has left, the next player to join becomes admin once the admin slot has expired', () => {
+  const { host, guest, advance } = setup();
   const { client: amal, room } = host();
+  // Someone else joined, so the room outlives the hold.
+  const badr = guest(room, 2);
   amal.close();
-  expect(guest(room, 2).last('lobby').adminId).toBe('p2');
+  badr.close();
+  wait(advance, HELD_SLOT_TIMEOUT);
+  expect(guest(room, 3).last('lobby').adminId).toBe('p3');
 });
 
 test('an empty room is deleted after the timeout, and not before', () => {
   const { host, guest, advance, server } = setup();
   const { client, room } = host();
+  // Someone else joined, so this is not a solo room and the long timeout applies.
+  const badr = guest(room, 2);
   client.close();
+  badr.close();
   advance(EMPTY_ROOM_TIMEOUT - 1);
   expect(server.roomCount()).toBe(1);
   advance(1);
   expect(server.roomCount()).toBe(0);
-  expect(reasons(guest(room, 2))).toEqual(['unknown_room']);
+  expect(reasons(guest(room, 3))).toEqual(['unknown_room']);
 });
 
 test('a room that someone rejoins is not deleted', () => {
   const { host, guest, advance, server } = setup();
   const { client, room } = host();
+  guest(room, 2).close();
   client.close();
   advance(EMPTY_ROOM_TIMEOUT - 1);
-  const badr = guest(room, 2);
+  const badr = guest(room, 3);
   advance(5);
   expect(server.roomCount()).toBe(1);
   // The timeout starts again from the moment the room next empties.
@@ -222,6 +256,7 @@ test('a room that someone rejoins is not deleted', () => {
 test('a join with the token of a connected player takes that player over', () => {
   const { host, connect, advance } = setup();
   const { client: first, room } = host('Amal');
+  startRun(first);
   first.send(input(1, { moveY: 1 }));
   first.send(input(2, { moveY: 1 }));
   advance(0.5);
@@ -243,11 +278,92 @@ test('a join with the token of a connected player takes that player over', () =>
   expect(second.ofType('snapshot')[0]!.full).toBe(true);
 });
 
+test('a takeover finds the session by player, whatever the order of sessions', () => {
+  const { host, guest, connect } = setup();
+  const { client: amal, room } = host('Amal');
+  const badr = guest(room, 2, 'Badr');
+  const chadi = guest(room, 3, 'Chadi');
+  const badrAgain = connect();
+  badrAgain.send({ type: 'join', room, name: 'Badr', token: token(2) });
+  expect(badr.closedByServer).toBe(true);
+  expect(amal.closedByServer).toBe(false);
+  expect(chadi.closedByServer).toBe(false);
+  expect(badrAgain.received[0]).toEqual({ type: 'welcome', playerId: 'p2', room });
+  expect(badrAgain.last('lobby').players.map((player) => player.name)).toEqual(['Amal', 'Badr', 'Chadi']);
+  // The old connection's late close does not remove the player.
+  badr.close();
+  expect(amal.last('lobby').players).toHaveLength(3);
+});
+
+test('the replaced connection is told error replaced before it is closed', () => {
+  const { host, guest, connect } = setup();
+  const { room } = host('Amal');
+  const badr = guest(room, 2, 'Badr');
+  const badrAgain = connect();
+  badrAgain.send({ type: 'join', room, name: 'Badr', token: token(2) });
+  expect(badr.ofType('error')).toEqual([{ type: 'error', reason: 'replaced' }]);
+  expect(badr.closedByServer).toBe(true);
+  expect(badrAgain.ofType('error')).toEqual([]);
+});
+
+// --- room creation per address and solo rooms ---
+
+test('the sixth create from one address within 60 s is refused; another address can create; after 60 s the first can again', () => {
+  const { connect, advance, server } = setup();
+  const create = (address: string, n: number) => {
+    const client = connect(address);
+    client.send({ type: 'create', name: 'Amal', token: token(n) });
+    return client;
+  };
+  for (let n = 0; n < CREATE_PER_MINUTE; n++) {
+    expect(reasons(create('one', n))).toEqual([]);
+    advance(1);
+  }
+  const refused = create('one', 10);
+  expect(reasons(refused)).toEqual(['server_full']);
+  expect(reasons(create('two', 11))).toEqual([]);
+  // The refused create did not count; the first create ages out at 60 s, not before.
+  advance(60 - CREATE_PER_MINUTE - 1);
+  expect(reasons(create('one', 12))).toEqual(['server_full']);
+  advance(1);
+  expect(reasons(create('one', 13))).toEqual([]);
+  expect(server.roomCount()).toBeGreaterThan(0);
+});
+
+test('a room nobody else joined is deleted after the solo timeout, and one someone joined lasts the full timeout', () => {
+  const { host, guest, advance, server } = setup();
+  const { client } = host('Amal');
+  client.close();
+  advance(SOLO_ROOM_TIMEOUT - 1);
+  expect(server.roomCount()).toBe(1);
+  advance(1);
+  expect(server.roomCount()).toBe(0);
+
+  const { client: amal, room } = host('Amal');
+  const badr = guest(room, 2);
+  amal.close();
+  badr.close();
+  advance(SOLO_ROOM_TIMEOUT);
+  expect(server.roomCount()).toBe(1);
+  advance(EMPTY_ROOM_TIMEOUT - SOLO_ROOM_TIMEOUT);
+  expect(server.roomCount()).toBe(0);
+});
+
+test('the creator rejoining with its own token does not make a room more than solo', () => {
+  const { host, guest, advance, server } = setup();
+  const { client, room } = host('Amal');
+  client.close();
+  guest(room, 1, 'Amal').close();
+  advance(SOLO_ROOM_TIMEOUT);
+  expect(server.roomCount()).toBe(0);
+});
+
 // --- simulation and snapshots ---
 
 test('snapshots arrive 20 times a second, the first one full', () => {
   const { host, advance } = setup();
   const { client } = host();
+  startRun(client);
   advance(1);
   const snapshots = client.ofType('snapshot');
   expect(snapshots).toHaveLength(TICK_RATE / SNAPSHOT_EVERY_TICKS);
@@ -260,7 +376,8 @@ test('snapshots arrive 20 times a second, the first one full', () => {
 
 test('a player who joins mid-run gets a full snapshot first', () => {
   const { host, guest, advance } = setup();
-  const { room } = host();
+  const { client, room } = host();
+  startRun(client);
   advance(1);
   const badr = guest(room, 2);
   advance(0.2);
@@ -273,6 +390,7 @@ test('a player who joins mid-run gets a full snapshot first', () => {
 test('a joining player appears in the snapshot at a spawn slot, and two players take different slots', () => {
   const { host, guest, advance } = setup();
   const { client: amal, room } = host();
+  startRun(amal);
   advance(0.2);
   const [first] = amal.last('snapshot').players;
   expect(amal.last('snapshot').players).toHaveLength(1);
@@ -290,9 +408,10 @@ test('a joining player appears in the snapshot at a spawn slot, and two players 
 });
 
 test('a player who leaves disappears from the snapshot players', () => {
-  const { host, guest, advance } = setup();
+  const { host, guest, advance, begin } = setup();
   const { client: amal, room } = host();
   const badr = guest(room, 2);
+  begin(amal, badr);
   advance(0.2);
   badr.close();
   advance(0.2);
@@ -301,7 +420,8 @@ test('a player who leaves disappears from the snapshot players', () => {
 
 test('a player who joins mid-run gets a full snapshot that includes the players', () => {
   const { host, guest, advance } = setup();
-  const { room } = host();
+  const { client, room } = host();
+  startRun(client);
   advance(1);
   const badr = guest(room, 2);
   advance(0.2);
@@ -311,9 +431,10 @@ test('a player who joins mid-run gets a full snapshot that includes the players'
 });
 
 test('the player in the driver seat drives; the others do not', () => {
-  const { host, guest, advance } = setup();
+  const { host, guest, advance, begin } = setup();
   const { client: amal, room } = host();
   const badr = guest(room, 2);
+  begin(amal, badr);
   advance(1);
   let seq = 0;
   // One input per tick for two seconds: Badr holds full throttle from his own spot, Amal has not boarded.
@@ -345,6 +466,7 @@ test('the player in the driver seat drives; the others do not', () => {
 test('when the driver leaves, the vehicle coasts until someone boards', () => {
   const { host, advance } = setup();
   const { client: amal } = host();
+  startRun(amal);
   amal.send(input(1, { interact: true }));
   advance(0.1);
   let seq = 1;
@@ -377,9 +499,10 @@ test('when the driver leaves, the vehicle coasts until someone boards', () => {
 });
 
 test('each client is told the last of its own inputs that was consumed', () => {
-  const { host, guest, advance } = setup();
+  const { host, guest, advance, begin } = setup();
   const { client: amal, room } = host();
   const badr = guest(room, 2);
+  begin(amal, badr);
   amal.send(input(1));
   amal.send(input(2));
   badr.send(input(1));
@@ -399,6 +522,7 @@ test('input from a connection that is not in a room is ignored', () => {
 test('a silent seated driver stops pressing the pedal after the neutral-input delay', () => {
   const { host, advance } = setup();
   const { client } = host();
+  startRun(client);
   client.send(input(1, { interact: true }));
   advance(0.1);
   client.send(input(2, { moveY: 1 }));
@@ -412,6 +536,7 @@ test('a silent seated driver stops pressing the pedal after the neutral-input de
 test('a tap of interact that is consumed together with the next input still boards', () => {
   const { host, advance } = setup();
   const { client } = host();
+  startRun(client);
   // More than INPUT_QUEUE_FAST_ABOVE inputs waiting: the first tick consumes the first two, the press and its release.
   client.send(input(1, { interact: true }));
   client.send(input(2));
@@ -425,6 +550,7 @@ test('a tap of interact that is consumed together with the next input still boar
 test('after a stall the room runs only the catch-up limit and drops the rest', () => {
   const { host, advance, stall } = setup();
   const { client } = host();
+  startRun(client);
   advance(1);
   const before = client.last('snapshot').tick;
   // Three seconds without a timer callback: 180 ticks are owed.
@@ -441,6 +567,7 @@ test('after a stall the room runs only the catch-up limit and drops the rest', (
 test('an empty room is paused and resumes where it was', () => {
   const { host, guest, advance } = setup();
   const { client, room } = host();
+  startRun(client);
   advance(1);
   const before = client.last('snapshot').tick;
   client.close();
@@ -473,7 +600,50 @@ test('a connection that keeps answering stays; one that goes silent is dropped f
   }
   expect(amal.closedByServer).toBe(false);
   expect(badr.closedByServer).toBe(true);
+  expect(amal.last('lobby').players.map((player) => [player.name, player.connected])).toEqual([['Amal', true], ['Badr', false]]);
+  wait(advance, HELD_SLOT_TIMEOUT, amal);
   expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
+});
+
+test('silence of exactly the timeout drops a connection and a hair less does not', () => {
+  const { connect, advance } = setup();
+  const client = connect();
+  advance(SILENCE_TIMEOUT - 0.05);
+  expect(client.closedByServer).toBe(false);
+  advance(0.1);
+  expect(client.closedByServer).toBe(true);
+});
+
+test('a stall with every client silent during it drops nobody', () => {
+  const { connect, advance, stall } = setup();
+  const client = connect();
+  advance(3);
+  stall(STALL_GRACE + 3);
+  advance(0.1);
+  // 7.1 s of silence in all, 4.1 s once the stall's excess is credited.
+  expect(client.closedByServer).toBe(false);
+});
+
+test('a client silent for the full timeout of non-stalled time is still dropped after a stall', () => {
+  const { connect, advance, stall } = setup();
+  const client = connect();
+  stall(STALL_GRACE + 3);
+  // The stall's excess (3 s) is forgiven, so the client is dropped at 3 + SILENCE_TIMEOUT s, not before.
+  advance(3 + SILENCE_TIMEOUT - (STALL_GRACE + 3) - 0.5);
+  expect(client.closedByServer).toBe(false);
+  advance(1);
+  expect(client.closedByServer).toBe(true);
+});
+
+test('a message heard after the previous timer run is not credited the stall excess', () => {
+  const { connect, advance, stall } = setup();
+  const client = connect();
+  stall(0.5);
+  client.send({ type: 'pong' });
+  stall(4);
+  // The message at 0.5 s makes the client due at 6.5 s; credited the excess it would be due at 10 s.
+  advance(2.5);
+  expect(client.closedByServer).toBe(true);
 });
 
 test('messages beyond the rate limit within a second are dropped', () => {
@@ -494,13 +664,24 @@ test('a connection that stays over the rate limit is closed and removed', () => 
     advance(0.1);
   }
   expect(badr.closedByServer).toBe(true);
-  expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
+  expect(amal.last('lobby').players.map((player) => [player.name, player.connected])).toEqual([['Amal', true], ['Badr', false]]);
+});
+
+test('a connection that floods in alternate seconds is closed on the strike count', () => {
+  const { connect, advance } = setup();
+  const client = connect();
+  for (let n = 0; n < RATE_LIMIT_STRIKES * 2 && !client.closedByServer; n++) {
+    if (n % 2 === 0) for (let i = 0; i < RATE_LIMIT_PER_SECOND + 10; i++) client.send({ type: 'pong' });
+    else client.send({ type: 'pong' });
+    advance(1);
+  }
+  expect(client.closedByServer).toBe(true);
 });
 
 test('create is refused once the server holds the most rooms it allows, until one is deleted', () => {
   const { connect, advance, server } = setup();
   const hosts = Array.from({ length: MAX_ROOMS }, (_, n) => {
-    const client = connect();
+    const client = connect(`address-${n}`);
     client.send({ type: 'create', name: 'Amal', token: token(n) });
     return client;
   });
@@ -528,8 +709,9 @@ test('create is refused once the server holds the most rooms it allows, until on
 });
 
 test('a connection whose send throws is reported and dropped, and the others carry on', () => {
-  const { host, advance, server, errors } = setup();
+  const { host, advance, server, errors, sources } = setup();
   const { client: amal, room } = host();
+  startRun(amal);
   let broken = false;
   let closed = false;
   const handle = server.connect({
@@ -539,7 +721,7 @@ test('a connection whose send throws is reported and dropped, and the others car
     close() {
       closed = true;
     },
-  });
+  }, 'test');
   handle.message(JSON.stringify({ type: 'join', room, name: 'Badr', token: token(2) }));
   expect(amal.last('lobby').players).toHaveLength(2);
 
@@ -547,8 +729,9 @@ test('a connection whose send throws is reported and dropped, and the others car
   const before = amal.ofType('snapshot').length;
   advance(1);
   expect(errors).toHaveLength(1);
+  expect(sources).toEqual([`connection:${room}`]);
   expect(closed).toBe(true);
-  expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
+  expect(amal.last('lobby').players.map((player) => [player.name, player.connected])).toEqual([['Amal', true], ['Badr', false]]);
   // The tick was never interrupted: Amal missed no snapshot.
   expect(amal.ofType('snapshot').length - before).toBe(TICK_RATE / SNAPSHOT_EVERY_TICKS);
   expect(amal.closedByServer).toBe(false);
@@ -561,7 +744,7 @@ test('a connection that has failed can no longer create a room', () => {
       throw new Error('socket failed');
     },
     close() {},
-  });
+  }, 'test');
   // The reply to this malformed message cannot be sent, which marks the connection as failed.
   handle.message('not json');
   expect(errors).toHaveLength(1);
@@ -580,7 +763,7 @@ test('a connection whose close throws is still removed from its room', () => {
     close() {
       throw new Error('close failed');
     },
-  });
+  }, 'test');
   handle.message(JSON.stringify({ type: 'join', room, name: 'Badr', token: token(2) }));
   expect(amal.last('lobby').players).toHaveLength(2);
 
@@ -590,7 +773,7 @@ test('a connection whose close throws is still removed from its room', () => {
     amal.send({ type: 'pong' });
   }
   expect(errors).toHaveLength(1);
-  expect(amal.last('lobby').players.map((player) => player.name)).toEqual(['Amal']);
+  expect(amal.last('lobby').players.map((player) => [player.name, player.connected])).toEqual([['Amal', true], ['Badr', false]]);
 });
 
 test('stop frees every room', () => {
@@ -599,4 +782,56 @@ test('stop frees every room', () => {
   host();
   server.stop();
   expect(server.roomCount()).toBe(0);
+});
+
+// --- shop ---
+
+test('S15: a buy sent before join gets cannot_buy', () => {
+  const { connect } = setup();
+  const client = connect();
+  client.send({ type: 'buy', item: 'jerrycan' });
+  expect(reasons(client)).toEqual(['cannot_buy']);
+});
+
+test('S15: a refused buy sends cannot_buy to that client only', () => {
+  const { host, guest, advance, begin } = setup();
+  const { client: amal, room } = host();
+  const badr = guest(room, 2);
+  begin(amal, badr);
+  advance(0.2);
+  amal.send({ type: 'buy', item: 'jerrycan' });
+  expect(reasons(amal)).toEqual(['cannot_buy']);
+  expect(reasons(badr)).toEqual([]);
+  expect(amal.closedByServer).toBe(false);
+});
+
+test('S15: an accepted buy sends no error and puts the item in the inventory', () => {
+  const { host, advance } = setup();
+  const { client: amal } = host();
+  startRun(amal);
+  let seq = 0;
+  const me = () => amal.last('snapshot').players.find((player) => player.playerId === 'p1')!;
+  // Walks toward a point on the ground, steering from the latest snapshot, until within `reach` of it.
+  const walkTo = (x: number, z: number, reach: number) => {
+    for (let i = 0; i < 20 * TICK_RATE; i++) {
+      const { pos } = me();
+      if (Math.hypot(x - pos.x, z - pos.z) <= reach) return;
+      seq += 1;
+      amal.send(input(seq, { moveY: 1, yaw: Math.atan2(-(x - pos.x), -(z - pos.z)) }));
+      advance(1 / TICK_RATE);
+    }
+    throw new Error(`Never reached ${x}, ${z}`);
+  };
+  advance(0.2);
+  // The test ground's coin-1 to coin-3, then the fuel station's counter.
+  walkTo(3, -12, 0.5);
+  walkTo(-3, -28, 0.5);
+  walkTo(6, -36, 0.5);
+  expect(amal.last('snapshot').wallet).toBe(3);
+  walkTo(11.5, -23, 0.5);
+  amal.send({ type: 'buy', item: 'jerrycan' });
+  expect(reasons(amal)).toEqual([]);
+  advance(0.2);
+  expect(amal.last('snapshot').wallet).toBe(0);
+  expect(me().inventory).toContain('jerrycan');
 });

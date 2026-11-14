@@ -10,7 +10,7 @@ export default defineConfig({
   use: { baseURL: 'http://localhost:3100', trace: 'retain-on-failure' },
   webServer: {
     command: 'npm start',
-    env: { PORT: '3100' },
+    env: { PORT: '3100', CREATE_PER_MINUTE: '1000', MAX_CONNECTIONS_PER_ADDRESS: '1000' },
     url: 'http://localhost:3100/',
     reuseExistingServer: false,
     timeout: 60_000,
@@ -18,6 +18,8 @@ export default defineConfig({
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 } } },
     // An iPhone in landscape, in WebKit, the engine of Safari. It is not Safari on a real iPhone, which is the owner's check.
-    { name: 'phone', use: { ...devices['iPhone 14 landscape'] } },
+    { name: 'phone', use: { ...devices['iPhone 14 landscape'] }, grepInvert: /@keyboard/ },
+    // The same phone profile in Chromium, for machines without WebKit.
+    { name: 'phone-chromium', use: { ...devices['iPhone 14 landscape'], browserName: 'chromium' }, grepInvert: /@keyboard/ },
   ],
 });

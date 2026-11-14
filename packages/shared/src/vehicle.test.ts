@@ -1,15 +1,18 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { DRIVER_DOOR_RANGE, GRAVITY, SURFACES } from './constants';
-import { SAND_PATCH_CENTER } from './courses/testGround';
-import { IDENTITY, vec3, yawOf, type Pose } from './math';
-import { createRig } from './testRig';
+import { DRIVER_DOOR_RANGE, GRAVITY, SURFACES, TICK_RATE, VEHICLE_UPSIDE_DOWN_DRAIN } from './constants';
+import { SAND_PATCH_CENTER, testGround } from './courses/testGround';
+import { IDENTITY, quatFromAxisAngle, vec3, yawOf, type Pose } from './math';
+import { buildStatics } from './statics';
+import { createRig, withBoxes } from './testRig';
+import { createVehicle } from './vehicle';
 import { VEHICLES, getVehicleConfig, type VehicleId } from './vehicles';
 
 beforeAll(async () => {
   await RAPIER.init();
 });
 
+const SAND_PATCH_HALF_Z = 15;
 const ORIGIN: Pose = { pos: vec3(0, 0, 0), rot: IDENTITY };
 const ON_SAND: Pose = { pos: vec3(SAND_PATCH_CENTER.x, 0, SAND_PATCH_CENTER.z + 10), rot: IDENTITY };
 
@@ -95,7 +98,7 @@ describe.each(['lodgy', 'rv'] as const)('%s', (id) => {
     expect(settled(id, ON_SAND).vehicle.wheelSurfaces()).toEqual(['sand', 'sand', 'sand', 'sand']);
   });
 
-  test('sand slows it to less than half the distance covered on road', () => {
+  test.runIf(id === 'lodgy')('sand slows it to less than half the distance covered on road', () => {
     const road = settled(id);
     road.run(3, { throttle: 1 });
     const onRoad = -road.vehicle.state().pos.z;
@@ -105,6 +108,26 @@ describe.each(['lodgy', 'rv'] as const)('%s', (id) => {
     const onSand = ON_SAND.pos.z - sand.vehicle.state().pos.z;
 
     expect(onSand).toBeLessThan(onRoad / 2);
+  });
+
+  test.runIf(id === 'rv')('from rest on sand at full throttle it stays bogged within 0.5 m for 10 s', () => {
+    const rig = settled(id, ON_SAND);
+    rig.run(10, { throttle: 1 });
+    const { pos } = rig.vehicle.state();
+    expect(Math.hypot(pos.x - ON_SAND.pos.x, pos.z - ON_SAND.pos.z)).toBeLessThan(0.5);
+  });
+
+  test.runIf(id === 'rv')('entering the sand at 12 m/s it crosses the far edge within 10 s', () => {
+    const edgeFar = SAND_PATCH_CENTER.z + SAND_PATCH_HALF_Z;
+    const edgeNear = SAND_PATCH_CENTER.z - SAND_PATCH_HALF_Z;
+    const rig = settled(id, { pos: vec3(SAND_PATCH_CENTER.x, 0, edgeFar + 5), rot: IDENTITY });
+    rig.vehicle.body.setLinvel({ x: 0, y: 0, z: -12 }, true);
+    let crossed = false;
+    for (let i = 0; i < 10 && !crossed; i++) {
+      rig.run(1, { throttle: 1 });
+      crossed = rig.vehicle.state().pos.z < edgeNear;
+    }
+    expect(crossed).toBe(true);
   });
 
   test('state reports clamped throttle and steer', () => {
@@ -159,5 +182,140 @@ describe.each(['lodgy', 'rv'] as const)('%s seats and spawn slots', (id) => {
     expect(() => {
       (config.spawnSlots[0] as { x: number }).x = 0;
     }).toThrow(TypeError);
+  });
+});
+
+describe.each(['lodgy', 'rv'] as const)('%s fuel and health', (id) => {
+  const config = VEHICLES[id];
+
+  test('(1) fuel drains at fuelBurn times the throttle magnitude, in reverse too, and not at zero throttle', () => {
+    const full = settled(id);
+    full.run(10, { throttle: 1 });
+    expect(full.vehicle.fuel()).toBeCloseTo(1 - 10 * config.fuelBurn, 4);
+    const half = settled(id);
+    half.run(10, { throttle: 0.5 });
+    expect(half.vehicle.fuel()).toBeCloseTo(1 - 5 * config.fuelBurn, 4);
+    const reverse = settled(id);
+    reverse.run(10, { throttle: -1 });
+    expect(reverse.vehicle.fuel()).toBeCloseTo(1 - 10 * config.fuelBurn, 4);
+    const idle = settled(id);
+    idle.run(10);
+    expect(idle.vehicle.fuel()).toBe(1);
+    expect(full.vehicle.state().fuel).toBe(full.vehicle.fuel());
+  });
+
+  test('(2) with an empty tank full throttle does not move it, and braking and steering still work while coasting', () => {
+    const rig = settled(id);
+    rig.vehicle.addFuel(-1);
+    expect(rig.vehicle.fuel()).toBe(0);
+    rig.run(3, { throttle: 1 });
+    expect(Math.hypot(rig.vehicle.state().pos.x, rig.vehicle.state().pos.z)).toBeLessThan(0.05);
+    expect(rig.vehicle.fuel()).toBe(0);
+
+    const coasting = settled(id);
+    coasting.run(4, { throttle: 1 });
+    coasting.vehicle.addFuel(-1);
+    const v0 = coasting.vehicle.forwardSpeed();
+    coasting.run(1, { throttle: 1, steer: 1 });
+    expect(coasting.vehicle.forwardSpeed()).toBeLessThan(v0);
+    expect(coasting.vehicle.state().steer).toBe(1);
+    expect(yawOf(coasting.vehicle.state().rot)).toBeLessThan(0);
+    coasting.run(5, { brake: true });
+    expect(Math.abs(coasting.vehicle.forwardSpeed())).toBeLessThan(0.01);
+  });
+
+  test('(3) addFuel and repair clamp to [0, 1]', () => {
+    const rig = settled(id);
+    rig.vehicle.addFuel(0.5);
+    expect(rig.vehicle.fuel()).toBe(1);
+    rig.vehicle.addFuel(-0.25);
+    expect(rig.vehicle.fuel()).toBeCloseTo(0.75, 10);
+    rig.vehicle.addFuel(-5);
+    expect(rig.vehicle.fuel()).toBe(0);
+    rig.vehicle.repair(0.5);
+    expect(rig.vehicle.health()).toBe(1);
+    rig.vehicle.repair(-5);
+    expect(rig.vehicle.health()).toBe(0);
+    rig.vehicle.repair(0.5);
+    expect(rig.vehicle.health()).toBe(0.5);
+    expect(rig.vehicle.state().health).toBe(0.5);
+  });
+
+  test('(4) health stays 1 at rest for 10 s, and over a 100 m drive and a full stop', () => {
+    const rest = createRig(RAPIER, id, ORIGIN);
+    rest.run(10);
+    expect(rest.vehicle.health()).toBe(1);
+
+    const drive = settled(id);
+    while (drive.vehicle.state().pos.z > -100) drive.run(0.1, { throttle: 1 });
+    drive.run(10, { brake: true });
+    expect(Math.abs(drive.vehicle.forwardSpeed())).toBeLessThan(0.01);
+    expect(drive.vehicle.health()).toBe(1);
+  });
+
+  test('(6) upside down at rest for 10 s loses 10 times the drain', () => {
+    const flipped = quatFromAxisAngle(vec3(0, 0, 1), Math.PI);
+    const rig = createRig(RAPIER, id, { pos: vec3(0, config.halfExtents.y + config.rideHeight, 0), rot: flipped });
+    rig.run(10);
+    expect(rig.vehicle.health()).toBeCloseTo(1 - 10 * VEHICLE_UPSIDE_DOWN_DRAIN, 2);
+  });
+
+  test('(7) health never goes below 0', () => {
+    const flipped = quatFromAxisAngle(vec3(0, 0, 1), Math.PI);
+    const rig = createRig(RAPIER, id, { pos: vec3(0, config.halfExtents.y + config.rideHeight, 0), rot: flipped });
+    rig.vehicle.repair(-0.95);
+    rig.run(10);
+    expect(rig.vehicle.health()).toBe(0);
+  });
+});
+
+describe('the lodgy against a wall', () => {
+  // The bumper reaches the wall's face after about `distance` metres.
+  const wallRun = (distance: number, throttle: number, speed?: number) => {
+    const half = VEHICLES.lodgy.halfExtents.z;
+    const course = withBoxes(testGround, {
+      walls: [{ center: vec3(0, 3, -(distance + half + 0.5)), halfExtents: vec3(8, 3, 0.5), rot: IDENTITY }],
+    });
+    const rig = createRig(RAPIER, 'lodgy', ORIGIN, course);
+    rig.run(1);
+    if (speed !== undefined) rig.vehicle.body.setLinvel({ x: 0, y: 0, z: -speed }, true);
+    rig.run(Math.max(6, (distance / 5) * 2), { throttle });
+    return { health: rig.vehicle.health(), z: rig.vehicle.body.translation().z };
+  };
+
+  test('(5) full throttle from 30 m costs 0.2 to 0.35, from 60 m costs more, a 2 m/s roll costs nothing', () => {
+    const near = wallRun(30, 1).health;
+    const far = wallRun(60, 1).health;
+    expect(near).toBeGreaterThan(1 - 0.35);
+    expect(near).toBeLessThan(1 - 0.2);
+    expect(far).toBeLessThan(near);
+    const roll = wallRun(5, 0, 2);
+    // The centre rests half a length from the face when the bumper touches it.
+    expect(roll.z).toBeLessThan(-5 + 0.3);
+    expect(roll.z).toBeGreaterThan(-5 - 0.3);
+    expect(roll.health).toBe(1);
+  });
+});
+
+describe('W1: gripScale', () => {
+  const config = VEHICLES.lodgy;
+  const slips = (surface: keyof typeof SURFACES, gripScale?: number) => {
+    const world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 });
+    world.timestep = 1 / TICK_RATE;
+    buildStatics(RAPIER, world, testGround);
+    const vehicle = createVehicle(RAPIER, world, config, ORIGIN, () => surface, gripScale === undefined ? undefined : { gripScale });
+    // The surface under a wheel is read from the previous step's contacts, so a few steps run first.
+    for (let i = 0; i < 10; i++) {
+      vehicle.step({ throttle: 0, steer: 0, brake: false });
+      world.step();
+    }
+    return vehicle.wheelFrictionSlips();
+  };
+
+  test.each(Object.keys(SURFACES) as (keyof typeof SURFACES)[])('on %s each wheel slips at grip x surface x scale', (surface) => {
+    const scaled = slips(surface, 0.75);
+    expect(scaled).toHaveLength(4);
+    for (const slip of scaled) expect(slip).toBeCloseTo(config.grip * SURFACES[surface].grip * 0.75, 6);
+    for (const slip of slips(surface)) expect(slip).toBeCloseTo(config.grip * SURFACES[surface].grip, 6);
   });
 });

@@ -16,6 +16,14 @@ async function players(page: Page): Promise<string> {
   return /^players\s+(.*)$/m.exec(text)?.[1] ?? '';
 }
 
+// A position line of the overlay, for example `you` or `server`, as x, y, z; null when the line is absent.
+async function overlayPosition(page: Page, label: string): Promise<[number, number, number] | null> {
+  const text = (await page.locator('#overlay').textContent()) ?? '';
+  const match = new RegExp(`^${label}\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)`, 'm').exec(text);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+const distance = (a: readonly number[], b: readonly number[]) => Math.hypot(...a.map((value, i) => value - b[i]!));
+
 // Uncaught errors in any page of the running test. A page can look right and still have failed, for example in WebGL.
 const pageErrors: string[] = [];
 const watch = (page: Page) => page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -51,6 +59,12 @@ async function createRoom(page: Page, name: string): Promise<string> {
   return new URL(page.url()).pathname.slice(1);
 }
 
+// The admin presses Start in the lobby; the run begins and the lobby closes.
+async function startRun(page: Page) {
+  await page.locator('#lobby-start').click();
+  await expect(page.locator('#lobby')).toBeHidden();
+}
+
 // Pressing a button once, held long enough for a tick to see it.
 async function tap(page: Page, key: string) {
   await page.keyboard.down(key);
@@ -58,7 +72,7 @@ async function tap(page: Page, key: string) {
   await page.keyboard.up(key);
 }
 
-test('two players share a room, board the vehicle, and only the driver drives', async ({ browser }) => {
+test('two players share a room, board the vehicle, and only the driver drives @keyboard', async ({ browser }) => {
   test.slow();
   const amal = await newPlayerPage(browser);
   const badr = await newPlayerPage(browser);
@@ -70,6 +84,12 @@ test('two players share a room, board the vehicle, and only the driver drives', 
   await badr.locator('#home-name').fill('Badr');
   await badr.locator('#home-primary').click();
   await expect(badr.locator('#home')).toBeHidden();
+
+  // Amal cannot start until Badr is ready.
+  await expect(amal.locator('#lobby-start')).toBeDisabled();
+  await badr.locator('#lobby-ready').click();
+  await startRun(amal);
+  await expect(badr.locator('#lobby')).toBeHidden();
 
   for (const page of [amal, badr]) {
     // Nobody is seated at the start: both stand beside the vehicle.
@@ -122,9 +142,38 @@ test('two players share a room, board the vehicle, and only the driver drives', 
   await amal.keyboard.up('KeyW');
 });
 
+test('the local player walks at once and the prediction agrees with the server @keyboard', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  await expect.poll(() => overlayPosition(page, 'you')).not.toBeNull();
+  const start = (await overlayPosition(page, 'you'))!;
+
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(1000);
+  await page.keyboard.up('KeyW');
+  await page.waitForTimeout(500);
+
+  const you = (await overlayPosition(page, 'you'))!;
+  const server = (await overlayPosition(page, 'server'))!;
+  expect(server).not.toBeNull();
+  expect(distance(you, start)).toBeGreaterThan(3);
+  expect(distance(you, server)).toBeLessThan(0.3);
+});
+
+test('a seated player is not predicted: the overlay has no you line @keyboard', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  await expect(page.locator('#overlay')).toContainText('hint     E to board');
+  expect(await overlayPosition(page, 'you')).not.toBeNull();
+  await tap(page, 'KeyE');
+  await expect(page.locator('#overlay')).toContainText('players  Amal (driver)');
+  await expect.poll(() => overlayPosition(page, 'you')).toBeNull();
+});
+
 test('a room can be joined from the home page by typing its name', async ({ browser }) => {
   const amal = await newPlayerPage(browser);
   const room = await createRoom(amal, 'Amal');
+  await startRun(amal);
 
   const badr = await newPlayerPage(browser);
   await badr.goto('/');
@@ -163,6 +212,7 @@ test('a name already used in the room is refused, and another name gets in', asy
 
 test('the name is remembered, and a reload keeps the player in the room', async ({ page }) => {
   await createRoom(page, 'Amal');
+  await startRun(page);
 
   await page.reload();
   await expect(page.locator('#home-name')).toHaveValue('Amal');
@@ -181,4 +231,175 @@ test('an empty name is refused on the page, before anything is sent', async ({ p
   await expect(page.locator('#home-error')).toHaveText('Enter a name of 1 to 16 characters.');
   await expect(page).toHaveURL(/\/$/);
   expect(sockets).toBe(0);
+});
+
+test('the course props are drawn: the overlay counts four props and four pickups and the page has no errors', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  await expect(page.locator('#overlay')).toContainText('props    8');
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
+});
+
+test('the winch cable is shown, stowed at the start, and the page has no errors', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  await expect(page.locator('#overlay')).toContainText(/cable\s+stowed 0\.0 m/);
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
+});
+
+test('fuel and slots are shown: a full tank, three empty slots, and the page has no errors', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  await expect(page.locator('#overlay')).toContainText(/fuel\s+100%/);
+  await expect(page.locator('#overlay')).toContainText(/slots\s+\[-\] - -/);
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
+});
+
+test('the local player starts at full health', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  await expect(page.locator('#overlay')).toContainText(/^health   100$/m);
+});
+
+test('the timer runs: the clock rises and the checkpoint shows the first of two', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  const overlay = page.locator('#overlay');
+  await expect(overlay).toContainText(/time\s+\d+:\d\d\.\d\s+cp 1\/2\s+restarts 0\s+respawns 0/);
+  const seconds = async () => {
+    const text = (await overlay.textContent()) ?? '';
+    const match = /time\s+(\d+):(\d\d\.\d)/.exec(text);
+    return match ? Number(match[1]) * 60 + Number(match[2]) : Number.NaN;
+  };
+  const first = await seconds();
+  await expect.poll(seconds).toBeGreaterThan(first);
+});
+
+test('the coins line shows an empty wallet and no coins collected out of four', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  await expect(page.locator('#overlay')).toContainText(/^coins    0   0\/4$/m);
+});
+
+test('the lobby: two players ready up, the admin starts, and both receive snapshots', async ({ browser }) => {
+  const amal = await newPlayerPage(browser);
+  const room = await createRoom(amal, 'Amal');
+  await expect(amal.locator('#lobby')).toBeVisible();
+  await expect(amal.locator('#lobby-link')).toContainText(`/${room}`);
+
+  const badr = await newPlayerPage(browser);
+  await badr.goto(`/${room}`);
+  await badr.locator('#home-name').fill('Badr');
+  await badr.locator('#home-primary').click();
+  await expect(badr.locator('#lobby')).toBeVisible();
+
+  // The admin edits the settings, the other player sees them as text, and no run has started.
+  await expect(amal.locator('#lobby-vehicle')).toHaveJSProperty('tagName', 'SELECT');
+  await expect(badr.locator('#lobby-vehicle')).toHaveText('Lodgy');
+  await expect(badr.locator('#lobby-start')).toBeHidden();
+  await expect(amal.locator('#lobby-players')).toContainText('Badr');
+  await expect(amal.locator('#lobby-start')).toBeDisabled();
+  await expect(amal.locator('#overlay')).toHaveText('');
+
+  await badr.locator('#lobby-ready').click();
+  await expect(amal.locator('#lobby-start')).toBeEnabled();
+  await amal.locator('#lobby-start').click();
+
+  for (const page of [amal, badr]) {
+    await expect(page.locator('#lobby')).toBeHidden();
+    await expect(page.locator('#overlay')).toContainText('players  Amal (on foot), Badr (on foot)');
+    const before = await tick(page);
+    await expect.poll(() => tick(page)).toBeGreaterThan(before);
+  }
+});
+
+test('the admin opens the run menu with Esc and sees the admin items @keyboard', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  // The lobby hides before the game is built; an Esc sent in that gap reaches no listener.
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
+  await expect(page.locator('#run-menu')).toBeHidden();
+  // The pointer is not locked, so the Esc reaches the page.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#run-menu')).toBeVisible();
+  for (const id of ['resume', 'restart-checkpoint', 'restart-course', 'to-lobby', 'skip', 'refill']) await expect(page.locator(`#run-${id}`)).toBeVisible();
+  await page.locator('#run-resume').click();
+  await expect(page.locator('#run-menu')).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#run-menu')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#run-menu')).toBeHidden();
+});
+
+test('the admin skips a checkpoint, drives to the finish, sees an assisted result and returns to the lobby @keyboard', async ({ page }) => {
+  test.slow();
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  // The lobby hides before the game is built; an Esc sent in that gap reaches no listener.
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#run-menu')).toBeVisible();
+  await page.locator('#run-skip').click();
+  await expect(page.locator('#run-menu')).toBeHidden();
+  // Skipping places the admin beside the driver door at the next checkpoint.
+  await expect(page.locator('#overlay')).toContainText('E to board', { timeout: 10_000 });
+  await tap(page, 'KeyE');
+  // Throttle held before the server seats the player is dropped, so wait for the driver seat.
+  await expect(page.locator('#overlay')).toContainText('Amal (driver)');
+  await page.keyboard.down('KeyW');
+  await expect(page.locator('#results')).toBeVisible({ timeout: 20_000 });
+  await page.keyboard.up('KeyW');
+  await expect(page.locator('#results')).toContainText('assisted');
+  await page.locator('#results-lobby').click();
+  await expect(page.locator('#lobby')).toBeVisible();
+  await expect(page.locator('#results')).toBeHidden();
+});
+
+test('the overlay shows the default conditions', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  await expect(page.locator('#overlay')).toContainText('weather  midday clear');
+});
+
+test('a night rain run draws without WebGL errors', async ({ page }) => {
+  const threeErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error' && message.text().includes('THREE')) threeErrors.push(message.text());
+  });
+  await createRoom(page, 'Amal');
+  await page.locator('#lobby-time').selectOption('night');
+  await page.locator('#lobby-weather').selectOption('rain');
+  await startRun(page);
+  await expect(page.locator('#overlay')).toContainText('weather  night rain');
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
+  await page.waitForTimeout(500);
+  expect(threeErrors).toEqual([]);
+});
+
+test('E7: the sound files are served, and a click and Start leave the page without errors', async ({ page }) => {
+  const license = await page.request.get('/sounds/LICENSE.md');
+  expect(license.status()).toBe(200);
+  expect(license.headers()['content-type']).toContain('text/markdown');
+  await page.goto('/');
+  await page.locator('#home-name').fill('Amal');
+  const sound = page.waitForResponse(/\/sounds\/.+\.(mp3|wav)$/);
+  await page.locator('#home-primary').click();
+  await expect(page.locator('#home')).toBeHidden();
+  await startRun(page);
+  expect((await sound).status()).toBe(200);
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
+  // The mute button is in the run menu, and M toggles it.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#run-mute')).toHaveText('Mute sound');
+  await page.keyboard.press('KeyM');
+  await expect(page.locator('#run-mute')).toHaveText('Unmute sound');
+  await page.locator('#run-mute').click();
+  await expect(page.locator('#run-mute')).toHaveText('Mute sound');
 });
