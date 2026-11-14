@@ -17,7 +17,7 @@ function clock(seconds: number): string {
 export function resultsView(message: ResultsMessage, isAdmin: boolean): ResultsView {
   const lines = [
     `Final time ${clock(message.finalTime)}`,
-    `Vehicle ${VEHICLE_LABELS[message.vehicleId] ?? message.vehicleId}`,
+    `Vehicle ${Object.hasOwn(VEHICLE_LABELS, message.vehicleId) ? VEHICLE_LABELS[message.vehicleId] : message.vehicleId}`,
     `Course ${message.courseId}, ${message.timeOfDay}, ${message.weather}`,
     `Restarts ${message.restarts}, respawns ${message.respawns}`,
     `Coins ${message.wallet} kept, ${message.coinsCollected}/${message.coinsTotal} collected`,
@@ -25,6 +25,7 @@ export function resultsView(message: ResultsMessage, isAdmin: boolean): ResultsV
   ];
   if (message.assisted) lines.push('assisted');
   if (message.campaignTotal !== undefined) lines.push(`Campaign total ${clock(message.campaignTotal)}`);
+  if (!isAdmin) lines.push('Waiting for the admin');
   const index = CAMPAIGN.indexOf(message.courseId);
   return { lines, showNext: isAdmin && index >= 0 && index < CAMPAIGN.length - 1, showLobby: isAdmin };
 }

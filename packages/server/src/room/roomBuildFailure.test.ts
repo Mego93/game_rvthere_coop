@@ -61,6 +61,7 @@ test('a restartCourse whose world fails to build disposes the half-built world a
   const admin = room.add('Amal', token, connection);
   expect(room.start(admin)).toBeNull();
   const running = room.debugWorld()!;
+  room.update(1);
   control.failNext = true;
   expect(() => room.restartCourse(admin)).toThrow('recordStart failed');
   expect(built).toHaveLength(2);
@@ -68,7 +69,7 @@ test('a restartCourse whose world fails to build disposes the half-built world a
   expect(built[0]!.dispose).not.toHaveBeenCalled();
   expect(room.phase()).toBe('playing');
   expect(room.debugWorld()).toBe(running);
-  room.update(0.5);
+  room.update(1.5);
   expect(running.snapshot().tick).toBeGreaterThan(0);
 
   expect(room.restartCourse(admin)).toBeNull();

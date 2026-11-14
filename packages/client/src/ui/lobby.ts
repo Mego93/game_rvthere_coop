@@ -1,7 +1,7 @@
 import { TIMES_OF_DAY, VEHICLE_IDS, WEATHERS, courseIds, type LobbyMessage, type RoomSettings } from '@lodgy/shared';
 
 export const VEHICLE_LABELS: Record<string, string> = { lodgy: 'Lodgy', rv: 'RV' };
-const vehicleLabel = (id: string) => VEHICLE_LABELS[id] ?? id;
+const vehicleLabel = (id: string) => (Object.hasOwn(VEHICLE_LABELS, id) ? VEHICLE_LABELS[id] : id);
 
 export interface LobbyPlayerView {
   playerId: string;
@@ -136,6 +136,17 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   let view: LobbyView | null = null;
   let renderedEditable: boolean | null = null;
   let pending: Partial<RoomSettings> = {};
+  let server: RoomSettings | null = null;
+
+  const applySettings = (values: RoomSettings, overrideFocus: boolean) => {
+    for (const { key, id, options } of SETTINGS) {
+      const element = doc.getElementById(id)!;
+      const value = values[key];
+      if (element instanceof HTMLSelectElement) {
+        if (overrideFocus || doc.activeElement !== element) element.value = value;
+      } else element.textContent = options().find((option) => option.value === value)?.text ?? value;
+    }
+  };
   let room = '';
 
   const current = (): RoomSettings => {
@@ -199,19 +210,13 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
       room = message.room;
       link.textContent = `${location.origin}/${message.room}`;
       if (renderedEditable !== view.settingsEditable) buildSettings(view.settingsEditable);
+      server = view.settings;
       if (renderedEditable) {
-        const merged = mergeSettings(current(), pending, view.settings);
+        const merged = mergeSettings(current(), pending, server);
         pending = merged.pending;
         view.settings = merged.settings;
       }
-      for (const { key, id, options } of SETTINGS) {
-        const element = doc.getElementById(id)!;
-        const value = view.settings[key];
-        if (element instanceof HTMLSelectElement) {
-          if (doc.activeElement !== element) element.value = value;
-        }
-        else element.textContent = options().find((option) => option.value === value)?.text ?? value;
-      }
+      applySettings(view.settings, false);
       players.textContent = '';
       for (const entry of view.players) {
         const item = el('li');
@@ -248,6 +253,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     setError(text) {
       // A refusal may be of a change; drop the unconfirmed ones so the next echo restores the server's values.
       pending = {};
+      if (server && renderedEditable) applySettings(server, true);
       error.textContent = text;
     },
   };

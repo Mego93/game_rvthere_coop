@@ -38,7 +38,7 @@ import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winc
 import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
 import { interactAction, overlayText } from './ui/overlay';
 import { CLOSED, createShopMenu, gateControl, menuFeet, menuInput, shopMenuState, type ShopMenuState } from './ui/shopMenu';
-import { createRunMenu, runMenuState, type RunMenuEvent, type RunMenuState } from './ui/runMenu';
+import { createRunMenu, inputFrozen, runMenuState, type RunMenuEvent, type RunMenuState } from './ui/runMenu';
 import type { TouchUi } from './ui/touchUi';
 import { touchView } from './ui/touchView';
 
@@ -120,6 +120,7 @@ export function createGame(
   const gate = gateControl(view.pointerGate);
   let runState: RunMenuState = { open: false };
   const anyOpen = () => menuState.open || runState.open;
+  const frozen = () => inputFrozen(anyOpen(), lobby.phase);
   // The lock change this causes is not the player's Esc.
   let releasedByGame = false;
   const releaseLock = () => {
@@ -139,7 +140,7 @@ export function createGame(
       }
       releaseLock();
     }
-    gate.follow(anyOpen());
+    gate.follow(frozen());
   };
   const closeRun = (action: ClientMessage | null) => {
     if (action) send(action);
@@ -189,7 +190,7 @@ export function createGame(
         applyRun('shopOpened');
         releaseLock();
       }
-      gate.follow(anyOpen());
+      gate.follow(frozen());
     }
     if (menuState.open) shopMenu.setWallet(buffer.latestStatus()?.wallet ?? 0);
   };
@@ -219,11 +220,11 @@ export function createGame(
     const sampled = input.sample();
     const pressed = sampled.interact && !wasInteract;
     wasInteract = sampled.interact;
-    const fields = menuInput(anyOpen(), sampled, lastSent);
-    if (!anyOpen()) lastSent = fields;
+    const fields = menuInput(frozen(), sampled, lastSent);
+    if (!frozen()) lastSent = fields;
     send({ type: 'input', ...fields, seq });
     reconciler.record(seq, fields);
-    if (pressed && !anyOpen() && latestLocal && lastVehicle) {
+    if (pressed && !frozen() && latestLocal && lastVehicle) {
       const feet = menuFeet(lastDrawn, latestLocal.pos)!;
       const action = interactAction(
         vehicleConfig,
@@ -384,12 +385,17 @@ export function createGame(
       lobby = next;
       updateRunMenu();
       showMenuButton();
-      if (next.phase === 'playing') return;
+      if (next.phase === 'playing') {
+        gate.follow(frozen());
+        return;
+      }
       applyRun('phaseLeft');
+      releaseLock();
+      gate.follow(true);
       if (menuState.open) {
         menuState = { open: false, feet: menuState.feet };
         shopMenu.setOpen(false);
-        gate.follow(anyOpen());
+        gate.follow(frozen());
       }
     },
     pushSnapshot(snapshot) {

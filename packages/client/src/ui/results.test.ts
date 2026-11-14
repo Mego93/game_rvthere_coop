@@ -37,8 +37,14 @@ test('L18: the vehicle label, the raw id fallback, the assisted line and the cam
   expect(resultsView(message({ vehicleId: 'tank' }), false).lines).toContain('Vehicle tank');
   expect(resultsView(message(), false).lines).not.toContain('assisted');
   expect(resultsView(message({ assisted: true, stars: [false, false, false] }), false).lines).toContain('assisted');
-  expect(resultsView(message({ campaignTotal: 301.5 }), false).lines.at(-1)).toBe('Campaign total 5:01.5');
+  expect(resultsView(message({ campaignTotal: 301.5 }), false).lines).toContain('Campaign total 5:01.5');
   expect(resultsView(message(), false).lines.join('\n')).not.toContain('Campaign');
+});
+
+test('L18: a non-admin sees "Waiting for the admin", the admin does not; an inherited key is not a label', () => {
+  expect(resultsView(message(), false).lines.at(-1)).toBe('Waiting for the admin');
+  expect(resultsView(message(), true).lines).not.toContain('Waiting for the admin');
+  expect(resultsView(message({ vehicleId: 'constructor' }), true).lines).toContain('Vehicle constructor');
 });
 
 test('L18: seconds below ten are padded', () => {

@@ -16,6 +16,9 @@ export function runMenuState(prev: RunMenuState, event: RunMenuEvent, shopOpen: 
   }
 }
 
+// The local game stands still while a menu is open and outside the playing phase (the frozen world behind the results).
+export const inputFrozen = (menuOpen: boolean, phase: string): boolean => menuOpen || phase !== 'playing';
+
 export function runMenuItems(isAdmin: boolean): string[] {
   return isAdmin ? ['Resume', 'Restart from checkpoint', 'Restart course', 'Return to lobby', 'Skip checkpoint', 'Refill'] : ['Resume'];
 }

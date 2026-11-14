@@ -1,6 +1,7 @@
 import {
   CAMPAIGN,
   HELD_SLOT_TIMEOUT,
+  WORLD_REBUILD_COOLDOWN,
   DEFAULT_TIME_OF_DAY,
   DEFAULT_WEATHER,
   PLAYER_COLOURS,
@@ -130,6 +131,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   let startTime = createdAt;
   // The time of the latest update; a run starts counting from it.
   let lastNow = createdAt;
+  let lastBuild = Number.NEGATIVE_INFINITY;
   let emptySince: number | null = createdAt;
   // The first token to join is the creator's.
   let creatorToken: string | null = null;
@@ -194,6 +196,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       next.dispose();
       throw error;
     }
+    lastBuild = lastNow;
     return next;
   };
 
@@ -344,6 +347,8 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     configure(by, next) {
       const refused = refusal(by, 'lobby');
       if (refused) return refused;
+      const changed = settings.courseId !== next.courseId || settings.vehicleId !== next.vehicleId || settings.timeOfDay !== next.timeOfDay || settings.weather !== next.weather;
+      if (!changed) return null;
       settings = { courseId: next.courseId, vehicleId: next.vehicleId, timeOfDay: next.timeOfDay, weather: next.weather };
       broadcastLobby();
       return null;
@@ -352,6 +357,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       const refused = refusal(by, 'lobby');
       if (refused) return refused;
       if (players.some((player) => player.playerId !== adminId && player.connected && !player.ready)) return 'not_ready';
+      if (lastNow - lastBuild < WORLD_REBUILD_COOLDOWN) return 'bad_phase';
       // Built first: if it throws, the room is still in the lobby, untouched.
       const fresh = createRunWorld();
       for (const player of players) {
@@ -373,6 +379,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     restartCourse(by) {
       const refused = refusal(by, 'playing');
       if (refused) return refused;
+      if (lastNow - lastBuild < WORLD_REBUILD_COOLDOWN) return 'bad_phase';
       // The queues stay: the client's game keeps running and its seq keeps rising.
       const fresh = createRunWorld();
       const old = world;

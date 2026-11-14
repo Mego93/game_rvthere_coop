@@ -1,7 +1,7 @@
 import { NEUTRAL_INPUT } from '@lodgy/shared';
 import { expect, test } from 'vitest';
 import { menuInput } from './shopMenu';
-import { runMenuItems, runMenuState } from './runMenu';
+import { inputFrozen, runMenuItems, runMenuState } from './runMenu';
 
 const CLOSED = { open: false };
 const OPEN = { open: true };
@@ -49,4 +49,11 @@ test('L19: input is neutral while either menu is open, with the slot kept from t
 test('L19: neither Esc nor the touch button opens the menu outside the playing phase', () => {
   expect(runMenuState(CLOSED, 'button', false, false).open).toBe(false);
   expect(runMenuState(CLOSED, 'esc', false, false).open).toBe(false);
+});
+
+test('L19: input is frozen while a menu is open and in every phase but playing', () => {
+  expect(inputFrozen(false, 'playing')).toBe(false);
+  expect(inputFrozen(true, 'playing')).toBe(true);
+  expect(inputFrozen(false, 'results')).toBe(true);
+  expect(inputFrozen(false, 'lobby')).toBe(true);
 });

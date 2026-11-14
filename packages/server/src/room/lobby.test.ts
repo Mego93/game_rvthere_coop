@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { HELD_SLOT_TIMEOUT, IDENTITY, NEUTRAL_INPUT, PLAYER_COLOURS, PLAYER_REVIVE_HEALTH, TICK_RATE, getCourse, vec3, type BuiltCourse, type ClientMessage, type ServerMessage } from '@lodgy/shared';
+import { HELD_SLOT_TIMEOUT, WORLD_REBUILD_COOLDOWN, IDENTITY, NEUTRAL_INPUT, PLAYER_COLOURS, PLAYER_REVIVE_HEALTH, TICK_RATE, getCourse, vec3, type BuiltCourse, type ClientMessage, type ServerMessage } from '@lodgy/shared';
 import { beforeAll, expect, test } from 'vitest';
 import { createRoom } from './room';
 import { createRoomServer } from './server';
@@ -152,6 +152,9 @@ test('restartCourse puts a fresh world in the same run: ticks keep rising, the n
   client.received.length = 0;
   badr.received.length = 0;
 
+  advance(0.5);
+  client.received.length = 0;
+  badr.received.length = 0;
   client.send({ type: 'restartCourse' });
   expect(reasons(client)).toEqual([]);
   const fresh = server.debugWorld(room)!;
@@ -473,6 +476,7 @@ test('L12: finishing test gives no campaign total; next selects segment-demo; fi
   expect(client.last('lobby')).toMatchObject({ phase: 'lobby', courseId: 'segment-demo' });
   expect(server.debugWorld(room)).toBeNull();
 
+  advance(1);
   startRun(client);
   advance(1);
   finishRun(server, room, advance);
@@ -483,6 +487,7 @@ test('L12: finishing test gives no campaign total; next selects segment-demo; fi
   // The latest time of a course counts, not the first: test again, slower.
   client.send({ type: 'toLobby' });
   client.send({ ...settings, courseId: 'test', vehicleId: 'lodgy' });
+  advance(1);
   startRun(client);
   advance(2);
   finishRun(server, room, advance);
@@ -501,6 +506,7 @@ test('L12: an assisted run still counts toward the campaign total', () => {
   const only = client.last('results');
   expect(only.assisted).toBe(true);
   client.send({ type: 'next' });
+  advance(1);
   startRun(client);
   finishRun(server, room, advance);
   const last = client.last('results');
@@ -613,6 +619,7 @@ test('L13: restartCourse resets restarts, respawns, coins and assisted', () => {
   expect(dirty).toMatchObject({ restarts: 1, assisted: true });
   expect(dirty.coinsCollected).toBe(1);
 
+  advance(1);
   client.send({ type: 'restartCourse' });
   advance(0.3);
   expect(client.last('snapshot')).toMatchObject({ restarts: 0, respawns: 0, wallet: 0, coinsCollected: 0, assisted: false, checkpoint: 0 });
@@ -964,4 +971,45 @@ test('L14: names with control or invisible characters are refused on create and 
   const unal = connectFakeClient(server);
   unal.send({ type: 'join', room, name: 'Ünal', token: token(20) });
   expect(unal.last('welcome').playerId).toBe('p2');
+});
+
+// --- N19: world rebuild cooldown, and no broadcast for unchanged settings ---
+
+test('N19: start and restartCourse within the cooldown of a build get bad_phase, and succeed after it', () => {
+  const { host, advance, server } = setup();
+  const { client, room } = host();
+  startRun(client);
+  const first = server.debugWorld(room)!;
+  advance(WORLD_REBUILD_COOLDOWN / 2);
+  client.send({ type: 'restartCourse' });
+  expect(reasons(client)).toEqual(['bad_phase']);
+  expect(server.debugWorld(room)).toBe(first);
+
+  advance(WORLD_REBUILD_COOLDOWN);
+  client.send({ type: 'restartCourse' });
+  expect(reasons(client)).toEqual(['bad_phase']);
+  expect(server.debugWorld(room)).not.toBe(first);
+
+  client.send({ type: 'toLobby' });
+  client.send({ type: 'start' });
+  expect(reasons(client)).toEqual(['bad_phase', 'bad_phase']);
+  expect(client.last('lobby').phase).toBe('lobby');
+  advance(WORLD_REBUILD_COOLDOWN);
+  client.send({ type: 'start' });
+  expect(client.last('lobby').phase).toBe('playing');
+});
+
+test('N19: configure with unchanged settings and ready with an unchanged value do not broadcast lobby', () => {
+  const { host, guest } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  client.send(settings);
+  ready(badr);
+  client.received.length = 0;
+  client.send(settings);
+  ready(badr);
+  expect(client.ofType('lobby')).toEqual([]);
+  expect(reasons(client)).toEqual([]);
+  client.send({ ...settings, weather: 'sandstorm' });
+  expect(client.ofType('lobby')).toHaveLength(1);
 });
