@@ -50,7 +50,7 @@ for (const type of ['pointerup', 'touchend', 'click', 'keydown']) window.addEven
 document.addEventListener(
   'click',
   (event) => {
-    if (event.target instanceof Element && event.target.closest('#lobby button, #run-menu button, #shop-menu button, #results button')) audio.play('click');
+    if (event.target instanceof Element && event.target.closest('#lobby button, #run-menu button:not(#run-mute), #shop-menu button, #results button')) audio.play('click');
   },
   { capture: true },
 );

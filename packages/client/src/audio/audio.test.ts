@@ -12,7 +12,7 @@ interface FakeNode {
   [key: string]: unknown;
 }
 
-function makeContext(listenerApi: 'modern' | 'legacy', state = 'suspended') {
+function makeContext(listenerApi: 'modern' | 'legacy', state = 'suspended', legacyPanner = false) {
   const sources: FakeNode[] = [];
   const panners: FakeNode[] = [];
   const gains: FakeNode[] = [];
@@ -38,7 +38,9 @@ function makeContext(listenerApi: 'modern' | 'legacy', state = 'suspended') {
       return gain;
     },
     createPanner: () => {
-      const panner = node('panner', { positionX: new FakeParam(), positionY: new FakeParam(), positionZ: new FakeParam() });
+      const panner = legacyPanner
+        ? node('panner', { setPosition: (...args: number[]) => calls.push(['panner.setPosition', ...args]) })
+        : node('panner', { positionX: new FakeParam(), positionY: new FakeParam(), positionZ: new FakeParam() });
       panners.push(panner);
       return panner;
     },
@@ -53,8 +55,8 @@ function makeContext(listenerApi: 'modern' | 'legacy', state = 'suspended') {
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function setup(listenerApi: 'modern' | 'legacy' = 'modern', failing: string[] = []) {
-  const fake = makeContext(listenerApi);
+function setup(listenerApi: 'modern' | 'legacy' = 'modern', failing: string[] = [], legacyPanner = false) {
+  const fake = makeContext(listenerApi, 'suspended', legacyPanner);
   const createContext = vi.fn(() => fake.ctx as unknown as AudioContext);
   const load = vi.fn((url: string) => (failing.some((part) => url.includes(part)) ? Promise.reject(new Error('404')) : Promise.resolve(new ArrayBuffer(8))));
   const audio = createAudio({ createContext, load });
@@ -218,4 +220,25 @@ test('dispose stops the loops and closes the context', async () => {
   audio.dispose();
   expect(sources[0]!.stop).toHaveBeenCalled();
   expect(ctx.close).toHaveBeenCalled();
+});
+
+test('a panner without positionX is placed with setPosition', async () => {
+  const { audio, calls } = setup('modern', [], true);
+  audio.unlock();
+  await flush();
+  audio.play('hurt', { at: { x: 4, y: 5, z: 6 } });
+  expect(calls).toEqual([['panner.setPosition', 4, 5, 6]]);
+});
+
+test('a context factory that throws warns once, however many gestures follow', () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const createContext = vi.fn(() => {
+    throw new Error('no audio');
+  });
+  const audio = createAudio({ createContext, load: () => Promise.resolve(new ArrayBuffer(1)) });
+  audio.unlock();
+  audio.unlock();
+  audio.unlock();
+  expect(createContext).toHaveBeenCalledTimes(1);
+  expect(warn).toHaveBeenCalledTimes(1);
 });

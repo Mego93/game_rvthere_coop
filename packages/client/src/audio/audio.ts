@@ -36,6 +36,7 @@ export function createAudio(deps: AudioDeps): GameAudio {
   let master: GainNode | null = null;
   let muted = false;
   let disposed = false;
+  let failed = false;
   const buffers = new Map<string, AudioBuffer>();
   const loops = new Map<LoopName, Loop>();
 
@@ -96,7 +97,7 @@ export function createAudio(deps: AudioDeps): GameAudio {
 
   return {
     unlock() {
-      if (disposed) return;
+      if (disposed || failed) return;
       if (!ctx) {
         try {
           ctx = deps.createContext();
@@ -107,6 +108,7 @@ export function createAudio(deps: AudioDeps): GameAudio {
           console.warn('Audio is not available', error);
           ctx = null;
           master = null;
+          failed = true;
           return;
         }
         decodeAll(ctx);
