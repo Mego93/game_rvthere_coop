@@ -100,6 +100,8 @@ export interface RoomConfig {
   noun: string;
   // Tests only: a course to use instead of the id's, for each id listed.
   courses?: Readonly<Record<string, BuiltCourse>>;
+  // The courses in play order; defaults to CAMPAIGN.
+  campaign?: readonly string[];
 }
 
 const movedSince = (a: PropSnapshot, b: PropSnapshot) =>
@@ -112,10 +114,11 @@ const movedSince = (a: PropSnapshot, b: PropSnapshot) =>
   Math.abs(a.rot.w - b.rot.w) > PROP_MOVED_EPSILON;
 
 export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number): Room {
+  const campaign = config.campaign ?? CAMPAIGN;
   let phase: Phase = 'lobby';
   // Only exists while playing, and frozen while the results are shown.
   let world: World | null = null;
-  let settings: RoomSettings = { courseId: CAMPAIGN[0]!, vehicleId: 'lodgy', timeOfDay: DEFAULT_TIME_OF_DAY, weather: DEFAULT_WEATHER };
+  let settings: RoomSettings = { courseId: campaign[0]!, vehicleId: 'lodgy', timeOfDay: DEFAULT_TIME_OF_DAY, weather: DEFAULT_WEATHER };
   let lastResults: ResultsMessage | null = null;
   // The latest final time of each course finished since the room was created.
   const finished = new Map<string, number>();
@@ -206,7 +209,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     const results = resultsOf(current.status(), { id: settings.courseId, targetTime: current.course.targetTime }, settings);
     finished.set(settings.courseId, results.finalTime);
     lastResults = { type: 'results', ...results };
-    if (CAMPAIGN.every((id) => finished.has(id))) lastResults.campaignTotal = CAMPAIGN.reduce((sum, id) => sum + finished.get(id)!, 0);
+    if (campaign.every((id) => finished.has(id))) lastResults.campaignTotal = campaign.reduce((sum, id) => sum + finished.get(id)!, 0);
     // The snapshot goes out at once, outside the cadence, so that clients see the win.
     broadcastSnapshot(current);
     broadcastLobby();
@@ -416,9 +419,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     next(by) {
       const refused = refusal(by, 'results');
       if (refused) return refused;
-      const index = CAMPAIGN.indexOf(settings.courseId);
-      if (index === -1 || index === CAMPAIGN.length - 1) return 'bad_phase';
-      settings = { ...settings, courseId: CAMPAIGN[index + 1]! };
+      const index = campaign.indexOf(settings.courseId);
+      if (index === -1 || index === campaign.length - 1) return 'bad_phase';
+      settings = { ...settings, courseId: campaign[index + 1]! };
       enterLobby();
       return null;
     },

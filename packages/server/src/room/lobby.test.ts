@@ -17,9 +17,11 @@ const finishAtStart = (id: string): BuiltCourse => {
   return { ...base, finish: { center: base.checkpoints[0]!.spawn.pos, halfExtents: vec3(20, 20, 20), rot: IDENTITY } };
 };
 
+const TWO = ['test', 'segment-demo'];
+
 function setup(finishing = false) {
   const fake = createFakeDeps(RAPIER);
-  const server = createRoomServer(fake.deps, finishing ? { courses: { test: finishAtStart('test'), 'segment-demo': finishAtStart('segment-demo') } } : {});
+  const server = createRoomServer(fake.deps, finishing ? { campaign: TWO, courses: { test: finishAtStart('test'), 'segment-demo': finishAtStart('segment-demo') } } : { campaign: TWO });
   const host = (name = 'Amal') => {
     const client = connectFakeClient(server);
     client.send({ type: 'create', name, token: token(1) });
@@ -355,7 +357,7 @@ test('L11: a takeover in results gets the results again', () => {
 // --- L15: input and buy outside playing ---
 
 test('L15: input in the lobby and in results is ignored, and buy gets cannot_buy', () => {
-  const finishing = createRoom(RAPIER, { noun: 'test', courses: { test: finishAtStart('test') } }, 0);
+  const finishing = createRoom(RAPIER, { noun: 'test', campaign: TWO, courses: { test: finishAtStart('test') } }, 0);
   const player = finishing.add('Amal', token(1), { send: () => {}, close: () => {} });
   let seq = 0;
   const push = () => finishing.pushInput(player, { ...NEUTRAL_INPUT, seq: (seq += 1), moveY: 1 });
@@ -1039,4 +1041,35 @@ test('W3: a rain room builds its world with rain grip, at start and after restar
   expect(server.debugWorld(room)).not.toBe(before);
   advance(0.1);
   for (const slip of wet()) expect(slip).toBeCloseTo(clear * RAIN_GRIP, 6);
+});
+
+test('C9: a one-course campaign: finishing gives campaignTotal equal to the final time, next is bad_phase, and the room starts on it', () => {
+  const fake = createFakeDeps(RAPIER);
+  const server = createRoomServer(fake.deps, { campaign: ['test'], courses: { test: finishAtStart('test') } });
+  const client = connectFakeClient(server);
+  client.send({ type: 'create', name: 'Amal', token: token(1) });
+  expect(client.last('lobby').courseId).toBe('test');
+  startRun(client);
+  fake.advance(0.1);
+  const result = client.last('results');
+  expect(result.campaignTotal).toBeCloseTo(result.finalTime, 9);
+  client.send({ type: 'next' });
+  expect(client.last('error').reason).toBe('bad_phase');
+  expect(client.last('lobby').phase).toBe('results');
+});
+
+test('C9: a two-course campaign passed explicitly starts on its first course and next selects the second', () => {
+  const fake = createFakeDeps(RAPIER);
+  const server = createRoomServer(fake.deps, {
+    campaign: ['segment-demo', 'test'],
+    courses: { test: finishAtStart('test'), 'segment-demo': finishAtStart('segment-demo') },
+  });
+  const client = connectFakeClient(server);
+  client.send({ type: 'create', name: 'Amal', token: token(1) });
+  expect(client.last('lobby').courseId).toBe('segment-demo');
+  startRun(client);
+  fake.advance(0.1);
+  expect(client.last('results').campaignTotal).toBeUndefined();
+  client.send({ type: 'next' });
+  expect(client.last('lobby').courseId).toBe('test');
 });

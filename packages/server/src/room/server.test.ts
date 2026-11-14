@@ -51,7 +51,7 @@ function setup(options?: RoomServerOptions) {
         sources.push(source);
       },
     },
-    options,
+    { campaign: ['test', 'segment-demo'], ...options },
   );
   const connect = (address?: string) => connectFakeClient(server, address);
   // Connects a client and creates a room with it.

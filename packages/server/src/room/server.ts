@@ -89,7 +89,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     const times = recentCreates(session.address, now);
     if (times.length >= createPerMinute) return refuse(session, 'server_full');
     const noun = pickNoun(deps.random, (candidate) => rooms.has(candidate));
-    const room = createRoom(deps.rapier, { noun, courses: options.courses }, now);
+    const room = createRoom(deps.rapier, { noun, courses: options.courses, campaign: options.campaign }, now);
     rooms.set(noun, room);
     creates.set(session.address, [...times, now]);
     const player = room.add(message.name, message.token, session.connection, now);

@@ -33,6 +33,8 @@ export interface RoomDeps {
 export interface RoomServerOptions {
   // Tests only: replaces the course of each id listed.
   courses?: Readonly<Record<string, BuiltCourse>>;
+  // The courses in play order; defaults to CAMPAIGN.
+  campaign?: readonly string[];
   // `create` messages one address may send in 60 s; defaults to CREATE_PER_MINUTE.
   createPerMinute?: number;
 }
