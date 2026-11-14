@@ -319,6 +319,9 @@ test('the lobby: two players ready up, the admin starts, and both receive snapsh
 test('the admin opens the run menu with Esc and sees the admin items @keyboard', async ({ page }) => {
   await createRoom(page, 'Amal');
   await startRun(page);
+  // The lobby hides before the game is built; an Esc sent in that gap reaches no listener.
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
   await expect(page.locator('#run-menu')).toBeHidden();
   // The pointer is not locked, so the Esc reaches the page.
   await page.keyboard.press('Escape');
@@ -336,6 +339,9 @@ test('the admin skips a checkpoint, drives to the finish, sees an assisted resul
   test.slow();
   await createRoom(page, 'Amal');
   await startRun(page);
+  // The lobby hides before the game is built; an Esc sent in that gap reaches no listener.
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
   await page.keyboard.press('Escape');
   await expect(page.locator('#run-menu')).toBeVisible();
   await page.locator('#run-skip').click();
@@ -343,6 +349,8 @@ test('the admin skips a checkpoint, drives to the finish, sees an assisted resul
   // Skipping places the admin beside the driver door at the next checkpoint.
   await expect(page.locator('#overlay')).toContainText('E to board', { timeout: 10_000 });
   await tap(page, 'KeyE');
+  // Throttle held before the server seats the player is dropped, so wait for the driver seat.
+  await expect(page.locator('#overlay')).toContainText('Amal (driver)');
   await page.keyboard.down('KeyW');
   await expect(page.locator('#results')).toBeVisible({ timeout: 20_000 });
   await page.keyboard.up('KeyW');
