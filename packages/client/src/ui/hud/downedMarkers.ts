@@ -1,6 +1,4 @@
-import type { Vec3 } from '@lodgy/shared';
-
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+import { clamp, type Vec3 } from '@lodgy/shared';
 
 export function projectMarker(
   project: (p: Vec3) => { x: number; y: number; z: number },

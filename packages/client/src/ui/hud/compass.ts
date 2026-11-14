@@ -21,11 +21,11 @@ export function headingOffset(heading: number, bearing: number): number {
 }
 
 export function markerPosition(offset: number): number | null {
-  return Math.abs(offset) > COMPASS_FOV / 2 ? null : 0.5 + offset / COMPASS_FOV;
+  return Math.abs(offset) <= COMPASS_FOV / 2 ? 0.5 + offset / COMPASS_FOV : null;
 }
 
 export function edgeSide(offset: number): -1 | 0 | 1 {
-  if (Math.abs(offset) <= COMPASS_FOV / 2) return 0;
+  if (!(Math.abs(offset) > COMPASS_FOV / 2)) return 0;
   return offset > 0 ? 1 : -1;
 }
 

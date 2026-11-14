@@ -73,4 +73,8 @@ describe('compassLabel', () => {
     expect(compassLabel(339.6)).toBe('340 m');
     expect(compassLabel(null)).toBe('');
   });
+  it('a NaN offset gives no marker and no edge side', () => {
+    expect(markerPosition(NaN)).toBeNull();
+    expect(edgeSide(NaN)).toBe(0);
+  });
 });

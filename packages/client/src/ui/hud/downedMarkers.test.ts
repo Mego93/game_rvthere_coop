@@ -36,5 +36,6 @@ describe('projectMarker', () => {
     expect(r.x).toBeLessThanOrEqual(800);
     expect(r.y).toBeGreaterThanOrEqual(0);
     expect(r.y).toBeLessThanOrEqual(600);
+    expect(r.x).toBeGreaterThan(400);
   });
 });
