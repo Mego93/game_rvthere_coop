@@ -61,12 +61,13 @@ export function openSocket(url: string, handlers: SocketHandlers, deps: SocketDe
   };
   const abandon = (code: number) => {
     if (reported) return;
+    // Reported first: a socket that fires its close event inside close() must not report its own code.
+    report({ code, byPage: false });
     try {
       socket.close();
     } catch {
       // The socket is already gone.
     }
-    report({ code, byPage: false });
   };
   const startTimer = (seconds: number, code: number) => {
     stopTimer();
@@ -95,12 +96,12 @@ export function openSocket(url: string, handlers: SocketHandlers, deps: SocketDe
     },
     close() {
       if (reported) return;
+      report({ code: 1000, byPage: true });
       try {
         socket.close();
       } catch {
         // The socket is already gone.
       }
-      report({ code: 1000, byPage: true });
     },
   };
 }

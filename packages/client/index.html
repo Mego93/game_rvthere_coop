@@ -82,6 +82,21 @@
       #results[hidden] {
         display: none;
       }
+      #reconnect {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: grid;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font-size: 20px;
+        /* Takes pointer input so nothing underneath can be pressed while the connection is down. */
+        pointer-events: auto;
+      }
+      #reconnect[hidden] {
+        display: none;
+      }
       #overlay:empty {
         display: none;
       }
@@ -153,6 +168,7 @@
     <pre id="overlay"></pre>
     <div id="crosshair" hidden></div>
     <div id="results" hidden></div>
+    <div id="reconnect" role="status" hidden>Reconnecting…</div>
     <div id="home" hidden>
       <form id="home-form" novalidate>
         <h1 id="home-title">Lodgy Co-op</h1>

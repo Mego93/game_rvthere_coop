@@ -1,6 +1,6 @@
 import { parseClientMessage } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { createMemoryStore, saveName, savedName, sessionToken } from './session';
+import { createMemoryStore, lastAutoReload, markAutoReload, saveName, savedName, saveRejoin, sessionToken, takeRejoin } from './session';
 
 const countUp = (bytes: Uint8Array) => bytes.forEach((_, index) => (bytes[index] = index * 17));
 
@@ -49,4 +49,38 @@ test('a store that refuses writes still gives a token, and saving a name does no
   };
   expect(sessionToken(refusing, countUp)).toBe('00112233445566778899aabbccddeeff');
   expect(() => saveName(refusing, 'Amal')).not.toThrow();
+});
+
+test('S1: a saved rejoin is taken once, with the name', () => {
+  const store = createMemoryStore();
+  saveRejoin(store, { room: 'camel', name: 'Badr', at: 5 });
+  expect(takeRejoin(store, 'camel')).toEqual({ name: 'Badr' });
+  expect(takeRejoin(store, 'camel')).toBeNull();
+});
+
+test('S2: a rejoin for another room, or from a page with no room, returns null and is cleared', () => {
+  const store = createMemoryStore();
+  saveRejoin(store, { room: 'camel', name: 'Badr', at: 5 });
+  expect(takeRejoin(store, 'tent')).toBeNull();
+  expect(takeRejoin(store, 'camel')).toBeNull();
+  saveRejoin(store, { room: 'camel', name: 'Badr', at: 5 });
+  expect(takeRejoin(store, null)).toBeNull();
+  expect(store.getItem('lodgy.rejoin')).toBe('');
+});
+
+test('S3: malformed values return null', () => {
+  for (const bad of ['{', 'null', '[]', '{"room":"camel"}', '{"room":1,"name":"A"}', '{"room":"camel","name":""}']) {
+    const store = createMemoryStore();
+    store.setItem('lodgy.rejoin', bad);
+    expect(takeRejoin(store, 'camel')).toBeNull();
+  }
+});
+
+test('S4: the reload time survives taking the rejoin', () => {
+  const store = createMemoryStore();
+  expect(lastAutoReload(store)).toBeNull();
+  markAutoReload(store, 1234);
+  saveRejoin(store, { room: 'camel', name: 'Badr', at: 1234 });
+  takeRejoin(store, 'camel');
+  expect(lastAutoReload(store)).toBe(1234);
 });

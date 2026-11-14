@@ -3,8 +3,9 @@ import type { ClientMessage, LobbyMessage, Phase, ResultsMessage, ServerMessage 
 import * as THREE from 'three';
 import { createGame, type Game } from './game';
 import { openSocket, type CloseInfo, type GameSocket } from './net/socket';
+import { RECONNECT_IDLE, RECONNECT_WINDOW, SOCKET_OPEN_TIMEOUT, reconnectStep, type ReconnectEvent, type ReconnectState } from './net/reconnect';
 import { roomFromPath, socketUrl } from './route';
-import { createMemoryStore, saveName, savedName, sessionToken, type KeyValueStore } from './session';
+import { createMemoryStore, lastAutoReload, markAutoReload, saveName, savedName, saveRejoin, sessionToken, takeRejoin, type KeyValueStore } from './session';
 import { createInputSource } from './input/combined';
 import { createKeyboardSource } from './input/keyboard';
 import { createMouseLook } from './input/mouse';
@@ -28,10 +29,8 @@ function storage(get: () => Storage): KeyValueStore {
 
 const nameStore = storage(() => localStorage);
 // Session storage is per tab, so each tab is its own player and a reload keeps its identity.
-const token = sessionToken(
-  storage(() => sessionStorage),
-  (bytes) => crypto.getRandomValues(bytes),
-);
+const sessionStore = storage(() => sessionStorage);
+const token = sessionToken(sessionStore, (bytes) => crypto.getRandomValues(bytes));
 
 // The physics module loads once; creating or joining a room waits for it.
 const rapierReady = RAPIER.init();
@@ -39,6 +38,7 @@ const RAPIER_FAILED = 'The game could not load its physics engine. Reload the pa
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
 const overlay = document.querySelector<HTMLElement>('#overlay')!;
+const reconnectOverlay = document.querySelector<HTMLElement>('#reconnect')!;
 const crosshair = document.querySelector<HTMLElement>('#crosshair')!;
 
 // Safari's pinch gesture would zoom the page.
@@ -52,9 +52,23 @@ let touchUi: ReturnType<typeof createTouchUi> | null = null;
 const pointerGate = { blocked: false };
 
 const CONNECTION_LOST = 'The connection to the server was lost.';
+const PLACE_LOST = 'Your place in the room was lost.';
+const VIEW_LOST = 'The 3D view was lost. Reload the page to continue.';
+// A context lost twice within this many ms of reloading would reload forever.
+const AUTO_RELOAD_GUARD = 10_000;
 
 let renderer: THREE.WebGLRenderer | null = null;
+// The joined socket, or the one that is joining. It is null while reconnecting.
 let socket: GameSocket | null = null;
+// The socket of a reconnect attempt, until its welcome makes it the joined socket.
+let attempt: GameSocket | null = null;
+let reconnect: ReconnectState = RECONNECT_IDLE;
+let attemptTimer: number | null = null;
+let deadlineTimer: number | null = null;
+let autoJoining = false;
+let pageHidden = false;
+let currentRoom: string | null = null;
+let droppedPlayerId = '';
 let game: Game | null = null;
 let name = savedName(nameStore);
 let playerId = '';
@@ -124,6 +138,10 @@ function onMessage(message: ServerMessage) {
   switch (message.type) {
     case 'welcome':
       playerId = message.playerId;
+      currentRoom = message.room;
+      autoJoining = false;
+      reconnectEvent('joined');
+      reconnectOverlay.hidden = true;
       saveName(nameStore, name);
       // Creating a room, or joining one by name, changes the address to the room's without reloading.
       if (roomFromPath(location.pathname) !== message.room) history.pushState(null, '', `/${message.room}`);
@@ -154,9 +172,17 @@ function onMessage(message: ServerMessage) {
       }
       if (playerId !== '') {
         // In a room an error never reaches the home page; being kicked ends with the home page's text.
-        if (message.reason === 'kicked') closeReason = errorText('kicked');
-        else if (lobby.isShown()) lobby.setError(errorText(message.reason));
+        if (message.reason === 'kicked') {
+          closeReason = errorText('kicked');
+          reconnectEvent('kicked');
+          socket?.close();
+        } else if (lobby.isShown()) lobby.setError(errorText(message.reason));
         else console.warn('Refused:', message.reason);
+        return;
+      }
+      if (autoJoining) {
+        closeReason = errorText(message.reason);
+        socket?.close();
         return;
       }
       home.setBusy(false);
@@ -172,7 +198,8 @@ function startGame(lobby: LobbyMessage) {
       renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     }
-  } catch {
+  } catch (error) {
+    console.error(error);
     closeReason = 'This browser cannot show 3D graphics (WebGL is not available).';
     socket?.close();
     return;
@@ -191,8 +218,27 @@ function startGame(lobby: LobbyMessage) {
   game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
-function onClose(_info: CloseInfo) {
+const clock = () => performance.now() / 1000;
+
+function reconnectEvent(event: ReconnectEvent) {
+  const step = reconnectStep(reconnect, event, clock());
+  reconnect = step.state;
+  return step.action;
+}
+
+function clearReconnectTimers() {
+  if (attemptTimer !== null) clearTimeout(attemptTimer);
+  if (deadlineTimer !== null) clearTimeout(deadlineTimer);
+  attemptTimer = null;
+  deadlineTimer = null;
+}
+
+// Puts the page on the home page after the connection ended.
+function showHome(text: string) {
+  clearReconnectTimers();
+  reconnectOverlay.hidden = true;
   socket = null;
+  autoJoining = false;
   stopGame();
   lobby.hide();
   results.hide();
@@ -201,8 +247,95 @@ function onClose(_info: CloseInfo) {
   lastResults = null;
   phase = null;
   home.setBusy(false);
-  home.show({ room: roomFromPath(location.pathname), name, error: closeReason });
+  home.show({ room: roomFromPath(location.pathname), name, error: text });
   closeReason = CONNECTION_LOST;
+}
+
+// Ends the connection for good, whether it is joined, reconnecting or neither.
+function giveUp(text: string) {
+  closeReason = text;
+  reconnectEvent('left');
+  clearReconnectTimers();
+  const pending = attempt;
+  attempt = null;
+  pending?.close();
+  if (socket) socket.close();
+  else showHome(text);
+}
+
+function onClose(info: CloseInfo) {
+  socket = null;
+  if (!info.byPage && playerId !== '') {
+    beginReconnect();
+    return;
+  }
+  reconnectEvent('left');
+  showHome(closeReason);
+}
+
+function beginReconnect() {
+  // A page being hidden loses its sockets; it must not start attempts nobody sees.
+  if (pageHidden) return;
+  stopGame();
+  droppedPlayerId = playerId;
+  playerId = '';
+  reconnectOverlay.hidden = false;
+  const action = reconnectEvent('dropped');
+  if (typeof action === 'object') scheduleAttempt(action.connectAt);
+  deadlineTimer = window.setTimeout(() => giveUp(CONNECTION_LOST), (RECONNECT_WINDOW + SOCKET_OPEN_TIMEOUT) * 1000);
+}
+
+function scheduleAttempt(connectAt: number) {
+  attemptTimer = window.setTimeout(startAttempt, Math.max(0, connectAt - clock()) * 1000);
+}
+
+function startAttempt() {
+  attemptTimer = null;
+  if (reconnect.kind !== 'reconnecting' || pageHidden || !currentRoom) return;
+  const room = currentRoom;
+  const opened = openSocket(socketUrl(location), {
+    onOpen: () => {
+      if (opened === attempt) opened.send({ type: 'join', room, name, token });
+    },
+    onMessage: (message) => onSocketMessage(opened, message),
+    onClose: (info) => onSocketClose(opened, info),
+  });
+  attempt = opened;
+}
+
+// Handlers of an old socket do nothing once it is replaced.
+function onSocketMessage(from: GameSocket, message: ServerMessage) {
+  if (from === socket) {
+    onMessage(message);
+    return;
+  }
+  if (from !== attempt) return;
+  if (message.type === 'error') {
+    reconnectEvent('refused');
+    giveUp(errorText(message.reason));
+  } else if (message.type === 'welcome') {
+    if (message.playerId !== droppedPlayerId) {
+      reconnectEvent('refused');
+      giveUp(PLACE_LOST);
+      return;
+    }
+    clearReconnectTimers();
+    socket = attempt;
+    attempt = null;
+    onMessage(message);
+  }
+}
+
+function onSocketClose(from: GameSocket, info: CloseInfo) {
+  if (from === socket) {
+    onClose(info);
+    return;
+  }
+  if (from !== attempt) return;
+  attempt = null;
+  const action = reconnectEvent('attemptFailed');
+  if (typeof action === 'object') scheduleAttempt(action.connectAt);
+  else giveUp(CONNECTION_LOST);
 }
 
 // Sends a create or join request once the physics module is ready.
@@ -226,13 +359,51 @@ function send(message: ClientMessage) {
   }
   const opened = openSocket(socketUrl(location), {
     onOpen: () => opened.send(message),
-    onMessage,
-    onClose,
+    onMessage: (incoming) => onSocketMessage(opened, incoming),
+    onClose: (info) => onSocketClose(opened, info),
   });
   socket = opened;
 }
 
+// Joins the room in the address at once, after the page reloaded itself because the 3D view was lost.
+function autoJoin(room: string, rejoinName: string) {
+  name = rejoinName;
+  autoJoining = true;
+  reconnectOverlay.hidden = false;
+  rapierReady.then(
+    () => {
+      if (pageHidden) return;
+      send({ type: 'join', room, name, token });
+    },
+    () => showHome(RAPIER_FAILED),
+  );
+}
+
+// The page is going away or into the back/forward cache; its sockets close without anything being wrong.
+window.addEventListener('pagehide', () => {
+  pageHidden = true;
+});
+
+canvas.addEventListener('webglcontextlost', () => {
+  if (!currentRoom || (playerId === '' && reconnect.kind !== 'reconnecting')) {
+    renderer = null;
+    return;
+  }
+  const at = Date.now();
+  const last = lastAutoReload(sessionStore);
+  if (last !== null && at - last < AUTO_RELOAD_GUARD) {
+    reconnectEvent('left');
+    giveUp(VIEW_LOST);
+    return;
+  }
+  saveRejoin(sessionStore, { room: currentRoom, name, at });
+  markAutoReload(sessionStore, at);
+  location.reload();
+});
+
 // Back and forward change the address without loading the page; reloading puts the page in step with it.
 window.addEventListener('popstate', () => location.reload());
 
-home.show({ room: roomFromPath(location.pathname), name });
+const rejoin = takeRejoin(sessionStore, roomFromPath(location.pathname));
+if (rejoin) autoJoin(roomFromPath(location.pathname)!, rejoin.name);
+else home.show({ room: roomFromPath(location.pathname), name });

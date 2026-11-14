@@ -34,6 +34,7 @@ import { createCoinMeshes } from './render/coinMesh';
 import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMesh';
 import { applyConditions, conditionsLook } from './render/conditions';
 import { createScene } from './render/scene';
+import { disposeScene } from './render/disposeScene';
 import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
@@ -435,6 +436,7 @@ export function createGame(
       scene.remove(winchMesh);
       disposeWinchMesh(winchMesh);
       conditions.dispose();
+      disposeScene(scene);
     },
   };
 }

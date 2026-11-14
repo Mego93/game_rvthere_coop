@@ -1,4 +1,4 @@
-import { cleanToken } from '@lodgy/shared';
+import { cleanName, cleanRoom, cleanToken } from '@lodgy/shared';
 
 const TOKEN_KEY = 'lodgy.token';
 const NAME_KEY = 'lodgy.name';
@@ -44,3 +44,32 @@ export function sessionToken(store: KeyValueStore, fillRandom: (bytes: Uint8Arra
 export const savedName = (store: KeyValueStore): string => store.getItem(NAME_KEY) ?? '';
 
 export const saveName = (store: KeyValueStore, name: string): void => remember(store, NAME_KEY, name);
+
+const REJOIN_KEY = 'lodgy.rejoin';
+const RELOADED_KEY = 'lodgy.reloadedAt';
+
+export const saveRejoin = (store: KeyValueStore, rejoin: { room: string; name: string; at: number }): void =>
+  remember(store, REJOIN_KEY, JSON.stringify(rejoin));
+
+// Reads the saved rejoin and clears it, so a failed rejoin is not tried again on the next load.
+export function takeRejoin(store: KeyValueStore, room: string | null): { name: string } | null {
+  const raw = store.getItem(REJOIN_KEY);
+  if (!raw) return null;
+  remember(store, REJOIN_KEY, '');
+  try {
+    const value = JSON.parse(raw) as { room?: unknown; name?: unknown };
+    if (typeof value.room !== 'string' || typeof value.name !== 'string') return null;
+    if (room === null || cleanRoom(value.room) !== room) return null;
+    const name = cleanName(value.name);
+    return name ? { name } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function lastAutoReload(store: KeyValueStore): number | null {
+  const value = Number(store.getItem(RELOADED_KEY));
+  return store.getItem(RELOADED_KEY) !== null && Number.isFinite(value) ? value : null;
+}
+
+export const markAutoReload = (store: KeyValueStore, at: number): void => remember(store, RELOADED_KEY, String(at));

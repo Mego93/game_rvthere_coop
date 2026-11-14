@@ -164,4 +164,17 @@ describe('openSocket', () => {
     sock.send({ type: 'pong' } as never);
     expect(native.sent).toEqual(['{"type":"pong"}']);
   });
+
+  it('a socket that fires its close event inside close() cannot report the wrong code', () => {
+    const { sock, native, advance, closes } = setup();
+    native.close = () => native.emit('close', { code: 1006 });
+    native.open();
+    sock.close();
+    expect(closes).toEqual([{ code: 1000, byPage: true }]);
+    const second = setup();
+    second.native.close = () => second.native.emit('close', { code: 1006 });
+    second.advance(SOCKET_OPEN_TIMEOUT + 0.1);
+    expect(second.closes).toEqual([{ code: 4000, byPage: false }]);
+    advance(0);
+  });
 });
