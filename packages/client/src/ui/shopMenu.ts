@@ -50,6 +50,14 @@ export const menuInput = (open: boolean, sampled: InputFields, last: InputFields
 // One position for every menu check: the drawn (predicted) one when there is one, so a lagging server position cannot close the menu.
 export const menuFeet = (drawn: Vec3 | null, server: Vec3 | null): Vec3 | null => drawn ?? server;
 
+// The mouse click gate follows the menu; releasing it on stop keeps a dropped game from blocking the next one.
+export function gateControl(gate: { blocked: boolean }): { follow(open: boolean): void; release(): void } {
+  return {
+    follow: (open) => void (gate.blocked = open),
+    release: () => void (gate.blocked = false),
+  };
+}
+
 const ITEMS: { kind: ItemKind; label: string }[] = [
   { kind: 'jerrycan', label: 'Jerrycan' },
   { kind: 'toolbox', label: 'Toolbox' },

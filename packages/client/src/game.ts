@@ -37,7 +37,7 @@ import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
 import { interactAction, overlayText } from './ui/overlay';
-import { CLOSED, createShopMenu, menuFeet, menuInput, shopMenuState, type ShopMenuState } from './ui/shopMenu';
+import { CLOSED, createShopMenu, gateControl, menuFeet, menuInput, shopMenuState, type ShopMenuState } from './ui/shopMenu';
 import type { TouchUi } from './ui/touchUi';
 import { touchView } from './ui/touchView';
 
@@ -116,6 +116,7 @@ export function createGame(
   let wasInteract = false;
   let lastSent: InputFields = NEUTRAL_INPUT;
 
+  const gate = gateControl(view.pointerGate);
   const refreshMenu = (feet: Vec3 | null, press: InteractAction | null, dismiss: boolean) => {
     const was = menuState.open;
     menuState = shopMenuState(menuState, {
@@ -129,7 +130,7 @@ export function createGame(
     });
     if (menuState.open !== was) {
       shopMenu.setOpen(menuState.open);
-      view.pointerGate.blocked = menuState.open;
+      gate.follow(menuState.open);
       if (menuState.open && document.pointerLockElement === renderer.domElement) document.exitPointerLock();
     }
     if (menuState.open) shopMenu.setWallet(buffer.latestStatus()?.wallet ?? 0);
@@ -165,7 +166,6 @@ export function createGame(
         buffer.latestCable(),
         course.anchors,
         course.stops,
-        buffer.latestStatus()?.won ?? false,
       );
       refreshMenu(feet, action, false);
     }
@@ -329,6 +329,7 @@ export function createGame(
       cancelAnimationFrame(frameRequest);
       window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', onKeyDown);
+      gate.release();
       shopMenu.dispose();
       coinMeshes.dispose();
       input.dispose();

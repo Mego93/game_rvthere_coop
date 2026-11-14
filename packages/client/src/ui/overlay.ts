@@ -79,7 +79,6 @@ export function interactAction(
   cable: CableSnapshot | null,
   anchors: readonly Placed[],
   stops: readonly ServiceStop[] = [],
-  won = false,
 ): InteractAction | null {
   const takenSeats = new Set<string>();
   const heldProps = new Set<string>();
@@ -111,10 +110,7 @@ export function interactAction(
       usable: stopUsable(stop, vehicle.pos, vehicle.fuel, vehicle.health),
     })),
   });
-  const split = splitCandidates(found);
-  // The shop is closed once the run is won.
-  if (won) split.stopCandidates = split.stopCandidates.filter((candidate) => candidate.action.kind !== 'shop');
-  return resolveInteract({ seat: local.seat, hands: local.hands, holdsHook: local.hands === 'hook', ...split });
+  return resolveInteract({ seat: local.seat, hands: local.hands, holdsHook: local.hands === 'hook', ...splitCandidates(found) });
 }
 
 // What pressing interact would do for the local player, as words, or null if nothing.
@@ -129,9 +125,8 @@ export function interactHint(
   cable: CableSnapshot | null,
   anchors: readonly Placed[],
   stops: readonly ServiceStop[] = [],
-  won = false,
 ): string | null {
-  const action = interactAction(config, vehicle, local, players, yaw, pitch, props, cable, anchors, stops, won);
+  const action = interactAction(config, vehicle, local, players, yaw, pitch, props, cable, anchors, stops);
   if (action?.kind === 'exitSeat') return 'E to leave the seat';
   if (action?.kind === 'throw') return 'E to throw';
   if (action?.kind === 'board') return 'E to board';
@@ -185,7 +180,7 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
       if (server) lines.push(`server   ${fixed(server.x)} ${fixed(server.y)} ${fixed(server.z)}`);
     }
     const local = players.find((player) => player.playerId === localId);
-    const hint = local ? interactHint(config, vehicle, local, players, aim.yaw, aim.pitch, propPoses, cable, anchors, stops, status?.won ?? false) : null;
+    const hint = local ? interactHint(config, vehicle, local, players, aim.yaw, aim.pitch, propPoses, cable, anchors, stops) : null;
     if (hint) lines.push(`hint     ${hint}`);
     if (local) {
       lines.push(`slots    ${local.inventory.map((kind, index) => (index === local.slot ? `[${kind ?? '-'}]` : (kind ?? '-'))).join(' ')}`);

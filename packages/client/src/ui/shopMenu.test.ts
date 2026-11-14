@@ -1,6 +1,6 @@
 import { NEUTRAL_INPUT, SHOP_MENU_TELEPORT, getCourse, vec3, type InteractAction, type Vec3 } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { CLOSED, menuFeet, menuInput, shopMenuState, type ShopMenuInputs, type ShopMenuState } from './shopMenu';
+import { CLOSED, gateControl, menuFeet, menuInput, shopMenuState, type ShopMenuInputs, type ShopMenuState } from './shopMenu';
 
 const stops = getCourse('test').stops;
 const counter = stops.find((stop) => stop.id === 'stop-fuel')!.shopCounter!;
@@ -63,4 +63,15 @@ test('M9: an input sampled while the menu is open is neutral, with the aim of th
   const sampled = { ...NEUTRAL_INPUT, moveX: 1 as const, moveY: 1 as const, jump: true, interact: true, use: true, yaw: 1.2, pitch: -0.3, slot: 2 as const };
   expect(menuInput(true, sampled, last)).toEqual({ ...NEUTRAL_INPUT, yaw: 1.2, pitch: -0.3, slot: 1 });
   expect(menuInput(false, sampled, last)).toBe(sampled);
+});
+
+test('the gate follows the menu and is released on stop, even with the menu open', () => {
+  const gate = { blocked: false };
+  const control = gateControl(gate);
+  control.follow(true);
+  expect(gate.blocked).toBe(true);
+  control.release();
+  expect(gate.blocked).toBe(false);
+  control.follow(false);
+  expect(gate.blocked).toBe(false);
 });

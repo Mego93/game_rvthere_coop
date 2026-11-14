@@ -506,7 +506,7 @@ describe('S10: operate and item holds', () => {
 });
 
 describe('S13: determinism with an operate hold', () => {
-  test('two worlds with a coin pickup and an operate hold give equal snapshots', () => {
+  test('two worlds with a coin pickup, an operate hold and a buy give equal snapshots', () => {
     const play = () => {
       const world = make('p1', 'p2');
       touch(world, 'p1', 'coin-1');
@@ -515,9 +515,12 @@ describe('S13: determinism with an operate hold', () => {
       world.teleportPlayer('p2', feetAt(coin(world, 'coin-3')));
       standAt(world, 'p1', 'stop-fuel');
       const events = holdInteract(world, 'p1', 40);
+      atCounter(world, 'p2');
+      const bought = world.buy('p2', 'healthKit');
+      expect(bought).toBe('ok');
       const snapshotMid = JSON.stringify(world.snapshot());
       holdInteract(world, 'p1', HOLD_TICKS);
-      return JSON.stringify([snapshotMid, world.snapshot(), events]);
+      return JSON.stringify([snapshotMid, world.snapshot(), events, bought]);
     };
     expect(play()).toBe(play());
   });
