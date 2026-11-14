@@ -232,7 +232,7 @@ Each course awards up to three stars, shown on the results screen only:
 
 1. Finish with no checkpoint restart.
 2. Finish with a final time under the course's target time, set in the course data.
-3. Collect every coin on the course.
+3. Collect every coin on the course. A course with no coins earns this star.
 
 A run in which an admin tool was used (see "Lobby") earns no stars and is marked as assisted on the results screen.
 
@@ -323,7 +323,7 @@ const world = createWorld(rapier, { courseId, vehicleId, weather }, builtCourse?
 world.addPlayer(id); world.removePlayer(id);
 world.teleportPlayer(id, pos);     // places a player; used by tests and checkpoint restarts
 world.step(inputsByPlayer);        // advances one fixed tick; returns the tick's events
-world.buy(playerId, item);         // shop purchase; returns ok or a refusal reason
+world.buy(playerId, item);         // shop purchase; returns 'ok' or 'cannot_buy'; the room sends `error cannot_buy` to that client, and the page shows it in the shop menu, never on the home page
 world.restartCheckpoint();         // the admin's manual restart; not an admin tool
 world.adminTool(tool);             // 'skipCheckpoint' | 'refill'; marks the run assisted
 world.snapshot();                  // serialisable state
@@ -376,11 +376,12 @@ This type is the contract between course data and everything else: the server si
 2. Apply forces: drive, push, cable
 3. Physics step
 4. Move characters
-5. Apply damage
-6. Kill-plane resets for players and props
-7. Record a checkpoint if one was entered
-8. Check for a lost vehicle and restart if so
-9. Check for a win, only if the vehicle was not lost this tick
+5. Collect coins touched this tick (step 10)
+6. Apply damage
+7. Kill-plane resets for players and props
+8. Record a checkpoint if one was entered
+9. Check for a lost vehicle and restart if so
+10. Check for a win, only if the vehicle was not lost this tick
 
 When two players compete for the same thing on one tick, players are processed in the order they joined the run and the first wins.
 
