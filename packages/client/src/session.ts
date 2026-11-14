@@ -48,20 +48,20 @@ export const saveName = (store: KeyValueStore, name: string): void => remember(s
 const REJOIN_KEY = 'lodgy.rejoin';
 const RELOADED_KEY = 'lodgy.reloadedAt';
 
-export const saveRejoin = (store: KeyValueStore, rejoin: { room: string; name: string; at: number }): void =>
+export const saveRejoin = (store: KeyValueStore, rejoin: { room: string; name: string; playerId: string; at: number }): void =>
   remember(store, REJOIN_KEY, JSON.stringify(rejoin));
 
 // Reads the saved rejoin and clears it, so a failed rejoin is not tried again on the next load.
-export function takeRejoin(store: KeyValueStore, room: string | null): { name: string } | null {
+export function takeRejoin(store: KeyValueStore, room: string | null): { name: string; playerId: string } | null {
   const raw = store.getItem(REJOIN_KEY);
   if (!raw) return null;
   remember(store, REJOIN_KEY, '');
   try {
-    const value = JSON.parse(raw) as { room?: unknown; name?: unknown };
-    if (typeof value.room !== 'string' || typeof value.name !== 'string') return null;
+    const value = JSON.parse(raw) as { room?: unknown; name?: unknown; playerId?: unknown };
+    if (typeof value.room !== 'string' || typeof value.name !== 'string' || typeof value.playerId !== 'string' || value.playerId === '') return null;
     if (room === null || cleanRoom(value.room) !== room) return null;
     const name = cleanName(value.name);
-    return name ? { name } : null;
+    return name ? { name, playerId: value.playerId } : null;
   } catch {
     return null;
   }

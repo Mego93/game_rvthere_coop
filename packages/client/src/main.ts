@@ -67,6 +67,7 @@ let attemptTimer: number | null = null;
 let deadlineTimer: number | null = null;
 let autoJoining = false;
 let autoJoinRoom = '';
+let autoJoinPlayerId = '';
 let pageHidden = false;
 let currentRoom: string | null = null;
 let droppedPlayerId = '';
@@ -138,6 +139,13 @@ function onLobby(message: LobbyMessage) {
 function onMessage(message: ServerMessage) {
   switch (message.type) {
     case 'welcome':
+      if (autoJoining && autoJoinPlayerId !== '' && message.playerId !== autoJoinPlayerId) {
+        // The slot expired or was taken; never become a new player silently.
+        closeReason = PLACE_LOST;
+        reconnectEvent('refused');
+        socket?.close();
+        return;
+      }
       playerId = message.playerId;
       currentRoom = message.room;
       autoJoining = false;
@@ -173,8 +181,8 @@ function onMessage(message: ServerMessage) {
       }
       if (playerId !== '') {
         // In a room an error never reaches the home page; being kicked ends with the home page's text.
-        if (message.reason === 'kicked') {
-          closeReason = errorText('kicked');
+        if (message.reason === 'kicked' || message.reason === 'replaced') {
+          closeReason = errorText(message.reason);
           reconnectEvent('kicked');
           socket?.close();
         } else if (lobby.isShown()) lobby.setError(errorText(message.reason));
@@ -203,6 +211,11 @@ function startGame(lobby: LobbyMessage) {
     console.error(error);
     closeReason = 'This browser cannot show 3D graphics (WebGL is not available).';
     socket?.close();
+    return;
+  }
+  // A context lost outside a run is not restored in time for this one; reload as for a loss during a run.
+  if (renderer.getContext().isContextLost()) {
+    reloadAfterContextLoss();
     return;
   }
   if (touchDevice && !touchUi) {
@@ -367,8 +380,9 @@ function send(message: ClientMessage) {
 }
 
 // Joins the room in the address at once, after the page reloaded itself because the 3D view was lost.
-function autoJoin(room: string, rejoinName: string) {
+function autoJoin(room: string, rejoinName: string, rejoinPlayerId: string) {
   name = rejoinName;
+  autoJoinPlayerId = rejoinPlayerId;
   autoJoining = true;
   autoJoinRoom = room;
   if (pageHidden) return;
@@ -399,28 +413,32 @@ window.addEventListener('pageshow', (event) => {
     hasAttemptTimer: attemptTimer !== null,
     reconnecting: reconnect.kind === 'reconnecting',
   });
-  if (action === 'autoJoin') autoJoin(autoJoinRoom, name);
+  if (action === 'autoJoin') autoJoin(autoJoinRoom, name, autoJoinPlayerId);
   else if (action === 'scheduleAttempt') scheduleAttempt(clock());
   else if (action === 'beginReconnect') beginReconnect();
 });
 
-canvas.addEventListener('webglcontextlost', () => {
-  // Outside a room Three's own listener restores the context.
-  if (!currentRoom || (playerId === '' && reconnect.kind !== 'reconnecting')) return;
+function reloadAfterContextLoss() {
+  if (!currentRoom) return;
   const at = Date.now();
   if (!autoReloadAllowed(sessionStore, at, AUTO_RELOAD_GUARD)) {
-    reconnectEvent('left');
     giveUp(VIEW_LOST);
     return;
   }
-  saveRejoin(sessionStore, { room: currentRoom, name, at });
+  saveRejoin(sessionStore, { room: currentRoom, name, playerId: playerId || droppedPlayerId, at });
   markAutoReload(sessionStore, at);
   location.reload();
+}
+
+canvas.addEventListener('webglcontextlost', () => {
+  // Outside a room Three's own listener restores the context.
+  if (!currentRoom || (playerId === '' && reconnect.kind !== 'reconnecting')) return;
+  reloadAfterContextLoss();
 });
 
 // Back and forward change the address without loading the page; reloading puts the page in step with it.
 window.addEventListener('popstate', () => location.reload());
 
 const rejoin = takeRejoin(sessionStore, roomFromPath(location.pathname));
-if (rejoin) autoJoin(roomFromPath(location.pathname)!, rejoin.name);
+if (rejoin) autoJoin(roomFromPath(location.pathname)!, rejoin.name, rejoin.playerId);
 else home.show({ room: roomFromPath(location.pathname), name });

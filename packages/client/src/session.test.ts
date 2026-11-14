@@ -53,23 +53,23 @@ test('a store that refuses writes still gives a token, and saving a name does no
 
 test('S1: a saved rejoin is taken once, with the name', () => {
   const store = createMemoryStore();
-  saveRejoin(store, { room: 'camel', name: 'Badr', at: 5 });
-  expect(takeRejoin(store, 'camel')).toEqual({ name: 'Badr' });
+  saveRejoin(store, { room: 'camel', name: 'Badr', playerId: 'p2', at: 5 });
+  expect(takeRejoin(store, 'camel')).toEqual({ name: 'Badr', playerId: 'p2' });
   expect(takeRejoin(store, 'camel')).toBeNull();
 });
 
 test('S2: a rejoin for another room, or from a page with no room, returns null and is cleared', () => {
   const store = createMemoryStore();
-  saveRejoin(store, { room: 'camel', name: 'Badr', at: 5 });
+  saveRejoin(store, { room: 'camel', name: 'Badr', playerId: 'p2', at: 5 });
   expect(takeRejoin(store, 'tent')).toBeNull();
   expect(takeRejoin(store, 'camel')).toBeNull();
-  saveRejoin(store, { room: 'camel', name: 'Badr', at: 5 });
+  saveRejoin(store, { room: 'camel', name: 'Badr', playerId: 'p2', at: 5 });
   expect(takeRejoin(store, null)).toBeNull();
   expect(store.getItem('lodgy.rejoin')).toBe('');
 });
 
 test('S3: malformed values return null', () => {
-  for (const bad of ['{', 'null', '[]', '{"room":"camel"}', '{"room":1,"name":"A"}', '{"room":"camel","name":""}']) {
+  for (const bad of ['{', 'null', '[]', '{"room":"camel"}', '{"room":1,"name":"A"}', '{"room":"camel","name":""}', '{"room":"camel","name":"Badr","at":1}', '{"room":"camel","name":"Badr","playerId":"","at":1}']) {
     const store = createMemoryStore();
     store.setItem('lodgy.rejoin', bad);
     expect(takeRejoin(store, 'camel')).toBeNull();
@@ -80,7 +80,7 @@ test('S4: the reload time survives taking the rejoin', () => {
   const store = createMemoryStore();
   expect(lastAutoReload(store)).toBeNull();
   markAutoReload(store, 1234);
-  saveRejoin(store, { room: 'camel', name: 'Badr', at: 1234 });
+  saveRejoin(store, { room: 'camel', name: 'Badr', playerId: 'p2', at: 1234 });
   takeRejoin(store, 'camel');
   expect(lastAutoReload(store)).toBe(1234);
 });

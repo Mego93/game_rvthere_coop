@@ -58,18 +58,8 @@ describe('reconnectStep', () => {
     const atBoundary = reconnectStep(rec, 'attemptFailed', 100 + RECONNECT_WINDOW - RECONNECT_DELAYS[1]!);
     expect(atBoundary.action).toEqual({ connectAt: 100 + RECONNECT_WINDOW });
     const past = reconnectStep(rec, 'attemptFailed', 100 + RECONNECT_WINDOW - RECONNECT_DELAYS[1]! + 0.01);
-    expect(past.action).toEqual({ connectAt: 100 + RECONNECT_WINDOW });
-    const after = reconnectStep(past.state, 'attemptFailed', 100 + RECONNECT_WINDOW);
-    expect(after.action).toBe('giveUp');
-    expect(after.state).toEqual({ kind: 'gaveUp' });
-  });
-
-  it('makes one last attempt at the end of the window when the next delay would pass it', () => {
-    const rec = reconnectStep(joined, 'dropped', 0).state;
-    const r = reconnectStep(rec, 'attemptFailed', 23.5);
-    expect(r.action).toEqual({ connectAt: 23.5 + RECONNECT_DELAYS[1]! });
-    const late = reconnectStep({ kind: 'reconnecting', droppedAt: 0, failures: 4 }, 'attemptFailed', 23.5);
-    expect(late.action).toEqual({ connectAt: RECONNECT_WINDOW });
+    expect(past.action).toBe('giveUp');
+    expect(past.state).toEqual({ kind: 'gaveUp' });
   });
 
   it('gives up at once on kicked, refused and left from any state', () => {

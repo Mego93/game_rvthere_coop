@@ -41,12 +41,7 @@ export function reconnectStep(
       if (state.kind !== 'reconnecting') return { state, action: 'none' };
       const failures = state.failures + 1;
       const connectAt = now + delayAfter(failures);
-      const limit = state.droppedAt + RECONNECT_WINDOW;
-      // One last attempt at the end of the window, while the server still holds the slot.
-      if (connectAt > limit) {
-        if (limit <= now) return { state: { kind: 'gaveUp' }, action: 'giveUp' };
-        return { state: { ...state, failures }, action: { connectAt: limit } };
-      }
+      if (connectAt > state.droppedAt + RECONNECT_WINDOW) return { state: { kind: 'gaveUp' }, action: 'giveUp' };
       return { state: { ...state, failures }, action: { connectAt } };
     }
   }
