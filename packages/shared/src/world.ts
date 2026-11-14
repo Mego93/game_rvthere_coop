@@ -54,6 +54,8 @@ export interface WorldSnapshot {
   wallet: number;
   coinsCollected: number;
   coinsTotal: number;
+  // True once an admin tool has been used in this run.
+  assisted: boolean;
 }
 
 export interface WorldStatus {
@@ -65,6 +67,7 @@ export interface WorldStatus {
   coinsCollected: number;
   coinsTotal: number;
   finalTime: number;
+  assisted: boolean;
 }
 
 export interface WorldDebug {
@@ -82,7 +85,14 @@ export interface World {
   snapshot(): WorldSnapshot;
   // Placed at the first valid spawn slot.
   addPlayer(id: string): void;
-  removePlayer(id: string): void;
+  // 'leave' drops the inventory at a spawn slot; 'hold' keeps health, downed and inventory for addPlayer.
+  removePlayer(id: string, mode?: 'leave' | 'hold'): void;
+  // Drops a held player's inventory at a spawn slot and forgets them; nothing for an unknown id.
+  forgetHeld(id: string): void;
+  // Re-records cp-0 with the players present.
+  recordStart(): void;
+  // Applies at once; false when it did nothing (won, or no next checkpoint).
+  adminTool(tool: 'skipCheckpoint' | 'refill'): boolean;
   teleportPlayer(id: string, pos: Vec3): void;
   // Applies at once; the buy event is returned by the next step.
   buy(playerId: string, item: ItemKind): 'ok' | 'cannot_buy';
@@ -145,6 +155,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   let wallet = 0;
   let coinsCollected = 0;
   let record: CheckpointRecord;
+  let assisted = false;
+  const held = new Map<string, { health: number; downed: boolean; inventory: (ItemKind | null)[] }>();
   let debugDamage: PendingDamage[] = [];
 
   const recordCheckpoint = (index: number) => {
@@ -497,9 +509,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }
   };
 
-  // Rule K3 in the order of Q1 and Q7: the world is put right first, the players last.
-  const restart = (events: WorldEvent[]) => {
-    const checkpoint = course.checkpoints[record.index]!;
+  // Steps shared by restart and skipCheckpoint; `between` runs after the vehicle moves and before the physics steps.
+  const placeCrew = (index: number, fuel: number, health: number, between: () => void) => {
+    const checkpoint = course.checkpoints[index]!;
     winch.stow();
     for (const player of players.all()) {
       releaseHook(player.id, 'stow');
@@ -509,42 +521,66 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }
     players.takePushIntents();
     for (const player of players.all()) players.setSeat(player.id, null);
-    vehicle.resetTo(checkpoint.spawn, Math.max(record.fuel, RESTART_FLOOR), Math.max(record.health, RESTART_FLOOR));
-    const vehicleBox = {
-      center: add(checkpoint.spawn.pos, rotate(checkpoint.spawn.rot, scale(AXIS_Y, vehicleConfig.rideHeight))),
-      halfExtents: vehicleConfig.halfExtents,
-      rot: checkpoint.spawn.rot,
-    };
-    for (const prop of props.all()) {
-      const recorded = record.props.get(prop.id);
-      if (recorded && !boxesOverlap({ center: recorded.centre, halfExtents: prop.config.halfExtents, rot: recorded.rot }, vehicleBox)) {
-        props.placeAtRest(prop.id, recorded.centre, recorded.rot);
-      } else {
-        props.resetToSpawn(prop.id);
-      }
-    }
-    items.restore(record.items);
-    // A purchase queued before the restart is rolled back with the wallet, so it emits nothing.
-    for (let i = events.length - 1; i >= 0; i--) if (events[i]!.kind === 'buy') events.splice(i, 1);
-    coinsLeft = [...record.coinsLeft];
-    wallet = record.wallet;
-    coinsCollected = record.coinsCollected;
+    vehicle.resetTo(checkpoint.spawn, fuel, health);
+    between();
     // Queries see nothing new until the broad phase has run (Rapier 0.21), as at creation.
     physics.timestep = 0;
     physics.step();
     physics.step();
     physics.timestep = TICK_DT;
     for (const player of players.all()) {
+      players.setSeat(player.id, null, players.findSpawn(player.id));
+      player.hitCooldown.clear();
+    }
+    resetLastTick = new Set();
+    cableTension = 0;
+  };
+
+  const spawnBox = (index: number) => {
+    const { spawn } = course.checkpoints[index]!;
+    return {
+      center: add(spawn.pos, rotate(spawn.rot, scale(AXIS_Y, vehicleConfig.rideHeight))),
+      halfExtents: vehicleConfig.halfExtents,
+      rot: spawn.rot,
+    };
+  };
+
+  // Rule K3 in the order of Q1 and Q7: the world is put right first, the players last.
+  const restart = (events: WorldEvent[]) => {
+    const checkpoint = course.checkpoints[record.index]!;
+    placeCrew(record.index, Math.max(record.fuel, RESTART_FLOOR), Math.max(record.health, RESTART_FLOOR), () => {
+      const vehicleBox = spawnBox(record.index);
+      for (const prop of props.all()) {
+        const recorded = record.props.get(prop.id);
+        if (recorded && !boxesOverlap({ center: recorded.centre, halfExtents: prop.config.halfExtents, rot: recorded.rot }, vehicleBox)) {
+          props.placeAtRest(prop.id, recorded.centre, recorded.rot);
+        } else {
+          props.resetToSpawn(prop.id);
+        }
+      }
+      items.restore(record.items);
+      // A purchase queued before the restart is rolled back with the wallet, so it emits nothing.
+      for (let i = events.length - 1; i >= 0; i--) if (events[i]!.kind === 'buy') events.splice(i, 1);
+      coinsLeft = [...record.coinsLeft];
+      wallet = record.wallet;
+      coinsCollected = record.coinsCollected;
+    });
+    for (const player of players.all()) {
       const saved = record.players.get(player.id);
       players.restoreInventory(player.id, saved?.inventory ?? []);
       player.health = saved ? Math.max(saved.health, PLAYER_RESTART_FLOOR) : PLAYER_MAX_HEALTH;
       player.downed = null;
-      player.hitCooldown.clear();
-      players.setSeat(player.id, null, players.findSpawn(player.id));
+    }
+    // A held player is restored like a present one.
+    for (const [id, entry] of held) {
+      const saved = record.players.get(id);
+      entry.inventory = saved ? [...saved.inventory] : [null, null, null];
+      entry.health = saved ? Math.max(saved.health, PLAYER_RESTART_FLOOR) : PLAYER_MAX_HEALTH;
+      entry.downed = false;
     }
     let level = 1;
     for (const [id, saved] of record.players) {
-      if (players.get(id)) continue;
+      if (players.get(id) || held.has(id)) continue;
       for (const kind of saved.inventory) {
         if (kind === null) continue;
         const at = checkpoint.spawn.pos;
@@ -552,10 +588,19 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         level += 1;
       }
     }
-    cableTension = 0;
-    resetLastTick = new Set();
     restarts += 1;
     events.push({ kind: 'vehicleLost', tick });
+  };
+
+  // Rule I11: at the first valid spawn slot, stacked upward.
+  const dropInventory = (id: string, inventory: readonly (ItemKind | null)[]) => {
+    const spot = players.findSpawn(id);
+    let level = 1;
+    for (const kind of inventory) {
+      if (kind === null) continue;
+      items.drop(kind, vec3(spot.x, spot.y + level * DROP_HEIGHT, spot.z));
+      level += 1;
+    }
   };
 
   return {
@@ -639,6 +684,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       wallet,
       coinsCollected,
       coinsTotal: course.coins.length,
+      assisted,
     }),
     restartCheckpoint() {
       if (!won) restartPending = true;
@@ -654,24 +700,62 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         coinsCollected,
         coinsTotal: course.coins.length,
         finalTime: finalTime({ elapsed, restarts, respawns, wallet }),
+        assisted,
       };
     },
-    addPlayer: (id) => void players.add(id),
-    removePlayer(id) {
+    addPlayer(id) {
+      const entry = held.get(id);
+      held.delete(id);
+      const state = players.add(id);
+      if (!entry) return;
+      players.restoreInventory(id, entry.inventory);
+      if (!entry.downed) {
+        state.health = entry.health;
+        return;
+      }
+      state.health = PLAYER_REVIVE_HEALTH;
+      if (!won) respawns += 1;
+      queuedEvents.push({ kind: 'respawn', tick: tick + 1, playerId: id, pos: { ...state.pos } });
+    },
+    removePlayer(id, mode = 'leave') {
       releaseHook(id, 'drop');
       const leaving = players.get(id);
       if (leaving) {
-        // Rule I11: at the first valid spawn slot, stacked upward.
-        const spot = players.findSpawn(id);
-        let level = 1;
-        for (const kind of leaving.inventory) {
-          if (kind === null) continue;
-          items.drop(kind, vec3(spot.x, spot.y + level * DROP_HEIGHT, spot.z));
-          level += 1;
-        }
+        if (mode === 'hold') held.set(id, { health: leaving.health, downed: leaving.downed !== null, inventory: [...leaving.inventory] });
+        else dropInventory(id, leaving.inventory);
       }
       players.remove(id);
       previous.delete(id);
+    },
+    forgetHeld(id) {
+      const entry = held.get(id);
+      if (!entry) return;
+      held.delete(id);
+      dropInventory(id, entry.inventory);
+    },
+    recordStart: () => recordCheckpoint(0),
+    adminTool(tool) {
+      if (won) return false;
+      if (tool === 'refill') {
+        vehicle.addFuel(1);
+        vehicle.repair(1);
+        assisted = true;
+        return true;
+      }
+      const next = record.index + 1;
+      if (next >= course.checkpoints.length) return false;
+      placeCrew(next, vehicle.fuel(), vehicle.health(), () => {
+        const vehicleBox = spawnBox(next);
+        for (const prop of props.all()) {
+          const box = { center: prop.body.translation(), halfExtents: prop.config.halfExtents, rot: prop.body.rotation() };
+          if (prop.heldBy !== null || boxesOverlap(box, vehicleBox)) props.resetToSpawn(prop.id);
+        }
+      });
+      recordCheckpoint(next);
+      const centre = vehicle.body.translation();
+      queuedEvents.push({ kind: 'checkpoint', tick: tick + 1, pos: vec3(centre.x, centre.y, centre.z) });
+      assisted = true;
+      return true;
     },
     teleportPlayer: (id, pos) => players.teleport(id, pos),
     buy(playerId, item) {

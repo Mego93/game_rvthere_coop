@@ -46,6 +46,7 @@ const snapshot = (
   wallet: 0,
   coinsCollected: 0,
   coinsTotal: 2,
+  assisted: false,
 });
 
 // Snapshots every 3 ticks, each arriving exactly when the server's clock reads its tick time plus `latency`.
