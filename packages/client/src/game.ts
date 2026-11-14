@@ -2,6 +2,7 @@ import {
   NEUTRAL_INPUT,
   PLAYER_EYE_HEIGHT,
   add,
+  dot,
   rotate,
   createPredictor,
   getCourse,
@@ -10,6 +11,7 @@ import {
   predictedFrom,
   vec3,
   type ClientMessage,
+  type EventMessage,
   type InputFields,
   type InteractAction,
   type ItemKind,
@@ -22,6 +24,9 @@ import {
   type VehicleState,
 } from '@lodgy/shared';
 import * as THREE from 'three';
+import { engineRate, rainOn, winchOn } from './audio/engine';
+import type { GameAudio } from './audio/audio';
+import { soundFor } from './audio/soundMap';
 import type { GameInput } from './input/source';
 import { hasJoystick } from './input/touch';
 import { createFixedStepper, createFrameClock } from './loop';
@@ -50,6 +55,10 @@ const MAX_FRAME_SECONDS = 0.25;
 export interface Game {
   setLobby(lobby: LobbyMessage): void;
   pushSnapshot(snapshot: SnapshotMessage): void;
+  // Plays the sound of a server event as it arrives.
+  onEvent(message: EventMessage): void;
+  // Shows the mute state in the run menu.
+  setMuted(muted: boolean): void;
   // Shows "Cannot buy" in the shop menu if it is open.
   showShopError(): void;
   // Stops drawing and listening for input.
@@ -68,6 +77,10 @@ export interface GameView {
   touchUi: TouchUi | null;
   // The mouse source's click gate; blocked while the shop menu is open.
   pointerGate: { blocked: boolean };
+  // The page's one audio; the game turns its loops off when it stops but does not dispose it.
+  audio: GameAudio;
+  muted: boolean;
+  onMute: () => void;
 }
 
 // Draws one run: sends an input every tick and shows the vehicle and the players from the server's snapshots.
@@ -157,7 +170,13 @@ export function createGame(
     onSkip: () => closeRun({ type: 'adminTool', tool: 'skipCheckpoint' }),
     onRefill: () => closeRun({ type: 'adminTool', tool: 'refill' }),
     onKick: (target) => closeRun({ type: 'kick', playerId: target }),
+    onMute: view.onMute,
   });
+  runMenu.setMuted(view.muted);
+  const { audio } = view;
+  // The first snapshot of a game does not count as a win.
+  let wasWon: boolean | null = null;
+  const forward = new THREE.Vector3();
   // The menu is rebuilt only when its content changes, so a click is not lost to a rebuild.
   let runMenuKey = '';
   const updateRunMenu = () => {
@@ -379,6 +398,16 @@ export function createGame(
       view.touchUi.update(touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable }));
       view.touchUi.setJoystick(hasJoystick(input) ? input.joystick() : null);
     }
+    audio.setListener(camera.position, camera.getWorldDirection(forward));
+    const playing = lobby.phase === 'playing';
+    if (vehicle && playing) {
+      const speed = dot(vehicle.linvel, rotate(vehicle.rot, vec3(0, 0, -1)));
+      const seated = latestLocal !== null && latestLocal.seat !== null;
+      audio.setLoop('engine', true, { rate: engineRate(speed, vehicleConfig.maxSpeed, vehicle.throttle), volume: seated ? 0.35 : 0.2, at: vehicle.pos });
+    } else audio.setLoop('engine', false);
+    if (vehicle && winchOn(latestCable)) audio.setLoop('winch', true, { at: add(vehicle.pos, rotate(vehicle.rot, vehicleConfig.winchMount)) });
+    else audio.setLoop('winch', false);
+    audio.setLoop('rain', rainOn(lobby.weather), { volume: 0.3 });
     conditions.update(camera.position, frameSeconds);
     conditions.setLights(vehicle, players);
     renderer.render(scene, camera);
@@ -405,6 +434,9 @@ export function createGame(
     },
     pushSnapshot(snapshot) {
       buffer.push(snapshot, performance.now() / 1000);
+      const won = buffer.latestStatus()?.won ?? false;
+      if (wasWon === false && won) audio.play('win');
+      wasWon = won;
       predictor.setVehicle(snapshot.vehicle.pos, snapshot.vehicle.rot);
       const held = new Set(snapshot.players.flatMap((player) => (player.hands === null || player.hands === 'hook' ? [] : [player.hands])));
       predictor.setProps(buffer.latestProps().filter((prop) => !held.has(prop.id)));
@@ -414,9 +446,15 @@ export function createGame(
       if (entry && predictionActive(entry)) reconciler.correct(predictedFrom(entry), snapshot.ackSeq);
       else reconciler.suspend();
     },
+    onEvent(message) {
+      const sound = soundFor(message, playerId);
+      if (sound) audio.play(sound.kind, sound.positional ? { at: message.pos } : undefined);
+    },
+    setMuted: (muted) => runMenu.setMuted(muted),
     showShopError: () => shopMenu.showError(),
     stop() {
       cancelAnimationFrame(frameRequest);
+      for (const loop of ['engine', 'winch', 'rain'] as const) audio.setLoop(loop, false);
       window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('pointerlockchange', onLockChange);

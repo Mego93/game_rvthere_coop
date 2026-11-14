@@ -45,6 +45,12 @@ export const savedName = (store: KeyValueStore): string => store.getItem(NAME_KE
 
 export const saveName = (store: KeyValueStore, name: string): void => remember(store, NAME_KEY, name);
 
+const MUTED_KEY = 'lodgy.muted';
+
+export const savedMuted = (store: KeyValueStore): boolean => store.getItem(MUTED_KEY) === '1';
+
+export const saveMuted = (store: KeyValueStore, muted: boolean): void => remember(store, MUTED_KEY, muted ? '1' : '0');
+
 const REJOIN_KEY = 'lodgy.rejoin';
 const RELOADED_KEY = 'lodgy.reloadedAt';
 

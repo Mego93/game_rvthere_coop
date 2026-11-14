@@ -381,3 +381,25 @@ test('a night rain run draws without WebGL errors', async ({ page }) => {
   await page.waitForTimeout(500);
   expect(threeErrors).toEqual([]);
 });
+
+test('E7: the sound files are served, and a click and Start leave the page without errors', async ({ page }) => {
+  const license = await page.request.get('/sounds/LICENSE.md');
+  expect(license.status()).toBe(200);
+  expect(license.headers()['content-type']).toContain('text/markdown');
+  await page.goto('/');
+  await page.locator('#home-name').fill('Amal');
+  const sound = page.waitForResponse(/\/sounds\/.+\.(mp3|wav)$/);
+  await page.locator('#home-primary').click();
+  await expect(page.locator('#home')).toBeHidden();
+  await startRun(page);
+  expect((await sound).status()).toBe(200);
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
+  // The mute button is in the run menu, and M toggles it.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#run-mute')).toHaveText('Mute sound');
+  await page.keyboard.press('KeyM');
+  await expect(page.locator('#run-mute')).toHaveText('Unmute sound');
+  await page.locator('#run-mute').click();
+  await expect(page.locator('#run-mute')).toHaveText('Mute sound');
+});

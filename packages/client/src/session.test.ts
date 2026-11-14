@@ -1,6 +1,6 @@
 import { parseClientMessage } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { autoReloadAllowed, createMemoryStore, lastAutoReload, markAutoReload, saveName, savedName, saveRejoin, sessionToken, takeRejoin } from './session';
+import { autoReloadAllowed, createMemoryStore, lastAutoReload, markAutoReload, saveMuted, saveName, savedMuted, savedName, saveRejoin, sessionToken, takeRejoin } from './session';
 
 const countUp = (bytes: Uint8Array) => bytes.forEach((_, index) => (bytes[index] = index * 17));
 
@@ -92,4 +92,13 @@ test('the reload guard allows a first reload, blocks a quick second, and treats 
   expect(autoReloadAllowed(store, 5000, 10_000)).toBe(false);
   expect(autoReloadAllowed(store, 11_000, 10_000)).toBe(true);
   expect(autoReloadAllowed(store, 500, 10_000)).toBe(true);
+});
+
+test('the mute setting is off by default and is remembered', () => {
+  const store = createMemoryStore();
+  expect(savedMuted(store)).toBe(false);
+  saveMuted(store, true);
+  expect(savedMuted(store)).toBe(true);
+  saveMuted(store, false);
+  expect(savedMuted(store)).toBe(false);
 });

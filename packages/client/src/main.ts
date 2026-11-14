@@ -1,11 +1,13 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { ClientMessage, LobbyMessage, Phase, ResultsMessage, ServerMessage } from '@lodgy/shared';
 import * as THREE from 'three';
+import { createAudio } from './audio/audio';
+import { isMuteKey } from './audio/soundMap';
 import { createGame, type Game } from './game';
 import { openSocket, type CloseInfo, type GameSocket } from './net/socket';
 import { RECONNECT_IDLE, RECONNECT_WINDOW, SOCKET_OPEN_TIMEOUT, reconnectStep, resumeAction, type ReconnectEvent, type ReconnectState } from './net/reconnect';
 import { roomFromPath, socketUrl } from './route';
-import { autoReloadAllowed, createMemoryStore, markAutoReload, saveName, savedName, saveRejoin, sessionToken, takeRejoin, type KeyValueStore } from './session';
+import { autoReloadAllowed, createMemoryStore, markAutoReload, saveMuted, saveName, savedMuted, savedName, saveRejoin, sessionToken, takeRejoin, type KeyValueStore } from './session';
 import { createInputSource } from './input/combined';
 import { createKeyboardSource } from './input/keyboard';
 import { createMouseLook } from './input/mouse';
@@ -31,6 +33,36 @@ const nameStore = storage(() => localStorage);
 // Session storage is per tab, so each tab is its own player and a reload keeps its identity.
 const sessionStore = storage(() => sessionStorage);
 const token = sessionToken(sessionStore, (bytes) => crypto.getRandomValues(bytes));
+
+// One audio per page; the context is made inside the first gesture, as iOS requires.
+const audio = createAudio({
+  createContext: () => new (window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)(),
+  load: async (url) => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`${url}: ${response.status}`);
+    return response.arrayBuffer();
+  },
+});
+let muted = savedMuted(nameStore);
+audio.setMuted(muted);
+// Kept for the page's life: a call resumes a context that iOS interrupted.
+for (const type of ['pointerup', 'touchend', 'click', 'keydown']) window.addEventListener(type, () => audio.unlock(), { capture: true });
+document.addEventListener(
+  'click',
+  (event) => {
+    if (event.target instanceof Element && event.target.closest('#lobby button, #run-menu button, #shop-menu button, #results button')) audio.play('click');
+  },
+  { capture: true },
+);
+function toggleMute() {
+  muted = !muted;
+  audio.setMuted(muted);
+  saveMuted(nameStore, muted);
+  game?.setMuted(muted);
+}
+window.addEventListener('keydown', (event) => {
+  if (isMuteKey(event, event.target instanceof Element ? event.target.tagName : null)) toggleMute();
+});
 
 // The physics module loads once; creating or joining a room waits for it.
 const rapierReady = RAPIER.init();
@@ -173,6 +205,9 @@ function onMessage(message: ServerMessage) {
     case 'snapshot':
       game?.pushSnapshot(message);
       return;
+    case 'event':
+      game?.onEvent(message);
+      return;
     case 'error':
       // A refused purchase belongs to the shop menu; it never ends the game or reaches the home page.
       if (message.reason === 'cannot_buy') {
@@ -229,7 +264,7 @@ function startGame(lobby: LobbyMessage) {
       ? createTouchSource({ surface: canvas, win: window, doc: document, width: () => window.innerWidth, controls })
       : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document, pointerGate));
   touchUi?.setVisible(true);
-  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, onMute: toggleMute }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
 const clock = () => performance.now() / 1000;

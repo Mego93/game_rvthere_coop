@@ -31,10 +31,12 @@ export interface RunMenuHandlers {
   onSkip(): void;
   onRefill(): void;
   onKick(playerId: string): void;
+  onMute(): void;
 }
 
 export interface RunMenu {
   setOpen(open: boolean): void;
+  setMuted(muted: boolean): void;
   // The admin's extra items and the kick list; rebuilt whenever the room changes.
   update(isAdmin: boolean, kickable: { playerId: string; name: string }[]): void;
   dispose(): void;
@@ -64,6 +66,7 @@ export function createRunMenu(doc: Document, handlers: RunMenuHandlers): RunMenu
     element.addEventListener('click', onClick);
     return element;
   };
+  const muteButton = button('run-mute', 'Mute sound', handlers.onMute);
   const actions: Record<string, [string, () => void]> = {
     Resume: ['run-resume', handlers.onResume],
     'Restart from checkpoint': ['run-restart-checkpoint', handlers.onRestartCheckpoint],
@@ -77,12 +80,15 @@ export function createRunMenu(doc: Document, handlers: RunMenuHandlers): RunMenu
     setOpen(open) {
       root.hidden = !open;
     },
+    setMuted(muted) {
+      muteButton.textContent = muted ? 'Unmute sound' : 'Mute sound';
+    },
     update(isAdmin, kickable) {
       const title = doc.createElement('strong');
       title.textContent = 'Menu';
       const items = runMenuItems(isAdmin).map((label) => button(actions[label]![0], label, actions[label]![1]));
       const kicks = isAdmin ? kickable.map((entry) => button(`run-kick-${entry.playerId}`, `Kick ${entry.name}`, () => handlers.onKick(entry.playerId), 'run-kick')) : [];
-      root.replaceChildren(style, title, ...items, ...kicks);
+      root.replaceChildren(style, title, ...items, muteButton, ...kicks);
     },
     dispose() {
       root.remove();
