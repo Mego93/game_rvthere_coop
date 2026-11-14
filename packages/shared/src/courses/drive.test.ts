@@ -27,6 +27,14 @@ describe.each(Object.keys(VEHICLES))('T3 drive the %s through course 1', (vehicl
   }, 120_000);
 });
 
+describe('M5 the RV at half a tank', () => {
+  test.each(SEGMENTS.filter((s) => !RV_NEEDS_WINCH.has(s.i)))('segment $i ($type) is reached at fuel 0.5', ({ i }) => {
+    const limit = timeLimit(segmentRouteLength(course, i), VEHICLES.rv.maxSpeed);
+    const result = driveSegment(RAPIER, 'rv', course, i, { fuel: 0.5 });
+    expect(result.reached, `rv segment ${i} at fuel 0.5: ${result.seconds.toFixed(1)} s of ${limit.toFixed(1)} s`).toBe(true);
+  }, 120_000);
+});
+
 describe('T4 course 1 structure for the drive', () => {
   const rv = VEHICLES.rv;
   // A point in a segment's frame: lateral to the right, along the way of travel.
