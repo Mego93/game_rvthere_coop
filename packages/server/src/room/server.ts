@@ -94,7 +94,6 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     creates.set(session.address, [...times, now]);
     const player = room.add(message.name, message.token, session.connection, now);
     admit(session, room, player);
-    if (options.autostart) room.start(player);
   };
 
   const join = (session: Session, message: Extract<ClientMessage, { type: 'join' }>) => {

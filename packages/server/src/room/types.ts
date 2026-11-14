@@ -33,8 +33,6 @@ export interface RoomDeps {
 export interface RoomServerOptions {
   // Tests only: replaces the course of each id listed.
   courses?: Readonly<Record<string, BuiltCourse>>;
-  // Tests and the end-to-end run only: a room starts its run as soon as it is created. Remove in step 11 task 4a, when the e2e flows press Start.
-  autostart?: boolean;
   // `create` messages one address may send in 60 s; defaults to CREATE_PER_MINUTE.
   createPerMinute?: number;
 }

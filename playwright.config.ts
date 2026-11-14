@@ -10,8 +10,7 @@ export default defineConfig({
   use: { baseURL: 'http://localhost:3100', trace: 'retain-on-failure' },
   webServer: {
     command: 'npm start',
-    // AUTOSTART is temporary: step 11 task 4a makes the flows press Start, then it goes.
-    env: { PORT: '3100', AUTOSTART: '1', CREATE_PER_MINUTE: '1000', MAX_CONNECTIONS_PER_ADDRESS: '1000' },
+    env: { PORT: '3100', CREATE_PER_MINUTE: '1000', MAX_CONNECTIONS_PER_ADDRESS: '1000' },
     url: 'http://localhost:3100/',
     reuseExistingServer: false,
     timeout: 60_000,

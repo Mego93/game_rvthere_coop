@@ -26,9 +26,7 @@ const limits = {
 };
 // TRUST_PROXY=1 behind the Cloudflare Tunnel: the client address then comes from CF-Connecting-IP.
 const trustProxy = process.env.TRUST_PROXY === '1';
-// AUTOSTART=1 starts every room's run on creation, for the end-to-end run only. Remove in step 11 task 4a, when the e2e flows press Start.
-const autostart = process.env.AUTOSTART === '1';
-const server = await startServer({ port, clientDir, autostart, trustProxy, limits });
+const server = await startServer({ port, clientDir, trustProxy, limits });
 console.log(`Proxy trust is ${trustProxy ? 'on (CF-Connecting-IP decides the client address)' : 'off'}.`);
 
 if (process.env.LODGY_DEV) {

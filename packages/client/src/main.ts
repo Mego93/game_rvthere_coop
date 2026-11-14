@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { ClientMessage, LobbyMessage, ServerMessage } from '@lodgy/shared';
+import type { ClientMessage, LobbyMessage, Phase, ResultsMessage, ServerMessage } from '@lodgy/shared';
 import * as THREE from 'three';
 import { createGame, type Game } from './game';
 import { openSocket, type GameSocket } from './net/socket';
@@ -11,6 +11,7 @@ import { createMouseLook } from './input/mouse';
 import type { GameInput } from './input/source';
 import { createTouchSource } from './input/touch';
 import { createHome, errorText } from './ui/home';
+import { createLobby } from './ui/lobby';
 import { createTouchUi } from './ui/touchUi';
 
 // Some private browsing modes refuse access to storage; the page then works without remembering anything.
@@ -38,6 +39,7 @@ const RAPIER_FAILED = 'The game could not load its physics engine. Reload the pa
 const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
 const overlay = document.querySelector<HTMLElement>('#overlay')!;
 const crosshair = document.querySelector<HTMLElement>('#crosshair')!;
+const resultsScreen = document.querySelector<HTMLElement>('#results')!;
 
 // Safari's pinch gesture would zoom the page.
 document.addEventListener('gesturestart', (event) => event.preventDefault());
@@ -56,6 +58,7 @@ let socket: GameSocket | null = null;
 let game: Game | null = null;
 let name = savedName(nameStore);
 let playerId = '';
+let phase: Phase | null = null;
 // What the home page says when the socket next closes.
 let closeReason = CONNECTION_LOST;
 
@@ -70,6 +73,48 @@ const home = createHome(document.querySelector<HTMLElement>('#home')!, {
   },
 });
 
+const lobby = createLobby(document, {
+  onReady: (ready) => socket?.send({ type: 'ready', ready }),
+  onConfigure: (settings) => socket?.send({ type: 'configure', ...settings }),
+  onStart: () => socket?.send({ type: 'start' }),
+  onKick: (target) => socket?.send({ type: 'kick', playerId: target }),
+});
+
+const SOMETHING_WRONG = 'Something went wrong.';
+
+// Stops the run's drawing and input; the lobby and the home page take over the screen.
+function stopGame() {
+  game?.stop();
+  game = null;
+  touchUi?.setVisible(false);
+  overlay.textContent = '';
+}
+
+// The placeholder of step 11 task 4c, which builds the real results screen.
+function showResults(message: ResultsMessage) {
+  resultsScreen.textContent = `Results\n${message.courseId}\nFinal time ${message.finalTime.toFixed(1)} s`;
+  resultsScreen.hidden = false;
+}
+
+function onLobby(message: LobbyMessage) {
+  phase = message.phase;
+  if (message.phase === 'lobby') {
+    stopGame();
+    resultsScreen.hidden = true;
+    lobby.show(message, playerId);
+    return;
+  }
+  lobby.hide();
+  if (message.phase === 'playing') {
+    resultsScreen.hidden = true;
+    if (game) game.setLobby(message);
+    else startGame(message);
+    return;
+  }
+  // Results: a running game stays drawn, frozen; a player who joined now has none and sees only the results.
+  game?.setLobby(message);
+}
+
 function onMessage(message: ServerMessage) {
   switch (message.type) {
     case 'welcome':
@@ -80,8 +125,16 @@ function onMessage(message: ServerMessage) {
       home.hide();
       return;
     case 'lobby':
-      if (game) game.setLobby(message);
-      else startGame(message);
+      try {
+        onLobby(message);
+      } catch (error) {
+        console.error(error);
+        closeReason = SOMETHING_WRONG;
+        socket?.close();
+      }
+      return;
+    case 'results':
+      if (phase === 'results') showResults(message);
       return;
     case 'snapshot':
       game?.pushSnapshot(message);
@@ -90,6 +143,13 @@ function onMessage(message: ServerMessage) {
       // A refused purchase belongs to the shop menu; it never ends the game or reaches the home page.
       if (message.reason === 'cannot_buy') {
         game?.showShopError();
+        return;
+      }
+      if (playerId !== '') {
+        // In a room an error never reaches the home page; being kicked ends with the home page's text.
+        if (message.reason === 'kicked') closeReason = errorText('kicked');
+        else if (lobby.isShown()) lobby.setError(errorText(message.reason));
+        else console.warn('Refused:', message.reason);
         return;
       }
       home.setBusy(false);
@@ -126,10 +186,11 @@ function startGame(lobby: LobbyMessage) {
 
 function onClose() {
   socket = null;
-  game?.stop();
-  game = null;
-  touchUi?.setVisible(false);
-  overlay.textContent = '';
+  stopGame();
+  lobby.hide();
+  resultsScreen.hidden = true;
+  playerId = '';
+  phase = null;
   home.setBusy(false);
   home.show({ room: roomFromPath(location.pathname), name, error: closeReason });
   closeReason = CONNECTION_LOST;

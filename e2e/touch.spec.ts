@@ -7,6 +7,11 @@ async function createRoom(page: Page, name: string) {
   await expect(page.locator('#home')).toBeHidden();
 }
 
+async function startRun(page: Page) {
+  await page.locator('#lobby-start').click();
+  await expect(page.locator('#lobby')).toBeHidden();
+}
+
 async function you(page: Page): Promise<number[] | null> {
   const text = (await page.locator('#overlay').textContent()) ?? '';
   const match = /^you\s+(\S+)\s+(\S+)\s+(\S+)/m.exec(text);
@@ -22,6 +27,7 @@ const send = (page: Page, type: 'touchstart' | 'touchmove' | 'touchend', x: numb
 test('desktop: there is no touch UI, and the overlay has the keyboard wording', async ({ page, hasTouch }) => {
   test.skip(hasTouch, 'desktop only');
   await createRoom(page, 'Amal');
+  await startRun(page);
   await expect(page.locator('#touch-ui')).toHaveCount(0);
   await expect(page.locator('#overlay')).toContainText('WASD move');
 });
@@ -42,6 +48,9 @@ test('the touch UI appears with a run and shows the buttons and the slots', asyn
   await page.goto('/');
   await expect(page.locator('#touch-ui')).toHaveCount(0);
   await createRoom(page, 'Amal');
+  // The lobby has no touch UI; it appears with the run.
+  await expect(page.locator('#touch-ui')).toHaveCount(0);
+  await startRun(page);
   await expect(page.locator('#touch-ui')).toBeVisible();
   for (const id of ['interact', 'jump', 'slot-0', 'slot-1', 'slot-2']) await expect(page.locator(`#touch-${id}`)).toBeVisible();
   for (const id of ['use', 'reel-in', 'reel-out', 'joystick']) await expect(page.locator(`#touch-${id}`)).toBeHidden();
@@ -52,6 +61,7 @@ test('the touch UI appears with a run and shows the buttons and the slots', asyn
 test('a drag on the left half moves the local player, and the joystick shows while it lasts', async ({ page, hasTouch }) => {
   test.skip(!hasTouch, 'touch only');
   await createRoom(page, 'Amal');
+  await startRun(page);
   await expect.poll(() => you(page)).not.toBeNull();
   const start = (await you(page))!;
   await send(page, 'touchstart', 150, 250);
@@ -71,6 +81,7 @@ test('a drag on the left half moves the local player, and the joystick shows whi
 test('tapping slot 2 selects it', async ({ page, hasTouch }) => {
   test.skip(!hasTouch, 'touch only');
   await createRoom(page, 'Amal');
+  await startRun(page);
   await expect(page.locator('#touch-slot-0')).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#touch-slot-1').tap();
   await expect(page.locator('#touch-slot-1')).toHaveAttribute('aria-pressed', 'true');
