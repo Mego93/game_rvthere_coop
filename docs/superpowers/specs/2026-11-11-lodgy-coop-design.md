@@ -714,6 +714,6 @@ Since step 11 a room starts in the lobby, and the course, vehicle, time of day a
 | 14 | Touch input source, floating joystick, touch UI, landscape and safe-area layout, web app manifest. | Owner, on a real iPhone |
 | 15 | Segment system: the six segment builders and the course builder. | Tests |
 | 16 | Course design pass with the owner, then course 1. Snapshot size is measured. | Owner, by playing it |
-| 17 | The RV: mesh and handling pass over course 1. | Owner, by playing it |
+| 17 | The RV: mesh and handling pass over course 1 (built as a mesh and measurements; no handling constant changed). | Owner, by playing it |
 | 18 | Sound effects. | Owner |
 | 19 | Reconnect polish, WebGL context-loss reload, Cloudflare Tunnel setup with a documented one-command start, and the always-on hosting decision. | Owner |
