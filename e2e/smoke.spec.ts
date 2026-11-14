@@ -59,6 +59,11 @@ async function createRoom(page: Page, name: string): Promise<string> {
   return new URL(page.url()).pathname.slice(1);
 }
 
+// The default course is the airport; these specs assert on the test ground, so the admin picks it in the lobby.
+async function chooseTestGround(page: Page) {
+  await page.locator('#lobby-course').selectOption('test');
+}
+
 // The admin presses Start in the lobby; the run begins and the lobby closes.
 async function startRun(page: Page) {
   await page.locator('#lobby-start').click();
@@ -238,6 +243,7 @@ test('an empty name is refused on the page, before anything is sent', async ({ p
 
 test('the course props are drawn: the overlay counts four props and four pickups and the page has no errors', async ({ page }) => {
   await createRoom(page, 'Amal');
+  await chooseTestGround(page);
   await startRun(page);
   await expect(page.locator('#overlay')).toContainText('props    8');
   const before = await tick(page);
@@ -269,6 +275,7 @@ test('the local player starts at full health', async ({ page }) => {
 
 test('the timer runs: the clock rises and the checkpoint shows the first of two', async ({ page }) => {
   await createRoom(page, 'Amal');
+  await chooseTestGround(page);
   await startRun(page);
   const overlay = page.locator('#overlay');
   await expect(overlay).toContainText(/time\s+\d+:\d\d\.\d\s+cp 1\/2\s+restarts 0\s+respawns 0/);
@@ -283,6 +290,7 @@ test('the timer runs: the clock rises and the checkpoint shows the first of two'
 
 test('the coins line shows an empty wallet and no coins collected out of four', async ({ page }) => {
   await createRoom(page, 'Amal');
+  await chooseTestGround(page);
   await startRun(page);
   await expect(page.locator('#overlay')).toContainText(/^coins    0   0\/4$/m);
 });
@@ -341,6 +349,7 @@ test('the admin opens the run menu with Esc and sees the admin items @keyboard',
 test('the admin skips a checkpoint, drives to the finish, sees an assisted result and returns to the lobby @keyboard', async ({ page }) => {
   test.slow();
   await createRoom(page, 'Amal');
+  await chooseTestGround(page);
   await startRun(page);
   // The lobby hides before the game is built; an Esc sent in that gap reaches no listener.
   const before = await tick(page);
