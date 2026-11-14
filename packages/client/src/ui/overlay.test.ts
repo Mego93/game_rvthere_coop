@@ -411,3 +411,9 @@ test('L6: the control line has the touch wording on touch devices', () => {
   expect(text.endsWith('joystick move   drag right half to look   buttons act')).toBe(true);
   expect(text).not.toContain('WASD');
 });
+
+test('W5: the weather line comes directly after the tick line', () => {
+  const lines = overlayText({ lobby: { ...lobby, timeOfDay: 'night', weather: 'rain' }, config: rv, tick: 3, fps: 60, vehicle: null, players: [], localId: 'p1', predicted: null, server: null, ...noAim }).split('\n');
+  expect(lines[lines.findIndex((line) => line.startsWith('tick')) + 1]).toBe('weather  night rain');
+  expect(call([])).toContain('weather  midday clear');
+});

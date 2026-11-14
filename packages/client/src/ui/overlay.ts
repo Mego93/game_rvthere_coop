@@ -155,6 +155,7 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
     `room     ${lobby.room}   vehicle ${lobby.vehicleId}   course ${lobby.courseId}`,
     `players  ${names.join(', ')}`,
     `tick     ${tick}   fps ${Math.round(fps)}`,
+    `weather  ${lobby.timeOfDay} ${lobby.weather}`,
   ];
   if (status) {
     lines.push(`time     ${clock(status.elapsed)}   cp ${status.checkpoint + 1}/${status.checkpointCount}   restarts ${status.restarts}   respawns ${status.respawns}`);

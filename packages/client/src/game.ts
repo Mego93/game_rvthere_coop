@@ -32,6 +32,7 @@ import { updateFollowCamera } from './render/followCamera';
 import { createPlayerMesh, disposePlayerMesh, placePlayerMesh } from './render/playerMesh';
 import { createCoinMeshes } from './render/coinMesh';
 import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMesh';
+import { applyConditions, conditionsLook } from './render/conditions';
 import { createScene } from './render/scene';
 import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
@@ -81,6 +82,7 @@ export function createGame(
   const cameraBoxes = [...course.ground, ...course.walls];
   const scene = createScene(course);
   const vehicleConfig = getVehicleConfig(lobby.vehicleId);
+  const conditions = applyConditions(scene, conditionsLook(firstLobby.timeOfDay, firstLobby.weather), view.touchUi !== null, vehicleConfig.halfExtents);
   const vehicleMesh = createVehicleMesh(vehicleConfig);
   vehicleMesh.visible = false;
   scene.add(vehicleMesh);
@@ -376,6 +378,8 @@ export function createGame(
       view.touchUi.update(touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable }));
       view.touchUi.setJoystick(hasJoystick(input) ? input.joystick() : null);
     }
+    conditions.update(vec3(camera.position.x, camera.position.y, camera.position.z), frameSeconds);
+    conditions.setLights(vehicle, players);
     renderer.render(scene, camera);
     frameRequest = requestAnimationFrame(frame);
   });
@@ -430,6 +434,7 @@ export function createGame(
       propMeshes.clear();
       scene.remove(winchMesh);
       disposeWinchMesh(winchMesh);
+      conditions.dispose();
     },
   };
 }

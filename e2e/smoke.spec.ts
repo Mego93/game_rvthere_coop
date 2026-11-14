@@ -351,3 +351,25 @@ test('the admin skips a checkpoint, drives to the finish, sees an assisted resul
   await expect(page.locator('#lobby')).toBeVisible();
   await expect(page.locator('#results')).toBeHidden();
 });
+
+test('the overlay shows the default conditions @keyboard', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  await expect(page.locator('#overlay')).toContainText('weather  midday clear');
+});
+
+test('a night rain run draws without WebGL errors @keyboard', async ({ page }) => {
+  const threeErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error' && message.text().includes('THREE')) threeErrors.push(message.text());
+  });
+  await createRoom(page, 'Amal');
+  await page.locator('#lobby-time').selectOption('night');
+  await page.locator('#lobby-weather').selectOption('rain');
+  await startRun(page);
+  await expect(page.locator('#overlay')).toContainText('weather  night rain');
+  const before = await tick(page);
+  await expect.poll(() => tick(page)).toBeGreaterThan(before);
+  await page.waitForTimeout(500);
+  expect(threeErrors).toEqual([]);
+});

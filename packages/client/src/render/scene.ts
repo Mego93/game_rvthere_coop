@@ -1,7 +1,6 @@
 import { ANCHOR_HEIGHT, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type BuiltCourse, type Surface } from '@lodgy/shared';
 import * as THREE from 'three';
 
-const SKY = 0xcfe6f5;
 const SURFACE_COLOURS: Record<Surface, number> = {
   road: 0x8a7f72,
   gravel: 0xa39a8c,
@@ -25,12 +24,6 @@ const ghost = (colour: number) =>
 
 export function createScene(course: BuiltCourse): THREE.Scene {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(SKY);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7f72, 1.2));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-  sun.position.set(30, 60, 20);
-  scene.add(sun);
-
   for (const ground of course.ground) scene.add(boxMesh(ground, solid(SURFACE_COLOURS[ground.surface])));
   for (const wall of course.walls) scene.add(boxMesh(wall, solid(0xc98a5a)));
   for (const checkpoint of course.checkpoints) scene.add(boxMesh(checkpoint.trigger, ghost(0x3b82f6)));
