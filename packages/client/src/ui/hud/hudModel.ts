@@ -1,4 +1,4 @@
-import { yawOf, type Box, type Checkpoint, type Vec3 } from '@lodgy/shared';
+import { PLAYER_MAX_HEALTH, clamp, yawOf, type Box, type Checkpoint, type Vec3 } from '@lodgy/shared';
 import { clock, interactHint, useHint, type OverlayData } from '../overlay';
 import { bearingTo, compassLabel, compassTarget, edgeSide, headingOffset, markerPosition } from './compass';
 import { LOW_FRACTION, MARKER_HEIGHT } from './constants';
@@ -26,6 +26,8 @@ export interface HudModel {
     yaw?: number;
   }[];
 }
+
+export const ownHealthFraction = (health: number): number => (Number.isFinite(health) ? clamp(health / PLAYER_MAX_HEALTH, 0, 1) : 0);
 
 const seconds = (left: number) => Math.ceil(left - 1e-9);
 

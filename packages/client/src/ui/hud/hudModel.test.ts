@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import type { RunStatus } from '../../net/snapshotBuffer';
 import type { OverlayData } from '../overlay';
 import { ITEM_LABELS } from './itemLabels';
-import { buildHudModel } from './hudModel';
+import { buildHudModel, ownHealthFraction } from './hudModel';
 
 const lobby: LobbyMessage = {
   type: 'lobby',
@@ -221,5 +221,14 @@ describe('compass (R7, H2, H4)', () => {
   });
   test('after the last checkpoint the target is the finish', () => {
     expect(build({ status: { ...status, checkpoint: 1 }, players: [player('p1', 0, 0)] }).compass.label).toBe('300 m');
+  });
+});
+
+describe('ownHealthFraction', () => {
+  test('maps health to 0..1 and clamps', () => {
+    expect(ownHealthFraction(64)).toBeCloseTo(0.64);
+    expect(ownHealthFraction(0)).toBe(0);
+    expect(ownHealthFraction(150)).toBe(1);
+    expect(ownHealthFraction(Number.NaN)).toBe(0);
   });
 });

@@ -1,5 +1,6 @@
-import { MAP_MARGIN, MAP_SIZE_DESKTOP, MAP_SIZE_TOUCH } from './constants';
-import type { HudModel } from './hudModel';
+import { clamp } from '@lodgy/shared';
+import { LOW_FRACTION, MAP_MARGIN, MAP_SIZE_DESKTOP, MAP_SIZE_TOUCH } from './constants';
+import { ownHealthFraction, type HudModel } from './hudModel';
 import { clampToMap, mapViewFor, routePath, toMap } from './minimap';
 
 export interface HudMarker { id: string; name: string; seconds: number; x: number; y: number; behind: boolean }
@@ -142,27 +143,71 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
 
   const markerNodes = new Map<string, HTMLElement>();
 
-  let drawn: { id: string; kind: string; px: number; py: number; flags: string }[] = [];
+  const dotNodes = new Map<string, { node: SVGElement; kind: string }>();
+  const setAttr = (node: SVGElement, name: string, value: number | string) => {
+    if (changed(node, name, value)) node.setAttribute(name, String(value));
+  };
   const renderMap = (entities: HudModel['mapEntities']) => {
-    const next = entities.map((e) => {
+    const seen = new Set<string>();
+    for (const e of entities) {
+      seen.add(e.id);
       const p = clampToMap(view, toMap(view, e.x, e.z));
-      return { id: e.id, kind: e.kind, px: Math.round(p.x * 2) / 2, py: Math.round(p.y * 2) / 2, flags: `${e.reached ? 1 : 0}${e.stopKind ?? ''}${e.yaw === undefined ? '' : Math.round(e.yaw * 20)}`, e, p };
-    });
-    const same = next.length === drawn.length && next.every((n, i) => n.id === drawn[i]!.id && n.kind === drawn[i]!.kind && n.px === drawn[i]!.px && n.py === drawn[i]!.py && n.flags === drawn[i]!.flags);
-    if (same) return;
-    drawn = next;
-    dots.replaceChildren();
-    for (const { e, p } of next) {
-      if (e.kind === 'checkpoint') svg('circle', dots, { cx: p.x, cy: p.y, r: 5 }, e.reached ? 'checkpoint reached' : 'checkpoint');
-      else if (e.kind === 'stop') svg('rect', dots, { x: p.x - 4, y: p.y - 4, width: 8, height: 8 }, e.stopKind === 'garage' ? 'stop-garage' : 'stop-fuel');
-      else if (e.kind === 'vehicle') svg('rect', dots, { x: p.x - 5, y: p.y - 5, width: 10, height: 10, rx: 2 }, 'vehicle');
-      else {
-        svg('circle', dots, { cx: p.x, cy: p.y, r: e.kind === 'self' ? 4 : 3 }, e.kind);
-        if (e.kind === 'self' && e.yaw !== undefined) {
-          // Yaw 0 faces -z, which is up on a north-up map; positive yaw turns left.
-          svg('line', dots, { x1: p.x, y1: p.y, x2: p.x - Math.sin(e.yaw) * 9, y2: p.y - Math.cos(e.yaw) * 9 }, 'tick');
-        }
+      const shape = e.kind === 'checkpoint' || e.kind === 'self' || e.kind === 'player' ? 'circle' : 'rect';
+      let entry = dotNodes.get(e.id);
+      if (entry && entry.kind !== e.kind) {
+        entry.node.remove();
+        dotNodes.delete(e.id);
+        entry = undefined;
       }
+      if (!entry) {
+        entry = { node: svg(shape, dots), kind: e.kind };
+        dotNodes.set(e.id, entry);
+      }
+      const { node } = entry;
+      if (e.kind === 'checkpoint') {
+        setAttr(node, 'class', e.reached ? 'checkpoint reached' : 'checkpoint');
+        setAttr(node, 'r', 5);
+      } else if (e.kind === 'stop') {
+        setAttr(node, 'class', e.stopKind === 'garage' ? 'stop-garage' : 'stop-fuel');
+        setAttr(node, 'width', 8);
+        setAttr(node, 'height', 8);
+      } else if (e.kind === 'vehicle') {
+        setAttr(node, 'class', 'vehicle');
+        setAttr(node, 'width', 10);
+        setAttr(node, 'height', 10);
+        setAttr(node, 'rx', 2);
+      } else {
+        setAttr(node, 'class', e.kind);
+        setAttr(node, 'r', e.kind === 'self' ? 4 : 3);
+      }
+      if (shape === 'circle') {
+        setAttr(node, 'cx', p.x.toFixed(1));
+        setAttr(node, 'cy', p.y.toFixed(1));
+      } else {
+        const half = e.kind === 'vehicle' ? 5 : 4;
+        setAttr(node, 'x', (p.x - half).toFixed(1));
+        setAttr(node, 'y', (p.y - half).toFixed(1));
+      }
+      // The facing tick is a second node for the local player, keyed by a suffixed id.
+      const tickId = `${e.id}:tick`;
+      if (e.kind === 'self' && e.yaw !== undefined) {
+        seen.add(tickId);
+        let tick = dotNodes.get(tickId);
+        if (!tick) {
+          tick = { node: svg('line', dots, {}, 'tick'), kind: 'tick' };
+          dotNodes.set(tickId, tick);
+        }
+        // Yaw 0 faces -z, which is up on a north-up map; positive yaw turns left.
+        setAttr(tick.node, 'x1', p.x.toFixed(1));
+        setAttr(tick.node, 'y1', p.y.toFixed(1));
+        setAttr(tick.node, 'x2', (p.x - Math.sin(e.yaw) * 9).toFixed(1));
+        setAttr(tick.node, 'y2', (p.y - Math.cos(e.yaw) * 9).toFixed(1));
+      }
+    }
+    for (const [id, entry] of dotNodes) {
+      if (seen.has(id)) continue;
+      entry.node.remove();
+      dotNodes.delete(id);
     }
   };
 
@@ -177,8 +222,8 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       renderMap(model.mapEntities);
 
       const v = model.vehicle;
-      const fuel = v ? Math.max(0, Math.min(1, v.fuel)) : 0;
-      const hull = v ? Math.max(0, Math.min(1, v.health)) : 0;
+      const fuel = v ? clamp(v.fuel, 0, 1) : 0;
+      const hull = v ? clamp(v.health, 0, 1) : 0;
       scale(fuelBar.fill, fuel);
       scale(vehicleHealthBar.fill, hull);
       flag(fuelBar.track, 'low', !!v?.fuelLow);
@@ -186,9 +231,9 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       text(timer, model.timer);
       text(wallet, `$${model.wallet}`);
 
-      const own = Math.max(0, Math.min(1, model.ownHealth));
+      const own = ownHealthFraction(model.ownHealth);
       scale(ownFill, own);
-      flag(ownHealth, 'low', own < 0.2);
+      flag(ownHealth, 'low', own < LOW_FRACTION);
 
       model.slots.forEach((slot, i) => {
         const node = slotNodes[i];
@@ -199,7 +244,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
 
       text(promptText, model.prompt ?? '');
       toggle(hold, model.hold === null);
-      if (model.hold !== null) scale(holdFill, Math.max(0, Math.min(1, model.hold)));
+      if (model.hold !== null) scale(holdFill, clamp(model.hold, 0, 1));
 
       toggle(downed, model.downedSelf === null);
       if (model.downedSelf !== null) text(downed, `DOWNED ${model.downedSelf}s`);
@@ -232,6 +277,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
     dispose() {
       root.remove();
       markerNodes.clear();
+      dotNodes.clear();
     },
   };
 }
