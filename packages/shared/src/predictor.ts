@@ -6,6 +6,7 @@ import { wishVelocity } from './player';
 import { sanitiseInput, type InputFields, type PlayerSnapshot } from './protocol';
 import type { PropSnapshot } from './props';
 import type { Rapier, RigidBody } from './rapier';
+import { settleQueries } from './settle';
 import { buildStatics } from './statics';
 import type { VehicleConfig } from './vehicles';
 import { createWalkController, stepWalk } from './walk';
@@ -51,13 +52,7 @@ export function createPredictor(rapier: Rapier, course: BuiltCourse, vehicle: Ve
       rapier.ColliderDesc.cuboid(h.x, h.y, h.z).setCollisionGroups(groups(GROUP_WORLD, GROUP_WORLD)),
       standIn,
     );
-    const settle = () => {
-      // Zero-length steps: queries see nothing until the broad phase has run. After a move the first one only drops the old position, so two.
-      physics.timestep = 0;
-      physics.step();
-      physics.step();
-      physics.timestep = TICK_DT;
-    };
+    const settle = () => settleQueries(rapier, physics, () => standIn.translation(), TICK_DT);
     const placeBody = (body: RigidBody, pos: Vec3, rot: Quat) => {
       body.setTranslation(pos, false);
       body.setRotation(rot, false);

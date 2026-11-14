@@ -206,6 +206,21 @@ describe('createPredictor', () => {
       predictor.dispose();
     });
 
+    test('setVehicle alone leaves the stand-in visible to the next query at every step phase', () => {
+      const predictor = createPredictor(RAPIER, testGround, lodgy);
+      const bad: number[] = [];
+      for (let n = 0; n < 24; n++) {
+        const moved = pose(FAR.z - 40 - (n % 2) * 20);
+        predictor.setVehicle(moved.pos, moved.rot);
+        const face = moved.pos.z + lodgy.halfExtents.z;
+        const start = rest(vec3(FAR.x, PLAYER_CONTROLLER_OFFSET, face + PLAYER_RADIUS + 0.01));
+        const next = predictor.stepPlayer(start, { ...NEUTRAL_INPUT, moveY: 1 }, false);
+        if (next.pos.z < face + PLAYER_RADIUS - 0.01) bad.push(n);
+      }
+      expect(bad).toEqual([]);
+      predictor.dispose();
+    });
+
     test('a rotated stand-in blocks along its rotated face', () => {
       const predictor = createPredictor(RAPIER, testGround, lodgy);
       const turned = pose(FAR.z - 4, quatFromAxisAngle(AXIS_Y, Math.PI / 2));
