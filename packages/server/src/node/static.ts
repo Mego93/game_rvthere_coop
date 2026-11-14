@@ -17,6 +17,8 @@ const CONTENT_TYPES: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg',
+  '.wav': 'audio/wav',
+  '.md': 'text/markdown; charset=utf-8',
   '.map': 'application/json; charset=utf-8',
 };
 

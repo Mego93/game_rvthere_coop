@@ -128,6 +128,9 @@ test('starting on a port that is already in use is refused', async () => {
 test('knows the content types the client needs', () => {
   expect(contentType('a/b/index.html')).toBe('text/html; charset=utf-8');
   expect(contentType('x.wasm')).toBe('application/wasm');
+  expect(contentType('x.wav')).toBe('audio/wav');
+  expect(contentType('x.md')).toBe('text/markdown; charset=utf-8');
+  expect(contentType('x.mp3')).toBe('audio/mpeg');
   expect(contentType('x.webmanifest')).toBe('application/manifest+json; charset=utf-8');
   expect(contentType('x.unknown')).toBe('application/octet-stream');
 });
