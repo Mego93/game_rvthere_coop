@@ -2,7 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { ClientMessage, LobbyMessage, Phase, ResultsMessage, ServerMessage } from '@lodgy/shared';
 import * as THREE from 'three';
 import { createGame, type Game } from './game';
-import { openSocket, type GameSocket } from './net/socket';
+import { openSocket, type CloseInfo, type GameSocket } from './net/socket';
 import { roomFromPath, socketUrl } from './route';
 import { createMemoryStore, saveName, savedName, sessionToken, type KeyValueStore } from './session';
 import { createInputSource } from './input/combined';
@@ -191,7 +191,7 @@ function startGame(lobby: LobbyMessage) {
   game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
-function onClose() {
+function onClose(_info: CloseInfo) {
   socket = null;
   stopGame();
   lobby.hide();
