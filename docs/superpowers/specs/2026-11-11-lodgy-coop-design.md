@@ -573,7 +573,7 @@ On touch devices the joystick floats over the left half and the action buttons s
 
 ### Sound
 
-Effects only: engine loop, impact, winch loop, hook attach, pickup, item use, coin, purchase, hurt, downed, revive, checkpoint, vehicle lost, rain loop, UI click, win. Files come from a CC0 pack (Kenney's audio packs are the first candidate), found and downloaded by the implementer; their licence is recorded in the repo. Engine pitch follows throttle and speed. Audio unlocks on the player's first tap or click, as iOS requires.
+Effects only: engine loop, impact, winch loop, hook attach, pickup, item use, coin, purchase, hurt, downed, revive, checkpoint, vehicle lost, rain loop, UI click, win. Files are CC0, from OpenGameArt (Kenney's packs mirrored there, and other CC0 authors; kenney.nl itself was unreachable from the build environment), in `packages/client/public/sounds/` with their sources in `LICENSE.md`. One-shots are MP3; the three loops are mono WAV so they repeat without a gap. Engine pitch follows throttle and speed. Audio unlocks on the player's first tap, click or key (on `pointerup`, `touchend`, `click` or `keydown`, as iOS requires) and resumes after an interruption. M or the in-run menu mutes it.
 
 ### Controls
 
