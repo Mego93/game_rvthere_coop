@@ -3,7 +3,9 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { DRIVER_DOOR_RANGE, GRAVITY, SURFACES, TICK_RATE, VEHICLE_UPSIDE_DOWN_DRAIN } from './constants';
 import { SAND_PATCH_CENTER, testGround } from './courses/testGround';
 import { IDENTITY, quatFromAxisAngle, vec3, yawOf, type Pose } from './math';
+import { buildStatics } from './statics';
 import { createRig, withBoxes } from './testRig';
+import { createVehicle } from './vehicle';
 import { VEHICLES, getVehicleConfig, type VehicleId } from './vehicles';
 
 beforeAll(async () => {
@@ -292,5 +294,28 @@ describe('the lodgy against a wall', () => {
     expect(roll.z).toBeLessThan(-5 + 0.3);
     expect(roll.z).toBeGreaterThan(-5 - 0.3);
     expect(roll.health).toBe(1);
+  });
+});
+
+describe('W1: gripScale', () => {
+  const config = VEHICLES.lodgy;
+  const slips = (surface: keyof typeof SURFACES, gripScale?: number) => {
+    const world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 });
+    world.timestep = 1 / TICK_RATE;
+    buildStatics(RAPIER, world, testGround);
+    const vehicle = createVehicle(RAPIER, world, config, ORIGIN, () => surface, gripScale === undefined ? undefined : { gripScale });
+    // The surface under a wheel is read from the previous step's contacts, so a few steps run first.
+    for (let i = 0; i < 10; i++) {
+      vehicle.step({ throttle: 0, steer: 0, brake: false });
+      world.step();
+    }
+    return vehicle.wheelFrictionSlips();
+  };
+
+  test.each(Object.keys(SURFACES) as (keyof typeof SURFACES)[])('on %s each wheel slips at grip x surface x scale', (surface) => {
+    const scaled = slips(surface, 0.75);
+    expect(scaled).toHaveLength(4);
+    for (const slip of scaled) expect(slip).toBeCloseTo(config.grip * SURFACES[surface].grip * 0.75, 6);
+    for (const slip of slips(surface)) expect(slip).toBeCloseTo(config.grip * SURFACES[surface].grip, 6);
   });
 });

@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { HOLD_OFFSET, PLAYER_KILL_RESPAWN_DELAY, THROW_SPEED, TICK_RATE } from './constants';
+import { HOLD_OFFSET, RAIN_GRIP, SURFACES, PLAYER_KILL_RESPAWN_DELAY, THROW_SPEED, TICK_RATE } from './constants';
 import { IDENTITY, add, quatFromAxisAngle, rotate, vec3, yawOf, AXIS_Y, type Vec3 } from './math';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
 import { testGround } from './courses/testGround';
@@ -785,5 +785,48 @@ describe('hands', () => {
     expect(world.debugBody('crate-1')!.isDynamic()).toBe(true);
     run(world, 60, new Map());
     expect(crateOf(world).pos.y).toBeLessThan(0.35);
+  });
+});
+
+describe('W2: weather', () => {
+  const steer = new Map([['a', input({ moveY: 1, moveX: 1 })]]);
+  const drive = (weather?: 'clear' | 'rain' | 'sandstorm') => {
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy', ...(weather ? { weather } : {}) });
+    world.addPlayer('a');
+    seat(world, 'a');
+    run(world, 120, steer);
+    return world;
+  };
+
+  test('rain scales every wheel\'s grip by RAIN_GRIP; clear and the default do not', () => {
+    const grip = VEHICLES.lodgy.grip * SURFACES.road.grip;
+    for (const [weather, scale] of [['rain', RAIN_GRIP], ['clear', 1], [undefined, 1]] as const) {
+      const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy', ...(weather ? { weather } : {}) });
+      run(world, 120, new Map());
+      expect(world.debug().wheelFrictionSlips).toHaveLength(4);
+      for (const slip of world.debug().wheelFrictionSlips) expect(slip).toBeCloseTo(grip * scale, 6);
+    }
+  });
+
+  const cornering = (weather: 'clear' | 'rain') => {
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy', weather });
+    world.addPlayer('a');
+    seat(world, 'a');
+    run(world, 60, new Map());
+    const body = world.debugBody('vehicle')!;
+    const yawBefore = yawOf(body.rotation());
+    body.setLinvel(vec3(0, 0, -15), true);
+    run(world, 60, new Map([['a', input({ moveX: 1 })]]));
+    return Math.abs(yawOf(body.rotation()) - yawBefore);
+  };
+
+  test('O1: in rain a 60-tick turn at 15 m/s yaws less than 0.9 of the clear turn', () => {
+    const clear = cornering('clear');
+    const rain = cornering('rain');
+    expect(rain).toBeLessThan(0.9 * clear);
+  });
+
+  test('O7: a sandstorm changes nothing in the simulation', () => {
+    expect(drive('sandstorm').snapshot()).toEqual(drive('clear').snapshot());
   });
 });

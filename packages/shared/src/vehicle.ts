@@ -46,6 +46,8 @@ export interface Vehicle {
   forwardSpeed(): number;
   // The surface under each wheel (front-left, front-right, rear-left, rear-right), or null if airborne.
   wheelSurfaces(): (Surface | null)[];
+  // Each wheel's friction slip as last set by step().
+  wheelFrictionSlips(): number[];
   fuel(): number;
   health(): number;
   addFuel(amount: number): void;
@@ -67,7 +69,9 @@ export function createVehicle(
   // A pose on the ground; the chassis centre is placed above it by the ride height.
   spawn: Pose,
   surfaceOf: (colliderHandle: number) => Surface | null,
+  options: { gripScale?: number } = {},
 ): Vehicle {
+  const gripScale = options.gripScale ?? 1;
   const h = config.halfExtents;
   const pos = add(spawn.pos, rotate(spawn.rot, scale(AXIS_Y, config.rideHeight)));
   const inertia = {
@@ -139,6 +143,7 @@ export function createVehicle(
     chassisHandle: chassis.handle,
     forwardSpeed,
     wheelSurfaces,
+    wheelFrictionSlips: () => Array.from({ length: WHEEL_COUNT }, (_, i) => controller.wheelFrictionSlip(i) ?? 0),
     step(controls) {
       throttle = clamp(controls.throttle, -1, 1);
       steer = clamp(controls.steer, -1, 1);
@@ -154,7 +159,7 @@ export function createVehicle(
         // The controller ignores the brake on a driven wheel, so while driving, resistance is subtracted from the drive force.
         const held = drive === 0 || controls.brake || (!moving && Math.abs(drive) <= resistance);
         const net = drive - (moving ? Math.sign(speed) : Math.sign(drive)) * resistance;
-        controller.setWheelFrictionSlip(i, config.grip * surface.grip);
+        controller.setWheelFrictionSlip(i, config.grip * surface.grip * gripScale);
         // With the axle along -X, a negative engine force drives toward -Z.
         controller.setWheelEngineForce(i, held ? 0 : -net / WHEEL_COUNT);
         // The controller takes the brake as an impulse per step.

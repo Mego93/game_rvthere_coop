@@ -1,6 +1,6 @@
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DROP_HEIGHT, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface } from './constants';
+import { DEFAULT_WEATHER, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface, type Weather } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
@@ -24,6 +24,8 @@ import { canReel, createWinch, type CableSnapshot, type Winch } from './winch';
 export interface WorldOptions {
   courseId: string;
   vehicleId: string;
+  // Defaults to clear.
+  weather?: Weather;
 }
 
 export interface WorldEvent {
@@ -75,6 +77,7 @@ export interface WorldDebug {
   wheelSurfaces: (Surface | null)[];
   // Cable tension of the last tick in newtons; 0 unless attached.
   cableTension: number;
+  wheelFrictionSlips: number[];
 }
 
 export interface World {
@@ -129,7 +132,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const physics = new rapier.World({ x: 0, y: -GRAVITY, z: 0 });
   physics.timestep = TICK_DT;
   const statics = buildStatics(rapier, physics, course);
-  const vehicle = createVehicle(rapier, physics, vehicleConfig, start.spawn, statics.surfaceOf);
+  const vehicle = createVehicle(rapier, physics, vehicleConfig, start.spawn, statics.surfaceOf, {
+    gripScale: (options.weather ?? DEFAULT_WEATHER) === 'rain' ? RAIN_GRIP : 1,
+  });
   // Queries see nothing until the broad phase has run once, and spawn rays are cast before the first tick.
   physics.timestep = 0;
   physics.step();
@@ -774,7 +779,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       queuedEvents.push({ kind: 'buy', tick: tick + 1, playerId, pos: { ...stop.shopCounter } });
       return 'ok';
     },
-    debug: () => ({ forwardSpeed: vehicle.forwardSpeed(), wheelSurfaces: vehicle.wheelSurfaces(), cableTension }),
+    debug: () => ({ forwardSpeed: vehicle.forwardSpeed(), wheelSurfaces: vehicle.wheelSurfaces(), cableTension, wheelFrictionSlips: vehicle.wheelFrictionSlips() }),
     debugBody: (id) => (id === 'vehicle' ? vehicle.body : props.get(id)?.body ?? items.get(id)?.body),
     debugWinch: () => winch,
     debugVehicle: () => vehicle,

@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { HELD_SLOT_TIMEOUT, WORLD_REBUILD_COOLDOWN, IDENTITY, NEUTRAL_INPUT, PLAYER_COLOURS, PLAYER_REVIVE_HEALTH, TICK_RATE, getCourse, vec3, type BuiltCourse, type ClientMessage, type ServerMessage } from '@lodgy/shared';
+import { HELD_SLOT_TIMEOUT, RAIN_GRIP, VEHICLES, WORLD_REBUILD_COOLDOWN, IDENTITY, NEUTRAL_INPUT, PLAYER_COLOURS, PLAYER_REVIVE_HEALTH, TICK_RATE, getCourse, vec3, type BuiltCourse, type ClientMessage, type ServerMessage } from '@lodgy/shared';
 import { beforeAll, expect, test } from 'vitest';
 import { createRoom } from './room';
 import { createRoomServer } from './server';
@@ -1012,4 +1012,31 @@ test('N19: configure with unchanged settings and ready with an unchanged value d
   expect(reasons(client)).toEqual([]);
   client.send({ ...settings, weather: 'sandstorm' });
   expect(client.ofType('lobby')).toHaveLength(1);
+});
+
+// --- W3: weather reaches the world ---
+
+test('W3: a rain room builds its world with rain grip, at start and after restartCourse; the default is clear', () => {
+  const { host, advance, server } = setup();
+  const { client, room } = host();
+  startRun(client);
+  advance(0.1);
+  const clear = VEHICLES.lodgy.grip;
+  for (const slip of server.debugWorld(room)!.debug().wheelFrictionSlips) expect(slip).toBeCloseTo(clear, 6);
+
+  client.send({ type: 'toLobby' });
+  advance(WORLD_REBUILD_COOLDOWN + 0.1);
+  client.send({ type: 'configure', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'rain' });
+  startRun(client);
+  advance(0.1);
+  const wet = () => server.debugWorld(room)!.debug().wheelFrictionSlips;
+  expect(wet()).toHaveLength(4);
+  for (const slip of wet()) expect(slip).toBeCloseTo(clear * RAIN_GRIP, 6);
+
+  const before = server.debugWorld(room);
+  advance(WORLD_REBUILD_COOLDOWN + 0.1);
+  client.send({ type: 'restartCourse' });
+  expect(server.debugWorld(room)).not.toBe(before);
+  advance(0.1);
+  for (const slip of wet()) expect(slip).toBeCloseTo(clear * RAIN_GRIP, 6);
 });

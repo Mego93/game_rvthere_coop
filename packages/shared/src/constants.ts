@@ -348,6 +348,8 @@ export const WEATHERS = ['clear', 'rain', 'sandstorm'] as const;
 export type Weather = (typeof WEATHERS)[number];
 export const DEFAULT_TIME_OF_DAY: TimeOfDay = 'midday';
 export const DEFAULT_WEATHER: Weather = 'clear';
+// Multiplies tyre grip on every surface in rain; a starting value.
+export const RAIN_GRIP = 0.75;
 // s a disconnected player's slot is kept.
 export const HELD_SLOT_TIMEOUT = 30;
 // s a room refuses to build another world after building one, so an admin cannot rebuild at message rate.
