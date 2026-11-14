@@ -14,6 +14,7 @@ export interface DriveTrace {
 export interface DriveResult {
   reached: boolean;
   seconds: number;
+  endSpeed: number;
   trace: DriveTrace[];
 }
 
@@ -126,7 +127,7 @@ export function driveRun(
   for (let tick = 0; tick <= maxTicks; tick++) {
     const state = rig.vehicle.state();
     if (tick % TRACE_EVERY === 0) trace.push({ t: tick * TICK_DT, speed: rig.vehicle.forwardSpeed(), fuel: state.fuel });
-    if (insideBox(target, state.pos)) return { reached: true, seconds: tick * TICK_DT, trace };
+    if (insideBox(target, state.pos)) return { reached: true, seconds: tick * TICK_DT, endSpeed: rig.vehicle.forwardSpeed(), trace };
     if (tick === maxTicks) break;
     progress = project(route, progress, state.pos.x, state.pos.z);
     const [tx, tz] = lookaheadPoint(route, progress, LOOKAHEAD);
@@ -136,7 +137,7 @@ export function driveRun(
     const error = Math.atan2(f.x * dz - f.z * dx, f.x * dx + f.z * dz);
     rig.run(TICK_DT, { throttle: 1, steer: Math.max(-STEER_MAX, Math.min(STEER_MAX, STEER_GAIN * error)) });
   }
-  return { reached: false, seconds: maxTicks * TICK_DT, trace };
+  return { reached: false, seconds: maxTicks * TICK_DT, endSpeed: rig.vehicle.forwardSpeed(), trace };
 }
 
 export function driveSegment(rapier: Rapier, vehicleId: string, course: BuiltCourse, segmentIndex: number, opts: { fuel?: number } = {}): DriveResult {
