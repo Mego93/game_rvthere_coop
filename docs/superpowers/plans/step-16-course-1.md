@@ -35,7 +35,7 @@ Lengths in metres. Straight roads carry stops; curved roads never do.
 | 1 | road | length 360, curve +0.35, debris 4 | `coinsAlong(6, 360)` |
 | 2 | road | length 300, curve -0.5, debris 3 | |
 | 3 | road | length 200 | fuel stop (side 1, along 100) with its shop |
-| 4 | sand | length 110, palms 4 | `coinsAlong(4, 110)`; pickup jerrycan on the apron (along 20, lateral -3) |
+| 4 | sand | length 30, palms 4 | coins `[{ along: 58, lateral: -2.5 }, { along: 70, lateral: 2.5 }]` (`along` counts the 50 m apron); pickup jerrycan on the apron (along 20, lateral -3) |
 | 5 | road | length 260, curve +0.4 | `coinsAlong(4, 260)` |
 | 6 | ford | width 24, rocks 8 | the oued; coins `[{ along: 18, lateral: -2.5 }, { along: 21, lateral: 2.5 }]` (the helper needs a length of at least 60) |
 | 7 | road | length 60, slope 4 | |
@@ -88,3 +88,5 @@ A1. The ford's coins are explicit (table row 6), because `coinsAlong` on a 24 m 
 A2. The "no steps, joins included" structural test samples 2.6 km at 0.05 m and may take a 120 s timeout. `groundProbe.ts` gains a test helper `groundSurfaceAt` for T2.
 
 A3. After the first drive run (Lodgy passes everything; RV stalls on the sand and on the bank), binding decisions: the sand segment is shortened to 110 m (50 m apron plus 60 m of sand, palms 4, coins `coinsAlong(4, 110)`), because the RV decelerates about 0.45 m/s² on sand and stops about 86 m after reaching 8.8 m/s, so 140 m was unreachable; the spec requires the RV to complete every segment. The bank is excluded from the RV's drive test, because the spec says the RV fails a medium slope unaided and needs the winch (the bank has three anchors for it); the Lodgy's drive of the bank stays. Both are recorded in `ROADMAP.md` (decision D-C1 and a note that the RV needs the winch on the bank, for the owner to confirm). The drive test's `RV_STALLS` filter becomes `RV_NEEDS_WINCH = new Set([8])` with the reason in a one-line comment.
+
+A4 (supersedes the sand part of A3). A sand segment's `length` is the sand only; the 50 m apron comes before it. Measured: the RV, with the 42 m run-up, reaches 8.8 m/s, then stalls about 38 m into the sand (the same trace at any longer length). The sand is therefore 30 m, the length the existing demo test already proves the RV crosses, with palms 4 and the coins above. A longer sand needs more run-up, which is a design change for the owner. The bank rule of A3 stands.
