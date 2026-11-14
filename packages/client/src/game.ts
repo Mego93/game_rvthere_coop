@@ -378,7 +378,7 @@ export function createGame(
       view.touchUi.update(touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable }));
       view.touchUi.setJoystick(hasJoystick(input) ? input.joystick() : null);
     }
-    conditions.update(vec3(camera.position.x, camera.position.y, camera.position.z), frameSeconds);
+    conditions.update(camera.position, frameSeconds);
     conditions.setLights(vehicle, players);
     renderer.render(scene, camera);
     frameRequest = requestAnimationFrame(frame);

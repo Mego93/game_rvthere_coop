@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { describe, expect, test } from 'vitest';
 import { applyConditions, conditionsLook, mixColour, RAIN_DROPS, RAIN_RADIUS, SANDSTORM_FOG } from './conditions';
 
+const HALF = vec3(0.88, 0.55, 2.25);
 const near = (a: number, b: number) => expect(a).toBeCloseTo(b, 9);
 
 describe('W4: conditionsLook', () => {
@@ -65,7 +66,7 @@ describe('applyConditions', () => {
 
   test('midday clear sets the scene as before', () => {
     const scene = new THREE.Scene();
-    applyConditions(scene, conditionsLook('midday', 'clear'), false);
+    applyConditions(scene, conditionsLook('midday', 'clear'), false, HALF);
     expect((scene.background as THREE.Color).getHex()).toBe(0xcfe6f5);
     expect(scene.fog).toBeNull();
     expect(lights(scene)).toHaveLength(2);
@@ -73,7 +74,7 @@ describe('applyConditions', () => {
 
   test('night has a fixed pool of lights, zero when unused or seated, and dispose removes everything', () => {
     const scene = new THREE.Scene();
-    const conditions = applyConditions(scene, conditionsLook('night', 'clear'), false);
+    const conditions = applyConditions(scene, conditionsLook('night', 'clear'), false, HALF);
     const all = lights(scene);
     expect(all).toHaveLength(2 + 2 + MAX_PLAYERS);
     conditions.setLights(null, []);
@@ -86,9 +87,29 @@ describe('applyConditions', () => {
     expect(scene.children).toHaveLength(0);
   });
 
+  test('headlights sit at the front corners, aim ahead and down, and both targets are in the scene', () => {
+    const scene = new THREE.Scene();
+    const conditions = applyConditions(scene, conditionsLook('night', 'clear'), false, HALF);
+    conditions.setLights({ ...vehicle, pos: vec3(10, 2, -5) }, []);
+    const spots = scene.children.filter((child) => (child as THREE.SpotLight).isSpotLight) as THREE.SpotLight[];
+    expect(spots).toHaveLength(2);
+    const xs = spots.map((spot) => spot.position.x - 10).sort((a, b) => a - b);
+    near(xs[0]!, -0.7 * HALF.x);
+    near(xs[1]!, 0.7 * HALF.x);
+    for (const spot of spots) {
+      near(spot.position.y, 2);
+      near(spot.position.z, -5 - HALF.z);
+      near(spot.target.position.x, spot.position.x);
+      near(spot.target.position.y, 1);
+      near(spot.target.position.z, -5 - HALF.z - 10);
+      expect(scene.children).toContain(spot.target);
+      expect(spot.intensity).toBeGreaterThan(0);
+    }
+  });
+
   test('rain drops stay within the volume around the camera and the buffer is reused', () => {
     const scene = new THREE.Scene();
-    const conditions = applyConditions(scene, conditionsLook('midday', 'rain'), true);
+    const conditions = applyConditions(scene, conditionsLook('midday', 'rain'), true, HALF);
     const points = scene.children.find((child) => (child as THREE.Points).isPoints) as THREE.Points;
     expect(points.frustumCulled).toBe(false);
     const attribute = points.geometry.attributes.position!;

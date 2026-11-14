@@ -1,4 +1,4 @@
-import { MAX_PLAYERS, rotate, vec3, type PlayerSnapshot, type TimeOfDay, type Vec3, type VehicleState, type Weather } from '@lodgy/shared';
+import { MAX_PLAYERS, vec3, type PlayerSnapshot, type TimeOfDay, type Vec3, type VehicleState, type Weather } from '@lodgy/shared';
 import * as THREE from 'three';
 
 export const RAIN_DROPS = { desktop: 1500, touch: 600 };
@@ -79,7 +79,7 @@ export interface Conditions {
   dispose(): void;
 }
 
-export function applyConditions(scene: THREE.Scene, look: Look, isTouch: boolean, halfExtents: Vec3 = vec3(1, 1, 2)): Conditions {
+export function applyConditions(scene: THREE.Scene, look: Look, isTouch: boolean, halfExtents: Vec3): Conditions {
   const created: THREE.Object3D[] = [];
   const disposables: { dispose(): void }[] = [];
   const add = <T extends THREE.Object3D>(object: T): T => {
@@ -121,6 +121,8 @@ export function applyConditions(scene: THREE.Scene, look: Look, isTouch: boolean
     for (let i = 0; i < MAX_PLAYERS; i++) playerLights.push(add(new THREE.PointLight(0xffe2b0, 0, PLAYER_LIGHT_RANGE, 2)));
   }
 
+  const scratch = new THREE.Vector3();
+  const scratchRot = new THREE.Quaternion();
   const wrap = (value: number, centre: number) => {
     const span = RAIN_RADIUS * 2;
     return centre + ((((value - centre + RAIN_RADIUS) % span) + span) % span) - RAIN_RADIUS;
@@ -138,31 +140,30 @@ export function applyConditions(scene: THREE.Scene, look: Look, isTouch: boolean
       rain.points.geometry.attributes.position!.needsUpdate = true;
     },
     setLights(vehicle, players) {
-      headlights.forEach((light, index) => {
+      for (let index = 0; index < headlights.length; index++) {
+        const light = headlights[index]!;
         if (!vehicle) {
           light.intensity = 0;
-          return;
+          continue;
         }
-        const side = index === 0 ? -1 : 1;
-        const at = (x: number, y: number, z: number) => {
-          const world = rotate(vehicle.rot, vec3(x, y, z));
-          return vec3(vehicle.pos.x + world.x, vehicle.pos.y + world.y, vehicle.pos.z + world.z);
-        };
-        const from = at(side * HEADLIGHT_HALF_WIDTH * halfExtents.x, 0, -halfExtents.z);
-        const to = at(side * HEADLIGHT_HALF_WIDTH * halfExtents.x, -1, -halfExtents.z - 10);
-        light.position.set(from.x, from.y, from.z);
-        light.target.position.set(to.x, to.y, to.z);
+        const x = (index === 0 ? -1 : 1) * HEADLIGHT_HALF_WIDTH * halfExtents.x;
+        scratchRot.set(vehicle.rot.x, vehicle.rot.y, vehicle.rot.z, vehicle.rot.w);
+        scratch.set(x, 0, -halfExtents.z).applyQuaternion(scratchRot);
+        light.position.set(vehicle.pos.x + scratch.x, vehicle.pos.y + scratch.y, vehicle.pos.z + scratch.z);
+        scratch.set(x, -1, -halfExtents.z - 10).applyQuaternion(scratchRot);
+        light.target.position.set(vehicle.pos.x + scratch.x, vehicle.pos.y + scratch.y, vehicle.pos.z + scratch.z);
         light.intensity = HEADLIGHT_INTENSITY;
-      });
-      playerLights.forEach((light, index) => {
+      }
+      for (let index = 0; index < playerLights.length; index++) {
+        const light = playerLights[index]!;
         const player = players[index];
         if (!player || player.seat !== null) {
           light.intensity = 0;
-          return;
+          continue;
         }
         light.position.set(player.pos.x, player.pos.y + PLAYER_LIGHT_HEIGHT, player.pos.z);
         light.intensity = PLAYER_LIGHT_INTENSITY;
-      });
+      }
     },
     dispose() {
       for (const object of created) scene.remove(object);

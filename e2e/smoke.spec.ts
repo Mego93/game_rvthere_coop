@@ -352,13 +352,13 @@ test('the admin skips a checkpoint, drives to the finish, sees an assisted resul
   await expect(page.locator('#results')).toBeHidden();
 });
 
-test('the overlay shows the default conditions @keyboard', async ({ page }) => {
+test('the overlay shows the default conditions', async ({ page }) => {
   await createRoom(page, 'Amal');
   await startRun(page);
   await expect(page.locator('#overlay')).toContainText('weather  midday clear');
 });
 
-test('a night rain run draws without WebGL errors @keyboard', async ({ page }) => {
+test('a night rain run draws without WebGL errors', async ({ page }) => {
   const threeErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error' && message.text().includes('THREE')) threeErrors.push(message.text());
