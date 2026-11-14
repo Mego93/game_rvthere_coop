@@ -28,8 +28,8 @@ M1. The RV mesh is a group of named boxes, in the vehicle's frame (origin at its
 - `window` ×4: dark, 0.05 deep, 1.0 long × 0.5 tall: two on each side, one in the cab (z -2.2, y 0.25) and one in the body (z 1.0, y 0.4), flush against the side faces (x = ±1.17).
 - `rear`: a slightly darker panel 2.0 × 1.6 × 0.05 on the rear face (z 3.42, y 0.0).
 - `vent`: a roof vent 0.8 × 0.15 × 0.8 at (0, 1.275, 0.8).
-- `bumper`: dark 2.3 × 0.3 × 0.3 at (0, -0.95, -3.55).
-- `stripe` ×2: terracotta, 0.03 deep, 4.0 long × 0.3 tall on both sides along the body and cab, at y -0.3, x = ±1.17.
+- `bumper`: dark 2.3 × 0.3 × 0.3 at (0, -0.95, -3.40) (so it stays inside the M2 envelope).
+- `stripe` ×2: terracotta, 0.03 deep, 4.0 long × 0.3 tall on both sides along the body and cab, at y -0.3, z 0, x = ±1.17.
 - `arch` ×4: dark, 0.3 wide × 0.4 tall × 1.0 long, centred at x = ±1.15, y = -1.0, z = ±2.3 (the wheel's z, `wheelZ`).
 - `wheel` ×4: 0.25 × 0.8 × 0.8, at (±wheelX, wheelY - suspensionRest, ±wheelZ) = (±1.05, -1.40, ±2.3), as the Lodgy's are placed.
 Colours: body and cab cream `0xefe6d2`, stripes terracotta `0xc1623f`, glass `0x1f2937`, rear panel `0xcfc6b2`, tyres, arches and bumper `0x111827`.
