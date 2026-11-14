@@ -298,3 +298,24 @@ Q12 (task 4, documents).
 - Add Safari's back/forward cache restore to the owner's checks.
 
 "Existing tests that change": none. No test covers `openSocket`, and the e2e reload test is unaffected.
+
+Q13 (from the branch review).
+- **Duplicate tab.**
+  - A duplicated tab copies sessionStorage, and with it the token. Two tabs with the same token would then take the slot from each other forever.
+  - The server sends `error { reason: 'replaced' }` to the connection it replaces (the takeover path in `room/server.ts`) and then closes it. `ERROR_REASONS` gains `'replaced'`, and `home.ts` gains the text "This room was opened in another tab."
+  - The client treats `replaced` like `kicked`: no retry, and it shows the home page with that text.
+  - Tests:
+    - a server test that the replaced connection gets the error before the close;
+    - a browser test where two pages share a token: the first shows the home page with the text, the second plays on, and neither loops.
+- **Q4 stands literally.** An attempt that would start after `droppedAt + RECONNECT_WINDOW` gives up. The clamp to the window's end that came in through the task 2 review is reverted, because a final attempt at +30 s lands after the server has freed the slot. P2t is restored to "an attempt after 30 s is not made".
+- **Auto-join after a reload.** `lodgy.rejoin` also stores `playerId`. On the auto-join's `welcome`, a different `playerId` is treated as a lost place, as Q2 says: the page shows "Your place in the room was lost."
+- **Renderer.** The renderer is kept on a context loss outside a room. This is a deviation from Q7, and it is logged. `startGame` checks `renderer.getContext().isContextLost()`, and if the context is lost it takes the reload path (save the rejoin, then reload, under the 10 s guard).
+- **Tests per Q1.**
+  - Q1(a): stay offline 10 s, and assert with `expect.poll` that A's players line shows one player while B's slot is held.
+  - P4t: assert that `#home` never became visible during the reload, through a `MutationObserver` flag set before the loss and read after the reload; or check that the name input was never focused. Also assert that B's `playerId` is unchanged.
+- **Scripts.**
+  - `dev.mjs` uses `shell: true` for `npm.cmd` on Windows.
+  - `killGroup` catches EPERM as well as ESRCH, logging EPERM.
+  - The normal "cloudflared exited (SIGTERM)." line is not printed when the stop was ours.
+  - How to run notes that on Windows, `npm run share` and `npm run dev` may leave the node server running after a stop.
+- **Documents.** The trimmed TRUST_PROXY carried row adds: with `TRUST_PROXY=1` the server listens on every interface, so LAN clients can send their own `CF-Connecting-IP` header and get around the per-address caps.
