@@ -13,7 +13,7 @@ const part = (name: string, width: number, height: number, depth: number, colour
   return mesh;
 };
 
-const CREAM = 0xefe6d2;
+const CREAM = BODY_COLOURS.rv;
 const TERRACOTTA = 0xc1623f;
 const GLASS = 0x1f2937;
 const REAR_PANEL = 0xcfc6b2;
@@ -48,7 +48,6 @@ function createRvMesh(config: VehicleConfig): THREE.Group {
   return group;
 }
 
-// The vehicle drawn as boxes: a body, a dark windscreen strip marking the front (-Z), and four wheels.
 // The vehicle drawn as boxes: the Lodgy a body, a dark windscreen strip marking the front (-Z) and four wheels; the RV a motorhome.
 export function createVehicleMesh(config: VehicleConfig): THREE.Group {
   if (config.id === 'rv') return createRvMesh(config);
