@@ -22,7 +22,7 @@ import {
 import { beforeAll, expect, test } from 'vitest';
 import { NOUNS } from './nouns';
 import { createRoomServer } from './server';
-import { connectFakeClient, createFakeDeps, type FakeClient } from './testing';
+import { connectFakeClient, createFakeDeps, startRun, type FakeClient } from './testing';
 import type { RoomServerOptions } from './types';
 
 beforeAll(async () => {
@@ -65,7 +65,12 @@ function setup(options?: RoomServerOptions) {
     client.send({ type: 'join', room, name, token: token(n) });
     return client;
   };
-  return { ...fake, server, errors, sources, connect, host, guest };
+  // Starts the run: the guests ready up, then the host presses Start.
+  const begin = (hostClient: FakeClient, ...guests: FakeClient[]) => {
+    for (const client of guests) client.send({ type: 'ready', ready: true });
+    startRun(hostClient);
+  };
+  return { ...fake, server, errors, sources, connect, host, guest, begin };
 }
 
 const reasons = (client: FakeClient) => client.ofType('error').map((message) => message.reason);
@@ -81,7 +86,7 @@ test('create makes a room and welcomes its creator, then announces the lobby', (
   expect(client.received[1]).toEqual({
     type: 'lobby',
     room,
-    phase: 'playing',
+    phase: 'lobby',
     players: [{ playerId: 'p1', name: 'Amal', colour: PLAYER_COLOURS[0], ready: false, connected: true }],
     adminId: 'p1',
     courseId: 'test',
@@ -101,17 +106,6 @@ test('the random source chooses the noun', () => {
   const { host, randomValues } = setup();
   randomValues.push(0.5);
   expect(host().room).toBe(NOUNS[Math.floor(NOUNS.length / 2)]);
-});
-
-test('the room runs the configured vehicle', () => {
-  const { host } = setup({ vehicleId: 'rv' });
-  expect(host().client.last('lobby').vehicleId).toBe('rv');
-});
-
-test('an unknown course or vehicle is refused when the server is created', () => {
-  const fake = createFakeDeps(RAPIER);
-  expect(() => createRoomServer(fake.deps, { vehicleId: 'bus' })).toThrow('Unknown vehicle: bus');
-  expect(() => createRoomServer(fake.deps, { courseId: 'moon' })).toThrow('Unknown course: moon');
 });
 
 test('join welcomes the newcomer and announces the lobby to everyone', () => {
@@ -242,6 +236,7 @@ test('a room that someone rejoins is not deleted', () => {
 test('a join with the token of a connected player takes that player over', () => {
   const { host, connect, advance } = setup();
   const { client: first, room } = host('Amal');
+  startRun(first);
   first.send(input(1, { moveY: 1 }));
   first.send(input(2, { moveY: 1 }));
   advance(0.5);
@@ -337,6 +332,7 @@ test('the creator rejoining with its own token does not make a room more than so
 test('snapshots arrive 20 times a second, the first one full', () => {
   const { host, advance } = setup();
   const { client } = host();
+  startRun(client);
   advance(1);
   const snapshots = client.ofType('snapshot');
   expect(snapshots).toHaveLength(TICK_RATE / SNAPSHOT_EVERY_TICKS);
@@ -349,7 +345,8 @@ test('snapshots arrive 20 times a second, the first one full', () => {
 
 test('a player who joins mid-run gets a full snapshot first', () => {
   const { host, guest, advance } = setup();
-  const { room } = host();
+  const { client, room } = host();
+  startRun(client);
   advance(1);
   const badr = guest(room, 2);
   advance(0.2);
@@ -362,6 +359,7 @@ test('a player who joins mid-run gets a full snapshot first', () => {
 test('a joining player appears in the snapshot at a spawn slot, and two players take different slots', () => {
   const { host, guest, advance } = setup();
   const { client: amal, room } = host();
+  startRun(amal);
   advance(0.2);
   const [first] = amal.last('snapshot').players;
   expect(amal.last('snapshot').players).toHaveLength(1);
@@ -379,9 +377,10 @@ test('a joining player appears in the snapshot at a spawn slot, and two players 
 });
 
 test('a player who leaves disappears from the snapshot players', () => {
-  const { host, guest, advance } = setup();
+  const { host, guest, advance, begin } = setup();
   const { client: amal, room } = host();
   const badr = guest(room, 2);
+  begin(amal, badr);
   advance(0.2);
   badr.close();
   advance(0.2);
@@ -390,7 +389,8 @@ test('a player who leaves disappears from the snapshot players', () => {
 
 test('a player who joins mid-run gets a full snapshot that includes the players', () => {
   const { host, guest, advance } = setup();
-  const { room } = host();
+  const { client, room } = host();
+  startRun(client);
   advance(1);
   const badr = guest(room, 2);
   advance(0.2);
@@ -400,9 +400,10 @@ test('a player who joins mid-run gets a full snapshot that includes the players'
 });
 
 test('the player in the driver seat drives; the others do not', () => {
-  const { host, guest, advance } = setup();
+  const { host, guest, advance, begin } = setup();
   const { client: amal, room } = host();
   const badr = guest(room, 2);
+  begin(amal, badr);
   advance(1);
   let seq = 0;
   // One input per tick for two seconds: Badr holds full throttle from his own spot, Amal has not boarded.
@@ -434,6 +435,7 @@ test('the player in the driver seat drives; the others do not', () => {
 test('when the driver leaves, the vehicle coasts until someone boards', () => {
   const { host, advance } = setup();
   const { client: amal } = host();
+  startRun(amal);
   amal.send(input(1, { interact: true }));
   advance(0.1);
   let seq = 1;
@@ -466,9 +468,10 @@ test('when the driver leaves, the vehicle coasts until someone boards', () => {
 });
 
 test('each client is told the last of its own inputs that was consumed', () => {
-  const { host, guest, advance } = setup();
+  const { host, guest, advance, begin } = setup();
   const { client: amal, room } = host();
   const badr = guest(room, 2);
+  begin(amal, badr);
   amal.send(input(1));
   amal.send(input(2));
   badr.send(input(1));
@@ -488,6 +491,7 @@ test('input from a connection that is not in a room is ignored', () => {
 test('a silent seated driver stops pressing the pedal after the neutral-input delay', () => {
   const { host, advance } = setup();
   const { client } = host();
+  startRun(client);
   client.send(input(1, { interact: true }));
   advance(0.1);
   client.send(input(2, { moveY: 1 }));
@@ -501,6 +505,7 @@ test('a silent seated driver stops pressing the pedal after the neutral-input de
 test('a tap of interact that is consumed together with the next input still boards', () => {
   const { host, advance } = setup();
   const { client } = host();
+  startRun(client);
   // More than INPUT_QUEUE_FAST_ABOVE inputs waiting: the first tick consumes the first two, the press and its release.
   client.send(input(1, { interact: true }));
   client.send(input(2));
@@ -514,6 +519,7 @@ test('a tap of interact that is consumed together with the next input still boar
 test('after a stall the room runs only the catch-up limit and drops the rest', () => {
   const { host, advance, stall } = setup();
   const { client } = host();
+  startRun(client);
   advance(1);
   const before = client.last('snapshot').tick;
   // Three seconds without a timer callback: 180 ticks are owed.
@@ -530,6 +536,7 @@ test('after a stall the room runs only the catch-up limit and drops the rest', (
 test('an empty room is paused and resumes where it was', () => {
   const { host, guest, advance } = setup();
   const { client, room } = host();
+  startRun(client);
   advance(1);
   const before = client.last('snapshot').tick;
   client.close();
@@ -671,6 +678,7 @@ test('create is refused once the server holds the most rooms it allows, until on
 test('a connection whose send throws is reported and dropped, and the others carry on', () => {
   const { host, advance, server, errors, sources } = setup();
   const { client: amal, room } = host();
+  startRun(amal);
   let broken = false;
   let closed = false;
   const handle = server.connect({
@@ -753,9 +761,10 @@ test('S15: a buy sent before join gets cannot_buy', () => {
 });
 
 test('S15: a refused buy sends cannot_buy to that client only', () => {
-  const { host, guest, advance } = setup();
+  const { host, guest, advance, begin } = setup();
   const { client: amal, room } = host();
   const badr = guest(room, 2);
+  begin(amal, badr);
   advance(0.2);
   amal.send({ type: 'buy', item: 'jerrycan' });
   expect(reasons(amal)).toEqual(['cannot_buy']);
@@ -766,6 +775,7 @@ test('S15: a refused buy sends cannot_buy to that client only', () => {
 test('S15: an accepted buy sends no error and puts the item in the inventory', () => {
   const { host, advance } = setup();
   const { client: amal } = host();
+  startRun(amal);
   let seq = 0;
   const me = () => amal.last('snapshot').players.find((player) => player.playerId === 'p1')!;
   // Walks toward a point on the ground, steering from the latest snapshot, until within `reach` of it.

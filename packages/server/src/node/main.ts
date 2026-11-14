@@ -1,22 +1,10 @@
 import { networkInterfaces } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { courseIds, getCourse } from '@lodgy/shared';
 import { startServer } from './listen';
 
 const port = Number(process.env.PORT ?? 3000);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   console.error(`PORT must be a number from 1 to 65535, not "${process.env.PORT}".`);
-  process.exit(1);
-}
-
-// COURSE=segment-demo runs every room on that course until the lobby (step 11) lets the admin choose.
-const courseId = process.env.COURSE;
-try {
-  if (courseId !== undefined) getCourse(courseId);
-} catch (error) {
-  if (!(error instanceof Error) || !error.message.startsWith('Unknown course:')) throw error;
-  const valid = courseIds().map((id) => `"${id}"`).join(' or ');
-  console.error(`COURSE "${courseId}" is not a course. Use ${valid}, or leave it unset.`);
   process.exit(1);
 }
 
@@ -38,8 +26,9 @@ const limits = {
 };
 // TRUST_PROXY=1 behind the Cloudflare Tunnel: the client address then comes from CF-Connecting-IP.
 const trustProxy = process.env.TRUST_PROXY === '1';
-// VEHICLE=rv runs every room with the RV until the lobby (step 11) lets the admin choose.
-const server = await startServer({ port, clientDir, vehicleId: process.env.VEHICLE, courseId, trustProxy, limits });
+// AUTOSTART=1 starts every room's run on creation, for the end-to-end run only. Remove in step 11 task 4a, when the e2e flows press Start.
+const autostart = process.env.AUTOSTART === '1';
+const server = await startServer({ port, clientDir, autostart, trustProxy, limits });
 console.log(`Proxy trust is ${trustProxy ? 'on (CF-Connecting-IP decides the client address)' : 'off'}.`);
 
 if (process.env.LODGY_DEV) {

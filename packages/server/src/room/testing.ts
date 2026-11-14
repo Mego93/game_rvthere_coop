@@ -75,6 +75,9 @@ export interface FakeClient {
   last<T extends ServerMessage['type']>(type: T): Extract<ServerMessage, { type: T }>;
 }
 
+// Starts the run: the admin's fake client sends `start`. Every other connected player must be ready first.
+export const startRun = (client: FakeClient) => client.send({ type: 'start' });
+
 export function connectFakeClient(server: RoomServer, address = 'test'): FakeClient {
   const received: ServerMessage[] = [];
   let handle: ConnectionHandle | null = null;

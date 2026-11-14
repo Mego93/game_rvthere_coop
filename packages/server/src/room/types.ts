@@ -1,4 +1,4 @@
-import type { Rapier } from '@lodgy/shared';
+import type { BuiltCourse, Rapier, World } from '@lodgy/shared';
 
 // One client's connection, as the room layer sees it. The adapter implements it over a real socket.
 // If send or close throws, the room server reports it and drops the connection.
@@ -31,9 +31,10 @@ export interface RoomDeps {
 }
 
 export interface RoomServerOptions {
-  // Until the lobby exists (step 11), every room runs this course with this vehicle.
-  courseId?: string;
-  vehicleId?: string;
+  // Tests only: replaces the course of each id listed.
+  courses?: Readonly<Record<string, BuiltCourse>>;
+  // Tests and the end-to-end run only: a room starts its run as soon as it is created. Remove in step 11 task 4a, when the e2e flows press Start.
+  autostart?: boolean;
   // `create` messages one address may send in 60 s; defaults to CREATE_PER_MINUTE.
   createPerMinute?: number;
 }
@@ -42,6 +43,8 @@ export interface RoomServer {
   // `address` is the client's address, used to limit room creation per address.
   connect(connection: Connection, address: string): ConnectionHandle;
   roomCount(): number;
+  // Tests only: the world of a room, or null while it has none.
+  debugWorld(noun: string): World | null;
   // Stops the timer and frees every room.
   stop(): void;
 }

@@ -125,23 +125,6 @@ test('starting on a port that is already in use is refused', async () => {
   expect((await fetch(url('/'))).status).toBe(200);
 });
 
-test('a server started with a course id runs it, and an unknown one is refused at start-up', async () => {
-  const other = await startServer({ port: 0, clientDir, courseId: 'segment-demo' });
-  const socket = new WebSocket(`ws://localhost:${other.port}${SOCKET_PATH}`);
-  const lobby = new Promise<ServerMessage>((resolve, reject) => {
-    socket.on('message', (data) => {
-      const message = JSON.parse(data.toString()) as ServerMessage;
-      if (message.type === 'lobby') resolve(message);
-    });
-    socket.once('open', () => socket.send(JSON.stringify({ type: 'create', name: 'Amal', token: 'course-token-amal' })));
-    socket.once('error', reject);
-  });
-  expect(await lobby).toMatchObject({ type: 'lobby', courseId: 'segment-demo' });
-  socket.close();
-  await other.close();
-  await expect(startServer({ port: 0, clientDir, courseId: 'moon' })).rejects.toThrow('Unknown course: moon');
-});
-
 test('knows the content types the client needs', () => {
   expect(contentType('a/b/index.html')).toBe('text/html; charset=utf-8');
   expect(contentType('x.wasm')).toBe('application/wasm');
@@ -158,6 +141,11 @@ test('two clients share a room, and the one who boards the driver seat drives th
   badr.send({ type: 'join', room, name: 'Badr', token: 'integration-token-badr' });
   const welcome = await badr.waitFor((message): message is Welcome => isWelcome(message));
   expect(welcome).toEqual({ type: 'welcome', playerId: 'p2', room });
+
+  // Badr readies up and Amal starts the run.
+  badr.send({ type: 'ready', ready: true });
+  await amal.waitFor((message): message is Extract<ServerMessage, { type: 'lobby' }> => message.type === 'lobby' && message.players.every((player) => player.ready || player.playerId === 'p1'));
+  amal.send({ type: 'start' });
 
   // Amal starts at the driver door: she presses interact to board, and drives once the snapshots show her seated.
   amal.send({ type: 'input', ...NEUTRAL_INPUT, interact: true, seq: 1 });

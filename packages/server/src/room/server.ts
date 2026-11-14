@@ -8,8 +8,6 @@ import {
   SOLO_ROOM_TIMEOUT,
   STALL_GRACE,
   TICK_DT,
-  getCourse,
-  getVehicleConfig,
   parseClientMessage,
   type ClientMessage,
   type ErrorReason,
@@ -36,12 +34,6 @@ interface Session {
 }
 
 export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}): RoomServer {
-  const courseId = options.courseId ?? 'test';
-  const vehicleId = options.vehicleId ?? 'lodgy';
-  // Fail at start-up, not at the first room, if either id is wrong.
-  getCourse(courseId);
-  getVehicleConfig(vehicleId);
-
   const rooms = new Map<string, Room>();
   const sessions = new Set<Session>();
   // The session each connected player is on, so that a takeover finds it without scanning every session.
@@ -74,6 +66,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     sessionOf.set(player, session);
     send(session.connection, { type: 'welcome', playerId: player.playerId, room: room.noun });
     room.announce();
+    room.catchUp(player);
   };
 
   // Takes a session out of its room and closes its connection.
@@ -96,10 +89,12 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     const times = recentCreates(session.address, now);
     if (times.length >= createPerMinute) return refuse(session, 'server_full');
     const noun = pickNoun(deps.random, (candidate) => rooms.has(candidate));
-    const room = createRoom(deps.rapier, { noun, courseId, vehicleId }, now);
+    const room = createRoom(deps.rapier, { noun, courses: options.courses }, now);
     rooms.set(noun, room);
     creates.set(session.address, [...times, now]);
-    admit(session, room, room.add(message.name, message.token, session.connection));
+    const player = room.add(message.name, message.token, session.connection);
+    admit(session, room, player);
+    if (options.autostart) room.start(player);
   };
 
   const join = (session: Session, message: Extract<ClientMessage, { type: 'join' }>) => {
@@ -124,6 +119,13 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     if (room.playerCount() >= MAX_PLAYERS) return refuse(session, 'room_full');
     if (room.nameTaken(message.name)) return refuse(session, 'name_taken');
     admit(session, room, room.add(message.name, message.token, session.connection));
+  };
+
+  // Runs a lobby or admin command; a connection that is not in a room gets bad_message.
+  const command = (session: Session, run: (room: Room, player: RoomPlayer) => ErrorReason | null) => {
+    if (!session.room || !session.player) return refuse(session, 'bad_message');
+    const reason = run(session.room, session.player);
+    if (reason) refuse(session, reason);
   };
 
   const handle = (session: Session, raw: string) => {
@@ -157,7 +159,19 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
       case 'join':
         if (session.room) return refuse(session, 'bad_message');
         return join(session, message);
-      // The room's behaviour for the lobby and admin messages comes with the lobby step's room task.
+      case 'ready':
+        return command(session, (room, player) => room.setReady(player, message.ready));
+      case 'configure': {
+        const { type: _type, ...settings } = message;
+        return command(session, (room, player) => room.configure(player, settings));
+      }
+      case 'start':
+        return command(session, (room, player) => room.start(player));
+      case 'restartCourse':
+        return command(session, (room, player) => room.restartCourse(player));
+      case 'toLobby':
+        return command(session, (room, player) => room.toLobby(player));
+      // kick (task 3), restartCheckpoint, adminTool and next (task 2b) are not wired yet.
       default:
         return refuse(session, 'bad_message');
     }
@@ -262,6 +276,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
       };
     },
     roomCount: () => rooms.size,
+    debugWorld: (noun) => rooms.get(noun)?.debugWorld() ?? null,
     stop() {
       stopTimer();
       const remaining = [...rooms.values()];

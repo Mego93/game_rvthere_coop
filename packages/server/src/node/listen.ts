@@ -16,8 +16,8 @@ export interface ServerOptions {
   port: number;
   // The folder holding the built client.
   clientDir: string;
-  vehicleId?: string;
-  courseId?: string;
+  // Tests and the end-to-end run only: rooms start their run on creation. Remove in step 11 task 4a.
+  autostart?: boolean;
   // Told about every failure the server survives, at most once per source per REPORT_INTERVAL. The default prints it.
   onError?: (error: unknown, source: string, suppressed: number) => void;
   // Behind a proxy on this machine (the Cloudflare Tunnel), the address comes from CF-Connecting-IP.
@@ -99,7 +99,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
         },
       },
     },
-    { vehicleId: options.vehicleId, courseId: options.courseId, createPerMinute: options.limits?.createPerMinute },
+    { autostart: options.autostart, createPerMinute: options.limits?.createPerMinute },
   );
 
   const pathOf = (url: string | undefined) => {

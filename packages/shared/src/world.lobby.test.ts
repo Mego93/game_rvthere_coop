@@ -347,6 +347,34 @@ describe('L3: adminTool', () => {
     world.dispose();
   });
 
+  test('skipCheckpoint while a player carries a crate empties the hands and resets the crate to its spawn, free to be picked up again', () => {
+    const world = fresh();
+    world.addPlayer('p1');
+    settle(world, 30);
+    const beside = vec3(12, 0.02, 8);
+    const aim = { yaw: Math.PI / 2, pitch: -Math.atan2(1.0, 1.7) };
+    const press = () => {
+      world.step(new Map([['p1', input({ ...aim, interact: true })]]));
+      world.step(new Map([['p1', input(aim)]]));
+    };
+    world.teleportPlayer('p1', beside);
+    settle(world, 30);
+    press();
+    expect(playerOf(world, 'p1')!.hands).toBe('crate-1');
+    expect(world.adminTool('skipCheckpoint')).toBe(true);
+    expect(playerOf(world, 'p1')!.hands).toBeNull();
+    const spawn = world.course.props.find((placed) => placed.id === 'crate-1')!.pose.pos;
+    const crate = world.snapshot().props.find((prop) => prop.id === 'crate-1')!;
+    expect(Math.hypot(crate.pos.x - spawn.x, crate.pos.z - spawn.z)).toBeLessThan(0.5);
+    // Nobody holds it any more: a player beside it can pick it up.
+    settle(world, 30);
+    world.teleportPlayer('p1', beside);
+    settle(world, 30);
+    press();
+    expect(playerOf(world, 'p1')!.hands).toBe('crate-1');
+    world.dispose();
+  });
+
   test('skipCheckpoint on the last checkpoint returns false and leaves assisted false', () => {
     const world = fresh();
     recordCp1(world);

@@ -1,4 +1,5 @@
 import {
+  CAMPAIGN,
   DEFAULT_TIME_OF_DAY,
   DEFAULT_WEATHER,
   PLAYER_COLOURS,
@@ -8,14 +9,21 @@ import {
   TICK_DT,
   TICK_RATE,
   createWorld,
+  resultsOf,
+  type BuiltCourse,
+  type ErrorReason,
   type InputFields,
   type ItemKind,
   type LobbyMessage,
+  type Phase,
   type PlayerInput,
-  type BuiltCourse,
   type PropSnapshot,
   type Rapier,
+  type ResultsMessage,
+  type RoomSettings,
+  type ServerMessage,
   type SnapshotMessage,
+  type World,
 } from '@lodgy/shared';
 import { createInputQueue, type InputQueue } from './inputQueue';
 import type { Connection } from './types';
@@ -29,10 +37,14 @@ export interface RoomPlayer {
   queue: InputQueue;
   // Whether this connection has been sent a full snapshot yet.
   sentFull: boolean;
+  ready: boolean;
+  // False while the slot is held for a dropped connection; nothing holds slots yet.
+  connected: boolean;
 }
 
 export interface Room {
   readonly noun: string;
+  phase(): Phase;
   playerCount(): number;
   findByToken(token: string): RoomPlayer | undefined;
   // Names are compared ignoring case.
@@ -44,6 +56,14 @@ export interface Room {
   remove(player: RoomPlayer, now: number): void;
   // Sends the lobby message to every player.
   announce(): void;
+  // After the lobby message to a joiner: sends the last results to a player who joins while they are shown.
+  catchUp(player: RoomPlayer): void;
+  // The lobby and run commands answer the reason they were refused, or null. The checks run in the order not_admin, bad_phase, not_ready.
+  setReady(player: RoomPlayer, ready: boolean): ErrorReason | null;
+  configure(by: RoomPlayer, settings: RoomSettings): ErrorReason | null;
+  start(by: RoomPlayer): ErrorReason | null;
+  restartCourse(by: RoomPlayer): ErrorReason | null;
+  toLobby(by: RoomPlayer): ErrorReason | null;
   pushInput(player: RoomPlayer, input: PlayerInput): void;
   // Spends the crew's coins on an item at a fuel station's counter; applies at once.
   buy(player: RoomPlayer, item: ItemKind): 'ok' | 'cannot_buy';
@@ -53,15 +73,15 @@ export interface Room {
   emptySince(): number | null;
   // Whether anyone with a token other than the creator's has ever joined.
   everJoinedByOthers(): boolean;
+  // Tests only.
+  debugWorld(): World | null;
   dispose(): void;
 }
 
 export interface RoomConfig {
   noun: string;
-  courseId: string;
-  vehicleId: string;
-  // Tests only: a course to use instead of the id's.
-  course?: BuiltCourse;
+  // Tests only: a course to use instead of the id's, for each id listed.
+  courses?: Readonly<Record<string, BuiltCourse>>;
 }
 
 const movedSince = (a: PropSnapshot, b: PropSnapshot) =>
@@ -74,33 +94,43 @@ const movedSince = (a: PropSnapshot, b: PropSnapshot) =>
   Math.abs(a.rot.w - b.rot.w) > PROP_MOVED_EPSILON;
 
 export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number): Room {
-  const world = createWorld(rapier, { courseId: config.courseId, vehicleId: config.vehicleId }, config.course);
+  let phase: Phase = 'lobby';
+  // Only exists while playing, and frozen while the results are shown.
+  let world: World | null = null;
+  let settings: RoomSettings = { courseId: CAMPAIGN[0]!, vehicleId: 'lodgy', timeOfDay: DEFAULT_TIME_OF_DAY, weather: DEFAULT_WEATHER };
+  let lastResults: ResultsMessage | null = null;
   // Kept in the order players joined.
   const players: RoomPlayer[] = [];
   let nextPlayerNumber = 1;
   let adminId: string | null = null;
+  // Ticks since the run started, and how many of them the current world has run.
   let tick = 0;
+  let worldTicks = 0;
+  // Added to a world's tick so that tick numbers keep rising across the worlds of one run.
+  let tickOffset = 0;
   // The time at which tick 0 would have run, given the ticks simulated so far.
   let startTime = createdAt;
+  // The time of the latest update; a run starts counting from it.
+  let lastNow = createdAt;
   let emptySince: number | null = createdAt;
   // The first token to join is the creator's.
   let creatorToken: string | null = null;
   let joinedByOthers = false;
 
+  const broadcast = (message: ServerMessage) => {
+    const data = JSON.stringify(message);
+    for (const player of players) if (player.connected) player.connection.send(data);
+  };
+
   const broadcastLobby = () => {
-    const message: LobbyMessage = {
+    broadcast({
       type: 'lobby',
       room: config.noun,
-      phase: 'playing',
-      players: players.map(({ playerId, name, colour }) => ({ playerId, name, colour, ready: false, connected: true })),
+      phase,
+      players: players.map(({ playerId, name, colour, ready, connected }) => ({ playerId, name, colour, ready, connected })),
       adminId,
-      courseId: config.courseId,
-      vehicleId: config.vehicleId,
-      timeOfDay: DEFAULT_TIME_OF_DAY,
-      weather: DEFAULT_WEATHER,
-    };
-    const data = JSON.stringify(message);
-    for (const player of players) player.connection.send(data);
+      ...settings,
+    } satisfies LobbyMessage);
   };
 
   // The pose last sent for each prop, whoever was sent it; the room's one record of what clients have been told.
@@ -108,8 +138,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   // Rule K8: a lost vehicle makes the next broadcast full for everyone.
   let restarted = false;
 
-  const broadcastSnapshot = () => {
-    const snapshot = world.snapshot();
+  const broadcastSnapshot = (current: World) => {
+    const taken = current.snapshot();
+    const snapshot = { ...taken, tick: taken.tick + tickOffset };
     // Rule I7: a prop or item that appeared or vanished cannot be told as a partial list, so everyone gets the whole.
     const idsChanged = snapshot.props.length !== lastSent.size || snapshot.props.some((prop) => !lastSent.has(prop.id));
     const full = idsChanged || restarted;
@@ -121,6 +152,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     });
     for (const prop of moved) lastSent.set(prop.id, prop);
     for (const player of players) {
+      if (!player.connected) continue;
       const message: SnapshotMessage = {
         type: 'snapshot',
         ...snapshot,
@@ -133,16 +165,46 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     }
   };
 
-  const stepOnce = () => {
+  // A world for the room's configuration, with every player in it and cp-0 recorded.
+  const createRunWorld = (): World => {
+    const next = createWorld(rapier, { courseId: settings.courseId, vehicleId: settings.vehicleId }, config.courses?.[settings.courseId]);
+    for (const player of players) next.addPlayer(player.playerId);
+    next.recordStart();
+    return next;
+  };
+
+  const enterResults = (current: World) => {
+    phase = 'results';
+    lastResults = { type: 'results', ...resultsOf(current.status(), { id: settings.courseId, targetTime: current.course.targetTime }, settings) };
+    // The snapshot goes out at once, outside the cadence, so that clients see the win.
+    broadcastSnapshot(current);
+    broadcastLobby();
+    broadcast(lastResults);
+  };
+
+  // Returns true when this tick won the run.
+  const stepOnce = (current: World): boolean => {
     const inputs = new Map<string, InputFields>();
     for (const player of players) inputs.set(player.playerId, player.queue.next().input);
-    if (world.step(inputs).some((event) => event.kind === 'vehicleLost')) restarted = true;
+    if (current.step(inputs).some((event) => event.kind === 'vehicleLost')) restarted = true;
     tick += 1;
-    if (tick % SNAPSHOT_EVERY_TICKS === 0) broadcastSnapshot();
+    worldTicks += 1;
+    if (current.status().state === 'won') {
+      enterResults(current);
+      return true;
+    }
+    if (tick % SNAPSHOT_EVERY_TICKS === 0) broadcastSnapshot(current);
+    return false;
+  };
+
+  const refusal = (by: RoomPlayer, ...allowed: Phase[]): ErrorReason | null => {
+    if (by.playerId !== adminId) return 'not_admin';
+    return allowed.includes(phase) ? null : 'bad_phase';
   };
 
   return {
     noun: config.noun,
+    phase: () => phase,
     playerCount: () => players.length,
     findByToken: (token) => players.find((player) => player.token === token),
     nameTaken(name) {
@@ -159,12 +221,15 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
         connection,
         queue: createInputQueue(),
         sentFull: false,
+        ready: false,
+        connected: true,
       };
       nextPlayerNumber += 1;
       creatorToken ??= token;
       if (token !== creatorToken) joinedByOthers = true;
       players.push(player);
-      world.addPlayer(player.playerId);
+      // In the lobby there is no world, and in the results the world is frozen, so a joiner there only joins the list.
+      if (phase === 'playing') world?.addPlayer(player.playerId);
       adminId ??= player.playerId;
       emptySince = null;
       return player;
@@ -181,16 +246,81 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       const index = players.indexOf(player);
       if (index === -1) return;
       players.splice(index, 1);
-      world.removePlayer(player.playerId);
+      world?.removePlayer(player.playerId);
       // The role passes to the longest-connected player, or to the next to join if nobody is left.
       if (adminId === player.playerId) adminId = players[0]?.playerId ?? null;
       if (players.length === 0) emptySince = now;
       broadcastLobby();
     },
     announce: broadcastLobby,
-    pushInput: (player, input) => player.queue.push(input),
-    buy: (player, item) => world.buy(player.playerId, item),
+    catchUp(player) {
+      if (phase === 'results' && lastResults) player.connection.send(JSON.stringify(lastResults));
+    },
+    setReady(player, ready) {
+      if (phase !== 'lobby') return 'bad_phase';
+      if (player.ready === ready) return null;
+      player.ready = ready;
+      broadcastLobby();
+      return null;
+    },
+    configure(by, next) {
+      const refused = refusal(by, 'lobby');
+      if (refused) return refused;
+      settings = { courseId: next.courseId, vehicleId: next.vehicleId, timeOfDay: next.timeOfDay, weather: next.weather };
+      broadcastLobby();
+      return null;
+    },
+    start(by) {
+      const refused = refusal(by, 'lobby');
+      if (refused) return refused;
+      if (players.some((player) => player.playerId !== adminId && player.connected && !player.ready)) return 'not_ready';
+      for (const player of players) {
+        player.queue = createInputQueue();
+        player.sentFull = false;
+      }
+      lastSent.clear();
+      restarted = false;
+      tick = 0;
+      worldTicks = 0;
+      tickOffset = 0;
+      startTime = lastNow;
+      lastResults = null;
+      world = createRunWorld();
+      phase = 'playing';
+      broadcastLobby();
+      return null;
+    },
+    restartCourse(by) {
+      const refused = refusal(by, 'playing');
+      if (refused) return refused;
+      // The queues stay: the client's game keeps running and its seq keeps rising.
+      const next = createRunWorld();
+      world?.dispose();
+      world = next;
+      tickOffset += worldTicks;
+      worldTicks = 0;
+      lastSent.clear();
+      restarted = true;
+      return null;
+    },
+    toLobby(by) {
+      const refused = refusal(by, 'playing', 'results');
+      if (refused) return refused;
+      world?.dispose();
+      world = null;
+      lastResults = null;
+      phase = 'lobby';
+      for (const player of players) player.ready = false;
+      broadcastLobby();
+      return null;
+    },
+    pushInput(player, input) {
+      if (phase === 'playing') player.queue.push(input);
+    },
+    buy: (player, item) => (phase === 'playing' && world ? world.buy(player.playerId, item) : 'cannot_buy'),
     update(now) {
+      lastNow = now;
+      if (phase !== 'playing' || !world) return;
       if (players.length === 0) {
         // An empty room is paused: the world keeps its state and no time is owed when someone returns.
         startTime = now - tick * TICK_DT;
@@ -203,10 +333,12 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
         startTime += (due - SERVER_MAX_CATCHUP_STEPS) * TICK_DT;
         due = SERVER_MAX_CATCHUP_STEPS;
       }
-      for (let i = 0; i < due; i++) stepOnce();
+      // After the win the world is frozen, even if more ticks are due.
+      for (let i = 0; i < due; i++) if (stepOnce(world)) break;
     },
     emptySince: () => emptySince,
     everJoinedByOthers: () => joinedByOthers,
-    dispose: () => world.dispose(),
+    debugWorld: () => world,
+    dispose: () => world?.dispose(),
   };
 }
