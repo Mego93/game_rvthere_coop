@@ -554,7 +554,7 @@ Binary encoding is deferred until snapshot size is measured as a problem. Snapsh
 ### Camera and rendering
 
 - On foot, the camera sits behind and above the player's shoulder and moves closer when a wall is in the way. Seated, it orbits the vehicle. For now the seated camera is the vehicle follow camera behind the vehicle.
-- If the WebGL context is lost, as iOS does to background tabs, the client reloads the page and rejoins with its session token.
+- If the WebGL context is lost, as iOS does to background tabs, the client reloads the page and rejoins with its session token, without showing the name form. It reloads at most once per 10 s; a second loss within that time returns to the home page with "The 3D view was lost. Reload the page to continue."
 
 ### HUD
 
@@ -603,7 +603,7 @@ Effects only: engine loop, impact, winch loop, hook attach, pickup, item use, co
 
 Hosting uses Cloudflare.
 
-- **During development and for play sessions:** the server runs on the owner's machine. Players on the same Wi-Fi open `http://<LAN-IP>:3000/<noun>`. Players elsewhere use a Cloudflare Tunnel, which gives the local server a public `https` address while it runs.
+- **During development and for play sessions:** the server runs on the owner's machine. Players on the same Wi-Fi open `http://<LAN-IP>:3000/<noun>`. Players elsewhere use a Cloudflare Tunnel, which gives the local server a public `https` address while it runs. `npm run share` starts the server with `TRUST_PROXY=1` behind a quick tunnel (no account; `cloudflared` must be installed) and prints the address.
 - **Always-on hosting** is decided at the last build step, between Cloudflare Containers (the same Node process in a container) and Workers with Durable Objects (one object per room). The choice is made then, against the platform's limits and pricing at that time. A Durable Object adapter, if chosen, replaces only the `node` adapter.
 
 The client derives the WebSocket URL from the page origin (`ws` for `http`, `wss` for `https`). The server runs from its TypeScript source with `tsx`; there is no server build step.
@@ -613,7 +613,7 @@ The client derives the WebSocket URL from the page origin (`ws` for `http`, `wss
 - **Bad input.** Covered by the protocol table: validation, clamping, refusal reasons and the rate limit.
 - **Join failures.** Unknown room, full room and taken name each return a specific error that the client displays.
 - **Refused purchase.** Too few coins, no free slot, or no shop counter in range returns `cannot_buy`.
-- **Disconnects.** The client shows a reconnecting overlay and retries with backoff for 30 s, rejoining with its session token. It does not retry after `kicked`. The server follows the held-slot rules.
+- **Disconnects.** The client shows a reconnecting overlay and retries after 0.5, 1, 2, 4 and then every 8 s, for 30 s from the drop, rejoining with its session token. A socket that does not open within 8 s counts as a failed attempt, and the page itself closes a connection that has heard nothing from the server for 6 s. It gives up at most 38 s after the drop. It does not retry after `kicked`, or after a refusal (`unknown_room`, `room_full`, `name_taken`); a rejoin that comes back as a different player (the slot expired or was kicked) is treated as a refusal: "Your place in the room was lost." The server follows the held-slot rules.
 - **Silent connections.** A connection that stops sending, such as a backgrounded iPhone, gets neutral input after 15 ticks and is dropped after 6 s.
 - **Stuck vehicle.** A vehicle that is wedged, or out of fuel with no way to refuel, is not detected automatically. The admin uses "restart from checkpoint".
 - **Physics escapes.** Handled by the kill-plane rules: players respawn, props return to spawn, the vehicle triggers a checkpoint restart.
