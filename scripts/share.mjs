@@ -1,7 +1,7 @@
 // Starts the server behind a Cloudflare quick tunnel and prints the public address.
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { makeStopAll } from './stopGroups.mjs';
+import { exitCodeOf, makeStopAll } from './stopGroups.mjs';
 import { parseShareArgs, tunnelUrl } from './shareLib.mjs';
 
 const parsed = parseShareArgs(process.argv.slice(2), process.env);
@@ -48,11 +48,11 @@ function run() {
 
   const stopAll = makeStopAll(children);
   tunnel.on('exit', (code, signal) => console.error(`cloudflared exited (${code ?? signal}).`));
-  for (const child of children) child.on('exit', stopAll);
-  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, stopAll);
+  for (const child of children) child.on('exit', (code, signal) => stopAll(exitCodeOf(code, signal)));
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => stopAll(0));
   for (const child of children) child.on('error', (error) => {
     console.error(`Could not start a process: ${error.message}`);
-    stopAll();
+    stopAll(1);
   });
 
   let printed = false;
