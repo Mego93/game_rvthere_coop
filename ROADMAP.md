@@ -122,6 +122,7 @@ What step 2 cost and what changed because of it. Estimates are rough, plus or mi
 - While the shop menu is open the slot is frozen but the aim follows the look input, so on a phone a right-half drag turns the player while shopping (M9 read as "aim kept live").
 - On a phone the touch Use button can show during an operate hold (it acts on items only), and every hint still names keys ("Hold E to refuel").
 - Rapier 0.21 sometimes answers scene queries with nothing for one zero-length step after a teleport: measured on the test ground as one skip in eight when only the vehicle moved, never on the segment demo or in 1,500 restarts. The world and the predictor now probe with a ray after settling and step again while it misses; the mechanism is not understood, so any new teleport-then-query site must use the same probe.
+- A reconnect that comes back as a different player ("Your place in the room was lost.") leaves that new player as a held slot for 30 s, which others see in the lobby and which counts toward the 6.
 - After a restart the vehicle settles onto its suspension at about 0.06 m/s for a moment, as it does when a room is created.
 - Items restored or dropped at a restart are not checked against the vehicle's box; items collide with statics only, so one inside the chassis stays there until picked up.
 - A hook dropped by a player standing on the barrier falls through to the ground under it: the drop ray finds ground colliders only (W2).
