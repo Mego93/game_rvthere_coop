@@ -43,7 +43,10 @@ import { disposeScene } from './render/disposeScene';
 import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
-import { interactAction, overlayText } from './ui/overlay';
+import { interactAction, overlayText, type OverlayData } from './ui/overlay';
+import { createHud } from './ui/hud/hud';
+import { buildHudModel } from './ui/hud/hudModel';
+import { projectMarker } from './ui/hud/downedMarkers';
 import { CLOSED, createShopMenu, gateControl, menuFeet, menuInput, shopMenuState, type ShopMenuState } from './ui/shopMenu';
 import { createRunMenu, inputFrozen, runMenuState, type RunMenuEvent, type RunMenuState } from './ui/runMenu';
 import type { TouchUi } from './ui/touchUi';
@@ -174,6 +177,19 @@ export function createGame(
     onMute: view.onMute,
   });
   runMenu.setMuted(view.muted);
+  const hudRoot = document.createElement('div');
+  document.body.append(hudRoot);
+  const hud = createHud(hudRoot, { touch: view.touchUi !== null, route: course.route });
+  const markerPoint = new THREE.Vector3();
+  const readDebugFlag = () => {
+    try {
+      return localStorage.getItem('lodgy.debug') === '1';
+    } catch {
+      return false;
+    }
+  };
+  // The debug overlay keeps updating while hidden.
+  overlay.hidden = !readDebugFlag();
   const { audio } = view;
   // The first snapshot of a game does not count as a win.
   let wasWon: boolean | null = null;
@@ -222,6 +238,11 @@ export function createGame(
     onClose: () => refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, true),
   });
   const onKeyDown = (event: KeyboardEvent) => {
+    if (event.code === 'F3') {
+      event.preventDefault();
+      if (!event.repeat) overlay.hidden = !overlay.hidden;
+      return;
+    }
     if (event.code !== 'Escape' || event.repeat) return;
     if (menuState.open) refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, true);
     else if (lobby.phase === 'playing') applyRun('esc');
@@ -381,7 +402,7 @@ export function createGame(
       updateFollowCamera(camera, vehicle, frameSeconds);
     }
     const latestCable = buffer.latestCable();
-    overlay.textContent = overlayText({
+    const overlayData: OverlayData = {
       lobby,
       config: vehicleConfig,
       tick: buffer.latestTick(),
@@ -399,7 +420,22 @@ export function createGame(
       stops: course.stops,
       targetTime: course.targetTime,
       touch: view.touchUi !== null,
+    };
+    overlay.textContent = overlayText(overlayData);
+    const hudModel = buildHudModel(overlayData, { checkpoints: course.checkpoints, finish: course.finish });
+    camera.updateMatrixWorld();
+    const markers = hudModel.downedOthers.map((other) => {
+      const projected = projectMarker(
+        (point) => markerPoint.set(point.x, point.y, point.z).project(camera),
+        (point) => markerPoint.set(point.x, point.y, point.z).applyMatrix4(camera.matrixWorldInverse).z,
+        other.pos,
+        window.innerWidth,
+        window.innerHeight,
+      );
+      return { id: other.id, name: other.name, seconds: other.seconds, ...projected };
     });
+    hud.update(hudModel, markers);
+    hud.setVisible(lobby.phase === 'playing' && !anyOpen());
     if (view.touchUi) {
       view.touchUi.update(touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable }));
       view.touchUi.setJoystick(hasJoystick(input) ? input.joystick() : null);
@@ -469,6 +505,7 @@ export function createGame(
       gate.release();
       shopMenu.dispose();
       runMenu.dispose();
+      hud.dispose();
       coinMeshes.dispose();
       input.dispose();
       predictor.dispose();
