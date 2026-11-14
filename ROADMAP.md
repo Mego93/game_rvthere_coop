@@ -61,7 +61,7 @@ Requires Node 22.12 or later. Node 23 and 25 work but print an `EBADENGINE` warn
 | `npm test` | Runs all unit, scenario and server integration tests once |
 | `npm run test:watch` | Runs tests on every change |
 | `npm run e2e` | Runs the browser tests (desktop, phone in WebKit, phone in Chromium); it starts its own server on port 3100. Without WebKit, run `npx playwright test -c e2e.local.config.ts --trace off` with an untracked local config that drops the WebKit project and points the others at a local Chromium |
-| `npm run share` | Builds and starts the server with `TRUST_PROXY=1` behind a Cloudflare quick tunnel and prints the public `https://….trycloudflare.com` address to share; needs `cloudflared` installed (`brew install cloudflared` on macOS) and no `~/.cloudflared/config.yml`; `--port N` or `PORT` changes the port |
+| `npm run share` | Builds and starts the server with `TRUST_PROXY=1` behind a Cloudflare quick tunnel and prints the public `https://….trycloudflare.com` address to share; needs `cloudflared` installed (`brew install cloudflared` on macOS) and no `~/.cloudflared/config.yml`; `--port N` or `PORT` changes the port; on Windows, `npm run share` and `npm run dev` may leave the node server running after a stop |
 | `node scripts/icons.mjs` | Regenerates the web app icons in `packages/client/public` (by hand; the PNGs are committed) |
 | `npm run typecheck` | Typechecks every package, config, experiment and the smoke test |
 | `npm run build` | Builds the client into `packages/client/dist` |

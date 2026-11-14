@@ -6,7 +6,8 @@ const killGroup = (child, signal) => {
     if (windows) child.kill(signal);
     else process.kill(-child.pid, signal);
   } catch (error) {
-    if (error.code !== 'ESRCH') throw error;
+    if (error.code === 'EPERM') console.error(`Could not stop process group ${child.pid}: ${error.message}`);
+    else if (error.code !== 'ESRCH') throw error;
   }
 };
 
@@ -14,7 +15,7 @@ const killGroup = (child, signal) => {
 // SIGTERM each group, then SIGKILL after 2 s for stragglers; the pending timer keeps the parent alive until then.
 export function makeStopAll(children) {
   let stopping = false;
-  return (code = 0) => {
+  const stopAll = (code = 0) => {
     if (stopping) return;
     stopping = true;
     for (const child of children) killGroup(child, 'SIGTERM');
@@ -23,6 +24,9 @@ export function makeStopAll(children) {
       process.exit(code);
     }, 2000);
   };
+  // True once a stop has begun, so a child's exit caused by it is not reported as news.
+  stopAll.isStopping = () => stopping;
+  return stopAll;
 }
 
 export const exitCodeOf = (code, signal) => (signal ? 1 : (code ?? 1));

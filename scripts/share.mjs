@@ -47,7 +47,9 @@ function run() {
   const children = [server, tunnel];
 
   const stopAll = makeStopAll(children);
-  tunnel.on('exit', (code, signal) => console.error(`cloudflared exited (${code ?? signal}).`));
+  tunnel.on('exit', (code, signal) => {
+    if (!stopAll.isStopping()) console.error(`cloudflared exited (${code ?? signal}).`);
+  });
   for (const child of children) child.on('exit', (code, signal) => stopAll(exitCodeOf(code, signal)));
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => stopAll(0));
   for (const child of children) child.on('error', (error) => {

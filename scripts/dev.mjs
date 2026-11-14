@@ -8,6 +8,8 @@ const children = ['@lodgy/server', '@lodgy/client'].map((workspace) =>
   spawn(npm, ['run', 'dev', '-w', workspace], {
     stdio: windows ? 'inherit' : ['ignore', 'inherit', 'inherit'],
     detached: !windows,
+    // Current Node refuses to start a .cmd file without a shell.
+    shell: windows,
     env: { ...process.env, LODGY_DEV: '1' },
   }),
 );
