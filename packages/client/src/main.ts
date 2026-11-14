@@ -12,6 +12,7 @@ import type { GameInput } from './input/source';
 import { createTouchSource } from './input/touch';
 import { createHome, errorText } from './ui/home';
 import { createLobby } from './ui/lobby';
+import { createResults } from './ui/results';
 import { createTouchUi } from './ui/touchUi';
 
 // Some private browsing modes refuse access to storage; the page then works without remembering anything.
@@ -39,7 +40,6 @@ const RAPIER_FAILED = 'The game could not load its physics engine. Reload the pa
 const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
 const overlay = document.querySelector<HTMLElement>('#overlay')!;
 const crosshair = document.querySelector<HTMLElement>('#crosshair')!;
-const resultsScreen = document.querySelector<HTMLElement>('#results')!;
 
 // Safari's pinch gesture would zoom the page.
 document.addEventListener('gesturestart', (event) => event.preventDefault());
@@ -58,6 +58,8 @@ let socket: GameSocket | null = null;
 let game: Game | null = null;
 let name = savedName(nameStore);
 let playerId = '';
+let adminId: string | null = null;
+let lastResults: ResultsMessage | null = null;
 let phase: Phase | null = null;
 // What the home page says when the socket next closes.
 let closeReason = CONNECTION_LOST;
@@ -80,6 +82,11 @@ const lobby = createLobby(document, {
   onKick: (target) => socket?.send({ type: 'kick', playerId: target }),
 });
 
+const results = createResults(document.querySelector<HTMLElement>('#results')!, {
+  onNext: () => socket?.send({ type: 'next' }),
+  onLobby: () => socket?.send({ type: 'toLobby' }),
+});
+
 const SOMETHING_WRONG = 'Something went wrong.';
 
 // Stops the run's drawing and input; the lobby and the home page take over the screen.
@@ -90,29 +97,27 @@ function stopGame() {
   overlay.textContent = '';
 }
 
-// The placeholder of step 11 task 4c, which builds the real results screen.
-function showResults(message: ResultsMessage) {
-  resultsScreen.textContent = `Results\n${message.courseId}\nFinal time ${message.finalTime.toFixed(1)} s`;
-  resultsScreen.hidden = false;
-}
-
 function onLobby(message: LobbyMessage) {
   phase = message.phase;
+  adminId = message.adminId;
+  if (message.phase !== 'results') lastResults = null;
   if (message.phase === 'lobby') {
     stopGame();
-    resultsScreen.hidden = true;
+    results.hide();
     lobby.show(message, playerId);
     return;
   }
   lobby.hide();
   if (message.phase === 'playing') {
-    resultsScreen.hidden = true;
+    results.hide();
     if (game) game.setLobby(message);
     else startGame(message);
     return;
   }
   // Results: a running game stays drawn, frozen; a player who joined now has none and sees only the results.
   game?.setLobby(message);
+  // An admin handover during results changes who sees the buttons.
+  if (lastResults) results.show(lastResults, adminId === playerId);
 }
 
 function onMessage(message: ServerMessage) {
@@ -125,16 +130,18 @@ function onMessage(message: ServerMessage) {
       home.hide();
       return;
     case 'lobby':
+    case 'results':
       try {
-        onLobby(message);
+        if (message.type === 'lobby') onLobby(message);
+        else if (phase === 'results') {
+          lastResults = message;
+          results.show(message, adminId === playerId);
+        }
       } catch (error) {
         console.error(error);
         closeReason = SOMETHING_WRONG;
         socket?.close();
       }
-      return;
-    case 'results':
-      if (phase === 'results') showResults(message);
       return;
     case 'snapshot':
       game?.pushSnapshot(message);
@@ -188,8 +195,10 @@ function onClose() {
   socket = null;
   stopGame();
   lobby.hide();
-  resultsScreen.hidden = true;
+  results.hide();
   playerId = '';
+  adminId = null;
+  lastResults = null;
   phase = null;
   home.setBusy(false);
   home.show({ room: roomFromPath(location.pathname), name, error: closeReason });

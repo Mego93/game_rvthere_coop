@@ -129,7 +129,7 @@ export function createGame(
   };
   const applyRun = (event: RunMenuEvent) => {
     const was = runState.open;
-    runState = runMenuState(runState, event, menuState.open);
+    runState = runMenuState(runState, event, menuState.open, lobby.phase === 'playing');
     if (runState.open === was) return;
     runMenu.setOpen(runState.open);
     if (runState.open) {
@@ -154,12 +154,23 @@ export function createGame(
     onRefill: () => closeRun({ type: 'adminTool', tool: 'refill' }),
     onKick: (target) => closeRun({ type: 'kick', playerId: target }),
   });
-  const updateRunMenu = () =>
-    runMenu.update(
-      lobby.adminId === playerId,
-      lobby.players.filter((entry) => entry.playerId !== playerId),
-    );
+  // The menu is rebuilt only when its content changes, so a click is not lost to a rebuild.
+  let runMenuKey = '';
+  const updateRunMenu = () => {
+    const isAdmin = lobby.adminId === playerId;
+    const kickable = lobby.players.filter((entry) => entry.playerId !== playerId).map((entry) => ({ playerId: entry.playerId, name: entry.name }));
+    const key = isAdmin ? JSON.stringify(kickable) : '';
+    if (runMenuKey === `${isAdmin}${key}`) return;
+    runMenuKey = `${isAdmin}${key}`;
+    runMenu.update(isAdmin, kickable);
+  };
+  // The corner button is only for the run.
+  const showMenuButton = () => {
+    const button = document.getElementById('touch-menu');
+    if (button) button.hidden = lobby.phase !== 'playing';
+  };
   updateRunMenu();
+  showMenuButton();
   view.touchUi?.onMenu(() => applyRun('button'));
   const refreshMenu = (feet: Vec3 | null, press: InteractAction | null, dismiss: boolean) => {
     const was = menuState.open;
@@ -187,7 +198,7 @@ export function createGame(
     onClose: () => refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, true),
   });
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.code !== 'Escape') return;
+    if (event.code !== 'Escape' || event.repeat) return;
     if (menuState.open) refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, true);
     else if (lobby.phase === 'playing') applyRun('esc');
   };
@@ -372,6 +383,7 @@ export function createGame(
     setLobby(next) {
       lobby = next;
       updateRunMenu();
+      showMenuButton();
       if (next.phase === 'playing') return;
       applyRun('phaseLeft');
       if (menuState.open) {

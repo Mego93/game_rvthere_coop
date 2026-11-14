@@ -331,3 +331,23 @@ test('the admin opens the run menu with Esc and sees the admin items @keyboard',
   await page.keyboard.press('Escape');
   await expect(page.locator('#run-menu')).toBeHidden();
 });
+
+test('the admin skips a checkpoint, drives to the finish, sees an assisted result and returns to the lobby @keyboard', async ({ page }) => {
+  test.slow();
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#run-menu')).toBeVisible();
+  await page.locator('#run-skip').click();
+  await expect(page.locator('#run-menu')).toBeHidden();
+  // Skipping places the admin beside the driver door at the next checkpoint.
+  await expect(page.locator('#overlay')).toContainText('E to board', { timeout: 10_000 });
+  await tap(page, 'KeyE');
+  await page.keyboard.down('KeyW');
+  await expect(page.locator('#results')).toBeVisible({ timeout: 20_000 });
+  await page.keyboard.up('KeyW');
+  await expect(page.locator('#results')).toContainText('assisted');
+  await page.locator('#results-lobby').click();
+  await expect(page.locator('#lobby')).toBeVisible();
+  await expect(page.locator('#results')).toBeHidden();
+});

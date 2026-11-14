@@ -162,7 +162,7 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
     if (status.won) {
       lines.push('FINISHED');
       const final = finalTime({ elapsed: status.elapsed, restarts: status.restarts, respawns: status.respawns, wallet: status.wallet });
-      const earned = stars({ restarts: status.restarts, finalTime: final, targetTime, coinsCollected: status.coinsCollected, coinsTotal: status.coinsTotal, assisted: false });
+      const earned = stars({ restarts: status.restarts, finalTime: final, targetTime, coinsCollected: status.coinsCollected, coinsTotal: status.coinsTotal, assisted: status.assisted });
       lines.push(`final    ${clock(final)}   stars ${earned.map((star) => (star ? '*' : '-')).join('')}`);
     }
   }

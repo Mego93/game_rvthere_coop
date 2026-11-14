@@ -40,6 +40,7 @@ export interface RunStatus {
   wallet: number;
   coinsCollected: number;
   coinsTotal: number;
+  assisted: boolean;
 }
 
 function blend(a: VehicleState, b: VehicleState, t: number): VehicleState {
@@ -172,8 +173,8 @@ export function createSnapshotBuffer(): SnapshotBuffer {
     latestStatus() {
       const newest = entries[entries.length - 1]?.snapshot;
       if (!newest) return null;
-      const { elapsed, checkpoint, checkpointCount, restarts, respawns, won, wallet, coinsCollected, coinsTotal } = newest;
-      return { elapsed, checkpoint, checkpointCount, restarts, respawns, won, wallet, coinsCollected, coinsTotal };
+      const { elapsed, checkpoint, checkpointCount, restarts, respawns, won, wallet, coinsCollected, coinsTotal, assisted } = newest;
+      return { elapsed, checkpoint, checkpointCount, restarts, respawns, won, wallet, coinsCollected, coinsTotal, assisted };
     },
     latestCoinsLeft: () => [...(entries[entries.length - 1]?.snapshot.coinsLeft ?? [])],
     latestProps: () => (entries[entries.length - 1]?.snapshot.props ?? []).map(copyProp),

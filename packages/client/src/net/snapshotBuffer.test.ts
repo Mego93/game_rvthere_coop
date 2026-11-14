@@ -369,8 +369,8 @@ test('latestStatus is null before any snapshot and then the newest snapshot\'s f
   expect(createSnapshotBuffer().latestStatus()).toBeNull();
   const buffer = createSnapshotBuffer();
   buffer.push(snapshot(3), 0);
-  buffer.push({ ...snapshot(6), checkpoint: 1, restarts: 2, respawns: 3, won: true, wallet: 1, coinsCollected: 2, coinsTotal: 2 }, 0.05);
-  expect(buffer.latestStatus()).toEqual({ elapsed: 6 / 60, checkpoint: 1, checkpointCount: 2, restarts: 2, respawns: 3, won: true, wallet: 1, coinsCollected: 2, coinsTotal: 2 });
+  buffer.push({ ...snapshot(6), checkpoint: 1, restarts: 2, respawns: 3, won: true, wallet: 1, coinsCollected: 2, coinsTotal: 2, assisted: true }, 0.05);
+  expect(buffer.latestStatus()).toEqual({ elapsed: 6 / 60, checkpoint: 1, checkpointCount: 2, restarts: 2, respawns: 3, won: true, wallet: 1, coinsCollected: 2, coinsTotal: 2, assisted: true });
   buffer.push(snapshot(4), 0.06);
   expect(buffer.latestStatus()?.elapsed).toBe(6 / 60);
 });

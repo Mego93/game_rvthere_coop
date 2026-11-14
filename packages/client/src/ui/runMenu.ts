@@ -4,13 +4,13 @@ export interface RunMenuState {
 
 export type RunMenuEvent = 'esc' | 'button' | 'resume' | 'shopOpened' | 'phaseLeft';
 
-// Esc toggles, but never while the shop menu is open (that Esc closes the shop menu); the touch button always opens.
-export function runMenuState(prev: RunMenuState, event: RunMenuEvent, shopOpen: boolean): RunMenuState {
+// Esc toggles, but never while the shop menu is open (that Esc closes the shop menu); the touch button opens; neither opens outside the playing phase.
+export function runMenuState(prev: RunMenuState, event: RunMenuEvent, shopOpen: boolean, playing = true): RunMenuState {
   switch (event) {
     case 'esc':
-      return { open: !shopOpen && !prev.open };
+      return { open: playing && !shopOpen && !prev.open };
     case 'button':
-      return { open: true };
+      return { open: playing };
     default:
       return { open: false };
   }

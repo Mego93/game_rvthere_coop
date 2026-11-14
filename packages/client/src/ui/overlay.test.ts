@@ -275,7 +275,7 @@ test('hints to refuel or repair when the selected item suits the vehicle and it 
   expect(lines([holding({ inventory: ['toString' as never, null, null] })], low).some((line) => line.includes('Hold F'))).toBe(false);
 });
 
-const run = (overrides: Partial<RunStatus> = {}): RunStatus => ({ elapsed: 0, checkpoint: 0, checkpointCount: 2, restarts: 0, respawns: 0, won: false, wallet: 0, coinsCollected: 0, coinsTotal: 4, ...overrides });
+const run = (overrides: Partial<RunStatus> = {}): RunStatus => ({ elapsed: 0, checkpoint: 0, checkpointCount: 2, restarts: 0, respawns: 0, won: false, wallet: 0, coinsCollected: 0, coinsTotal: 4, assisted: false, ...overrides });
 const withStatus = (status: RunStatus | null) =>
   overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [], localId: 'p1', predicted: null, server: null, ...noAim, status });
 
@@ -311,6 +311,10 @@ test('S16: shows the final time and the stars after FINISHED, only once won', ()
   expect(won[won.indexOf('FINISHED') + 1]).toBe('final    2:20.0   stars -**');
   expect(withFinal(run({ elapsed: 100, won: true, coinsCollected: 3 }))).toContain('final    1:40.0   stars **-');
   expect(withFinal(run({ elapsed: 300, won: true }), 200)).toContain('stars *--');
+});
+
+test('an assisted run shows no stars in the final line', () => {
+  expect(withFinal(run({ elapsed: 100, won: true, coinsCollected: 4, assisted: true }))).toContain('final    1:40.0   stars ---');
 });
 
 const course = getCourse('test');

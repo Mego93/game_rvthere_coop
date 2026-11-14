@@ -45,3 +45,8 @@ test('L19: input is neutral while either menu is open, with the slot kept from t
   }
   expect(menuInput(false, sampled, last)).toEqual(sampled);
 });
+
+test('L19: neither Esc nor the touch button opens the menu outside the playing phase', () => {
+  expect(runMenuState(CLOSED, 'button', false, false).open).toBe(false);
+  expect(runMenuState(CLOSED, 'esc', false, false).open).toBe(false);
+});
