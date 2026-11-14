@@ -219,7 +219,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     for (const player of players) if (player.connected) inputs.set(player.playerId, player.queue.next().input);
     const events = current.step(inputs);
     if (events.some((event) => event.kind === 'vehicleLost')) restarted = true;
-    for (const event of events) broadcast({ type: 'event', ...event, tick: event.tick + tickOffset } as EventMessage);
+    for (const event of events) broadcast({ type: 'event', ...event, tick: event.tick + tickOffset } satisfies EventMessage);
     tick += 1;
     worldTicks += 1;
     if (current.status().state === 'won') {

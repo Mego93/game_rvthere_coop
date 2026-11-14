@@ -14,7 +14,7 @@ import { aimRay, createPlayers, type PendingDamage, type PlayerState, type StepI
 import { elapsedAfter, finalTime, reachedFinish, vehicleLost } from './rules';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
-import { NEUTRAL_INPUT, type InputFields, type PlayerSnapshot } from './protocol';
+import { NEUTRAL_INPUT, type EventKind, type InputFields, type PlayerSnapshot } from './protocol';
 import type { Rapier, RigidBody } from './rapier';
 import { buildStatics } from './statics';
 import { stopUsable } from './stops';
@@ -30,7 +30,7 @@ export interface WorldOptions {
 }
 
 export interface WorldEvent {
-  kind: string;
+  kind: EventKind;
   tick: number;
   playerId?: string;
   pos?: Vec3;
@@ -320,14 +320,14 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         winch.take(player.id);
         if (winch.state().holderId === player.id) players.setHands(player.id, 'hook');
       } else if (action?.kind === 'detachHook') {
-        const at = { ...winch.state().hookPos };
+        const before = winch.state();
         winch.detach(player.id);
-        events.push({ kind: 'hookDetach', tick: tick + 1, playerId: player.id, pos: at });
+        if (before.state === 'attached') events.push({ kind: 'hookDetach', tick: tick + 1, playerId: player.id, pos: { ...before.hookPos } });
         if (winch.state().holderId === player.id) players.setHands(player.id, 'hook');
       } else if (action?.kind === 'releaseHook') {
-        const at = { ...winch.state().hookPos };
+        const before = winch.state();
         winch.release();
-        events.push({ kind: 'hookDetach', tick: tick + 1, playerId: player.id, pos: at });
+        if (before.state === 'attached') events.push({ kind: 'hookDetach', tick: tick + 1, playerId: player.id, pos: { ...before.hookPos } });
       } else if (action?.kind === 'operate') {
         // Rule V6: an item hold running blocks it, as does an operate hold already running.
         if (player.hold === null) operatePressed.set(player.id, action.stopId);

@@ -75,13 +75,21 @@ test('E3b: a held slot gets no events, and none of the missed ones after it rejo
   expect(events(again)).toEqual([]);
 });
 
-test('E3c: no event follows the results of the winning tick, and none are sent in the lobby or results', () => {
+test('E3c: an event of the winning tick comes before the snapshot and results, and none follow, in results or the lobby', () => {
   const { host, advance, server } = setup(true);
   const { client, room } = host();
   startRun(client);
+  server.debugWorld(room)!.debugHurt('p1', 10);
   advance(0.2);
   const types = client.received.map((message) => message.type);
-  expect(types.at(-1)).toBe('results');
+  const hurt = client.received.findIndex((message) => message.type === 'event');
+  const snapshot = types.indexOf('snapshot');
+  const results = types.indexOf('results');
+  expect(hurt).toBeGreaterThanOrEqual(0);
+  expect(hurt).toBeLessThan(snapshot);
+  expect(snapshot).toBeLessThan(results);
+  expect(results).toBe(types.length - 1);
+  expect(events(client)[0]).toMatchObject({ kind: 'hurt', tick: client.last('snapshot').tick });
   const count = events(client).length;
   server.debugWorld(room)?.debugHurt('p1', 10);
   advance(2);
