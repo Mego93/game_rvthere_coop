@@ -354,5 +354,5 @@ export const RAIN_GRIP = 0.75;
 export const HELD_SLOT_TIMEOUT = 30;
 // s a room refuses to build another world after building one, so an admin cannot rebuild at message rate.
 export const WORLD_REBUILD_COOLDOWN = 1;
-// Course ids in campaign order; step 16 replaces it with the real campaign.
+// Course ids in campaign order.
 export const CAMPAIGN: readonly string[] = deepFreeze(['airport']);
