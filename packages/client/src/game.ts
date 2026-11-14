@@ -52,6 +52,15 @@ import { createRunMenu, inputFrozen, runMenuState, type RunMenuEvent, type RunMe
 import type { TouchUi } from './ui/touchUi';
 import { touchView } from './ui/touchView';
 
+// Survives a restart of the run, so an F3 toggle sticks; the stored flag only sets the first value.
+let debugShown = (() => {
+  try {
+    return localStorage.getItem('lodgy.debug') === '1';
+  } catch {
+    return false;
+  }
+})();
+
 // A frame longer than this (a background tab, a debugger pause) is treated as this long.
 const MAX_FRAME_SECONDS = 0.25;
 const LOOPS = ['engine', 'winch', 'rain'] as const;
@@ -181,15 +190,10 @@ export function createGame(
   document.body.append(hudRoot);
   const hud = createHud(hudRoot, { touch: view.touchUi !== null, route: course.route });
   const markerPoint = new THREE.Vector3();
-  const readDebugFlag = () => {
-    try {
-      return localStorage.getItem('lodgy.debug') === '1';
-    } catch {
-      return false;
-    }
-  };
+  const project = (point: Vec3) => markerPoint.set(point.x, point.y, point.z).project(camera);
+  const cameraSpaceZ = (point: Vec3) => markerPoint.set(point.x, point.y, point.z).applyMatrix4(camera.matrixWorldInverse).z;
   // The debug overlay keeps updating while hidden.
-  overlay.hidden = !readDebugFlag();
+  overlay.hidden = !debugShown;
   const { audio } = view;
   // The first snapshot of a game does not count as a win.
   let wasWon: boolean | null = null;
@@ -240,7 +244,7 @@ export function createGame(
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.code === 'F3') {
       event.preventDefault();
-      if (!event.repeat) overlay.hidden = !overlay.hidden;
+      if (!event.repeat) overlay.hidden = debugShown = !debugShown;
       return;
     }
     if (event.code !== 'Escape' || event.repeat) return;
@@ -425,13 +429,7 @@ export function createGame(
     const hudModel = buildHudModel(overlayData, { checkpoints: course.checkpoints, finish: course.finish });
     camera.updateMatrixWorld();
     const markers = hudModel.downedOthers.map((other) => {
-      const projected = projectMarker(
-        (point) => markerPoint.set(point.x, point.y, point.z).project(camera),
-        (point) => markerPoint.set(point.x, point.y, point.z).applyMatrix4(camera.matrixWorldInverse).z,
-        other.pos,
-        window.innerWidth,
-        window.innerHeight,
-      );
+      const projected = projectMarker(project, cameraSpaceZ, other.pos, window.innerWidth, window.innerHeight);
       return { id: other.id, name: other.name, seconds: other.seconds, ...projected };
     });
     hud.update(hudModel, markers);

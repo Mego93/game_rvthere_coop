@@ -23,8 +23,8 @@ const STYLE = `
 #hud-compass-left { left: 8px; }
 #hud-compass-right { right: 8px; }
 #hud-compass-centre { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255, 255, 255, 0.35); }
-#hud-minimap { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); background: rgba(0, 0, 0, 0.55); border-radius: 8px; }
-#hud.touch #hud-minimap { top: calc(56px + env(safe-area-inset-top)); }
+#hud-minimap { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: calc(8px + env(safe-area-inset-left)); background: rgba(0, 0, 0, 0.55); border-radius: 8px; }
+#hud.touch #hud-vehicle { top: calc(56px + env(safe-area-inset-top)); }
 #hud-minimap .route { fill: none; stroke: rgba(255, 255, 255, 0.5); stroke-width: 2; stroke-linejoin: round; }
 #hud-minimap .vehicle { fill: #ffd34e; }
 #hud-minimap .self { fill: #4ec3ff; }
@@ -34,7 +34,7 @@ const STYLE = `
 #hud-minimap .checkpoint { fill: none; stroke: #fff; stroke-width: 2; }
 #hud-minimap .checkpoint.reached { opacity: 0.3; }
 #hud-minimap .tick { stroke: #4ec3ff; stroke-width: 2; }
-#hud-vehicle { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: calc(8px + env(safe-area-inset-left)); display: grid; gap: 4px; min-width: 130px; }
+#hud-vehicle { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); display: grid; gap: 4px; min-width: 130px; }
 #hud-vehicle .row { display: grid; grid-template-columns: 38px 1fr; gap: 6px; align-items: center; font-size: 11px; }
 #hud .bar { height: 8px; background: rgba(255, 255, 255, 0.2); border-radius: 4px; overflow: hidden; }
 #hud .bar > i { display: block; height: 100%; width: 100%; background: #6ee07a; transform-origin: left; }
@@ -42,7 +42,7 @@ const STYLE = `
 #hud .bar.low > i { background: #ff4e4e; }
 #hud-meta { display: flex; justify-content: space-between; font: 600 12px/1.2 ui-monospace, Menlo, monospace; }
 #hud-health { position: absolute; left: calc(8px + env(safe-area-inset-left)); bottom: calc(8px + env(safe-area-inset-bottom)); width: 130px; }
-#hud-slots { position: absolute; left: 50%; bottom: calc(8px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 6px; }
+#hud-slots { position: absolute; right: calc(8px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); display: flex; gap: 6px; }
 #hud-slots .slot { width: 64px; height: 44px; display: grid; place-items: center; box-sizing: border-box; background: rgba(0, 0, 0, 0.55); border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 8px; font-size: 12px; }
 #hud-slots .slot.selected { border-color: #ffd34e; box-shadow: 0 0 0 2px #ffd34e; }
 #hud-prompt { position: absolute; left: 50%; bottom: calc(72px + env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: 70vw; text-align: center; white-space: pre; }
@@ -75,23 +75,19 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
   style.textContent = STYLE;
   root.append(style);
 
-  // Each setter writes to the DOM only when the value differs from the last one written (H17).
-  const last = new Map<object, unknown>();
-  const changed = (key: object, value: unknown) => {
-    if (last.get(key) === value) return false;
-    last.set(key, value);
+  // Each setter writes to the DOM only when the value differs from the last one written for that node and slot (H17).
+  const cache = new WeakMap<object, Map<string, unknown>>();
+  const changed = (node: object, slot: string, value: unknown) => {
+    let slots = cache.get(node);
+    if (!slots) cache.set(node, (slots = new Map()));
+    if (slots.get(slot) === value) return false;
+    slots.set(slot, value);
     return true;
   };
-  const text = (node: Node, value: string) => { if (changed(node, value)) node.textContent = value; };
-  const toggle = (node: HTMLElement, name: 'hidden', on: boolean) => { if (changed(node, on)) node[name] = on; };
-  const flag = (node: HTMLElement, cls: string, on: boolean) => {
-    const bucket = flagKeys.get(node) ?? new Map<string, object>();
-    flagKeys.set(node, bucket);
-    const stored = bucket.get(cls) ?? {};
-    bucket.set(cls, stored);
-    if (changed(stored, on)) node.classList.toggle(cls, on);
-  };
-  const flagKeys = new WeakMap<HTMLElement, Map<string, object>>();
+  const text = (node: Node, value: string) => { if (changed(node, 'text', value)) node.textContent = value; };
+  const toggle = (node: HTMLElement, on: boolean) => { if (changed(node, 'hidden', on)) node.hidden = on; };
+  const flag = (node: HTMLElement, cls: string, on: boolean) => { if (changed(node, `class:${cls}`, on)) node.classList.toggle(cls, on); };
+  const scale = (node: HTMLElement, value: number) => { if (changed(node, 'scale', value)) node.style.transform = `scaleX(${value})`; };
 
   const compass = el('div', root, 'hud-compass');
   el('div', compass, 'hud-compass-centre');
@@ -146,17 +142,17 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
 
   const markerNodes = new Map<string, HTMLElement>();
 
+  let drawn: { id: string; kind: string; px: number; py: number; flags: string }[] = [];
   const renderMap = (entities: HudModel['mapEntities']) => {
-    const signature = entities
-      .map((e) => {
-        const p = clampToMap(view, toMap(view, e.x, e.z));
-        return `${e.id}|${e.kind}|${p.x.toFixed(1)}|${p.y.toFixed(1)}|${e.reached ? 1 : 0}|${e.stopKind ?? ''}|${e.yaw === undefined ? '' : e.yaw.toFixed(2)}`;
-      })
-      .join(';');
-    if (!changed(dots, signature)) return;
-    dots.replaceChildren();
-    for (const e of entities) {
+    const next = entities.map((e) => {
       const p = clampToMap(view, toMap(view, e.x, e.z));
+      return { id: e.id, kind: e.kind, px: Math.round(p.x * 2) / 2, py: Math.round(p.y * 2) / 2, flags: `${e.reached ? 1 : 0}${e.stopKind ?? ''}${e.yaw === undefined ? '' : Math.round(e.yaw * 20)}`, e, p };
+    });
+    const same = next.length === drawn.length && next.every((n, i) => n.id === drawn[i]!.id && n.kind === drawn[i]!.kind && n.px === drawn[i]!.px && n.py === drawn[i]!.py && n.flags === drawn[i]!.flags);
+    if (same) return;
+    drawn = next;
+    dots.replaceChildren();
+    for (const { e, p } of next) {
       if (e.kind === 'checkpoint') svg('circle', dots, { cx: p.x, cy: p.y, r: 5 }, e.reached ? 'checkpoint reached' : 'checkpoint');
       else if (e.kind === 'stop') svg('rect', dots, { x: p.x - 4, y: p.y - 4, width: 8, height: 8 }, e.stopKind === 'garage' ? 'stop-garage' : 'stop-fuel');
       else if (e.kind === 'vehicle') svg('rect', dots, { x: p.x - 5, y: p.y - 5, width: 10, height: 10, rx: 2 }, 'vehicle');
@@ -172,10 +168,10 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
 
   return {
     update(model, markers) {
-      toggle(compassMarker, 'hidden', model.compass.marker === null);
-      if (model.compass.marker !== null && changed(compassMarker, model.compass.marker)) compassMarker.style.left = `${(model.compass.marker * 100).toFixed(1)}%`;
-      toggle(compassLeft, 'hidden', model.compass.side !== -1);
-      toggle(compassRight, 'hidden', model.compass.side !== 1);
+      toggle(compassMarker, model.compass.marker === null);
+      if (model.compass.marker !== null && changed(compassMarker, 'left', model.compass.marker)) compassMarker.style.left = `${(model.compass.marker * 100).toFixed(1)}%`;
+      toggle(compassLeft, model.compass.side !== -1);
+      toggle(compassRight, model.compass.side !== 1);
       text(compassLabel, model.compass.label);
 
       renderMap(model.mapEntities);
@@ -183,15 +179,15 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       const v = model.vehicle;
       const fuel = v ? Math.max(0, Math.min(1, v.fuel)) : 0;
       const hull = v ? Math.max(0, Math.min(1, v.health)) : 0;
-      if (changed(fuelBar.fill, fuel)) fuelBar.fill.style.transform = `scaleX(${fuel})`;
-      if (changed(vehicleHealthBar.fill, hull)) vehicleHealthBar.fill.style.transform = `scaleX(${hull})`;
+      scale(fuelBar.fill, fuel);
+      scale(vehicleHealthBar.fill, hull);
       flag(fuelBar.track, 'low', !!v?.fuelLow);
       flag(vehicleHealthBar.track, 'low', !!v?.healthLow);
       text(timer, model.timer);
       text(wallet, `$${model.wallet}`);
 
       const own = Math.max(0, Math.min(1, model.ownHealth));
-      if (changed(ownFill, own)) ownFill.style.transform = `scaleX(${own})`;
+      scale(ownFill, own);
       flag(ownHealth, 'low', own < 0.2);
 
       model.slots.forEach((slot, i) => {
@@ -202,10 +198,10 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       });
 
       text(promptText, model.prompt ?? '');
-      toggle(hold, 'hidden', model.hold === null);
-      if (model.hold !== null && changed(holdFill, model.hold)) holdFill.style.transform = `scaleX(${Math.max(0, Math.min(1, model.hold))})`;
+      toggle(hold, model.hold === null);
+      if (model.hold !== null) scale(holdFill, Math.max(0, Math.min(1, model.hold)));
 
-      toggle(downed, 'hidden', model.downedSelf === null);
+      toggle(downed, model.downedSelf === null);
       if (model.downedSelf !== null) text(downed, `DOWNED ${model.downedSelf}s`);
 
       const seen = new Set<string>();
@@ -216,10 +212,10 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
           node = el('div', root, undefined, 'marker');
           markerNodes.set(marker.id, node);
         }
-        toggle(node, 'hidden', marker.behind);
+        toggle(node, marker.behind);
         text(node, `${marker.name} ${marker.seconds}s`);
         const position = `${marker.x.toFixed(0)}px,${marker.y.toFixed(0)}px`;
-        if (changed(node.style, position)) {
+        if (changed(node, 'pos', position)) {
           node.style.left = `${marker.x.toFixed(0)}px`;
           node.style.top = `${marker.y.toFixed(0)}px`;
         }
@@ -227,18 +223,15 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       for (const [id, node] of markerNodes) {
         if (seen.has(id)) continue;
         node.remove();
-        last.delete(node);
-        last.delete(node.style);
         markerNodes.delete(id);
       }
     },
     setVisible(visible) {
-      toggle(root, 'hidden', !visible);
+      toggle(root, !visible);
     },
     dispose() {
       root.remove();
       markerNodes.clear();
-      last.clear();
     },
   };
 }
