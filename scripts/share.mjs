@@ -1,6 +1,7 @@
 // Starts the server behind a Cloudflare quick tunnel and prints the public address.
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { makeStopAll } from './stopGroups.mjs';
 import { parseShareArgs, tunnelUrl } from './shareLib.mjs';
 
 const parsed = parseShareArgs(process.argv.slice(2), process.env);
@@ -25,12 +26,10 @@ probe.on('error', (error) => {
   console.error(`Could not run cloudflared: ${error.message}`);
   process.exit(1);
 });
-probe.on('exit', (code) => {
-  if (code === 0) run();
-  else if (code !== null) {
-    console.error(`cloudflared --version exited with code ${code}.`);
-    process.exit(1);
-  }
+probe.on('exit', (code, signal) => {
+  if (code === 0) return run();
+  console.error(code === null ? `cloudflared --version was stopped by ${signal}.` : `cloudflared --version exited with code ${code}.`);
+  process.exit(1);
 });
 
 function run() {
@@ -47,16 +46,8 @@ function run() {
   });
   const children = [server, tunnel];
 
-  const stopAll = () => {
-    for (const child of children) {
-      try {
-        if (windows) child.kill();
-        else process.kill(-child.pid, 'SIGTERM');
-      } catch (error) {
-        if (error.code !== 'ESRCH') throw error;
-      }
-    }
-  };
+  const stopAll = makeStopAll(children);
+  tunnel.on('exit', (code, signal) => console.error(`cloudflared exited (${code ?? signal}).`));
   for (const child of children) child.on('exit', stopAll);
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, stopAll);
   for (const child of children) child.on('error', (error) => {
@@ -68,9 +59,12 @@ function run() {
   for (const stream of [tunnel.stdout, tunnel.stderr]) {
     createInterface({ input: stream }).on('line', (line) => {
       const url = tunnelUrl(line);
-      if (url && !printed) {
+      if (!url) {
+        if (line.trim()) console.error(line);
+      } else if (!printed) {
         printed = true;
-        console.log(`\nShare this address: ${url}\n`);
+        console.log(`\nShare this address: ${url}`);
+        console.log('Friends can open it once the server says it is listening.\n');
       }
     });
   }
