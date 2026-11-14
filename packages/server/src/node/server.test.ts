@@ -146,6 +146,8 @@ test('two clients share a room, and the one who boards the driver seat drives th
   expect(welcome).toEqual({ type: 'welcome', playerId: 'p2', room });
 
   // Badr readies up and Amal starts the run.
+  amal.send({ type: 'configure', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'clear' });
+  await amal.waitFor((message): message is Extract<ServerMessage, { type: 'lobby' }> => message.type === 'lobby' && message.courseId === 'test');
   badr.send({ type: 'ready', ready: true });
   await amal.waitFor((message): message is Extract<ServerMessage, { type: 'lobby' }> => message.type === 'lobby' && message.players.every((player) => player.ready || player.playerId === 'p1'));
   amal.send({ type: 'start' });
@@ -205,6 +207,8 @@ test('L22: two clients ready up, start, board, and drive the Lodgy to the finish
   badr.socket.on('message', (data) => {
     if ((JSON.parse(data.toString()) as ServerMessage).type === 'ping') badr.send({ type: 'pong' });
   });
+  amal.send({ type: 'configure', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'clear' });
+  await amal.waitFor((message): message is Extract<ServerMessage, { type: 'lobby' }> => message.type === 'lobby' && message.courseId === 'test');
   badr.send({ type: 'ready', ready: true });
   await amal.waitFor((message): message is Extract<ServerMessage, { type: 'lobby' }> => message.type === 'lobby' && message.players.every((player) => player.ready || player.playerId === 'p1'));
   amal.send({ type: 'start' });
