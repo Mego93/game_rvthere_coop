@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import type { SnapshotMessage } from '../protocol';
 import { getVehicleConfig, VEHICLES, type VehicleId } from '../vehicles';
 import { createWorld } from '../world';
+import { airport } from './airport';
 import { driveRun } from './driveRig';
 import { getCourse } from './index';
 
@@ -15,9 +16,9 @@ beforeAll(async () => {
 });
 
 const course = getCourse('airport');
-const FUEL_SEGMENT = 3;
-const BANK = 8;
-const ROADWORKS = 10;
+const FUEL_SEGMENT = airport.segments.findIndex((s) => s.stop?.kind === 'fuel');
+const BANK = airport.segments.findIndex((s) => s.type === 'bank');
+const ROADWORKS = airport.segments.findIndex((s) => s.type === 'roadworks');
 const LAST = course.checkpoints.length - 1;
 
 type Leg = [from: number, to: number | 'finish'];
@@ -65,25 +66,24 @@ describe('C6 snapshot size and tick cost with 6 players', () => {
     return world;
   };
 
-  const messageSize = (props: SnapshotMessage['props'], full: boolean) => {
+  const messageSize = (full: boolean) => {
     const world = sixPlayerWorld();
     for (let i = 0; i < 20; i++) world.step(new Map());
     const snapshot = world.snapshot();
-    const message: SnapshotMessage = { type: 'snapshot', ...snapshot, props: props.length ? snapshot.props : props, ackSeq: 0, full };
-    return JSON.stringify(message).length; // ASCII only, so characters equal bytes
+    const message: SnapshotMessage = { type: 'snapshot', ...snapshot, props: full ? snapshot.props : [], ackSeq: 0, full };
+    world.dispose();
+    return { bytes: JSON.stringify(message).length, props: message.props.length }; // ASCII only, so characters equal bytes
   };
 
   test('the steady-state snapshot (no moved props, as the room sends after a first one) is under 4096 bytes', () => {
-    const bytes = messageSize([], false);
+    const { bytes } = messageSize(false);
     console.info(`C6 steady-state snapshot (JSON text, props: [], full: false): ${bytes} bytes`);
     expect(bytes).toBeLessThan(4096);
   });
 
   test('the full snapshot (all props, as sent on join) is under 12288 bytes', () => {
-    const world = sixPlayerWorld();
-    for (let i = 0; i < 20; i++) world.step(new Map());
-    const bytes = messageSize(world.snapshot().props, true);
-    console.info(`C6 full snapshot (JSON text, ${world.snapshot().props.length} props, full: true): ${bytes} bytes`);
+    const { bytes, props } = messageSize(true);
+    console.info(`C6 full snapshot (JSON text, ${props} props, full: true): ${bytes} bytes`);
     expect(bytes).toBeLessThan(12288);
   });
 
@@ -93,6 +93,7 @@ describe('C6 snapshot size and tick cost with 6 players', () => {
     const start = performance.now();
     for (let i = 0; i < 300; i++) world.step(new Map());
     const average = (performance.now() - start) / 300;
+    world.dispose();
     console.info(`C6 world.step with 6 players: ${average.toFixed(3)} ms per tick`);
     expect(average).toBeLessThan(4);
   });

@@ -279,20 +279,33 @@ describe.each(Object.keys(DEFS) as (keyof typeof DEFS)[])('structure of %s', (id
     });
   });
 
-
-  test('T1: all six segment types, one fuel stop with its shop, one garage, coins, every pickup kind', () => {
-    if (id !== 'airport') return;
-    expect(new Set(def.segments.map((s) => s.type))).toEqual(new Set(['road', 'alley', 'sand', 'ford', 'bank', 'roadworks']));
-    expect(course.stops.map((s) => s.kind).sort()).toEqual(['fuel', 'garage']);
-    expect(course.stops.find((s) => s.kind === 'fuel')!.shopCounter).toBeDefined();
-    expect(course.coins.length).toBeGreaterThan(0);
-    expect(new Set(course.pickups.map((p) => p.kind))).toEqual(new Set(Object.keys(ITEM_KINDS)));
-  });
-
   test('T2: no checkpoint spawn is on sand', () => {
     for (const cp of course.checkpoints) {
-      expect(groundSurfaceAt(course.ground, cp.spawn.pos.x, cp.spawn.pos.z), cp.id).not.toBe('sand');
+      const surface = groundSurfaceAt(course.ground, cp.spawn.pos.x, cp.spawn.pos.z);
+      expect(surface, cp.id).not.toBeNull();
+      expect(surface, cp.id).not.toBe('sand');
     }
+  });
+});
+
+describe('airport', () => {
+  const airportCourse = getCourse('airport');
+
+  test('T1: all six segment types, one fuel stop with its shop, one garage, coins, every pickup kind', () => {
+    expect(new Set(airport.segments.map((s) => s.type))).toEqual(new Set(['road', 'alley', 'sand', 'ford', 'bank', 'roadworks']));
+    expect(airportCourse.stops.map((s) => s.kind).sort()).toEqual(['fuel', 'garage']);
+    expect(airportCourse.stops.find((s) => s.kind === 'fuel')!.shopCounter).toBeDefined();
+    expect(airportCourse.coins.length).toBeGreaterThan(0);
+    expect(new Set(airportCourse.pickups.map((p) => p.kind))).toEqual(new Set(Object.keys(ITEM_KINDS)));
+  });
+
+  test('T2: the sand segment\'s checkpoint spawn is on a non-sand surface', () => {
+    const sandIndex = airport.segments.findIndex((s) => s.type === 'sand');
+    const cp = airportCourse.checkpoints.find((c) => c.id === `cp-${sandIndex}`)!;
+    expect(cp).toBeDefined();
+    const surface = groundSurfaceAt(airportCourse.ground, cp.spawn.pos.x, cp.spawn.pos.z);
+    expect(surface).not.toBeNull();
+    expect(surface).not.toBe('sand');
   });
 });
 

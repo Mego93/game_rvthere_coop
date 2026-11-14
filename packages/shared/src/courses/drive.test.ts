@@ -16,14 +16,14 @@ const ROADWORKS = airport.segments.findIndex((s) => s.type === 'roadworks');
 const SEGMENTS = airport.segments.map((s, i) => ({ i, type: s.type })).filter((s) => s.i !== ROADWORKS);
 
 // Spec: the RV fails a medium slope unaided; the bank has anchors for the winch.
-const RV_NEEDS_WINCH = new Set([8]);
+const RV_NEEDS_WINCH = new Set([airport.segments.findIndex((s) => s.type === 'bank')]);
 
 describe.each(Object.keys(VEHICLES))('T3 drive the %s through course 1', (vehicleId) => {
   test.each(SEGMENTS.filter((s) => vehicleId !== 'rv' || !RV_NEEDS_WINCH.has(s.i)))('segment $i ($type) is driven within the time limit', ({ i, type }) => {
     const config = VEHICLES[vehicleId as keyof typeof VEHICLES];
     const limit = timeLimit(segmentRouteLength(course, i), config.maxSpeed);
     const result = driveSegment(RAPIER, vehicleId, course, i);
-    expect(result.reached, `${vehicleId} segment ${i}: ${result.seconds.toFixed(1)} s of ${limit.toFixed(1)} s`).toBe(true);
+    expect(result.reached, `${vehicleId} segment ${i}: ${result.seconds.toFixed(1)} s of ${limit.toFixed(1)} s; speed ${result.trace.map((p) => p.speed.toFixed(1)).join(' ')}`).toBe(true);
   }, 120_000);
 });
 
