@@ -13,32 +13,50 @@ The spec's step 17 is "the RV: mesh and handling pass over course 1". Per CLAUDE
 
 ## Files
 
-- `packages/client/src/render/vehicleMesh.ts`: `createVehicleMesh(config)` builds the RV from the parts in M1 when `config.id === 'rv'`; the Lodgy keeps its current look.
+- `packages/client/src/render/vehicleMesh.ts`: `createVehicleMesh(config)` builds the RV from the parts in M1 when `config.id === 'rv'`; the Lodgy keeps its current look. Every part sets `mesh.name`.
 - `packages/client/src/render/vehicleMesh.test.ts` (new).
-- `packages/shared/src/courses/courses.test.ts` (from step 16): the RV drive test also runs with 50% fuel.
+- `packages/shared/src/courses/driveRig.ts` (new, created in this step by moving the step 16 drive controller out of the test file): `timeLimit(routeLength: number, maxSpeed: number): number` (`15 + routeLength / (0.3 * maxSpeed)`), `driveSegment(rapier, vehicleId: string, course: BuiltCourse, segmentIndex: number, opts?: { fuel?: number }): { reached: boolean; seconds: number; trace: { t: number; speed: number; fuel: number }[] }`. The fuel is set through `rig.vehicle.resetTo(spawn, fuel, 1)`. The step 16 test file `courses/courses.test.ts` changes only its imports.
+- `experiments/rv/rv.experiment.ts` (new): the measurements script. `package.json`: add `"experiment:rv": "vitest run --config experiments/vitest.config.ts --reporter=verbose experiments/rv"` and append `experiments/cable` to the `experiment:cable` script so the two do not run each other's files.
 - `ROADMAP.md`: a working note "RV measurements" and the status.
 
 ## Behaviour rules
 
-M1. The RV mesh is a group of boxes: a cargo body (the rear 65% of the length, full height), a cab (the front 35%, 20% lower than the body, with a bonnet step), a dark windscreen on the front face as now, dark side windows on both sides of the cab and the body, a rear panel, a roof vent, a dark front bumper, and wheels with dark wheel arches. Colours: cream body (the current `0xefe6d2`), a stripe of terracotta (`0xc1623f`) along both sides, dark glass (`0x1f2937`), tyres (`0x111827`). The front (-Z) stays marked by the windscreen so the direction is readable.
-M2. Every part lies inside the vehicle's collision box expanded by 0.15 m on every side (the roof vent may rise 0.15 m above). The wheels sit where the config puts them (`wheelX`, `wheelY - suspensionRest`, `wheelZ`), as now. The group's origin is the vehicle's centre, as now, so `placeVehicleMesh` is unchanged.
-M3. `createVehicleMesh('lodgy')` produces exactly what it does today (the existing tests, if any, pass; no change to the Lodgy).
-M4. Mesh disposal: `disposeScene` already disposes geometries and materials of any group; the RV mesh creates no textures and no shared module-level materials that a disposal could break (each part makes its own material, as `part` does).
-M5. RV completability at 50% fuel: for every segment of `airport` except the roadworks, the RV starting at the segment's checkpoint spawn with fuel 0.5 reaches the next checkpoint (the finish for the last segment), using the step 16 controller and time limit. This is a variant of the step 16 drive test (fuel parameter), not a new controller.
-M6. Handling measurements (recorded, not asserted beyond M5): for the RV and the Lodgy on `airport`: top speed reached on the first road segment; time from standstill to 10 m/s on road; speed at the end of the sand segment, entering with the speed reached from the apron; time through the ford; and time through the bank. Written by a script `experiments/rv/rv.measurements.ts` that prints a table (like `experiments/cable`), run with `npm run experiment:rv`. The script uses the same rig and controller as the drive tests (import them from a shared test helper; if they live inside a test file, move them to `packages/shared/src/courses/driveRig.ts` and import from both; the step 16 tests change only their import).
+M1. The RV mesh is a group of named boxes, in the vehicle's frame (origin at its centre, front at -Z). With `h = (1.15, 1.2, 3.4)`:
+- `body`: the cargo body, z from -1.02 to 3.4, full height (y from -1.2 to 1.2), full width.
+- `cab`: z from -3.4 to -1.02, y from -1.2 to 0.72 (80% of the height), full width. No separate bonnet.
+- `windscreen`: dark, 2.07 wide, 0.7 tall, 0.1 deep, centred at (0, 0.30, -3.43) on the cab's front face (as now, in the dark glass colour).
+- `window` ×4: dark, 0.05 deep, 1.0 long × 0.5 tall: two on each side, one in the cab (z -2.2, y 0.25) and one in the body (z 1.0, y 0.4), flush against the side faces (x = ±1.17).
+- `rear`: a slightly darker panel 2.0 × 1.6 × 0.05 on the rear face (z 3.42, y 0.0).
+- `vent`: a roof vent 0.8 × 0.15 × 0.8 at (0, 1.275, 0.8).
+- `bumper`: dark 2.3 × 0.3 × 0.3 at (0, -0.95, -3.55).
+- `stripe` ×2: terracotta, 0.03 deep, 4.0 long × 0.3 tall on both sides along the body and cab, at y -0.3, x = ±1.17.
+- `arch` ×4: dark, 0.3 wide × 0.4 tall × 1.0 long, centred at x = ±1.15, y = -1.0, z = ±2.3 (the wheel's z, `wheelZ`).
+- `wheel` ×4: 0.25 × 0.8 × 0.8, at (±wheelX, wheelY - suspensionRest, ±wheelZ) = (±1.05, -1.40, ±2.3), as the Lodgy's are placed.
+Colours: body and cab cream `0xefe6d2`, stripes terracotta `0xc1623f`, glass `0x1f2937`, rear panel `0xcfc6b2`, tyres, arches and bumper `0x111827`.
+M2. Every named part except `wheel` lies inside the collision box expanded by 0.15 m on each side (so |x| ≤ 1.30, |y| ≤ 1.35, |z| ≤ 3.55), except `vent`, whose top may reach y = 1.5. Wheels are checked only against the config (centre and size as in M1), because they hang below the collision box as the Lodgy's do. The group's origin is the vehicle's centre, so `placeVehicleMesh` is unchanged.
+M3. `createVehicleMesh(lodgy)` produces exactly what it does today: children in this order, body 1.76 × 1.1 × 4.5 at the origin; windscreen 1.584 × 0.33 × 0.1 at (0, 0.275, -2.28); wheels 0.25 × 0.66 × 0.66 at (±0.78, -0.70, ±1.40) in the order x = -, +, with z = -, + inside each (-,-), (-,+), (+,-), (+,+) as the existing loops produce. Parts of the Lodgy also get names (`body`, `windscreen`, `wheel`), which changes no geometry.
+M4. Disposal: each part makes its own geometry and material, as `part` does; no textures and no module-level shared materials.
+M5. RV completability at 50% fuel: for every segment of `airport` except the roadworks, `driveSegment` with `fuel: 0.5` for the RV reaches the next checkpoint (the finish for the last segment) within `timeLimit`. Fuel matters only at zero, so this is in effect a drain check. If the step 16 drive fails the bank for the RV (the spec says the RV needs the winch on any real slope), stop and report; the owner decides whether the bank is excluded.
+M6. Handling measurements (recorded, not asserted beyond M5), for the RV and the Lodgy on `airport`, with the same controller and no per-vehicle recalibration; the script must not tune it:
+- Top speed on road: the maximum speed of `driveSegment` on segment 0 (road 120) extended by continuing through segments 0 to 1 from the start (continuous run).
+- Time to 10 m/s: from the standstill at segment 0's spawn, the first time the speed reaches 10 m/s.
+- Sand exit speed: a continuous run from segment 3's checkpoint spawn to segment 5's checkpoint trigger; the speed at the moment the vehicle's centre passes the end of segment 4 (the next checkpoint's trigger).
+- Ford time: `driveSegment` seconds for segment 6.
+- Bank time: `driveSegment` seconds for segment 8.
+It prints a table (vehicle × measurement) and fails only on an exception.
 
 ## Tests (numbered)
 
-T1 M1/M2: for the RV config, every child mesh of the group has a bounding box inside the collision box expanded by 0.15 m (0.15 m above for the roof vent); the group has a windscreen child at the front (-Z) face; wheel positions equal the config's.
-T2 M3: for the Lodgy config the group has the same children (count, sizes, positions) as before the change (snapshot the numbers the existing function produces).
-T3 M4: disposing the RV group with `disposeScene` leaves no mesh un-disposed (use the existing disposal test's approach).
-T4 M5: the RV completes every segment of `airport` except the roadworks with fuel 0.5.
-T5 M6: the script runs without error under `npm run experiment:rv` (smoke-run in the step's checks, not a unit test).
+T1 M1/M2: for the RV config, each named child's `Box3.setFromObject` (after `group.updateMatrixWorld()`) lies inside the M2 envelope (the vent's top at most 1.5); the windscreen is at z = -3.43 and has the dark colour; the wheels' centres and sizes equal the config's; the children's names match M1 exactly (counts: body 1, cab 1, windscreen 1, window 4, rear 1, vent 1, bumper 1, stripe 2, arch 4, wheel 4). No renderer is used.
+T2 M3: the Lodgy's children match the numbers in M3.
+T3 M4: after `disposeScene`, every geometry and material of the RV group is disposed (the approach of `disposeScene.test.ts`).
+T4 M5: the RV completes every segment of `airport` except the roadworks at fuel 0.5.
+T5 M6: `npm run experiment:rv` runs and prints the table (run in the step's checks).
 
 ## Tasks
 
 1. RV mesh (M1 to M4, T1 to T3).
-2. `driveRig.ts` extraction if needed, the 50% fuel drive test (M5, T4), and the measurement script (M6, T5).
-3. `ROADMAP.md`: the status `needs sign-off`, the measurements table as a working note, the decision D-RV1 (handling not retuned; owner decides after playing), the spec row; run every check.
+2. `driveRig.ts` extraction, the 50% fuel test (M5, T4) and the measurement experiment with its scripts (M6, T5). Needs step 16's drive test to exist.
+3. `ROADMAP.md`: the status `needs sign-off`, the measurements table as a working note, the decision D-RV1 (handling not retuned; the owner decides after playing), the spec row; run every check.
 
 Review after each task by a Sonnet reviewer; Opus reviews the whole branch at the end.
