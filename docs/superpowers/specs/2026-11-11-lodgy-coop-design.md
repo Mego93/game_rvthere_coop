@@ -327,7 +327,7 @@ world.buy(playerId, item);         // shop purchase; returns 'ok' or 'cannot_buy
 world.restartCheckpoint();         // the admin's manual restart; not an admin tool
 world.adminTool(tool);             // 'skipCheckpoint' | 'refill'; marks the run assisted
 world.snapshot();                  // serialisable state
-world.status();                    // 'running' | 'won', plus the results fields
+world.status();                    // { state: 'running' | 'won', elapsed, restarts, respawns, wallet, coinsCollected, coinsTotal, finalTime }
 
 const predictor = createPredictor(rapier, builtCourse, vehicleConfig);   // used by the client only
 predictor.setVehicle(pos, rot);    // positions the vehicle stand-in
