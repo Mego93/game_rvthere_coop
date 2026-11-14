@@ -305,3 +305,187 @@ Each task: tests first, then a Sonnet review. Run `npm test` and `npm run typech
 - The world is created at `start`, not at room creation. Every path that touched the world before (join, input, buy, snapshot broadcast) must handle "no world".
 - A run that ends in `results` while a player is mid-hold or mid-menu. The client's menus must close on the phase change.
 - Room tests that relied on a world existing at join time. Adapt them; don't weaken them.
+
+## Amendments after the plan review (binding; where they differ from the text above, they win)
+
+A probe against the real world measured these times: a Lodgy at rest at cp-1, boarded, at full throttle, wins after 6.47 s, with its centre at z = −98.11. The whole scripted course takes 9.98 s.
+
+N1 (R5, input queues). At `start` from `lobby`:
+- every player's input queue is replaced with a fresh one, and `sentFull` is set false;
+- the room's `lastSent` prop map is cleared;
+- the room's `tick` and `startTime` are reset to now.
+
+`restartCourse` keeps the queues, because the client's game keeps running and its `seq` keeps rising.
+
+N2 (R5, ticks across worlds). Snapshot and event ticks run on without a break across the worlds of one room. The room adds to each world's tick the number of ticks its earlier worlds ran, so `snapshot.tick` never decreases within a room. After `restartCourse`, the next snapshot is full for everyone, as after a restart.
+
+N3 (L1 replaced). L1. `recordStart`:
+1. Set p1's inventory to `['jerrycan', null, null]` (`debugSetInventory`) and hurt p1 to 40. Step, then call `recordStart`.
+2. Lose the vehicle before cp-1. p1 comes back at 50 health (40 raised to the floor) with the jerrycan.
+3. Control, without the `recordStart` call: p1 comes back at 100 health with an empty inventory.
+4. A player added after `recordStart` gets 100 health and an empty inventory.
+
+N4 (test access to courses and the world).
+- `RoomServerOptions.courses?: Readonly<Record<string, BuiltCourse>>`, tests only. It replaces the course of each id it lists, and is passed down as `RoomConfig.courses`.
+- `RoomServer.debugWorld(noun: string): World | null`, tests only.
+- For L5 and L12, tests build "finish at start" variants of `test` and `segment-demo`: the course with `finish` set to cp-0's trigger box, so the run is won on its first tick.
+- `results.courseId` and the `finished` key are the room's configured `courseId`, never `course.id`.
+- R6's phrase "as today's tests do" is void.
+
+N5 (L21 replaced). The drive goes like this:
+1. Skip checkpoint.
+2. Wait for the hint `E to board`. The admin is placed in the first spawn slot at cp-1, beside the driver door.
+3. Tap E, then hold W.
+4. Wait up to 20 s for `#results` to be visible. It shows "assisted".
+5. Back to lobby shows `#lobby`.
+
+N6 (the `Room` interface).
+```
+RoomConfig: { noun: string; courses?: Readonly<Record<string, BuiltCourse>> }   // courseId/vehicleId removed
+RoomPlayer gains: ready: boolean; connected: boolean; connectedSince: number; heldSince: number | null
+Room gains:
+  phase(): Phase
+  hold(player, now): void                   // replaces remove() for a closed or dropped connection
+  rejoin(player, connection, now): Connection | null   // held or connected slot; returns the old connection, if any
+  expireHeld(now): void                     // called on the server's tick; frees slots with now - heldSince >= HELD_SLOT_TIMEOUT
+  kick(by, playerId): ErrorReason | null    // on success the server sends 'kicked' to the target and closes it
+  setReady(player, ready): ErrorReason | null
+  configure(by, settings: RoomSettings): ErrorReason | null
+  start(by) / restartCheckpoint(by) / restartCourse(by) / adminTool(by, tool) / toLobby(by) / next(by): ErrorReason | null
+  debugWorld(): World | null                // tests only
+```
+- `testing.ts` gets `startRun(client: FakeClient)`, which sends `{ type: 'start' }`.
+- `room.test.ts` calls `room.start(admin)` instead.
+- A kick frees the slot through its own path.
+- `RoomSettings` is `{ courseId; vehicleId; timeOfDay; weather }`.
+
+N7 (existing tests that change; this replaces the plan's list).
+- Task 1a/1b. These break typecheck as soon as the protocol changes.
+  - `shared/src/protocol.test.ts`:
+    - add `timeOfDay`/`weather` to the `lobby` fixture and `assisted` to the `snapshot` fixture;
+    - the "unknown reason" case uses `"kicked"` today; change it to `"banned"`.
+  - `client/src/net/snapshotBuffer.test.ts`: the snapshot fixture gains `assisted: false`.
+  - `client/src/ui/overlay.test.ts`: the `lobby` fixture gains the two fields.
+  - `server/src/room/room.ts`: `broadcastLobby` sends the defaults for the two fields.
+  - `server/src/room/server.test.ts`: the first test's exact `lobby` gains the two fields.
+  - `client/src/ui/home.ts`: `ERROR_TEXT` gains the four new reasons.
+- Task 2a.
+  - `server.test.ts`:
+    - call `startRun` first in the tests that expect snapshots or a world (around lines 335, 348, 360, 379, 389, 400, 432, 466, 486, 499, 512, 528 and 764);
+    - delete "runs the configured vehicle" and "unknown course or vehicle refused at creation";
+    - the first test expects `phase: 'lobby'`.
+  - `room.test.ts`: every test calls `room.start(admin)` after the joins.
+  - `roomFailure.test.ts`: the two tests that count snapshots start the room first.
+  - `node/server.test.ts`:
+    - delete "a server started with a course id";
+    - in the input test, amal sends `start` first.
+  - `node/listen.ts`: `ServerOptions` loses `vehicleId`/`courseId`.
+- Task 3. The `server.test.ts` tests that assume a disconnect removes the slot at once (around lines 181, 192, 202, 553, 615 and 715) are rewritten:
+  - the slot is listed with `connected: false` until `HELD_SLOT_TIMEOUT`, then removed;
+  - the admin handover happens after the slot expires.
+- Task 4a/4b.
+  - `overlay.test.ts`: the exact desktop controls line gains `Esc menu`.
+  - `e2e/touch.spec.ts`:
+    - the touch UI appears only after Start, and `menu` joins the visible buttons;
+    - the four run tests start the run first.
+  - `e2e/smoke.spec.ts`:
+    - the 11 run tests start the run first; the three that stay on the home page or in the lobby are unchanged;
+    - in the two-player test, Badr presses Ready and then Amal presses Start;
+    - the mid-run join test joins after the start, so no Ready is needed there.
+
+N8 (R5, held slots at start). Held slots are not added to the world at `start`. A held slot that rejoins during `playing` is added by `addPlayer(id)`. For an id with no held entry, that makes a new player at 100 health with an empty inventory. `forgetHeld` of an id with no held entry does nothing.
+
+N9 (R2, restart). On a restart, each held entry is restored like a present player:
+- health `max(recorded, PLAYER_RESTART_FLOOR)`, or 100 if not recorded;
+- `downed` cleared;
+- inventory set to the recorded one, or empty if not recorded.
+
+Held ids are skipped by the departed-player drop. A held player's rejoin as a respawn queues a `respawn` event. R2's `releaseHeld` is renamed `forgetHeld`, because `player.ts` already has an internal `releaseHeld`.
+
+N10 (R3, skipCheckpoint). Factor a helper `placeCrew(index, fuel, health)` out of `restart`. It runs these steps in order:
+1. `winch.stow()`.
+2. For each player: `releaseHook(id, 'stow')`, `setHands(id, null)`, `hold = null`, `respawnIn = null`.
+3. `takePushIntents()`, then unseat everyone.
+4. `vehicle.resetTo(cp.spawn, fuel, health)`.
+5. Two zero-length physics steps.
+6. For each player: `setSeat(id, null, findSpawn(id))` and `hitCooldown.clear()`.
+7. `resetLastTick = ∅`, `cableTension = 0`.
+
+`restart` calls it, with the props, items and coins restore between steps 4 and 5. `skipCheckpoint` calls it with `vehicle.fuel()` and `vehicle.health()`.
+
+Rules for `skipCheckpoint`:
+- A downed player stays downed and keeps their timer.
+- A prop whose box overlaps the vehicle's new spawn box goes to its own spawn. Other props and items stay where they are.
+- It applies at once, as `buy` does. Its `checkpoint` event goes into `queuedEvents`, stamped `tick + 1`.
+- The room makes the next snapshot full for everyone when `adminTool('skipCheckpoint')` returns true (spec: "full … after any restart or skip").
+
+`refill` returns true whenever the run is not won, even when the tank and health are already full.
+
+N11 (L3's last-checkpoint case). Record cp-1 by placing the vehicle in its trigger with `debugBody` and stepping. Then `skipCheckpoint` returns false and `assisted` stays false.
+
+N12 (R5, the win sequence and sends).
+- On the win tick the room stops stepping, even if more ticks are due in that update. It then sends, in order: a snapshot at once (outside the 20 Hz cadence), `lobby` with `phase: 'results'`, and `results`.
+- No snapshots are sent in `lobby` or `results`.
+- A join or rejoin in `results` gets `welcome`, then `lobby`, then the stored `results`.
+- Held slots are skipped for sends.
+- The pause and empty checks in `update` count connected players only.
+
+N13 (R7, refusals and validation).
+- `configure`, `adminTool` and the other new messages are shape-checked in `parseClientMessage`:
+  - course ids against `courseIds()`;
+  - vehicles against `VEHICLE_IDS`;
+  - times and weathers against their lists.
+- Anything malformed gets `bad_message` before any other check.
+- The room then checks, in this order:
+  1. `not_admin`;
+  2. `bad_phase`;
+  3. `not_ready`, or `bad_message` (an unknown or own `playerId` for `kick`).
+- A lobby or admin message from a connection that is not in a room gets `bad_message`.
+- The admin may send `ready`; it is stored and ignored.
+- Kicking a held slot frees it, with no message sent.
+- R11's "next player who joins" includes a held player who rejoins.
+- R10's rejoin keeps the slot's name and ignores the name in the `join`.
+
+N14 (client: routing, errors and Esc).
+- Phase `results` with no running game (a player who joined during results) shows only the results screen.
+- `not_admin`, `not_ready`, `bad_phase` and `bad_message` received while in a room go to `#lobby-error` when the lobby is showing, and are logged otherwise. They never reach the home page.
+- On `error kicked`, set the close text to "You were removed from the room." and do not call `home.setError`.
+- An Esc that closes the shop menu does not open the run menu.
+- Every menu closes when the phase leaves `playing`.
+- Losing pointer lock during `playing` opens the run menu, when no menu is open and the game did not release the lock itself. Browsers may swallow the Esc that releases the lock. The owner judges this behaviour.
+
+N15 (client pure APIs and ids).
+- `resultsView(message: ResultsMessage, isAdmin: boolean): { lines: string[]; showNext: boolean; showLobby: boolean }`. It replaces `resultsText`.
+- `runMenuState(prev, event: 'esc' | 'button' | 'resume' | 'shopOpened' | 'phaseLeft', shopOpen: boolean): { open: boolean }`.
+- `runMenuItems(isAdmin: boolean): string[]`.
+- While either menu is open, input is `menuInput(shopOpen || runOpen, …)`.
+- Element ids:
+  - kick buttons: `#lobby-kick-<playerId>` and `#run-kick-<playerId>`;
+  - the room link: `#lobby-link`;
+  - the touch menu button: `#touch-menu`.
+- Labels: the vehicles are 'Lodgy' and 'RV' (a client constant); courses are shown by id.
+
+N16 (more tests).
+- L22 (task 2b, `node/server.test.ts`): create, join, ready, start, board, then hold the throttle until `results` arrives, which takes about 10 s. The test timeout is 30 s. This is the spec's integration test.
+- L8 adds, at room level: a downed player's rejoin gives 50 health and `respawns` +1.
+
+N17 (task split, replacing "Tasks" 1, 2 and 4).
+- 1a. World: R1–R3 (N3, N8–N11). Tests L1–L3.
+- 1b. Protocol and rules: R4, R13's parse, R14, and the task 1 fixture changes in N7. Tests L4, L14 (parse) and L16.
+- 2a. Room lifecycle: phases, configure, ready, start, toLobby, restartCourse, join by phase, N1, N2, N4, N6, N12 and N13, the options and `main.ts`, and adapting the existing tests (N7). Tests L5–L7, L11 and L15.
+- 2b. Results: the results message, the campaign total, `next`, and the restartCheckpoint and adminTool wiring. Tests L12, L13 and L22.
+- 3. Held slots, admin and kick, as before.
+- 4a. Routing, the lobby screen, the kicked text, the e2e start helper and all e2e adaptations. Tests L17 and L20.
+- 4b. The run menu, `#touch-menu` and the controls line. Test L19.
+- 4c. The results screen. Tests L18 and L21.
+
+The commit messages per task are the implementer's, in the plan's style.
+
+N18 (minor).
+- Add `export const VEHICLE_IDS = Object.keys(VEHICLES) as VehicleId[]` to `vehicles.ts`.
+- L14 uses escapes: `"a\u0000b"`, `"a\nb"`, `"a​b"`, `"a b"`. A bare `" "` is trimmed away.
+- R14 lives in `cleanName` (task 1b), so the home form gets it as well. A name refused for a character gets its own home text: "Names cannot contain control or invisible characters."
+- R4's config type is `{ vehicleId: string; timeOfDay: TimeOfDay; weather: Weather }`.
+- Assisted runs count toward `campaignTotal`.
+- `WorldOptions` gains `weather` at step 13, not now.
+- Task 5's spec edits also rewrite the build-order note about `VEHICLE=rv` before the lobby.
