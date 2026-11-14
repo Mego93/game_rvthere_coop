@@ -51,6 +51,7 @@ import { touchView } from './ui/touchView';
 
 // A frame longer than this (a background tab, a debugger pause) is treated as this long.
 const MAX_FRAME_SECONDS = 0.25;
+const LOOPS = ['engine', 'winch', 'rain'] as const;
 
 export interface Game {
   setLobby(lobby: LobbyMessage): void;
@@ -226,6 +227,11 @@ export function createGame(
     else if (lobby.phase === 'playing') applyRun('esc');
   };
   window.addEventListener('keydown', onKeyDown);
+  // The frame loop starts the loops again when the tab is visible.
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') for (const loop of LOOPS) audio.setLoop(loop, false);
+  };
+  document.addEventListener('visibilitychange', onVisibility);
   // Browsers swallow the Esc that releases the lock, so a lock lost on its own opens the menu.
   const onLockChange = () => {
     if (document.pointerLockElement === renderer.domElement) return;
@@ -405,7 +411,7 @@ export function createGame(
       const seated = latestLocal !== null && latestLocal.seat !== null;
       audio.setLoop('engine', true, { rate: engineRate(speed, vehicleConfig.maxSpeed, vehicle.throttle), volume: seated ? 0.35 : 0.2, at: vehicle.pos });
     } else audio.setLoop('engine', false);
-    if (vehicle && winchOn(latestCable)) audio.setLoop('winch', true, { at: add(vehicle.pos, rotate(vehicle.rot, vehicleConfig.winchMount)) });
+    if (vehicle && winchOn(latestCable, lobby.phase)) audio.setLoop('winch', true, { at: add(vehicle.pos, rotate(vehicle.rot, vehicleConfig.winchMount)) });
     else audio.setLoop('winch', false);
     audio.setLoop('rain', rainOn(lobby.weather), { volume: 0.3 });
     conditions.update(camera.position, frameSeconds);
@@ -454,7 +460,8 @@ export function createGame(
     showShopError: () => shopMenu.showError(),
     stop() {
       cancelAnimationFrame(frameRequest);
-      for (const loop of ['engine', 'winch', 'rain'] as const) audio.setLoop(loop, false);
+      for (const loop of LOOPS) audio.setLoop(loop, false);
+      document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('pointerlockchange', onLockChange);

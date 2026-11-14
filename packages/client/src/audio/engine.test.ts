@@ -10,12 +10,14 @@ test('E5: idle is 0.6, top speed with full throttle is 1.7, and reverse uses its
 });
 
 test('E5: the winch is on only while attached and reeling', () => {
-  expect(winchOn({ state: 'attached', reel: 1 })).toBe(true);
-  expect(winchOn({ state: 'attached', reel: -1 })).toBe(true);
-  expect(winchOn({ state: 'attached', reel: 0 })).toBe(false);
-  expect(winchOn({ state: 'ground', reel: 1 })).toBe(false);
-  expect(winchOn({ state: 'held', reel: 1 })).toBe(false);
-  expect(winchOn(null)).toBe(false);
+  expect(winchOn({ state: 'attached', reel: 1 }, 'playing')).toBe(true);
+  expect(winchOn({ state: 'attached', reel: -1 }, 'playing')).toBe(true);
+  expect(winchOn({ state: 'attached', reel: 0 }, 'playing')).toBe(false);
+  expect(winchOn({ state: 'ground', reel: 1 }, 'playing')).toBe(false);
+  expect(winchOn({ state: 'held', reel: 1 }, 'playing')).toBe(false);
+  expect(winchOn(null, 'playing')).toBe(false);
+  expect(winchOn({ state: 'attached', reel: 1 }, 'results')).toBe(false);
+  expect(winchOn({ state: 'attached', reel: 1 }, 'lobby')).toBe(false);
 });
 
 test('E5: rain is on only in rain', () => {

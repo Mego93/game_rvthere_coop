@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
-import { HOLD_DURATION, TICK_RATE } from './constants';
+import { HOLD_DURATION, PLAYER_EYE_HEIGHT, TICK_RATE } from './constants';
 import { add, length, rotate, sub, vec3 } from './math';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
 import { createWorld, type World, type WorldEvent } from './world';
@@ -67,17 +67,28 @@ describe('impact (R2)', () => {
 
 describe('use (R2)', () => {
   const HOLD_TICKS = Math.round(HOLD_DURATION * TICK_RATE) + 5;
+  // Steps until the use event arrives and records the snapshot tick of that very step, then runs on to the end of the hold.
+  const runUntilUse = (world: World, inputs: Map<string, PlayerInput>) => {
+    const events: WorldEvent[] = [];
+    let tickOfUse = -1;
+    for (let i = 0; i < HOLD_TICKS; i++) {
+      const stepped = world.step(inputs);
+      if (tickOfUse < 0 && of(stepped, 'use').length > 0) tickOfUse = world.snapshot().tick;
+      events.push(...stepped);
+    }
+    return { events, tickOfUse };
+  };
 
   test('a jerrycan used on the vehicle gives one use', () => {
     const world = make('p1');
     run(world, 30);
     world.debugVehicle().addFuel(-0.7);
     world.debugSetInventory('p1', ['jerrycan', null, null]);
-    const events = run(world, HOLD_TICKS, new Map([['p1', input({ use: true })]]));
+    const { events, tickOfUse } = runUntilUse(world, new Map([['p1', input({ use: true })]]));
     expect(me(world, 'p1').inventory[0]).toBeNull();
     const uses = of(events, 'use');
     expect(uses).toHaveLength(1);
-    expect(uses[0]).toMatchObject({ playerId: 'p1', tick: expect.any(Number) });
+    expect(uses[0]).toMatchObject({ playerId: 'p1', tick: tickOfUse });
     expect(length(sub(uses[0]!.pos!, world.snapshot().vehicle.pos))).toBeLessThan(0.01);
   });
 
@@ -89,10 +100,10 @@ describe('use (R2)', () => {
     world.debugSetInventory('p1', ['healthKit', null, null]);
     world.debugHurt('p2', 30);
     run(world, 2);
-    const events = run(world, HOLD_TICKS, new Map([['p1', input({ use: true, yaw: 0, pitch: -0.45 })]]));
+    const { events, tickOfUse } = runUntilUse(world, new Map([['p1', input({ use: true, yaw: 0, pitch: -0.45 })]]));
     expect(me(world, 'p1').inventory[0]).toBeNull();
     expect(of(events, 'use')).toHaveLength(1);
-    expect(of(events, 'use')[0]).toMatchObject({ playerId: 'p1' });
+    expect(of(events, 'use')[0]).toMatchObject({ playerId: 'p1', tick: tickOfUse });
     expect(of(events, 'revive')).toHaveLength(0);
   });
 });
@@ -152,6 +163,35 @@ describe('hook (R2)', () => {
     const detach = run(world, 1, new Map([['p1', input({ interact: true, ...aim })]]));
     expect(world.snapshot().cable.state).not.toBe('attached');
     const detached = of(detach, 'hookDetach');
+    expect(detached).toHaveLength(1);
+    expect(detached[0]).toMatchObject({ playerId: 'p1', tick: world.snapshot().tick, pos: hookAt });
+  });
+
+  test('releasing the cable at the winch box gives hookDetach at the hook', () => {
+    const world = make('p1');
+    const body = world.debugBody('vehicle')!;
+    body.setTranslation(vec3(-40, 1, -60), true);
+    body.setLinvel(vec3(0, 0, 0), true);
+    run(world, 60);
+    const mount = add(body.translation(), rotate(body.rotation(), world.vehicleConfig.winchMount));
+    world.teleportPlayer('p1', vec3(mount.x, 0.02, mount.z - 1.1));
+    run(world, 20);
+    one(world, 'p1', { interact: true, yaw: 0, pitch: -0.2 });
+    world.teleportPlayer('p1', vec3(-40, 0.02, -68.5));
+    run(world, 20);
+    const aim = { yaw: 0, pitch: -0.63 };
+    run(world, 1, new Map([['p1', input({ interact: true, ...aim })]]));
+    expect(world.snapshot().cable.state).toBe('attached');
+    run(world, 1, new Map([['p1', input(aim)]]));
+    const hookAt = { ...world.snapshot().cable.hookPos };
+    const feet = vec3(mount.x, 0.02, mount.z - 1.1);
+    world.teleportPlayer('p1', feet);
+    run(world, 20);
+    const d = sub(mount, add(feet, vec3(0, PLAYER_EYE_HEIGHT, 0)));
+    const toMount = { yaw: Math.atan2(-d.x, -d.z), pitch: Math.asin(d.y / length(d)) };
+    const release = run(world, 1, new Map([['p1', input({ interact: true, ...toMount })]]));
+    expect(world.snapshot().cable.state).not.toBe('attached');
+    const detached = of(release, 'hookDetach');
     expect(detached).toHaveLength(1);
     expect(detached[0]).toMatchObject({ playerId: 'p1', tick: world.snapshot().tick, pos: hookAt });
   });
