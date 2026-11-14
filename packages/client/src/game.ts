@@ -1,4 +1,5 @@
 import {
+  NEUTRAL_INPUT,
   PLAYER_EYE_HEIGHT,
   add,
   rotate,
@@ -9,6 +10,7 @@ import {
   predictedFrom,
   vec3,
   type ClientMessage,
+  type InputFields,
   type InteractAction,
   type ItemKind,
   type LobbyMessage,
@@ -35,7 +37,7 @@ import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
 import { interactAction, overlayText } from './ui/overlay';
-import { CLOSED, createShopMenu, menuInput, shopMenuState, type ShopMenuState } from './ui/shopMenu';
+import { CLOSED, createShopMenu, menuFeet, menuInput, shopMenuState, type ShopMenuState } from './ui/shopMenu';
 import type { TouchUi } from './ui/touchUi';
 import { touchView } from './ui/touchView';
 
@@ -61,6 +63,8 @@ export interface GameView {
   input: () => GameInput;
   // The touch buttons, or null on a device without touch.
   touchUi: TouchUi | null;
+  // The mouse source's click gate; blocked while the shop menu is open.
+  pointerGate: { blocked: boolean };
 }
 
 // Draws one run: sends an input every tick and shows the vehicle and the players from the server's snapshots.
@@ -110,6 +114,7 @@ export function createGame(
   let lastDrawn: Vec3 | null = null;
   let menuState: ShopMenuState = CLOSED;
   let wasInteract = false;
+  let lastSent: InputFields = NEUTRAL_INPUT;
 
   const refreshMenu = (feet: Vec3 | null, press: InteractAction | null, dismiss: boolean) => {
     const was = menuState.open;
@@ -117,22 +122,24 @@ export function createGame(
       feet,
       seated: latestLocal === null || latestLocal.seat !== null,
       downed: latestLocal === null || latestLocal.downed !== null,
+      won: buffer.latestStatus()?.won ?? false,
       stops: course.stops,
       press,
       dismiss,
     });
     if (menuState.open !== was) {
       shopMenu.setOpen(menuState.open);
+      view.pointerGate.blocked = menuState.open;
       if (menuState.open && document.pointerLockElement === renderer.domElement) document.exitPointerLock();
     }
     if (menuState.open) shopMenu.setWallet(buffer.latestStatus()?.wallet ?? 0);
   };
   const shopMenu = createShopMenu(document, {
     onBuy: (item: ItemKind) => send({ type: 'buy', item }),
-    onClose: () => refreshMenu(latestLocal?.pos ?? null, null, true),
+    onClose: () => refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, true),
   });
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.code === 'Escape' && menuState.open) refreshMenu(latestLocal?.pos ?? null, null, true);
+    if (event.code === 'Escape' && menuState.open) refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, true);
   };
   window.addEventListener('keydown', onKeyDown);
 
@@ -141,11 +148,12 @@ export function createGame(
     const sampled = input.sample();
     const pressed = sampled.interact && !wasInteract;
     wasInteract = sampled.interact;
-    const fields = menuInput(menuState.open, sampled);
+    const fields = menuInput(menuState.open, sampled, lastSent);
+    if (!menuState.open) lastSent = fields;
     send({ type: 'input', ...fields, seq });
     reconciler.record(seq, fields);
     if (pressed && !menuState.open && latestLocal && lastVehicle) {
-      const feet = lastDrawn ?? latestLocal.pos;
+      const feet = menuFeet(lastDrawn, latestLocal.pos)!;
       const action = interactAction(
         vehicleConfig,
         lastVehicle,
@@ -157,6 +165,7 @@ export function createGame(
         buffer.latestCable(),
         course.anchors,
         course.stops,
+        buffer.latestStatus()?.won ?? false,
       );
       refreshMenu(feet, action, false);
     }
@@ -311,7 +320,7 @@ export function createGame(
       predictor.setProps(buffer.latestProps().filter((prop) => !held.has(prop.id)));
       const entry = snapshot.players.find((player) => player.playerId === playerId);
       latestLocal = entry ?? null;
-      refreshMenu(latestLocal?.pos ?? null, null, false);
+      refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, false);
       if (entry && predictionActive(entry)) reconciler.correct(predictedFrom(entry), snapshot.ackSeq);
       else reconciler.suspend();
     },

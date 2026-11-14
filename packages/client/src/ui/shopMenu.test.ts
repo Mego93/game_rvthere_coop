@@ -1,6 +1,6 @@
 import { NEUTRAL_INPUT, SHOP_MENU_TELEPORT, getCourse, vec3, type InteractAction, type Vec3 } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { CLOSED, menuInput, shopMenuState, type ShopMenuInputs, type ShopMenuState } from './shopMenu';
+import { CLOSED, menuFeet, menuInput, shopMenuState, type ShopMenuInputs, type ShopMenuState } from './shopMenu';
 
 const stops = getCourse('test').stops;
 const counter = stops.find((stop) => stop.id === 'stop-fuel')!.shopCounter!;
@@ -9,7 +9,7 @@ const far = vec3(40, 0.02, 40);
 const shop: InteractAction = { kind: 'shop', stopId: 'stop-fuel' };
 const OPEN: ShopMenuState = { open: true, feet: near };
 
-const at = (changes: Partial<ShopMenuInputs>): ShopMenuInputs => ({ feet: near, seated: false, downed: false, stops, press: null, dismiss: false, ...changes });
+const at = (changes: Partial<ShopMenuInputs>): ShopMenuInputs => ({ feet: near, seated: false, downed: false, won: false, stops, press: null, dismiss: false, ...changes });
 
 test('S17: an interact press that resolves to the shop in range opens the menu', () => {
   expect(shopMenuState(CLOSED, at({ press: shop })).open).toBe(true);
@@ -44,8 +44,23 @@ test('S17: it closes on a jump of more than SHOP_MENU_TELEPORT between updates, 
   expect(shopMenuState({ open: true, feet: from }, at({ feet: vec3(from.x, from.y, from.z + SHOP_MENU_TELEPORT - 0.1) })).open).toBe(true);
 });
 
-test('M9: an input sampled while the menu is open is neutral with the aim and slot kept; closed, it is unchanged', () => {
+test('it closes once the run is won, and does not open after', () => {
+  expect(shopMenuState(OPEN, at({ won: true })).open).toBe(false);
+  expect(shopMenuState(CLOSED, at({ won: true, press: shop })).open).toBe(false);
+});
+
+test('menuFeet prefers the drawn position, so a lagging server position does not close the menu', () => {
+  const predicted = vec3(near.x, 0.02, near.z - 0.5);
+  const lagging = vec3(near.x, 0.02, near.z - 3.5);
+  expect(shopMenuState(OPEN, at({ feet: lagging })).open).toBe(false);
+  expect(shopMenuState({ open: true, feet: predicted }, at({ feet: menuFeet(predicted, lagging) })).open).toBe(true);
+  expect(menuFeet(null, lagging)).toBe(lagging);
+  expect(menuFeet(null, null)).toBeNull();
+});
+
+test('M9: an input sampled while the menu is open is neutral, with the aim of the sample and the slot last sent; closed, it is unchanged', () => {
+  const last = { ...NEUTRAL_INPUT, slot: 1 as const, yaw: 0.5 };
   const sampled = { ...NEUTRAL_INPUT, moveX: 1 as const, moveY: 1 as const, jump: true, interact: true, use: true, yaw: 1.2, pitch: -0.3, slot: 2 as const };
-  expect(menuInput(true, sampled)).toEqual({ ...NEUTRAL_INPUT, yaw: 1.2, pitch: -0.3, slot: 2 });
-  expect(menuInput(false, sampled)).toBe(sampled);
+  expect(menuInput(true, sampled, last)).toEqual({ ...NEUTRAL_INPUT, yaw: 1.2, pitch: -0.3, slot: 1 });
+  expect(menuInput(false, sampled, last)).toBe(sampled);
 });

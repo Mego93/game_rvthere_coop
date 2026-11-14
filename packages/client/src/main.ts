@@ -46,6 +46,9 @@ document.addEventListener('gesturestart', (event) => event.preventDefault());
 const touchDevice = window.matchMedia('(pointer: coarse)').matches;
 let touchUi: ReturnType<typeof createTouchUi> | null = null;
 
+// Set by the game while a menu is open, so a click does not take the pointer back.
+const pointerGate = { blocked: false };
+
 const CONNECTION_LOST = 'The connection to the server was lost.';
 
 let renderer: THREE.WebGLRenderer | null = null;
@@ -116,9 +119,9 @@ function startGame(lobby: LobbyMessage) {
   const input = (): GameInput =>
     controls
       ? createTouchSource({ surface: canvas, win: window, doc: document, width: () => window.innerWidth, controls })
-      : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document));
+      : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document, pointerGate));
   touchUi?.setVisible(true);
-  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
 function onClose() {

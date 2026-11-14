@@ -21,6 +21,7 @@ export interface ShopMenuInputs {
   feet: Vec3 | null;
   seated: boolean;
   downed: boolean;
+  won: boolean;
   stops: readonly ServiceStop[];
   // What the local interact press resolved to this update, or null when there was no press.
   press: InteractAction | null;
@@ -31,8 +32,8 @@ export interface ShopMenuInputs {
 export const CLOSED: ShopMenuState = { open: false, feet: null };
 
 // Rule V10 with M2: opens only on a press that resolves to the shop; closes on leaving range, being downed or seated, a teleport, or a dismissal.
-export function shopMenuState(prev: ShopMenuState, { feet, seated, downed, stops, press, dismiss }: ShopMenuInputs): ShopMenuState {
-  if (feet === null || seated || downed || dismiss) return { open: false, feet };
+export function shopMenuState(prev: ShopMenuState, { feet, seated, downed, won, stops, press, dismiss }: ShopMenuInputs): ShopMenuState {
+  if (feet === null || seated || downed || won || dismiss) return { open: false, feet };
   const inRange = stops.some((stop) => inShopRange(feet, stop));
   if (!inRange) return { open: false, feet };
   if (prev.open) {
@@ -42,8 +43,12 @@ export function shopMenuState(prev: ShopMenuState, { feet, seated, downed, stops
   return { open: press?.kind === 'shop', feet };
 }
 
-// Rule M9: while the menu is open the player stands still, keeping aim and slot.
-export const menuInput = (open: boolean, sampled: InputFields): InputFields => (open ? neutralInput(sampled) : sampled);
+// Rule M9: while the menu is open the player stands still; the aim follows the sample and the slot stays as last sent.
+export const menuInput = (open: boolean, sampled: InputFields, last: InputFields): InputFields =>
+  open ? { ...neutralInput(last), yaw: sampled.yaw, pitch: sampled.pitch } : sampled;
+
+// One position for every menu check: the drawn (predicted) one when there is one, so a lagging server position cannot close the menu.
+export const menuFeet = (drawn: Vec3 | null, server: Vec3 | null): Vec3 | null => drawn ?? server;
 
 const ITEMS: { kind: ItemKind; label: string }[] = [
   { kind: 'jerrycan', label: 'Jerrycan' },

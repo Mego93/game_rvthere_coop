@@ -8,12 +8,13 @@ export interface MouseLook {
   dispose(): void;
 }
 
-export function createMouseLook(canvas: HTMLElement, doc: Document): MouseLook {
+// While `blocked` is true a click does not ask for pointer lock; the game sets it with a menu open.
+export function createMouseLook(canvas: HTMLElement, doc: Document, gate: { blocked: boolean } = { blocked: false }): MouseLook {
   const look = createLook();
   const locked = () => doc.pointerLockElement === canvas;
 
   const onClick = () => {
-    if (locked()) return;
+    if (locked() || gate.blocked) return;
     // iOS Safari has no requestPointerLock and Chrome's promise can reject.
     const request: unknown = canvas.requestPointerLock?.();
     if (request instanceof Promise) request.catch(() => {});

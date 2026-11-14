@@ -333,6 +333,16 @@ test('S16: the overlay shows the operate hint through the stops it is given', ()
   expect(text).toContain('hint     Hold E to refuel');
 });
 
+test('there is no shop hint once the run is won', () => {
+  const counter = beside(fuelStop, -1.1);
+  const full = parked(fuelStop, { fuel: 1 });
+  expect(interactHint(rv, full, counter, [counter], 0, 0, [], stowed, [], course.stops)).toBe('E to shop');
+  expect(interactHint(rv, full, counter, [counter], 0, 0, [], stowed, [], course.stops, true)).toBeNull();
+  const text = (won: boolean) => overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle: full, players: [counter], localId: 'p1', predicted: null, server: null, ...noAim, stops: course.stops, status: run({ won }) });
+  expect(text(false)).toContain('hint     E to shop');
+  expect(text(true)).not.toContain('E to shop');
+});
+
 test('M2: aiming level at the post resolves to operate, and level at the counter to shop', () => {
   const op = fuelStop.operatePoint;
   const yawToward = (from: Vec3, to: Vec3) => Math.atan2(-(to.x - from.x), -(to.z - from.z));
