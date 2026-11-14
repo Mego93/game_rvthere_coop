@@ -1,8 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { PLAYER_REVIVE_HEALTH } from './constants';
-import { vec3 } from './math';
+import { testGround } from './courses/testGround';
+import { IDENTITY, vec3 } from './math';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
+import { withBoxes } from './testRig';
 import { createWorld, type World } from './world';
 
 beforeAll(async () => {
@@ -250,6 +252,82 @@ describe('L2: held players', () => {
     expect(world.status().respawns).toBe(1);
     expect(playerOf(world, 'p1')!.downed).toBeNull();
     world.dispose();
+  });
+});
+
+describe('L4: the crew lands beside the vehicle at any tick', () => {
+  const nearVehicle = (world: World) => {
+    const vehicle = world.snapshot().vehicle.pos;
+    const player = playerOf(world, 'p1')!;
+    return Math.hypot(player.pos.x - vehicle.x, player.pos.z - vehicle.z);
+  };
+  // A spawn slot is about 2 m to the side; the fallback is the spawn point itself, under the chassis.
+  const inSlot = (world: World) => nearVehicle(world) > 1.5 && nearVehicle(world) < 5;
+  const skipAt = (tickCount: number): boolean => {
+    const world = fresh();
+    world.addPlayer('p1');
+    settle(world, tickCount);
+    expect(world.adminTool('skipCheckpoint')).toBe(true);
+    const ok = inSlot(world);
+    world.dispose();
+    return ok;
+  };
+
+  test('a skip at tick 61 places the player beside the vehicle', () => {
+    expect(skipAt(61)).toBe(true);
+  });
+
+  test('a skip at tick 69 places the player beside the vehicle', () => {
+    expect(skipAt(69)).toBe(true);
+  });
+
+  test('a skip at every tick from 60 to 160 places the player beside the vehicle', () => {
+    const bad: number[] = [];
+    for (let t = 60; t <= 160; t++) if (!skipAt(t)) bad.push(t);
+    expect(bad).toEqual([]);
+  });
+
+  test('with every slot blocked a skip falls back to the new checkpoint spawn, not the previous one', () => {
+    const blocked = withBoxes(testGround, { walls: [{ center: vec3(0, 2, -50), halfExtents: vec3(8, 3, 8), rot: IDENTITY }] });
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' }, blocked);
+    world.addPlayer('p1');
+    settle(world, 10);
+    expect(world.adminTool('skipCheckpoint')).toBe(true);
+    const player = playerOf(world, 'p1')!;
+    expect(Math.hypot(player.pos.x - CP1_SPAWN.x, player.pos.z - CP1_SPAWN.z)).toBeLessThan(1);
+    world.dispose();
+  });
+
+  test('a restart after driving off, at every tick from 60 to 160, places the player beside the vehicle', () => {
+    const bad: number[] = [];
+    for (let t = 60; t <= 160; t++) {
+      const world = fresh();
+      world.addPlayer('p1');
+      settle(world, t);
+      world.debugBody('vehicle')!.setTranslation({ x: 0, y: 1, z: -20 }, true);
+      world.step(none);
+      world.restartCheckpoint();
+      world.step(none);
+      if (!inSlot(world)) bad.push(t);
+      world.dispose();
+    }
+    expect(bad).toEqual([]);
+  });
+
+  test('a skip then a restart after driving off, at every tick from 60 to 160, places the player beside the vehicle at cp-1', () => {
+    const bad: number[] = [];
+    for (let t = 60; t <= 160; t++) {
+      const world = fresh();
+      world.addPlayer('p1');
+      settle(world, t);
+      world.adminTool('skipCheckpoint');
+      settle(world, 3);
+      world.restartCheckpoint();
+      world.step(none);
+      if (!inSlot(world)) bad.push(t);
+      world.dispose();
+    }
+    expect(bad).toEqual([]);
   });
 });
 

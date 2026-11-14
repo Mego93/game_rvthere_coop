@@ -123,6 +123,9 @@ export interface World {
 const finite = (value: number | undefined): number => (value !== undefined && Number.isFinite(value) ? value : 0);
 
 // A course passed in is used instead of the id's course; tests add walls and ledges this way.
+const BLIND_PROBE_HEIGHT = 5;
+const BLIND_RETRIES = 2;
+
 export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?: BuiltCourse): World {
   const course = builtCourse ?? getCourse(options.courseId);
   const vehicleConfig = getVehicleConfig(options.vehicleId);
@@ -514,6 +517,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }
   };
 
+  const sceneVisibleAbove = (at: Vec3): boolean =>
+    physics.castRay(new rapier.Ray({ x: at.x, y: at.y + BLIND_PROBE_HEIGHT, z: at.z }, { x: 0, y: -1, z: 0 }), BLIND_PROBE_HEIGHT + 1, true) !== null;
+
   // Steps shared by restart and skipCheckpoint; `between` runs after the vehicle moves and before the physics steps.
   const placeCrew = (index: number, fuel: number, health: number, between: () => void) => {
     const checkpoint = course.checkpoints[index]!;
@@ -532,7 +538,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     physics.timestep = 0;
     physics.step();
     physics.step();
+    // Rapier 0.21 queries see nothing after every 8th step following a teleport; one more step clears it.
+    for (let extra = 0; extra < BLIND_RETRIES && !sceneVisibleAbove(vehicle.body.translation()); extra++) physics.step();
     physics.timestep = TICK_DT;
+    players.setFallbackSpawn(checkpoint.spawn.pos);
     for (const player of players.all()) {
       players.setSeat(player.id, null, players.findSpawn(player.id));
       player.hitCooldown.clear();
