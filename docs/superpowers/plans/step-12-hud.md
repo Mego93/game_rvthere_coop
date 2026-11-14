@@ -135,3 +135,4 @@ R10. `prompt` is the interact hint then the use hint joined with `'   '`, wordin
 R11. The HUD hides when the phase is not `playing`, and also while the run menu or shop menu is open.
 R12. Named exported constants in `hud/constants.ts`: `LOW_FRACTION = 0.2`, `MARKER_HEIGHT = 1.2`, `MAP_SIZE_DESKTOP = 140`, `MAP_SIZE_TOUCH = 110`, `MAP_MARGIN = 8`.
 R13. Task 7 also updates the spec's HUD section (the mock-up sentence) and adds D-HUD1 to the decisions log.
+R14. As built (accepted at the whole-branch review): the HUD styles are injected from `hud.ts` (as `touchUi.ts` does), not `index.html`, and the HUD is created in `game.ts` only, not `main.ts`.
