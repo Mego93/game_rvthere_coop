@@ -2,14 +2,11 @@ import { createServer, type IncomingHttpHeaders } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { MAX_CONNECTIONS, MAX_CONNECTIONS_PER_ADDRESS, MAX_SEND_BUFFER, SOCKET_CLOSE_TIMEOUT, SOCKET_PATH } from '@lodgy/shared';
+import { MAX_CONNECTIONS, MAX_CONNECTIONS_PER_ADDRESS, MAX_MESSAGE_BYTES, MAX_SEND_BUFFER, SOCKET_CLOSE_TIMEOUT, SOCKET_PATH } from '@lodgy/shared';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { createReporter } from '../room/report';
 import { createRoomServer } from '../room/server';
 import { serveStatic } from './static';
-
-// No valid message is anywhere near this size; larger ones close the connection.
-const MAX_MESSAGE_BYTES = 4096;
 
 export interface ServerOptions {
   // 0 picks a free port.

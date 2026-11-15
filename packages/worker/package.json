@@ -1,0 +1,15 @@
+{
+  "name": "@lodgy/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@dimforge/rapier3d": "0.21.0",
+    "@lodgy/server": "*",
+    "@lodgy/shared": "*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261115.1",
+    "wrangler": "4.162.0"
+  }
+}
