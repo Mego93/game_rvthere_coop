@@ -1,6 +1,8 @@
 import { TICK_DT, TICK_RATE } from '../constants';
 import type { Box, BuiltCourse } from '../course';
 import { rotate, vec3, type Quat, type Vec3 } from '../math';
+import { NEUTRAL_INPUT, type InputFields } from '../protocol';
+import type { World } from '../world';
 import type { Rapier } from '../rapier';
 import { createRig } from '../testRig';
 import { getVehicleConfig, type VehicleId } from '../vehicles';
@@ -33,7 +35,7 @@ export function insideBox(box: Box, p: Vec3): boolean {
 }
 
 // Route vertex index where each segment starts, then the end of the route.
-function segmentStarts(course: BuiltCourse): number[] {
+export function segmentStarts(course: BuiltCourse): number[] {
   const starts = course.checkpoints.map((cp) => {
     let best = 0;
     let bestGap = Infinity;
@@ -61,12 +63,12 @@ export function segmentRouteLength(course: BuiltCourse, segmentIndex: number): n
 }
 
 // Where the vehicle is on the route: the leg it is on and the fraction along it. Only moves forward.
-interface Progress {
+export interface Progress {
   leg: number;
   t: number;
 }
 
-function project(route: BuiltCourse['route'], from: Progress, x: number, z: number): Progress {
+export function project(route: BuiltCourse['route'], from: Progress, x: number, z: number): Progress {
   let best = from;
   let bestGap = Infinity;
   for (let leg = from.leg; leg < Math.min(route.length - 1, from.leg + 3); leg++) {
@@ -85,7 +87,7 @@ function project(route: BuiltCourse['route'], from: Progress, x: number, z: numb
 }
 
 // The point `distance` metres along the route from a progress.
-function lookaheadPoint(route: BuiltCourse['route'], at: Progress, distance: number): [number, number] {
+export function lookaheadPoint(route: BuiltCourse['route'], at: Progress, distance: number): [number, number] {
   let remaining = distance;
   for (let leg = at.leg; leg < route.length - 1; leg++) {
     const [x0, z0] = route[leg]!;
@@ -143,4 +145,88 @@ export function driveRun(
 export function driveSegment(rapier: Rapier, vehicleId: string, course: BuiltCourse, segmentIndex: number, opts: { fuel?: number } = {}): DriveResult {
   const last = segmentIndex === course.checkpoints.length - 1;
   return driveRun(rapier, vehicleId, course, segmentIndex, last ? 'finish' : segmentIndex + 1, opts);
+}
+
+const cumulativeCache = new WeakMap<BuiltCourse, number[]>();
+const progressOf = new WeakMap<World, Progress>();
+
+function cumulative(course: BuiltCourse): number[] {
+  let table = cumulativeCache.get(course);
+  if (!table) {
+    table = [0];
+    for (let i = 1; i < course.route.length; i++) {
+      const [x0, z0] = course.route[i - 1]!;
+      const [x1, z1] = course.route[i]!;
+      table.push(table[i - 1]! + Math.hypot(x1 - x0, z1 - z0));
+    }
+    cumulativeCache.set(course, table);
+  }
+  return table;
+}
+
+// Metres along the whole route from its start.
+export function alongOf(course: BuiltCourse, progress: Progress): number {
+  const table = cumulative(course);
+  const [x0, z0] = course.route[progress.leg]!;
+  const [x1, z1] = course.route[progress.leg + 1]!;
+  return table[progress.leg]! + progress.t * Math.hypot(x1 - x0, z1 - z0);
+}
+
+function nearestProgress(course: BuiltCourse, x: number, z: number): Progress {
+  let best: Progress = { leg: 0, t: 0 };
+  let bestGap = Infinity;
+  for (let leg = 0; leg < course.route.length - 1; leg++) {
+    const [x0, z0] = course.route[leg]!;
+    const [x1, z1] = course.route[leg + 1]!;
+    const len2 = (x1 - x0) ** 2 + (z1 - z0) ** 2;
+    const t = Math.max(0, Math.min(1, ((x - x0) * (x1 - x0) + (z - z0) * (z1 - z0)) / len2));
+    const gap = Math.hypot(x0 + (x1 - x0) * t - x, z0 + (z1 - z0) * t - z);
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = { leg, t };
+    }
+  }
+  return best;
+}
+
+// Metres along the whole route of the route point nearest to (x, z).
+export function alongOfPoint(course: BuiltCourse, x: number, z: number): number {
+  return alongOf(course, nearestProgress(course, x, z));
+}
+
+export interface WorldDriveResult {
+  reached: boolean;
+  ticks: number;
+  along: number;
+}
+
+// A seated driver follows the route with the pursuit controller through a real world until the vehicle is `untilAlong` metres along the whole route.
+// `others` is held for every other player each tick. The route progress is kept per world; `restart` finds it afresh (after a teleport).
+export function driveWorld(
+  world: World,
+  playerId: string,
+  untilAlong: number,
+  opts: { timeoutTicks?: number; others?: ReadonlyMap<string, InputFields>; restart?: boolean; stop?: () => boolean } = {},
+): WorldDriveResult {
+  const course = world.course;
+  const timeoutTicks = opts.timeoutTicks ?? 120 * TICK_RATE;
+  let pos = world.snapshot().vehicle.pos;
+  let progress = !opts.restart && progressOf.get(world) ? progressOf.get(world)! : nearestProgress(course, pos.x, pos.z);
+  for (let tick = 0; ; tick++) {
+    const along = alongOf(course, progress);
+    if (along >= untilAlong || world.status().state === 'won') return { reached: true, ticks: tick, along };
+    if (tick >= timeoutTicks || opts.stop?.()) return { reached: false, ticks: tick, along };
+    const { pos: p, rot } = world.snapshot().vehicle;
+    pos = p;
+    progress = project(course.route, progress, pos.x, pos.z);
+    progressOf.set(world, progress);
+    const [tx, tz] = lookaheadPoint(course.route, progress, LOOKAHEAD);
+    const f = rotate(rot, vec3(0, 0, -1));
+    const dx = tx - pos.x;
+    const dz = tz - pos.z;
+    const error = Math.atan2(f.x * dz - f.z * dx, f.x * dx + f.z * dz);
+    const inputs = new Map<string, InputFields>(opts.others);
+    inputs.set(playerId, { ...NEUTRAL_INPUT, moveY: 1, moveX: Math.max(-STEER_MAX, Math.min(STEER_MAX, STEER_GAIN * error)) });
+    world.step(inputs);
+  }
 }
