@@ -67,8 +67,34 @@ function lit(material: THREE.Material): THREE.Material {
   return standard;
 }
 
+// The Nature Kit's palette is minty and its materials are fully metallic; desert colours and no metal suit the scene.
+const NATURE_TINTS: Record<string, number> = {
+  grass: 0x7a8f3e,
+  leafsGreen: 0x5f8a3a,
+  stone: 0xb3a590,
+  stoneDark: 0x948873,
+  _defaultMat: 0xc9ad88,
+  dirt: 0xc08560,
+  woodBark: 0x7a5535,
+  woodDark: 0x5e4129,
+  wood: 0x8a6240,
+  woodInner: 0xd9b88a,
+};
+
+// City Kit walls are near white; ochre (the spec's palette) multiplies into their colour map.
+const PACK_TINTS: Record<string, number> = { 'city-commercial': 0xe6c79a, 'city-suburban': 0xe6c79a, 'city-roads': 0xeadcc4 };
+
+function desert(material: THREE.Material, pack: string | undefined): THREE.Material {
+  const standard = material as THREE.MeshStandardMaterial;
+  if (!standard.isMeshStandardMaterial || standard.metalnessMap) return material;
+  standard.metalness = 0;
+  const tint = standard.map ? PACK_TINTS[pack ?? ''] : NATURE_TINTS[standard.name];
+  if (tint !== undefined) standard.color.set(tint);
+  return material;
+}
+
 // Wraps a loaded scene in a root whose origin is the bottom centre and whose size matches the target.
-export function prepareModel(scene: THREE.Object3D, target: ModelTarget): THREE.Group {
+export function prepareModel(scene: THREE.Object3D, target: ModelTarget, pack?: string): THREE.Group {
   scene.updateMatrixWorld(true);
   const { scale, offset } = fitToTarget(new THREE.Box3().setFromObject(scene), target);
   const converted = new Map<THREE.Material, THREE.Material>();
@@ -78,7 +104,7 @@ export function prepareModel(scene: THREE.Object3D, target: ModelTarget): THREE.
     const swap = (material: THREE.Material) => {
       let next = converted.get(material);
       if (!next) {
-        next = lit(material);
+        next = desert(lit(material), pack);
         converted.set(material, next);
       }
       markShared(mesh.geometry, next);
@@ -126,7 +152,7 @@ async function load(onProgress?: (done: number, total: number) => void): Promise
     if (!scene) continue;
     try {
       // Keys that share a file each normalise their own copy of the node tree; geometry and materials stay shared.
-      templates.set(key, prepareModel(scene.clone(), entry.targetSize));
+      templates.set(key, prepareModel(scene.clone(), entry.targetSize, entry.pack));
     } catch (error) {
       console.warn(`model ${key} could not be prepared`, error);
     }

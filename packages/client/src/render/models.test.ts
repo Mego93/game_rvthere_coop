@@ -114,3 +114,29 @@ describe('real files', () => {
     expect(measured.min.y).toBeCloseTo(0);
   });
 });
+
+describe('desert look', () => {
+  const standard = (name: string, map: THREE.Texture | null) => new THREE.MeshStandardMaterial({ name, map, metalness: 1, color: 0x2ed8b8 });
+  const wrap = (material: THREE.Material) => {
+    const scene = new THREE.Group();
+    scene.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material));
+    return scene;
+  };
+
+  it('drops the Nature Kit metal and mint colours', () => {
+    const material = standard('grass', null);
+    prepareModel(wrap(material), 1, 'nature');
+    expect(material.metalness).toBe(0);
+    expect(material.color.getHex()).not.toBe(new THREE.Color(0x2ed8b8).getHex());
+  });
+
+  it('multiplies an ochre tint into a City Kit colour map only', () => {
+    const map = new THREE.Texture();
+    const city = standard('colormap', map);
+    const car = standard('colormap', map);
+    prepareModel(wrap(city), 1, 'city-commercial');
+    prepareModel(wrap(car), 1, 'car-kit');
+    expect(city.color.getHex()).toBe(new THREE.Color(0xe6c79a).getHex());
+    expect(car.color.getHex()).toBe(new THREE.Color(0x2ed8b8).getHex());
+  });
+});

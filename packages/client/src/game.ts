@@ -6,6 +6,7 @@ import {
   rotate,
   createPredictor,
   getCourse,
+  getCourseDef,
   getVehicleConfig,
   holdPoseAt,
   predictedFrom,
@@ -39,6 +40,8 @@ import { createCoinMeshes } from './render/coinMesh';
 import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMesh';
 import { applyConditions, conditionsLook, configureRenderer } from './render/conditions';
 import { applySky, hasSky } from './render/environment';
+import { createDecorRenderer } from './render/decorRenderer';
+import { scatterDecor, seedFromId } from './render/decorScatter';
 import { createScene } from './render/scene';
 import { disposeScene } from './render/disposeScene';
 import { cameraPlacement } from './render/shoulderCamera';
@@ -110,6 +113,8 @@ export function createGame(
   const course = getCourse(lobby.courseId);
   const cameraBoxes = [...course.ground, ...course.walls];
   const scene = createScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true });
+  const decor = createDecorRenderer(scatterDecor(course, getCourseDef(course.id), seedFromId(course.id)), course.route, { touch: view.touchUi !== null, softwareGl: view.softwareGl === true });
+  scene.add(decor.group);
   const vehicleConfig = getVehicleConfig(lobby.vehicleId);
   const look = conditionsLook(firstLobby.timeOfDay, firstLobby.weather);
   const isTouch = view.touchUi !== null;
@@ -457,6 +462,7 @@ export function createGame(
     if (vehicle && winchOn(latestCable, lobby.phase)) audio.setLoop('winch', true, { at: add(vehicle.pos, rotate(vehicle.rot, vehicleConfig.winchMount)) });
     else audio.setLoop('winch', false);
     audio.setLoop('rain', rainOn(lobby.weather), { volume: 0.3 });
+    decor.update(camera.position, now / 1000);
     conditions.update(camera.position, frameSeconds, local && onFoot ? local.pos : vehicle ? vehicle.pos : camera.position);
     conditions.setLights(vehicle, players);
     renderer.render(scene, camera);
@@ -525,6 +531,7 @@ export function createGame(
       scene.remove(winchMesh);
       disposeWinchMesh(winchMesh);
       conditions.dispose();
+      decor.dispose();
       disposeScene(scene);
     },
   };
