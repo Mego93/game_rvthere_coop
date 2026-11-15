@@ -108,6 +108,13 @@ test.each(['jump', 'interact', 'drop'] as const)('keeps a %s tap from the first 
   expect(tick.input.moveX).toBe(0.02);
 });
 
+test('(T8) a reset hold is not a tap: the first of two consumed inputs does not set it', () => {
+  const { tick } = consumeTwo({ reset: true }, {});
+  expect(tick.input.reset).toBeFalsy();
+  const held = consumeTwo({}, { reset: true });
+  expect(held.tick.input.reset).toBe(true);
+});
+
 test('takes axes, aim, use, reel and slot from the second of two consumed inputs', () => {
   const { tick } = consumeTwo(
     { moveX: 1, moveY: 1, yaw: 1, pitch: 1, use: true, reel: 1, slot: 1 },

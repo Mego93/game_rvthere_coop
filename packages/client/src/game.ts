@@ -74,6 +74,8 @@ export interface Game {
   pushSnapshot(snapshot: SnapshotMessage): void;
   // Plays the sound of a server event as it arrives.
   onEvent(message: EventMessage): void;
+  // The controls panel opened or closed: the game stands still, and Esc is not the game's while it is open.
+  setControlsOpen(open: boolean): void;
   // Shows the mute state in the run menu.
   setMuted(muted: boolean): void;
   // Shows "Cannot buy" in the shop menu if it is open.
@@ -99,6 +101,9 @@ export interface GameView {
   muted: boolean;
   softwareGl?: boolean;
   onMute: () => void;
+  onHelp: () => void;
+  // Whether the controls panel is open when the game starts.
+  controlsOpen: boolean;
 }
 
 // Draws one run: sends an input every tick and shows the vehicle and the players from the server's snapshots.
@@ -162,7 +167,8 @@ export function createGame(
 
   const gate = gateControl(view.pointerGate);
   let runState: RunMenuState = { open: false };
-  const anyOpen = () => menuState.open || runState.open;
+  let controlsOpen = view.controlsOpen;
+  const anyOpen = () => menuState.open || runState.open || controlsOpen;
   const frozen = () => inputFrozen(anyOpen(), lobby.phase);
   // The lock change this causes is not the player's Esc.
   let releasedByGame = false;
@@ -198,6 +204,7 @@ export function createGame(
     onRefill: () => closeRun({ type: 'adminTool', tool: 'refill' }),
     onKick: (target) => closeRun({ type: 'kick', playerId: target }),
     onMute: view.onMute,
+    onHelp: view.onHelp,
   });
   runMenu.setMuted(view.muted);
   const hudRoot = document.createElement('div');
@@ -505,6 +512,11 @@ export function createGame(
     onEvent(message) {
       const sound = soundFor(message, playerId);
       if (sound) audio.play(sound.kind, sound.positional ? { at: message.pos } : undefined);
+    },
+    setControlsOpen(open) {
+      controlsOpen = open;
+      if (open) releaseLock();
+      gate.follow(frozen());
     },
     setMuted: (muted) => runMenu.setMuted(muted),
     showShopError: () => shopMenu.showError(),

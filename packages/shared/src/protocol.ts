@@ -20,6 +20,8 @@ export interface PlayerInput {
   reel: -1 | 0 | 1;
   slot: 0 | 1 | 2;
   drop: boolean;
+  // Absent means false, so a client without the button keeps working.
+  reset?: boolean;
 }
 
 export type InputFields = Omit<PlayerInput, 'seq'>;
@@ -228,9 +230,12 @@ function parseInput(data: Record<string, unknown>): PlayerInput | null {
   if (!finite(moveX) || !finite(moveY) || !finite(yaw) || !finite(pitch)) return null;
   if (typeof jump !== 'boolean' || typeof interact !== 'boolean') return null;
   if (typeof use !== 'boolean' || typeof drop !== 'boolean') return null;
+  const { reset } = data;
+  if (reset !== undefined && typeof reset !== 'boolean') return null;
   if (reel !== -1 && reel !== 0 && reel !== 1) return null;
   if (slot !== 0 && slot !== 1 && slot !== 2) return null;
-  return { seq: seq as number, ...sanitiseInput({ moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop }) };
+  const fields = sanitiseInput({ moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop });
+  return { seq: seq as number, ...fields, ...(reset === undefined ? {} : { reset }) };
 }
 
 // Validates one message from a client. Returns null for anything malformed.
@@ -302,6 +307,7 @@ const isVehicleState = (value: unknown): value is VehicleState =>
   isVec3(value.pos) &&
   isQuat(value.rot) &&
   isVec3(value.linvel) &&
+  (value.resetReady === undefined || typeof value.resetReady === 'boolean') &&
   finite(value.throttle) &&
   finite(value.steer) &&
   finite(value.fuel) &&

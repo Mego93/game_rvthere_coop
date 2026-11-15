@@ -19,6 +19,7 @@ import { createMouseLook } from './input/mouse';
 import type { GameInput } from './input/source';
 import { createTouchSource } from './input/touch';
 import { createCredits } from './ui/credits';
+import { createControlsPanel, isHelpKey } from './ui/controls';
 import { createHome, errorText } from './ui/home';
 import { createLobby } from './ui/lobby';
 import { createResults } from './ui/results';
@@ -148,6 +149,10 @@ let phase: Phase | null = null;
 let closeReason = CONNECTION_LOST;
 
 const credits = createCredits(document);
+const helpPanel = createControlsPanel(document, (open) => game?.setControlsOpen(open), () => credits.open());
+window.addEventListener('keydown', (event) => {
+  if (isHelpKey(event, event.target instanceof Element ? event.target.tagName : null)) helpPanel.toggle();
+});
 
 const home = createHome(document.querySelector<HTMLElement>('#home')!, {
   onCreate(chosenName) {
@@ -307,7 +312,7 @@ function startGame(lobby: LobbyMessage) {
       ? createTouchSource({ surface: canvas, win: window, doc: document, width: () => window.innerWidth, controls })
       : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document, pointerGate));
   touchUi?.setVisible(true);
-  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, onMute: toggleMute }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, onMute: toggleMute, onHelp: () => helpPanel.open(), controlsOpen: helpPanel.isOpen() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
 const clock = () => performance.now() / 1000;

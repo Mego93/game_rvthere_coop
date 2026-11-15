@@ -385,3 +385,17 @@ test('latestCoinsLeft is empty before any snapshot, then the newest snapshot\'s 
   left.push('x');
   expect(buffer.latestCoinsLeft()).toEqual(['coin-2']);
 });
+
+test('resetReady survives the copy and the blend, and stays absent when not set', () => {
+  const buffer = createSnapshotBuffer();
+  const ready = snapshot(3);
+  ready.vehicle.resetReady = true;
+  const later = snapshot(6);
+  later.vehicle.resetReady = true;
+  buffer.push(ready, 3 * TICK_DT);
+  buffer.push(later, 6 * TICK_DT);
+  expect(buffer.sample(6 * TICK_DT + INTERPOLATION_DELAY)!.vehicle.resetReady).toBe(true);
+  const plain = createSnapshotBuffer();
+  plain.push(snapshot(3), 3 * TICK_DT);
+  expect('resetReady' in plain.sample(3 * TICK_DT + INTERPOLATION_DELAY)!.vehicle).toBe(false);
+});

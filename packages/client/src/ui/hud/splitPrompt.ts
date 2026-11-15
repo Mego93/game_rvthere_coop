@@ -1,6 +1,6 @@
 export interface PromptPart { key: string | null; hold: boolean; text: string }
 
-const PATTERN = /^(Hold )?(E|F|Act|Use) to /;
+const PATTERN = /^(Hold )?(E|F|X|Act|Use|Reset) to /;
 
 export function splitPrompt(prompt: string): PromptPart[] {
   const parts = prompt.split(/ {3,}/).map((p) => p.replace(/ {2,}/g, ' ')).filter((p) => p !== '');

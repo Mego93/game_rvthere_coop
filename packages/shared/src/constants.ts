@@ -329,6 +329,18 @@ export const FINISH_TRIGGER: Vec3 = deepFreeze(vec3(ROAD_WIDTH / 2, 2, 2));
 // Fuel and vehicle health are restored at least to this on a restart.
 export const RESTART_FLOOR = 0.5;
 
+// Player reset of a stuck vehicle.
+// s the reset button is held before it fires.
+export const RESET_HOLD = 1.5;
+// m/s; the vehicle must be slower than this.
+export const RESET_MAX_SPEED = 1;
+// The vehicle's up vector y below this counts as upside down or on its side.
+export const RESET_TIPPED_UP_Y = 0.3;
+// s of throttle over which the vehicle must have moved STUCK_DISTANCE to count as free.
+export const STUCK_WINDOW = 8;
+// m.
+export const STUCK_DISTANCE = 1;
+
 // Coins, stops and shops.
 // m, the coin's touch sphere.
 export const COIN_RADIUS = 0.5;
@@ -368,3 +380,22 @@ export const HELD_SLOT_TIMEOUT = 30;
 export const WORLD_REBUILD_COOLDOWN = 1;
 // Course ids in campaign order.
 export const CAMPAIGN: readonly string[] = deepFreeze(['airport']);
+
+// m from the centre line to each barrier of a gates hazard; the corridor between inner edges is 2 * (this - barrier half width).
+export const GATES_OFFSET = 2.7;
+// m between the barriers of a gates hazard along the road.
+export const GATES_SPACING = 14;
+export const GATES_MIN_COUNT = 2;
+export const GATES_MAX_COUNT = 6;
+// m, each side of a roadblock, that its two edge fences reach along the road.
+export const ROADBLOCK_FENCE_HALF = 10;
+// m of road before the end of a segment that no hazard may reach into.
+export const HAZARD_END_CLEARANCE = 8;
+// m between the end of one hazard and the start of the next.
+export const HAZARD_MIN_GAP = 20;
+// m between a hazard and the nearest debris crate.
+export const HAZARD_DEBRIS_GAP = 10;
+// m of lateral centre of the three crates across the right half of the lane.
+export const CRATE_WALL_LATERALS: readonly number[] = Object.freeze([2.0, 2.62, 3.24]);
+// m, lateral offset of the outer barriers of a roadblock row (barriers at -3, 0, 3).
+export const ROADBLOCK_LATERAL = 3;

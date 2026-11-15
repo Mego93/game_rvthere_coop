@@ -1,6 +1,6 @@
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DEFAULT_WEATHER, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESTART_FLOOR, TICK_DT, type Surface, type Weather } from './constants';
+import { DEFAULT_WEATHER, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
@@ -164,6 +164,16 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   let assisted = false;
   const held = new Map<string, { health: number; downed: boolean; inventory: (ItemKind | null)[] }>();
   let debugDamage: PendingDamage[] = [];
+  // Each player's reset hold, private to the world; `spent` waits for a release before it can count again.
+  const resetHolds = new Map<string, { ticks: number; spent: boolean }>();
+  const stuckWindowTicks = Math.round(STUCK_WINDOW * TICK_RATE);
+  const resetHoldTicks = Math.round(RESET_HOLD * TICK_RATE);
+  // The vehicle centre over the last window as a ring: the slot at `historyNext` is the oldest once the ring is full; emptied by a restart.
+  const centreHistory: Vec3[] = Array.from({ length: stuckWindowTicks + 1 }, () => vec3(0, 0, 0));
+  let historyNext = 0;
+  let historyCount = 0;
+  let throttleTicks = 0;
+  let resetReady = false;
 
   const recordCheckpoint = (index: number) => {
     const checkpoint = course.checkpoints[index]!;
@@ -472,6 +482,50 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     events.push({ kind: 'respawn', tick, playerId: player.id, pos });
   };
 
+  // Rule R1: slow, and upturned, stuck under throttle for a full window, or out of fuel.
+  const resetConditions = (driverThrottle: number): boolean => {
+    const centre = vehicle.body.translation();
+    centreHistory[historyNext] = vec3(centre.x, centre.y, centre.z);
+    historyNext = (historyNext + 1) % centreHistory.length;
+    historyCount = Math.min(historyCount + 1, centreHistory.length);
+    throttleTicks = driverThrottle > 0 ? throttleTicks + 1 : 0;
+    const v = vehicle.body.linvel();
+    if (Math.hypot(v.x, v.y, v.z) >= RESET_MAX_SPEED) return false;
+    if (rotate(vehicle.body.rotation(), AXIS_Y).y < RESET_TIPPED_UP_Y) return true;
+    if (vehicle.fuel() <= 0) return true;
+    return throttleTicks >= stuckWindowTicks && historyCount === centreHistory.length && length(sub(centre, centreHistory[historyNext]!)) < STUCK_DISTANCE;
+  };
+
+  // Rule R2: a seated player holding reset while the conditions hold restarts from the checkpoint.
+  const stepReset = (onFoot: ReadonlyMap<string, StepInputs>, driverThrottle: number) => {
+    resetReady = false;
+    if (won) {
+      resetHolds.clear();
+      return;
+    }
+    const eligible = resetConditions(driverThrottle);
+    let fire = false;
+    for (const player of players.all()) {
+      const pressing = onFoot.get(player.id)?.fields.reset === true;
+      const able = eligible && player.seat !== null && player.downed === null;
+      if (able) resetReady = true;
+      const entry = resetHolds.get(player.id);
+      if (!pressing) {
+        resetHolds.delete(player.id);
+        continue;
+      }
+      const state = entry ?? { ticks: 0, spent: false };
+      resetHolds.set(player.id, state);
+      if (state.spent) continue;
+      state.ticks = able ? state.ticks + 1 : 0;
+      if (state.ticks >= resetHoldTicks) fire = true;
+    }
+    if (!fire) return;
+    restartPending = true;
+    // Whoever is still holding needs a fresh press for the next reset.
+    for (const state of resetHolds.values()) Object.assign(state, { ticks: 0, spent: true });
+  };
+
   // Rule V1: the first player in join order to touch a coin takes it.
   const stepCoins = (events: WorldEvent[]) => {
     if (won) return;
@@ -609,6 +663,11 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       }
     }
     restarts += 1;
+    historyNext = 0;
+    historyCount = 0;
+    throttleTicks = 0;
+    // A hold in progress starts over; a hold that already fired still needs a fresh press.
+    for (const state of resetHolds.values()) state.ticks = 0;
     events.push({ kind: 'vehicleLost', tick });
   };
 
@@ -646,6 +705,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       cableTension = cable.tension;
       const driver = players.all().find((player) => player.seat === 'driver');
       const controls = driver ? onFoot.get(driver.id)?.fields : undefined;
+      stepReset(onFoot, controls?.moveY ?? 0);
       vehicle.step({
         throttle: controls?.moveY ?? 0,
         steer: controls?.moveX ?? 0,
@@ -682,7 +742,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     },
     snapshot: () => ({
       tick,
-      vehicle: vehicle.state(),
+      vehicle: resetReady ? { ...vehicle.state(), resetReady: true } : vehicle.state(),
       players: players.all().map((player) => ({
         playerId: player.id,
         pos: { ...player.pos },
@@ -756,6 +816,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       }
       players.remove(id);
       previous.delete(id);
+      resetHolds.delete(id);
     },
     forgetHeld,
     recordStart: () => recordCheckpoint(0),

@@ -1,4 +1,4 @@
-import { PLAYER_MAX_HEALTH, clamp, yawOf, type Box, type Checkpoint, type Vec3 } from '@lodgy/shared';
+import { FINAL_RESTART_PENALTY, PLAYER_MAX_HEALTH, clamp, yawOf, type Box, type Checkpoint, type Vec3 } from '@lodgy/shared';
 import { clock, interactHint, useHint, type OverlayData } from '../overlay';
 import { bearingTo, compassLabel, compassTarget, edgeSide, headingOffset, markerPosition } from './compass';
 import { LOW_FRACTION, MARKER_HEIGHT } from './constants';
@@ -14,6 +14,7 @@ export interface HudModel {
   ownHealth: number;
   slots: { kind: string | null; label: string | null; selected: boolean }[];
   prompt: string | null;
+  canReset: boolean;
   hold: number | null;
   downedSelf: number | null;
   downedOthers: { id: string; name: string; pos: Vec3; seconds: number }[];
@@ -29,6 +30,8 @@ export interface HudModel {
 }
 
 export const ownHealthFraction = (health: number): number => (Number.isFinite(health) ? clamp(health / PLAYER_MAX_HEALTH, 0, 1) : 0);
+
+const RESET_HINT = `Hold X to reset (${FINAL_RESTART_PENALTY} s penalty)`;
 
 const seconds = (left: number) => Math.ceil(left - 1e-9);
 
@@ -53,8 +56,13 @@ export function buildHudModel(data: OverlayData, course: { checkpoints: readonly
   });
 
   let prompt: string | null = null;
+  const canReset = !!vehicle && seated && local.downed === null && vehicle.resetReady === true;
   if (vehicle && local && local.downed === null) {
-    const hints = [interactHint(config, vehicle, local, players, aim.yaw, aim.pitch, propPoses, cable, anchors, stops), useHint(data)];
+    const hints = [
+      interactHint(config, vehicle, local, players, aim.yaw, aim.pitch, propPoses, cable, anchors, stops),
+      useHint(data),
+      canReset ? RESET_HINT : null,
+    ];
     prompt = hints.filter((hint) => hint !== null).map((hint) => (data.touch ? touchWording(hint) : hint)).join('   ') || null;
   }
 
@@ -90,6 +98,7 @@ export function buildHudModel(data: OverlayData, course: { checkpoints: readonly
     ownHealth: local?.health ?? 0,
     slots,
     prompt,
+    canReset,
     hold: local?.hold?.progress ?? null,
     downedSelf: local && local.downed !== null ? seconds(local.downed) : null,
     downedOthers,

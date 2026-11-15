@@ -192,7 +192,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
     for (const part of splitPrompt(value)) {
       const wrap = el('span', promptText, undefined, 'part');
       if (part.key !== null) {
-        const pill = part.key === 'Act' || part.key === 'Use';
+        const pill = part.key === 'Act' || part.key === 'Use' || part.key === 'Reset';
         const cap = el('span', wrap, undefined, `keycap${pill ? ' pill' : ''}${part.hold ? ' hold' : ''}`);
         cap.textContent = part.key;
       }

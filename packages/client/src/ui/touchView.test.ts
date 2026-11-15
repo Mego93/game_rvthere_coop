@@ -28,7 +28,7 @@ const view = (local: Partial<PlayerSnapshot>, v: VehicleState | null = vehicle, 
   touchView({ config: rv, vehicle: v, players: [{ ...base, ...local }], localId: 'p1', aim: { yaw: 0, pitch: 0 }, cable: c });
 
 test('with no local player or no vehicle everything is off', () => {
-  const off = { seated: false, useVisible: false, reelVisible: false, slots: [null, null, null], selected: 0 };
+  const off = { seated: false, useVisible: false, reelVisible: false, resetVisible: false, slots: [null, null, null], selected: 0 };
   expect(touchView({ config: rv, vehicle, players: [base], localId: 'nobody', aim: { yaw: 0, pitch: 0 }, cable: null })).toEqual(off);
   expect(view({}, null)).toEqual(off);
 });
@@ -79,4 +79,12 @@ test('a player on foot at the winch mount sees the reel buttons', () => {
 
 test('no cable snapshot gives no reel buttons', () => {
   expect(view({ seat: 'driver' }, vehicle, null).reelVisible).toBe(false);
+});
+
+test('(T10) the reset button shows only for a seated player while the vehicle says it is ready', () => {
+  const ready = { ...vehicle, resetReady: true };
+  expect(view({ seat: 'driver' }, ready).resetVisible).toBe(true);
+  expect(view({ seat: 'driver' }).resetVisible).toBe(false);
+  expect(view({}, ready).resetVisible).toBe(false);
+  expect(view({ seat: 'driver', downed: 5 }, ready).resetVisible).toBe(false);
 });

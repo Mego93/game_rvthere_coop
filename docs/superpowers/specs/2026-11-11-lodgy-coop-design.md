@@ -164,7 +164,7 @@ Common to both:
 
 - Fuel drains in proportion to throttle. At 0 fuel, throttle has no effect.
 - Health drops on impacts above a speed threshold, scaled by the speed above it, and continuously while upside down.
-- A Lodgy on its side is righted by pushing. An upturned vehicle, or an RV on its side, is recovered by a checkpoint restart: a cable at the front bumper cannot roll a vehicle.
+- A Lodgy on its side is righted by pushing. An upturned vehicle, or an RV on its side, is recovered by a checkpoint restart (any seated player can hold X for it): a cable at the front bumper cannot roll a vehicle.
 - Same winch, same health pool.
 - Models are recognisable shapes without any manufacturer's name or badge.
 
@@ -185,7 +185,7 @@ Course geometry is sized so the RV fits, and every segment is completable by the
 ### Push
 
 - The push is a horizontal force along the player's move input, applied at the contact point: the point of the object's box nearest to the player's push point, a fixed height above the feet. It applies only while the input points into the surface. A player's force is a constant, capped at the object's mass times a maximum acceleration, so light debris is not launched.
-- On the vehicle, forces add per player, capped at 4 pushers' worth (the first 4 in join order among those pushing it that tick). Because the force acts at the contact point, pushing can roll a flipped vehicle upright. While the vehicle is tipped more than 45° from upright, each player's push uses a larger constant, so four players can roll a Lodgy lying on its side back onto its wheels; an upturned vehicle or a tipped RV needs a checkpoint restart.
+- On the vehicle, forces add per player, capped at 4 pushers' worth (the first 4 in join order among those pushing it that tick). Because the force acts at the contact point, pushing can roll a flipped vehicle upright. While the vehicle is tipped more than 45° from upright, each player's push uses a larger constant, so four players can roll a Lodgy lying on its side back onto its wheels; an upturned vehicle or a tipped RV needs a checkpoint restart, which any seated player can trigger by holding X (see Stuck vehicle).
 - A player standing on an object applies no push to it.
 - A heavy obstacle is locked in place. It unlocks only while enough players push it at once, or while the cable attached to it is taut. The count is 1 when one player is connected, 2 for 2–3 connected players, 3 for 4–6, and follows the players currently connected. The vehicle cannot shove a locked obstacle. A heavy obstacle never rotates: unlocked, it slides.
 
@@ -255,7 +255,7 @@ Segment types in spec 1:
 
 | Type | Content | Parameters |
 |---|---|---|
-| `road` | Plain road, optionally curved or sloped | length, curve, slope, light debris count |
+| `road` | Plain road, optionally curved or sloped | length, curve, slope, light debris count, hazards (`gates`, `crateWall`, `roadblock`) |
 | `alley` | Narrow walled street cluttered with crates, carts, parked scooters | length, clutter density |
 | `sand` | Soft sand between palm trees; the vehicle slows down | length, palm (anchor) count |
 | `ford` | Shallow rocky riverbed, slow and fuel-hungry | width, rock count |
@@ -473,7 +473,7 @@ Client to server:
 
 Every message is validated for shape and its numbers are clamped. A malformed message gets `bad_message` and is dropped.
 
-`input { seq, moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop }`. The client sends one per simulation tick, with `seq` starting at 1 and increasing by 1.
+`input { seq, moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop, reset? }`. The client sends one per simulation tick, with `seq` starting at 1 and increasing by 1.
 
 | Field | On foot | As driver |
 |---|---|---|
@@ -485,6 +485,7 @@ Every message is validated for shape and its numbers are clamped. A malformed me
 | `reel`: −1 out, 0, 1 in | Works within range of the winch box | Works always |
 | `slot`: 0, 1 or 2 | Selected inventory slot | Same |
 | `drop`, boolean | Drops the selected item on the press | No effect |
+| `reset?`, boolean, held (absent means false) | No effect | Any seated player: held 1.5 s while the vehicle is tipped, out of fuel or stuck, it restarts from the last checkpoint |
 
 Server to client:
 
@@ -501,7 +502,7 @@ Server to client:
 ```
 snapshot {
   tick, ackSeq, full,
-  vehicle { pos, rot, linvel, throttle, steer, fuel, health },
+  vehicle { pos, rot, linvel, throttle, steer, fuel, health, resetReady? },   // resetReady: true while a seated player could reset; absent means false
   players [ {
     playerId, pos, yaw, health,                         // health 0..100, rounded down
     walk: { x, z }, carry: { x, z }, vy, grounded,   // the walking state the predictor resets to
@@ -586,6 +587,8 @@ Effects only: engine loop, impact, winch loop, hook attach, pickup, item use, co
 | Jump / brake | Space | Button (label changes when seated) |
 | Throttle, reverse | W, S when driving | Joystick up, down when driving |
 | Reel in, out | Q, R | Two buttons, shown only when reeling is possible |
+| Reset a stuck vehicle | X (hold 1.5 s) | A button on touch, shown only when it can act |
+| Controls help | H | A `?` entry in the run menu on touch |
 | Select slot | 1, 2, 3 | Tap the slot |
 | Drop item | G | Long-press the slot |
 | Menu | Esc | Button |
@@ -615,7 +618,7 @@ Hosting on Cloudflare is built (decision D-HOST1 in `ROADMAP.md`, setup in `docs
 - **Refused purchase.** Too few coins, no free slot, or no shop counter in range returns `cannot_buy`.
 - **Disconnects.** The client shows a reconnecting overlay and retries after 0.5, 1, 2, 4 and then every 8 s, for 30 s from the drop, rejoining with its session token. A socket that does not open within 8 s counts as a failed attempt, and the page itself closes a connection that has heard nothing from the server for 6 s. It gives up at most 38 s after the drop. It does not retry after `kicked` or `replaced` (the server sends `replaced` to a connection whose slot another connection with the same token took over, as a duplicated tab does: "This room was opened in another tab."), or after a refusal (`unknown_room`, `room_full`, `name_taken`); a rejoin that comes back as a different player (the slot expired or was kicked) is treated as a refusal: "Your place in the room was lost." The server follows the held-slot rules.
 - **Silent connections.** A connection that stops sending, such as a backgrounded iPhone, gets neutral input after 15 ticks and is dropped after 6 s.
-- **Stuck vehicle.** A vehicle that is wedged, or out of fuel with no way to refuel, is not detected automatically. The admin uses "restart from checkpoint".
+- **Stuck vehicle.** A vehicle that is tipped, out of fuel, or has moved under 1 m in 8 s with the throttle held, and is slower than 1 m/s, can be reset by any seated player holding X for 1.5 s: a checkpoint restart with the usual penalty. The admin can still restart from the menu.
 - **Physics escapes.** Handled by the kill-plane rules: players respawn, props return to spawn, the vehicle triggers a checkpoint restart.
 - **Server restart.** Rooms are in memory; a restart ends all runs.
 

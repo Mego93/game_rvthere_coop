@@ -88,6 +88,22 @@ test('accepts an input and keeps its fields', () => {
   });
 });
 
+test('(T9) an input keeps reset when present and leaves it absent when not', () => {
+  expect(parseClientMessage(input({ reset: true }))).toEqual({ type: 'input', ...INPUT, reset: true });
+  expect(parseClientMessage(input({ reset: false }))).toEqual({ type: 'input', ...INPUT, reset: false });
+  const absent = parseClientMessage(input({})) as PlayerInput;
+  expect('reset' in absent).toBe(false);
+});
+
+test.each([['a number', 1], ['text', 'true'], ['null', null]])('(T9) rejects an input whose reset is %s', (_label, reset) => {
+  expect(parseClientMessage(input({ reset }))).toBeNull();
+});
+
+test('(T9) the neutral input has no reset', () => {
+  expect('reset' in NEUTRAL_INPUT).toBe(false);
+  expect('reset' in neutralInput({ ...NEUTRAL_INPUT, reset: true })).toBe(false);
+});
+
 test('clamps the axes and the pitch, and wraps the yaw', () => {
   const message = parseClientMessage(input({ moveX: 3, moveY: -9, pitch: 5, yaw: 3 * Math.PI + 0.5 }));
   expect(message).toMatchObject({ moveX: 1, moveY: -1, pitch: Math.PI / 2 });
@@ -189,6 +205,7 @@ test.each<ServerMessage>([
   { ...lobby, players: [], adminId: null } as ServerMessage,
   snapshot as ServerMessage,
   { ...snapshot, tick: 0, ackSeq: 0, full: true } as ServerMessage,
+  { ...snapshot, vehicle: { ...vehicle, resetReady: true } } as ServerMessage,
   { ...snapshot, elapsed: 61.5, checkpoint: 1, restarts: 2, respawns: 3, won: true } as ServerMessage,
 ])('parseServerMessage accepts %j', (message) => {
   expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
@@ -259,6 +276,7 @@ test.each([
   ['a player whose downed is negative', JSON.stringify({ ...snapshot, players: [{ ...onFoot, downed: -1 }] })],
   ['a player whose downed is text', JSON.stringify({ ...snapshot, players: [{ ...onFoot, downed: '30' }] })],
   ['a player whose downed is too large to be finite', JSON.stringify({ ...snapshot, players: [{ ...onFoot, downed: 1 }] }).replace('"downed":1', '"downed":1e999')],
+  ['a vehicle whose resetReady is text', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, resetReady: 'yes' } })],
   ['a snapshot whose throttle is text', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, throttle: 'full' } })],
 ])('parseServerMessage rejects %s', (_label, raw) => {
   expect(parseServerMessage(raw)).toBeNull();

@@ -5,6 +5,10 @@ describe('splitPrompt', () => {
   it('T1 E to board', () => {
     expect(splitPrompt('E to board')).toEqual([{ key: 'E', hold: false, text: 'board' }]);
   });
+  it('splits the reset hint', () => {
+    expect(splitPrompt('Hold X to reset (60 s penalty)')).toEqual([{ key: 'X', hold: true, text: 'reset (60 s penalty)' }]);
+    expect(splitPrompt('Hold Reset to reset')).toEqual([{ key: 'Reset', hold: true, text: 'reset' }]);
+  });
   it('T2 Hold F to refuel', () => {
     expect(splitPrompt('Hold F to refuel')).toEqual([{ key: 'F', hold: true, text: 'refuel' }]);
   });
