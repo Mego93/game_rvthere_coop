@@ -5,7 +5,7 @@ import { createVehicleMesh } from './vehicleMesh';
 import { disposeScene } from './disposeScene';
 
 const meshes = (group: THREE.Group) => group.children as THREE.Mesh[];
-const colourOf = (mesh: THREE.Mesh) => (mesh.material as THREE.MeshLambertMaterial).color.getHex();
+const colourOf = (mesh: THREE.Mesh) => (mesh.material as THREE.MeshStandardMaterial).color.getHex();
 const sizeOf = (mesh: THREE.Mesh) => {
   const p = (mesh.geometry as THREE.BoxGeometry).parameters;
   return [p.width, p.height, p.depth];

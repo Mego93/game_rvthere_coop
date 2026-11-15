@@ -31,16 +31,18 @@ function nameSprite(name: string): THREE.Sprite {
 // A capsule body and a sphere head in the player's colour, a dark visor on the front (-Z), and the name above.
 export function createPlayerMesh(name: string, colour: string): THREE.Group {
   const safe = PLAYER_COLOUR_PATTERN.test(colour) ? colour : PLAYER_COLOURS[0];
-  const material = new THREE.MeshLambertMaterial({ color: safe, flatShading: true });
+  const material = new THREE.MeshStandardMaterial({ color: safe, flatShading: true, roughness: 1, metalness: 0 });
   const group = new THREE.Group();
 
   const bodyLength = PLAYER_HEIGHT - 2 * HEAD_RADIUS - 2 * PLAYER_RADIUS;
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(PLAYER_RADIUS, bodyLength, 4, 12), material);
   body.position.y = PLAYER_RADIUS + bodyLength / 2;
+  body.castShadow = true;
   group.add(body);
 
   const head = new THREE.Mesh(new THREE.SphereGeometry(HEAD_RADIUS, 16, 12), material);
   head.position.y = PLAYER_HEIGHT - HEAD_RADIUS;
+  head.castShadow = true;
   group.add(head);
 
   const visor = new THREE.Mesh(

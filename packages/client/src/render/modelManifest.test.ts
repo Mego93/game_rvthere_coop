@@ -1,0 +1,106 @@
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { MODEL_KEYS, MODEL_MANIFEST } from './modelManifest';
+
+const PUBLIC = join(import.meta.dirname, '../../public');
+
+const subfolders = (dir: string): string[] =>
+  readdirSync(join(PUBLIC, dir)).filter((name) => statSync(join(PUBLIC, dir, name)).isDirectory());
+
+describe('model manifest', () => {
+  it('T2: keys are unique and listed once', () => {
+    expect(new Set(MODEL_KEYS).size).toBe(MODEL_KEYS.length);
+    expect(MODEL_KEYS.length).toBeGreaterThan(60);
+  });
+
+  it('T2: every file exists, is a .glb and sits in its pack folder', () => {
+    for (const key of MODEL_KEYS) {
+      const entry = MODEL_MANIFEST[key];
+      expect(entry.file.endsWith('.glb'), key).toBe(true);
+      expect(entry.file.startsWith(`${entry.pack}/`), key).toBe(true);
+      expect(existsSync(join(PUBLIC, 'models', entry.file)), key).toBe(true);
+    }
+  });
+
+  it('T2: target sizes are above 0 and at most 30 m, except distant cliffs up to 40 m', () => {
+    for (const key of MODEL_KEYS) {
+      const { targetSize } = MODEL_MANIFEST[key];
+      const sides = typeof targetSize === 'number' ? [targetSize] : [targetSize.x, targetSize.y, targetSize.z];
+      const limit = key.startsWith('decor.cliff.') ? 40 : 30;
+      for (const side of sides) {
+        expect(side, key).toBeGreaterThan(0);
+        expect(side, key).toBeLessThanOrEqual(limit);
+      }
+    }
+  });
+
+  it('every model file stays small and every texture it names is beside it', () => {
+    let total = 0;
+    for (const key of MODEL_KEYS) {
+      const path = join(PUBLIC, 'models', MODEL_MANIFEST[key].file);
+      const bytes = readFileSync(path);
+      total += bytes.length;
+      const json = JSON.parse(bytes.subarray(20, 20 + bytes.readUInt32LE(12)).toString()) as { images?: { uri?: string }[] };
+      for (const image of json.images ?? []) {
+        if (image.uri) expect(existsSync(join(path, '..', image.uri)), `${key} ${image.uri}`).toBe(true);
+      }
+    }
+    expect(total).toBeLessThan(12 * 1024 * 1024);
+  });
+});
+
+describe('model triangle budgets', () => {
+  const triangles = (file: string): number => {
+    const bytes = readFileSync(join(PUBLIC, 'models', file));
+    const json = JSON.parse(bytes.subarray(20, 20 + bytes.readUInt32LE(12)).toString()) as {
+      accessors: { count: number }[];
+      meshes: { primitives: { indices?: number; attributes: { POSITION: number } }[] }[];
+    };
+    let total = 0;
+    for (const mesh of json.meshes) {
+      for (const p of mesh.primitives) total += (json.accessors[p.indices ?? p.attributes.POSITION]?.count ?? 0) / 3;
+    }
+    return total;
+  };
+
+  it('A5: palms stay at most 1000 triangles, everything else at most 2500', () => {
+    for (const key of MODEL_KEYS) {
+      expect(triangles(MODEL_MANIFEST[key].file), key).toBeLessThanOrEqual(key.includes('palm') ? 1000 : 2500);
+    }
+  });
+});
+
+describe('credits', () => {
+  const credits = readFileSync(join(PUBLIC, 'CREDITS.md'), 'utf8');
+  const headings = credits.split('\n').filter((line) => line.startsWith('## ')).map((line) => line.slice(3).trim());
+
+  it('T1: every folder under models, textures and env has a section', () => {
+    for (const pack of subfolders('models')) expect(headings, `models/${pack}`).toContain(`models/${pack}`);
+    for (const name of subfolders('textures')) expect(headings, `textures/${name}`).toContain(`textures/${name}`);
+    expect(headings).toContain('env');
+    expect(headings).toContain('sounds');
+  });
+
+  it('T1: every section names a real folder and the sounds record is referenced', () => {
+    for (const heading of headings) expect(existsSync(join(PUBLIC, heading)), heading).toBe(true);
+    expect(credits).toContain('sounds/LICENSE.md');
+    expect(existsSync(join(PUBLIC, 'sounds/LICENSE.md'))).toBe(true);
+  });
+
+  it('T1: every pack folder carries its licence file and every skies/texture file is under 2.5 MB / 600 KB', () => {
+    for (const pack of subfolders('models')) expect(existsSync(join(PUBLIC, 'models', pack, 'License.txt')), pack).toBe(true);
+    let sky = 0;
+    for (const file of readdirSync(join(PUBLIC, 'env'))) {
+      const size = statSync(join(PUBLIC, 'env', file)).size;
+      expect(size, file).toBeLessThan(2.5 * 1024 * 1024);
+      sky += size;
+    }
+    expect(sky).toBeLessThan(8 * 1024 * 1024);
+    for (const name of subfolders('textures')) {
+      for (const file of readdirSync(join(PUBLIC, 'textures', name))) {
+        expect(statSync(join(PUBLIC, 'textures', name, file)).size, `${name}/${file}`).toBeLessThan(600 * 1024);
+      }
+    }
+  });
+});

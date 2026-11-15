@@ -4,6 +4,10 @@ import * as THREE from 'three';
 import { createAudio } from './audio/audio';
 import { isMuteKey } from './audio/soundMap';
 import { createGame, type Game } from './game';
+import { isSoftwareRenderer, pixelRatioFor } from './render/renderScale';
+import { preloadAssets } from './render/models';
+import { preloadSkies, SKY_COUNT } from './render/environment';
+import { preloadGroundTextures } from './render/groundTextures';
 import { openSocket, type CloseInfo, type GameSocket } from './net/socket';
 import { RECONNECT_IDLE, RECONNECT_WINDOW, SOCKET_OPEN_TIMEOUT, reconnectStep, resumeAction, type ReconnectEvent, type ReconnectState } from './net/reconnect';
 import { roomFromPath, socketUrl } from './route';
@@ -66,6 +70,32 @@ window.addEventListener('keydown', (event) => {
 
 // The physics module loads once; creating or joining a room waits for it.
 const rapierReady = RAPIER.init();
+// Models, skies and ground textures load as the page does; both resolve even when a file fails, which only warns.
+let modelsProgress = 0;
+let skiesProgress = 0;
+let texturesProgress = 0;
+let assetsLoading = true;
+let requesting = false;
+const assetsReady = Promise.all([
+  preloadAssets((done, total) => {
+    modelsProgress = done / total;
+    showLoading();
+  }),
+  preloadSkies((done) => {
+    skiesProgress = done / SKY_COUNT;
+    showLoading();
+  }),
+  preloadGroundTextures(!window.matchMedia('(pointer: coarse)').matches, (done, total) => {
+    texturesProgress = done / total;
+    showLoading();
+  }),
+]).then(() => {
+  assetsLoading = false;
+});
+function showLoading() {
+  if (assetsLoading && requesting) home.setBusy(true, `Loading ${Math.round(((modelsProgress + skiesProgress + texturesProgress) / 3) * 100)}%`);
+}
+
 const RAPIER_FAILED = 'The game could not load its physics engine. Reload the page to try again.';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
@@ -90,6 +120,9 @@ const VIEW_LOST = 'The 3D view was lost. Reload the page to continue.';
 const AUTO_RELOAD_GUARD = 10_000;
 
 let renderer: THREE.WebGLRenderer | null = null;
+let softwareGl = false;
+// ?hq keeps the full look on software GL, for screenshots; read at load, before a room's path replaces the address.
+const fullQuality = new URLSearchParams(location.search).has('hq');
 // The joined socket, or the one that is joining. It is null while reconnecting.
 let socket: GameSocket | null = null;
 // The socket of a reconnect attempt, until its welcome makes it the joined socket.
@@ -240,7 +273,11 @@ function startGame(lobby: LobbyMessage) {
   try {
     if (!renderer) {
       renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      const gl = renderer.getContext();
+      const debug = gl.getExtension('WEBGL_debug_renderer_info');
+      const description = debug ? String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : '';
+      softwareGl = isSoftwareRenderer(description) && !fullQuality;
+      renderer.setPixelRatio(pixelRatioFor(window.devicePixelRatio, description, fullQuality));
     }
   } catch (error) {
     console.error(error);
@@ -264,7 +301,7 @@ function startGame(lobby: LobbyMessage) {
       ? createTouchSource({ surface: canvas, win: window, doc: document, width: () => window.innerWidth, controls })
       : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document, pointerGate));
   touchUi?.setVisible(true);
-  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, onMute: toggleMute }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, onMute: toggleMute }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
 const clock = () => performance.now() / 1000;
@@ -389,11 +426,18 @@ function onSocketClose(from: GameSocket, info: CloseInfo) {
 
 // Sends a create or join request once the physics module is ready.
 function request(message: ClientMessage) {
+  requesting = true;
   home.setBusy(true);
-  // Until the physics module is ready nothing is sent, so no lobby (and no game) can arrive before it.
-  rapierReady.then(
-    () => send(message),
+  showLoading();
+  // Until the physics module and the assets are ready nothing is sent, so no lobby (and no game) can arrive before them.
+  Promise.all([rapierReady, assetsReady]).then(
     () => {
+      requesting = false;
+      home.setBusy(true);
+      send(message);
+    },
+    () => {
+      requesting = false;
       home.setBusy(false);
       home.setError(RAPIER_FAILED);
     },
@@ -422,7 +466,7 @@ function autoJoin(room: string, rejoinName: string, rejoinPlayerId: string) {
   autoJoinRoom = room;
   if (pageHidden) return;
   reconnectOverlay.hidden = false;
-  rapierReady.then(
+  Promise.all([rapierReady, assetsReady]).then(
     () => {
       if (pageHidden) return;
       send({ type: 'join', room, name, token });

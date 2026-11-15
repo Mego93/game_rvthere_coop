@@ -27,7 +27,8 @@ export interface HomeView {
   hide(): void;
   setError(text: string): void;
   // Disables the buttons while a request is with the server.
-  setBusy(busy: boolean): void;
+  // progress, when given, is shown on the main button while busy.
+  setBusy(busy: boolean, progress?: string): void;
 }
 
 // The home page and the "join this room" page. The markup is in index.html; this wires it up.
@@ -90,9 +91,10 @@ export function createHome(root: HTMLElement, handlers: HomeHandlers): HomeView 
       root.hidden = true;
     },
     setError,
-    setBusy(busy) {
+    setBusy(busy, progress) {
       primaryButton.disabled = busy;
       joinButton.disabled = busy;
+      primaryButton.textContent = busy && progress ? progress : linkedRoom ? 'Join' : 'Create room';
     },
   };
 }

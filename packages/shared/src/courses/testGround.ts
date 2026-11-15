@@ -25,8 +25,8 @@ export function slopePose(slope: ReferenceSlope, along: number): Pose {
 
 // Both stops stand on the right and left of the road at z = -20; the pads are coplanar with the main slab.
 const STOP_AT: SurfacePoint = { pos: vec3(0, 0, -20), yaw: 0, pitch: 0 };
-const fuelStop = placeStop('stop-fuel', 'fuel', STOP_AT, 1);
-const garageStop = placeStop('stop-garage', 'garage', STOP_AT, -1);
+const fuelStop = placeStop('stop-fuel', 'fuel', STOP_AT, 1, 0);
+const garageStop = placeStop('stop-garage', 'garage', STOP_AT, -1, 0);
 
 const slopes: GroundBox[] = (Object.keys(SLOPE_X) as ReferenceSlope[]).map((slope) =>
   ramp(vec3(SLOPE_X[slope], 0, SLOPE_START_Z), REFERENCE_SLOPES_DEG[slope], 4, SLOPE_LENGTH, 'road'),

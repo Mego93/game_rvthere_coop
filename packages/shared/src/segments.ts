@@ -20,6 +20,8 @@ import {
   ROADWORKS_ROW,
   ROADWORKS_ROW_SPACING,
   SAND_APRON,
+  SHOULDER_OVERLAP,
+  SHOULDER_WIDTH,
   WALL_THICKNESS,
   WATER_HALF_THICKNESS,
   ROAD_JOINT_OVERLAP,
@@ -32,6 +34,7 @@ import {
   STOP_COUNTER_OFFSET,
   STOP_OPERATE_GAP,
   STOP_PAD,
+  STOP_PAD_LIFT,
   STOP_ZONE_GAP,
   STOP_ZONE,
   type PropKind,
@@ -137,6 +140,26 @@ function roadBoxes(pieces: Piece[], curved: boolean, width = ROAD_WIDTH): Ground
   });
 }
 
+// Solid ground beside the road, per piece: same pose, height and thickness, reaching SHOULDER_WIDTH past each edge.
+// `turn` is the yaw change between pieces; on a curve the boxes grow at both ends to close the wedge at the outer edge.
+function shoulderBoxes(pieces: Piece[], turn: number, width = ROAD_WIDTH): GroundBox[] {
+  const inner = width / 2 - SHOULDER_OVERLAP;
+  const half = (width / 2 + SHOULDER_WIDTH - inner) / 2;
+  const lateral = inner + half;
+  const before = turn === 0 ? 0 : ROAD_JOINT_OVERLAP + (width / 2 + SHOULDER_WIDTH) * Math.tan(Math.abs(turn) / 2);
+  return pieces.flatMap((piece) => {
+    const rot = yawPitchQuat(piece.yaw, piece.pitch);
+    const total = piece.length + 2 * before;
+    const surface: Surface = piece.surface === 'sand' ? 'sand' : 'gravel';
+    return ([-1, 1] as const).map((side) => ({
+      center: add(piece.start, rotate(rot, vec3(side * lateral, -ROAD_THICKNESS / 2, -(total / 2 - before)))),
+      halfExtents: vec3(half, ROAD_THICKNESS / 2, total / 2),
+      rot,
+      surface,
+    }));
+  });
+}
+
 function endOf(piece: Piece): Vec3 {
   return add(piece.start, rotate(yawPitchQuat(piece.yaw, piece.pitch), vec3(0, 0, -piece.length)));
 }
@@ -174,19 +197,20 @@ export function evenSlots(count: number, routeLength: number): { along: number; 
 }
 
 // The pad and stop beside the road at `s`; side is +1 on the right, -1 on the left.
+// `lift` raises the pad above the shoulder it overlaps; a ground with no shoulders passes 0.
 // The counter offset assumes yaw 0 (a road facing -Z), as every caller has.
-export function placeStop(id: string, kind: ServiceStop['kind'], s: SurfacePoint, side: 1 | -1): { pad: GroundBox; stop: ServiceStop } {
+export function placeStop(id: string, kind: ServiceStop['kind'], s: SurfacePoint, side: 1 | -1, lift = STOP_PAD_LIFT): { pad: GroundBox; stop: ServiceStop } {
   const rot = yawQuat(s.yaw);
-  const padCenter = offsetFrom(s, side * (ROAD_WIDTH / 2 + STOP_PAD.x), -STOP_PAD.y);
+  const padCenter = offsetFrom(s, side * (ROAD_WIDTH / 2 + STOP_PAD.x), -STOP_PAD.y + lift);
   const zoneLateral = side * (ROAD_WIDTH / 2 + STOP_ZONE_GAP + STOP_ZONE.x);
   const operateLateral = side * (ROAD_WIDTH / 2 + STOP_ZONE_GAP + 2 * STOP_ZONE.x + STOP_OPERATE_GAP);
-  const operatePoint = offsetFrom(s, operateLateral);
+  const operatePoint = offsetFrom(s, operateLateral, lift);
   return {
     pad: { center: padCenter, halfExtents: STOP_PAD, rot, surface: 'road' },
     stop: {
       id,
       kind,
-      zone: { center: offsetFrom(s, zoneLateral, STOP_ZONE.y), halfExtents: STOP_ZONE, rot },
+      zone: { center: offsetFrom(s, zoneLateral, STOP_ZONE.y + lift), halfExtents: STOP_ZONE, rot },
       operatePoint,
       shopCounter: kind === 'fuel' ? vec3(operatePoint.x, operatePoint.y, operatePoint.z - STOP_COUNTER_OFFSET) : null,
     },
@@ -247,7 +271,7 @@ function buildRoad(def: Extract<SegmentDef, { type: 'road' }>): LocalSegment {
     props.push({ id: id('crate'), kind: 'crate', pose: { pos: offsetFrom(s, (slot.side * ROAD_WIDTH) / 4), rot: yawPitchQuat(s.yaw, s.pitch) } });
   }
   const seg: LocalSegment = {
-    ground: roadBoxes(pieces, curve !== 0),
+    ground: [...roadBoxes(pieces, curve !== 0), ...shoulderBoxes(pieces, curve / pieces.length)],
     walls: [],
     props,
     pickups: [],
@@ -359,7 +383,7 @@ function buildSand(def: Extract<SegmentDef, { type: 'sand' }>): LocalSegment {
       pose: { pos: offsetFrom(surfaceAt(slot.along), slot.side * (ROAD_WIDTH / 2 + PALM_OFFSET)), rot: yawQuat(0) },
     }),
   );
-  return finish(pieces, { ground: roadBoxes(pieces, false), walls: [], props: [], anchors, decor: [], width: ROAD_WIDTH }, def, id);
+  return finish(pieces, { ground: [...roadBoxes(pieces, false), ...shoulderBoxes(pieces, 0)], walls: [], props: [], anchors, decor: [], width: ROAD_WIDTH }, def, id);
 }
 
 function buildFord(def: Extract<SegmentDef, { type: 'ford' }>): LocalSegment {
@@ -406,7 +430,7 @@ function buildBank(def: Extract<SegmentDef, { type: 'bank' }>): LocalSegment {
     return { id: id('boulder'), kind: 'boulder', pose: { pos: offsetFrom(surfaceAt(along), side * (ROAD_WIDTH / 2 - BOULDER_EDGE_INSET)), rot: yawQuat(0) } };
   });
   const { anchors: _count, ...extras } = def;
-  return finish(pieces, { ground: roadBoxes(pieces, false), walls: [], props: [], anchors, decor: [], width: ROAD_WIDTH }, extras, id);
+  return finish(pieces, { ground: [...roadBoxes(pieces, false), ...shoulderBoxes(pieces, 0)], walls: [], props: [], anchors, decor: [], width: ROAD_WIDTH }, extras, id);
 }
 
 function buildRoadworks(def: Extract<SegmentDef, { type: 'roadworks' }>): LocalSegment {
@@ -426,7 +450,7 @@ function buildRoadworks(def: Extract<SegmentDef, { type: 'roadworks' }>): LocalS
     return { id: id('barrier'), kind: 'barrier', pose: { pos: offsetFrom(surfaceAt(along), lateral), rot: yawQuat(0) } };
   });
   const walls = [edgeWall(-1, ROAD_WIDTH / 2, FENCE_HEIGHT, routeLength), edgeWall(1, ROAD_WIDTH / 2, FENCE_HEIGHT, routeLength)];
-  return finish(pieces, { ground: roadBoxes(pieces, false), walls, props, anchors: [], decor: [], width: ROAD_WIDTH }, def, id);
+  return finish(pieces, { ground: [...roadBoxes(pieces, false), ...shoulderBoxes(pieces, 0)], walls, props, anchors: [], decor: [], width: ROAD_WIDTH }, def, id);
 }
 
 export function buildSegment(def: SegmentDef): LocalSegment {

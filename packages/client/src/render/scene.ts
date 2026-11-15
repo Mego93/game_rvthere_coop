@@ -1,5 +1,8 @@
 import { ANCHOR_HEIGHT, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type BuiltCourse, type Surface } from '@lodgy/shared';
 import * as THREE from 'three';
+import { groupBySurface, mergeBoxes, toGeometry } from './groundMerge';
+import { groundTexture, SURFACE_TEXTURE, type SceneOptions } from './groundTextures';
+import { createTerrainMesh } from './terrain';
 
 const SURFACE_COLOURS: Record<Surface, number> = {
   road: 0x8a7f72,
@@ -15,17 +18,41 @@ function boxMesh(box: Box, material: THREE.Material): THREE.Mesh {
   );
   mesh.position.set(box.center.x, box.center.y, box.center.z);
   mesh.quaternion.set(box.rot.x, box.rot.y, box.rot.z, box.rot.w);
+  mesh.receiveShadow = true;
   return mesh;
 }
 
-const solid = (colour: number) => new THREE.MeshLambertMaterial({ color: colour, flatShading: true });
+const solid = (colour: number) => new THREE.MeshStandardMaterial({ color: colour, flatShading: true, roughness: 1, metalness: 0 });
 const ghost = (colour: number) =>
   new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.25, depthWrite: false });
 
-export function createScene(course: BuiltCourse): THREE.Scene {
+// A surface with its texture, or its flat colour when the texture did not load.
+function groundMaterial(surface: Surface, { lite = false, flat = false }: SceneOptions): THREE.MeshStandardMaterial {
+  const set = SURFACE_TEXTURE[surface];
+  const map = flat ? null : groundTexture(set, 'diffuse');
+  if (!map) return new THREE.MeshStandardMaterial({ color: SURFACE_COLOURS[surface], roughness: 1, metalness: 0 });
+  map.anisotropy = lite ? 1 : 4;
+  return new THREE.MeshStandardMaterial({ color: 0xffffff, map, normalMap: lite ? null : groundTexture(set, 'normal'), roughness: 1, metalness: 0 });
+}
+
+function mergedMesh(boxes: readonly Box[], material: THREE.Material, bottom: boolean): THREE.Mesh | null {
+  const merged = mergeBoxes(boxes, undefined, bottom);
+  if (!merged) return null;
+  const mesh = new THREE.Mesh(toGeometry(merged), material);
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+export function createScene(course: BuiltCourse, options: SceneOptions = {}): THREE.Scene {
   const scene = new THREE.Scene();
-  for (const ground of course.ground) scene.add(boxMesh(ground, solid(SURFACE_COLOURS[ground.surface])));
-  for (const wall of course.walls) scene.add(boxMesh(wall, solid(0xc98a5a)));
+  const groups = groupBySurface(course.ground);
+  for (const surface of Object.keys(groups) as Surface[]) {
+    const mesh = mergedMesh(groups[surface]!, groundMaterial(surface, options), false);
+    if (mesh) scene.add(mesh);
+  }
+  const walls = mergedMesh(course.walls, solid(0xc98a5a), true);
+  if (walls) scene.add(walls);
+  scene.add(createTerrainMesh(course, options));
   for (const checkpoint of course.checkpoints) scene.add(boxMesh(checkpoint.trigger, ghost(0x3b82f6)));
   scene.add(boxMesh(course.finish, ghost(0x22c55e)));
 

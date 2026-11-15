@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { CHECKPOINT_TRIGGER, FINISH_PAD, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET, STOP_PAD } from '../constants';
+import { CHECKPOINT_TRIGGER, FINISH_PAD, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET, STOP_PAD, STOP_PAD_LIFT } from '../constants';
 import type { BuiltCourse } from '../course';
 import { groundHeightAt } from '../groundProbe';
 import { degToRad, rotate, vec3 } from '../math';
@@ -261,7 +261,7 @@ describe('extras after chaining', () => {
     expect(pad).toBeDefined();
     expect(pad!.center.x).toBeCloseTo(exit.x - 20, 9);
     expect(pad!.center.z).toBeCloseTo(exit.z - (ROAD_WIDTH / 2 + STOP_PAD.x), 9);
-    expect(pad!.center.y).toBe(-STOP_PAD.y);
+    expect(pad!.center.y).toBeCloseTo(-STOP_PAD.y + STOP_PAD_LIFT, 12);
     const q = yawQuat(Math.PI / 2);
     expect(pad!.rot.y).toBeCloseTo(q.y, 12);
   });

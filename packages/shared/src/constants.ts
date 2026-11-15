@@ -248,6 +248,10 @@ export const ROAD_PIECE_LENGTH = 10;
 // rad, the largest yaw change of one piece of a curve.
 export const ROAD_MAX_PIECE_YAW = Math.PI / 18;
 export const ROAD_THICKNESS = 1;
+// m of solid ground beside each road edge, at the road's height.
+export const SHOULDER_WIDTH = 25;
+// m a shoulder box reaches under the road edge, so the two never leave a seam.
+export const SHOULDER_OVERLAP = 0.05;
 // m added at both ends of each piece where the yaw changes.
 export const ROAD_JOINT_OVERLAP = 0.6;
 // m between the walls.
@@ -284,6 +288,8 @@ export const FINISH_PAD = 20;
 export const KILL_PLANE_BELOW = 20;
 // Half extents of the ground pad beside the road.
 export const STOP_PAD: Vec3 = deepFreeze(vec3(4, 0.5, 8));
+// m a stop pad's top sits above the shoulder it overlaps, so the pad's surface wins the wheel ray.
+export const STOP_PAD_LIFT = 0.01;
 // Half extents of a stop's parking zone.
 export const STOP_ZONE: Vec3 = deepFreeze(vec3(2.5, 2, 5));
 // m above the ground.
