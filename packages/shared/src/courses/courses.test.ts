@@ -310,6 +310,34 @@ describe('airport', () => {
   });
 });
 
+describe('airport hazards', () => {
+  const airportCourse = getCourse('airport');
+  const hazardProps = (index: number) => {
+    const debris = (airport.segments[index] as { debris?: number }).debris ?? 0;
+    const ofSegment = airportCourse.props.filter((p) => p.id.startsWith(`s${index}-`));
+    return ofSegment.slice(debris);
+  };
+
+  test('T6: hazards sit on segments 1, 2 and 12 only, with 6, 4 and 3 props', () => {
+    airport.segments.forEach((seg, i) => expect(seg.type === 'road' && seg.hazards !== undefined, `segment ${i}`).toBe([1, 2, 12].includes(i)));
+    expect(hazardProps(1)).toHaveLength(6);
+    expect(hazardProps(2)).toHaveLength(4);
+    expect(hazardProps(12)).toHaveLength(3);
+  });
+
+  test('T6: no hazard prop lies within COIN_RADIUS + 1 m of a coin', () => {
+    for (const index of [1, 2, 12]) {
+      for (const p of hazardProps(index)) {
+        const half = PROP_KINDS[p.kind as keyof typeof PROP_KINDS].halfExtents;
+        const center = add(p.pose.pos, rotate(p.pose.rot, vec3(0, half.y, 0)));
+        for (const coin of airportCourse.coins) {
+          expect(distanceToBox(coin.pose.pos, half, center, p.pose.rot), `${p.id} and ${coin.id}`).toBeGreaterThanOrEqual(COIN_RADIUS + 1);
+        }
+      }
+    }
+  });
+});
+
 describe('the demo', () => {
   test.each(VEHICLE_CONFIGS.map((c) => c.id))('%s: the world lists the first road\'s jerrycan and toolbox as pickups', (vehicleId) => {
     const world = createWorld(RAPIER, { courseId: 'segment-demo', vehicleId });

@@ -81,10 +81,10 @@ describe('C6 snapshot size and tick cost with 6 players', () => {
     expect(bytes).toBeLessThan(4096);
   });
 
-  test('the full snapshot (all props, as sent on join) is under 12288 bytes', () => {
+  test('the full snapshot (all props, as sent on join) is under 16384 bytes', () => {
     const { bytes, props } = messageSize(true);
     console.info(`C6 full snapshot (JSON text, ${props} props, full: true): ${bytes} bytes`);
-    expect(bytes).toBeLessThan(12288);
+    expect(bytes).toBeLessThan(16384);
   });
 
   test('world.step averages under 4 ms over 300 ticks', () => {

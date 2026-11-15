@@ -6,7 +6,11 @@ import {
   BANK_APPROACH,
   BANK_TOP,
   COIN_HEIGHT,
+  CRATE_WALL_LATERALS,
   FENCE_HEIGHT,
+  GATES_OFFSET,
+  GATES_SPACING,
+  ROADBLOCK_FENCE_HALF,
   FORD_ROCK,
   PLAYER_HEIGHT,
   PLAYER_OVERLAP_LIFT,
@@ -763,5 +767,119 @@ describe('B5 checkpoint spawns', () => {
         }
       }
     }
+  });
+});
+
+describe('hazards', () => {
+  const FROM = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z;
+  const barrierZ = PROP_KINDS.barrier.halfExtents.z;
+  const crateZ = PROP_KINDS.crate.halfExtents.z;
+
+  test('T2: gates place count barriers alternating left then right at GATES_OFFSET, GATES_SPACING apart', () => {
+    const seg = buildSegment(road(150, { hazards: [{ kind: 'gates', along: 30, count: 4 }] }));
+    expect(seg.props.map((p) => p.id)).toEqual(['barrier-1', 'barrier-2', 'barrier-3', 'barrier-4']);
+    expect(seg.props.every((p) => p.kind === 'barrier')).toBe(true);
+    expect(seg.props.map((p) => p.pose.pos.x)).toEqual([-GATES_OFFSET, GATES_OFFSET, -GATES_OFFSET, GATES_OFFSET]);
+    seg.props.forEach((p, i) => expect(p.pose.pos.z).toBeCloseTo(-(30 + i * GATES_SPACING), 9));
+  });
+
+  test('T3: a crate wall is 3 across and 2 high on the right half, with the ids after the debris', () => {
+    const seg = buildSegment(road(150, { debris: 2, hazards: [{ kind: 'crateWall', along: 80 }] }));
+    const wall = seg.props.slice(2);
+    expect(wall.map((p) => p.id)).toEqual(['crate-3', 'crate-4', 'crate-5', 'crate-6', 'crate-7', 'crate-8']);
+    expect(wall.map((p) => p.kind)).toEqual(Array(6).fill('crate'));
+    expect(wall.map((p) => p.pose.pos.x)).toEqual([...CRATE_WALL_LATERALS, ...CRATE_WALL_LATERALS]);
+    expect(wall.slice(0, 3).every((p) => p.pose.pos.y === 0)).toBe(true);
+    expect(wall.slice(3).every((p) => Math.abs(p.pose.pos.y - 2 * PROP_KINDS.crate.halfExtents.y) < 1e-9)).toBe(true);
+    expect(wall.every((p) => Math.abs(p.pose.pos.z + 80) < 1e-9)).toBe(true);
+  });
+
+  test('T3: on a curve the wall follows the surface and the centre line yaw', () => {
+    const seg = buildSegment(road(150, { curve: 0.5, hazards: [{ kind: 'crateWall', along: 80 }] }));
+    const s = seg.surfaceAt(80);
+    const p = seg.props[0]!;
+    const want = offsetFrom(s, CRATE_WALL_LATERALS[0]!, 0);
+    expect(p.pose.pos.x).toBeCloseTo(want.x, 9);
+    expect(p.pose.pos.z).toBeCloseTo(want.z, 9);
+  });
+
+  test('T4: a roadblock is 3 barriers across the road with a fence each side along +-ROADBLOCK_FENCE_HALF', () => {
+    const seg = buildSegment(road(150, { hazards: [{ kind: 'roadblock', along: 70 }] }));
+    expect(seg.props.map((p) => p.pose.pos.x)).toEqual([-3, 0, 3]);
+    expect(seg.props.every((p) => p.kind === 'barrier' && Math.abs(p.pose.pos.z + 70) < 1e-9)).toBe(true);
+    expect(seg.walls).toHaveLength(2);
+    for (const side of [-1, 1]) {
+      const w = seg.walls.find((b) => Math.sign(b.center.x) === side)!;
+      expect(Math.abs(w.center.x)).toBeCloseTo(ROAD_WIDTH / 2 + WALL_THICKNESS / 2, 9);
+      expect(w.halfExtents.z).toBeCloseTo(ROADBLOCK_FENCE_HALF, 9);
+      expect(w.center.z).toBeCloseTo(-70, 9);
+      expect(w.halfExtents.y).toBeCloseTo(FENCE_HEIGHT / 2, 9);
+    }
+  });
+
+  test('T4: every roadblock gap is narrower than twice the RV half width', () => {
+    const seg = buildSegment(road(150, { hazards: [{ kind: 'roadblock', along: 70 }] }));
+    const edges = seg.props.map((p) => [p.pose.pos.x - PROP_KINDS.barrier.halfExtents.x, p.pose.pos.x + PROP_KINDS.barrier.halfExtents.x] as const).sort((a, b) => a[0] - b[0]);
+    const gaps = [edges[0]![0] - -ROAD_WIDTH / 2, edges[1]![0] - edges[0]![1], edges[2]![0] - edges[1]![1], ROAD_WIDTH / 2 - edges[2]![1]];
+    for (const gap of gaps) expect(gap).toBeLessThan(2 * VEHICLES.rv.halfExtents.x);
+    expect(Math.max(...gaps)).toBeCloseTo(1.0, 9);
+  });
+
+  test('T5: the gates corridor fits the RV with a metre to spare', () => {
+    const corridor = 2 * (GATES_OFFSET - PROP_KINDS.barrier.halfExtents.x);
+    expect(corridor).toBeGreaterThanOrEqual(2 * VEHICLES.rv.halfExtents.x + 1.0);
+    expect(corridor).toBeGreaterThanOrEqual(2 * VEHICLES.lodgy.halfExtents.x + 1.0);
+  });
+
+  test('hazards are placed in the pitched frame on a slope', () => {
+    const seg = buildSegment(road(150, { slope: 5, hazards: [{ kind: 'crateWall', along: 80 }] }));
+    expect(seg.props[0]!.pose.pos.y).toBeCloseTo(seg.surfaceAt(80).pos.y, 9);
+  });
+
+  describe('T1 validation', () => {
+    const earliest = FROM + barrierZ;
+    test('the earliest allowed roadblock builds, a hair earlier throws', () => {
+      expect(() => buildSegment(road(150, { hazards: [{ kind: 'gates', along: earliest, count: 2 }] }))).not.toThrow();
+      expect(() => buildSegment(road(150, { hazards: [{ kind: 'gates', along: earliest - 0.01, count: 2 }] }))).toThrow(/spawn/);
+      expect(() => buildSegment(road(150, { hazards: [{ kind: 'crateWall', along: FROM + crateZ - 0.01 }] }))).toThrow(/spawn/);
+      expect(() => buildSegment(road(150, { hazards: [{ kind: 'crateWall', along: FROM + crateZ }] }))).not.toThrow();
+    });
+
+    test('a hazard ending within 8 m of the segment end throws', () => {
+      expect(() => buildSegment(road(100, { hazards: [{ kind: 'crateWall', along: 100 - 8 - crateZ }] }))).not.toThrow();
+      expect(() => buildSegment(road(100, { hazards: [{ kind: 'crateWall', along: 100 - 8 - crateZ + 0.01 }] }))).toThrow(/end of the segment/);
+      expect(() => buildSegment(road(100, { hazards: [{ kind: 'gates', along: 30, count: 6 }] }))).toThrow(/end of the segment/);
+    });
+
+    test('gates count must be a whole number from 2 to 6', () => {
+      for (const count of [1, 7, 2.5, Number.NaN]) {
+        expect(() => buildSegment(road(300, { hazards: [{ kind: 'gates', along: 30, count }] }))).toThrow(/whole number from 2 to 6/);
+      }
+      for (const count of [2, 6]) expect(() => buildSegment(road(300, { hazards: [{ kind: 'gates', along: 30, count }] }))).not.toThrow();
+    });
+
+    test('two hazards closer than 20 m end to start throw; exactly 20 m builds, in either input order', () => {
+      const a = { kind: 'crateWall', along: 40 } as const;
+      expect(() => buildSegment(road(200, { hazards: [a, { kind: 'crateWall', along: 40 + 2 * crateZ + 19.99 }] }))).toThrow(/20 m apart/);
+      expect(() => buildSegment(road(200, { hazards: [a, { kind: 'crateWall', along: 40 + 2 * crateZ + 20 }] }))).not.toThrow();
+      expect(() => buildSegment(road(200, { hazards: [{ kind: 'crateWall', along: 40 + 2 * crateZ + 20 }, a] }))).not.toThrow();
+      expect(() => buildSegment(road(300, { hazards: [{ kind: 'gates', along: 40, count: 3 }, { kind: 'crateWall', along: 40 + 28 + barrierZ + crateZ + 19 }] }))).toThrow(/20 m apart/);
+    });
+
+    test('a hazard within 10 m of a debris crate throws', () => {
+      const probe = buildSegment(road(200, { debris: 2 }));
+      const z = -probe.props[0]!.pose.pos.z;
+      expect(() => buildSegment(road(200, { debris: 2, hazards: [{ kind: 'crateWall', along: z + crateZ + 9.9 + crateZ }] }))).toThrow(/debris/);
+      expect(() => buildSegment(road(200, { debris: 2, hazards: [{ kind: 'crateWall', along: z + crateZ + 10 + crateZ }] }))).not.toThrow();
+    });
+
+    test('a segment with a stop takes no hazards', () => {
+      expect(() => buildSegment(road(200, { stop: { kind: 'fuel', side: 1, along: 100 }, hazards: [{ kind: 'crateWall', along: 40 }] }))).toThrow(/stop/);
+    });
+
+    test('a roadblock whose fences would leave the segment throws', () => {
+      expect(() => buildSegment(road(200, { hazards: [{ kind: 'roadblock', along: 200 - ROADBLOCK_FENCE_HALF + 1 }] }))).toThrow(/fences/);
+      expect(() => buildSegment(road(200, { hazards: [{ kind: 'roadblock', along: 200 - ROADBLOCK_FENCE_HALF - 8 }] }))).not.toThrow();
+    });
   });
 });

@@ -9,11 +9,21 @@ import {
   BOULDER_FIRST_ALONG,
   BOULDER_PAIR_SPACING,
   COIN_HEIGHT,
+  CRATE_WALL_LATERALS,
   FENCE_HEIGHT,
   FORD_ROCK,
   FORD_ROCK_LATERAL,
+  GATES_MAX_COUNT,
+  GATES_MIN_COUNT,
+  GATES_OFFSET,
+  GATES_SPACING,
+  HAZARD_DEBRIS_GAP,
+  HAZARD_END_CLEARANCE,
+  HAZARD_MIN_GAP,
   PALM_OFFSET,
   PROP_KINDS,
+  ROADBLOCK_FENCE_HALF,
+  ROADBLOCK_LATERAL,
   ROADWORKS_BARRIER_SPACING,
   ROADWORKS_FIRST_ROW,
   ROADWORKS_LAST_ROW_CLEARANCE,
@@ -58,8 +68,10 @@ export interface SegmentExtras {
   stop?: { kind: 'fuel' | 'garage'; side: -1 | 1; along: number };
 }
 
+export type Hazard = { kind: 'gates'; along: number; count: number } | { kind: 'crateWall'; along: number } | { kind: 'roadblock'; along: number };
+
 export type SegmentDef =
-  | ({ type: 'road'; length: number; curve?: number; slope?: number; debris?: number } & SegmentExtras)
+  | ({ type: 'road'; length: number; curve?: number; slope?: number; debris?: number; hazards?: Hazard[] } & SegmentExtras)
   | ({ type: 'alley'; length: number; clutter: number } & SegmentExtras)
   | ({ type: 'sand'; length: number; palms: number } & SegmentExtras)
   | ({ type: 'ford'; width: number; rocks: number } & SegmentExtras)
@@ -251,6 +263,75 @@ function addExtras(
   }
 }
 
+// Where a hazard's props start and end along the road, in m, counting the prop depth.
+function hazardSpan(h: Hazard): [start: number, end: number] {
+  const barrierZ = PROP_KINDS.barrier.halfExtents.z;
+  if (h.kind === 'crateWall') return [h.along - PROP_KINDS.crate.halfExtents.z, h.along + PROP_KINDS.crate.halfExtents.z];
+  if (h.kind === 'roadblock') return [h.along - barrierZ, h.along + barrierZ];
+  return [h.along - barrierZ, h.along + (h.count - 1) * GATES_SPACING + barrierZ];
+}
+
+function checkHazards(def: Extract<SegmentDef, { type: 'road' }>, routeLength: number, debrisAlong: number[]): Hazard[] {
+  const hazards = def.hazards ?? [];
+  if (hazards.length === 0) return hazards;
+  if (def.stop) throw new Error('A segment with a stop takes no hazards');
+  const spawnClear = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z;
+  for (const h of hazards) {
+    if (!Number.isFinite(h.along)) throw new Error('A hazard needs a finite along');
+    if (h.kind === 'gates' && !(Number.isInteger(h.count) && h.count >= GATES_MIN_COUNT && h.count <= GATES_MAX_COUNT)) {
+      throw new Error(`Gates count must be a whole number from ${GATES_MIN_COUNT} to ${GATES_MAX_COUNT}`);
+    }
+    const [start, end] = hazardSpan(h);
+    if (start < spawnClear - 1e-9) throw new Error(`Hazard at ${h.along} m starts before the spawn clearance (${spawnClear} m)`);
+    if (end > routeLength - HAZARD_END_CLEARANCE + 1e-9) throw new Error(`Hazard at ${h.along} m ends less than ${HAZARD_END_CLEARANCE} m before the end of the segment`);
+    if (h.kind === 'roadblock' && (h.along - ROADBLOCK_FENCE_HALF < 0 || h.along + ROADBLOCK_FENCE_HALF > routeLength)) {
+      throw new Error(`The roadblock fences at ${h.along} m leave the segment`);
+    }
+    const crateZ = PROP_KINDS.crate.halfExtents.z;
+    for (const d of debrisAlong) {
+      if (start - (d + crateZ) < HAZARD_DEBRIS_GAP - 1e-9 && d - crateZ - end < HAZARD_DEBRIS_GAP - 1e-9) {
+        throw new Error(`Hazard at ${h.along} m is less than ${HAZARD_DEBRIS_GAP} m from a debris crate`);
+      }
+    }
+  }
+  const sorted = [...hazards].sort((a, b) => a.along - b.along);
+  for (let i = 1; i < sorted.length; i++) {
+    if (hazardSpan(sorted[i]!)[0] - hazardSpan(sorted[i - 1]!)[1] < HAZARD_MIN_GAP - 1e-9) {
+      throw new Error(`Hazards at ${sorted[i - 1]!.along} m and ${sorted[i]!.along} m are less than ${HAZARD_MIN_GAP} m apart`);
+    }
+  }
+  return sorted;
+}
+
+function placeHazard(h: Hazard, surfaceAt: (along: number) => SurfacePoint, id: (kind: string) => string, props: Placed[], walls: Box[]): void {
+  const barrier = (s: SurfacePoint, lateral: number): Placed => ({
+    id: id('barrier'),
+    kind: 'barrier',
+    pose: { pos: offsetFrom(s, lateral), rot: yawPitchQuat(s.yaw, s.pitch) },
+  });
+  if (h.kind === 'gates') {
+    for (let i = 0; i < h.count; i++) props.push(barrier(surfaceAt(h.along + i * GATES_SPACING), (i % 2 === 0 ? -1 : 1) * GATES_OFFSET));
+  } else if (h.kind === 'crateWall') {
+    const s = surfaceAt(h.along);
+    for (const height of [0, 2 * PROP_KINDS.crate.halfExtents.y]) {
+      for (const lateral of CRATE_WALL_LATERALS) {
+        props.push({ id: id('crate'), kind: 'crate', pose: { pos: offsetFrom(s, lateral, height), rot: yawPitchQuat(s.yaw, s.pitch) } });
+      }
+    }
+  } else {
+    const s = surfaceAt(h.along);
+    for (const lateral of [-ROADBLOCK_LATERAL, 0, ROADBLOCK_LATERAL]) props.push(barrier(s, lateral));
+    // Fences close the shoulders so the row really blocks; they follow the road's pose at the row.
+    for (const side of [-1, 1] as const) {
+      walls.push({
+        center: offsetFrom(s, side * (ROAD_WIDTH / 2 + WALL_THICKNESS / 2), FENCE_HEIGHT / 2),
+        halfExtents: vec3(WALL_THICKNESS / 2, FENCE_HEIGHT / 2, ROADBLOCK_FENCE_HALF),
+        rot: yawPitchQuat(s.yaw, s.pitch),
+      });
+    }
+  }
+}
+
 function buildRoad(def: Extract<SegmentDef, { type: 'road' }>): LocalSegment {
   const curve = def.curve ?? 0;
   const slope = def.slope ?? 0;
@@ -266,13 +347,17 @@ function buildRoad(def: Extract<SegmentDef, { type: 'road' }>): LocalSegment {
   const props: Placed[] = [];
   // Debris starts past the RV standing on the checkpoint spawn, so none lands on a player slot there.
   const from = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z + PROP_KINDS.crate.halfExtents.z;
-  for (const slot of evenSlots(def.debris ?? 0, routeLength - from)) {
+  const debrisSlots = evenSlots(def.debris ?? 0, routeLength - from);
+  const hazards = checkHazards(def, routeLength, debrisSlots.map((slot) => from + slot.along));
+  for (const slot of debrisSlots) {
     const s = surfaceAt(from + slot.along);
     props.push({ id: id('crate'), kind: 'crate', pose: { pos: offsetFrom(s, (slot.side * ROAD_WIDTH) / 4), rot: yawPitchQuat(s.yaw, s.pitch) } });
   }
+  const walls: Box[] = [];
+  for (const h of hazards) placeHazard(h, surfaceAt, id, props, walls);
   const seg: LocalSegment = {
     ground: [...roadBoxes(pieces, curve !== 0), ...shoulderBoxes(pieces, curve / pieces.length)],
-    walls: [],
+    walls,
     props,
     pickups: [],
     anchors: [],
