@@ -2,6 +2,7 @@ import { ANCHOR_HEIGHT, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type Buil
 import * as THREE from 'three';
 import { groupBySurface, mergeBoxes, toGeometry } from './groundMerge';
 import { groundTexture, SURFACE_TEXTURE, type SceneOptions } from './groundTextures';
+import { createTerrainMesh } from './terrain';
 
 const SURFACE_COLOURS: Record<Surface, number> = {
   road: 0x8a7f72,
@@ -51,6 +52,7 @@ export function createScene(course: BuiltCourse, options: SceneOptions = {}): TH
   }
   const walls = mergedMesh(course.walls, solid(0xc98a5a), true);
   if (walls) scene.add(walls);
+  scene.add(createTerrainMesh(course, options));
   for (const checkpoint of course.checkpoints) scene.add(boxMesh(checkpoint.trigger, ghost(0x3b82f6)));
   scene.add(boxMesh(course.finish, ghost(0x22c55e)));
 
