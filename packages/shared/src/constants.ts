@@ -112,7 +112,6 @@ export const PLAYER_CONTROLLER_OFFSET = 0.02;
 export const PLAYER_OVERLAP_LIFT = 0.05;
 // Height above a standing spot's feet of the ray that checks for a wall between the vehicle and the spot.
 export const SPAWN_WALL_RAY_HEIGHT = 0.9;
-
 export const PLAYER_KILL_RESPAWN_DELAY = 3;
 export const BOARD_RANGE = 2;
 export const DRIVER_DOOR_RANGE = 1.5;

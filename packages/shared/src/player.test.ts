@@ -703,7 +703,7 @@ describe('a wall between the vehicle and a standing spot', () => {
   test('T3: a wall beside the point or behind the vehicle changes nothing', () => {
     const course = withBoxes(testGround, {
       walls: [
-        { center: vec3(-1.3, 1, 6), halfExtents: vec3(0.05, 1, 1), rot: IDENTITY },
+        { center: vec3(-2.6, 1, 0.3), halfExtents: vec3(0.8, 1, 0.05), rot: IDENTITY },
         { center: vec3(0, 1, 5), halfExtents: vec3(4, 1, 0.05), rot: IDENTITY },
         { center: vec3(4, 1, 0), halfExtents: vec3(0.05, 1, 4), rot: IDENTITY },
       ],
@@ -716,7 +716,7 @@ describe('a wall between the vehicle and a standing spot', () => {
   test('T4: a ground box and a 1 m barrier between the vehicle and the point do not block', () => {
     const course = withProps(
       withBoxes(testGround, {
-        ground: [{ center: vec3(-1.3, 0.15, 0), halfExtents: vec3(0.1, 0.15, 3), rot: IDENTITY, surface: 'road' }],
+        ground: [{ center: vec3(-1.3, 1, 0), halfExtents: vec3(0.05, 1, 3), rot: IDENTITY, surface: 'road' }],
       }),
       [{ id: 'barrier-9', kind: 'barrier', pose: { pos: vec3(-1.27, 0, -0.45), rot: quatFromAxisAngle(AXIS_Y, Math.PI / 2) } }],
     );
