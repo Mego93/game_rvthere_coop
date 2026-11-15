@@ -104,6 +104,26 @@ test('(T9) the neutral input has no reset', () => {
   expect('reset' in neutralInput({ ...NEUTRAL_INPUT, reset: true })).toBe(false);
 });
 
+test.each(['sprint', 'crouch'] as const)('(T6) an input keeps %s when present and leaves it absent when not', (key) => {
+  expect(parseClientMessage(input({ [key]: true }))).toEqual({ type: 'input', ...INPUT, [key]: true });
+  expect(parseClientMessage(input({ [key]: false }))).toEqual({ type: 'input', ...INPUT, [key]: false });
+  const absent = parseClientMessage(input({})) as PlayerInput;
+  expect(key in absent).toBe(false);
+  expect(key in NEUTRAL_INPUT).toBe(false);
+  expect(key in neutralInput({ ...NEUTRAL_INPUT, [key]: true })).toBe(false);
+});
+
+test.each([
+  ['sprint', 1],
+  ['sprint', 'true'],
+  ['sprint', null],
+  ['crouch', 1],
+  ['crouch', 'true'],
+  ['crouch', null],
+])('(T6) rejects an input whose %s is %j', (key, value) => {
+  expect(parseClientMessage(input({ [key]: value }))).toBeNull();
+});
+
 test('clamps the axes and the pitch, and wraps the yaw', () => {
   const message = parseClientMessage(input({ moveX: 3, moveY: -9, pitch: 5, yaw: 3 * Math.PI + 0.5 }));
   expect(message).toMatchObject({ moveX: 1, moveY: -1, pitch: Math.PI / 2 });
@@ -205,6 +225,10 @@ test.each<ServerMessage>([
   { ...lobby, players: [], adminId: null } as ServerMessage,
   snapshot as ServerMessage,
   { ...snapshot, tick: 0, ackSeq: 0, full: true } as ServerMessage,
+  { ...snapshot, players: [{ ...onFoot, stance: 'crouch' }] } as ServerMessage,
+  { ...snapshot, players: [{ ...onFoot, stance: 'slide', slide: { ticks: 30, cooldown: 0, air: 0, dirX: 0.6, dirZ: -0.8 } }] } as ServerMessage,
+  { ...snapshot, players: [{ ...onFoot, slide: { ticks: 0, cooldown: 40, air: 0, dirX: 0, dirZ: 0 } }] } as ServerMessage,
+  { ...snapshot, players: [{ ...onFoot, stance: 'roll' }] } as ServerMessage,
   { ...snapshot, vehicle: { ...vehicle, resetReady: true } } as ServerMessage,
   { ...snapshot, elapsed: 61.5, checkpoint: 1, restarts: 2, respawns: 3, won: true } as ServerMessage,
 ])('parseServerMessage accepts %j', (message) => {
@@ -267,6 +291,13 @@ test.each([
   ['a vehicle without fuel', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, fuel: undefined } })],
   ['a vehicle whose fuel is text', JSON.stringify({ ...snapshot, vehicle: { ...vehicle, fuel: '1' } })],
   ['a vehicle whose health is too large to be finite', JSON.stringify(snapshot).replace('"health":1', '"health":1e999')],
+  ['a player whose stance is a number', JSON.stringify({ ...snapshot, players: [{ ...onFoot, stance: 1 }] })],
+  ['a player whose slide is text', JSON.stringify({ ...snapshot, players: [{ ...onFoot, slide: 'on' }] })],
+  ['a player whose slide ticks are negative', JSON.stringify({ ...snapshot, players: [{ ...onFoot, slide: { ticks: -1, cooldown: 0, air: 0, dirX: 0, dirZ: 0 } }] })],
+  ['a player whose slide ticks are not whole', JSON.stringify({ ...snapshot, players: [{ ...onFoot, slide: { ticks: 1.5, cooldown: 0, air: 0, dirX: 0, dirZ: 0 } }] })],
+  ['a player whose slide cooldown is missing', JSON.stringify({ ...snapshot, players: [{ ...onFoot, slide: { ticks: 1, air: 0, dirX: 0, dirZ: 0 } }] })],
+  ['a player whose slide air is negative', JSON.stringify({ ...snapshot, players: [{ ...onFoot, slide: { ticks: 1, cooldown: 0, air: -1, dirX: 0, dirZ: 0 } }] })],
+  ['a player whose slide direction is not finite', JSON.stringify({ ...snapshot, players: [{ ...onFoot, slide: { ticks: 1, cooldown: 0, air: 0, dirX: 1e999, dirZ: 0 } }] })],
   ['a player without health', JSON.stringify({ ...snapshot, players: [{ ...onFoot, health: undefined }] })],
   ['a player whose health is negative', JSON.stringify({ ...snapshot, players: [{ ...onFoot, health: -1 }] })],
   ['a player whose health is over 100', JSON.stringify({ ...snapshot, players: [{ ...onFoot, health: 101 }] })],

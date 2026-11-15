@@ -104,6 +104,23 @@ export const PLAYER_RADIUS = 0.35;
 export const PLAYER_HEIGHT = 1.8;
 export const PLAYER_EYE_HEIGHT = 1.6;
 export const PLAYER_WALK_SPEED = 4.5;
+export const PLAYER_SPRINT_SPEED = 7.0;
+export const PLAYER_CROUCH_SPEED = 2.2;
+export const PLAYER_CROUCH_HEIGHT = 1.1;
+export const PLAYER_CROUCH_EYE_HEIGHT = 0.95;
+// The knee slide: starts from a sprint, keeps its speed for a while, then falls to the crouch speed.
+export const PLAYER_KNEESLIDE_SPEED = 9.0;
+// s at PLAYER_KNEESLIDE_SPEED, out of PLAYER_KNEESLIDE_TIME.
+export const PLAYER_KNEESLIDE_HOLD = 0.35;
+export const PLAYER_KNEESLIDE_TIME = 0.8;
+// m/s of horizontal speed needed to start one.
+export const PLAYER_KNEESLIDE_MIN_SPEED = 5.5;
+export const PLAYER_KNEESLIDE_COOLDOWN = 1.0;
+// rad/s the slide's direction may turn toward the wish direction.
+export const PLAYER_KNEESLIDE_STEER = 0.6;
+// A slide ends when it moves slower than this (a wall), or after this many ticks in the air.
+export const PLAYER_KNEESLIDE_STOP_SPEED = 1;
+export const PLAYER_KNEESLIDE_AIR_TICKS = 12;
 export const PLAYER_GROUND_ACCEL = 40;
 export const PLAYER_AIR_ACCEL = 10;
 export const PLAYER_JUMP_SPEED = 5;
