@@ -136,6 +136,13 @@ describe('prompt and hold (T12, R10)', () => {
     const prompt = build({ vehicle: doorVehicle, players: [door({ inventory: ['healthKit', null, null], health: 50 })] }).prompt;
     expect(prompt).toBe('E to board   Hold F to heal yourself');
   });
+  test('touch wording names the buttons (T9, K2)', () => {
+    const jerrycan = [door({ inventory: ['jerrycan', null, null], slot: 0 })];
+    expect(build({ vehicle: doorVehicle, players: [door()], touch: true }).prompt).toBe('Act to board');
+    expect(build({ vehicle: doorVehicle, players: jerrycan, touch: true }).prompt).toBe('Act to board   Hold Use to refuel');
+    expect(build({ vehicle: doorVehicle, players: jerrycan, touch: false }).prompt).toBe('E to board   Hold F to refuel');
+    expect(build({ vehicle: doorVehicle, players: jerrycan }).prompt).toBe('E to board   Hold F to refuel');
+  });
   test('nothing in reach', () => {
     expect(build().prompt).toBeNull();
   });
