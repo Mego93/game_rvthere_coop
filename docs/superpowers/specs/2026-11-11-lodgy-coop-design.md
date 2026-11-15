@@ -155,7 +155,7 @@ The admin picks the vehicle in the lobby. Vehicles differ in look and handling b
 | Mass | Baseline | About 2.5 times heavier |
 | Tipping | Rolls but recovers | High centre of gravity |
 | Climbing | Weak on steep slopes | Needs the winch on any real slope |
-| Soft sand | Slows to a crawl | Cannot pull away from rest on sand; crosses it only with a run-up. The winch frees it |
+| Soft sand | Slows a lot, and still drives | Slows a lot (rolling resistance 0.15 of its weight against its engine's 0.20), but pulls away from rest and crosses it with a run-up |
 | Fuel burn | Baseline | About 1.5 times |
 | Pushing | Crew can shove it free | Barely moves; an RV on its side cannot be righted and needs a checkpoint restart |
 | Turning circle | Tight | Wide |
@@ -257,7 +257,7 @@ Segment types in spec 1:
 |---|---|---|
 | `road` | Plain road, optionally curved or sloped | length, curve, slope, light debris count |
 | `alley` | Narrow walled street cluttered with crates, carts, parked scooters | length, clutter density |
-| `sand` | Soft sand between palm trees; the vehicle bogs down | length, palm (anchor) count |
+| `sand` | Soft sand between palm trees; the vehicle slows down | length, palm (anchor) count |
 | `ford` | Shallow rocky riverbed, slow and fuel-hungry | width, rock count |
 | `bank` | Short steep earth or gravel bank | height, gradient, anchor count |
 | `roadworks` | Road blocked by heavy obstacles and barriers | length, obstacle count |
