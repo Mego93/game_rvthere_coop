@@ -397,6 +397,25 @@ test('a night rain run draws without WebGL errors', async ({ page }) => {
   expect(threeErrors).toEqual([]);
 });
 
+// ?hq keeps the lit, shadowed, textured render path on software GL, which otherwise drops it.
+test('the full-quality render path draws the airport run without console or page errors @keyboard', async ({ page }) => {
+  test.setTimeout(60_000);
+  const consoleErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  await page.goto('/?hq');
+  await page.locator('#home-name').fill('Amal');
+  await page.locator('#home-primary').click();
+  await expect(page.locator('#home')).toBeHidden({ timeout: 30_000 });
+  await startRun(page);
+  await expect(page.locator('#hud-compass')).toBeVisible({ timeout: 30_000 });
+  const before = await tick(page);
+  await expect.poll(() => tick(page), { timeout: 20_000 }).toBeGreaterThan(before);
+  await page.waitForTimeout(1000);
+  expect(consoleErrors).toEqual([]);
+});
+
 test('E7: the sound files are served, and a click and Start leave the page without errors', async ({ page }) => {
   const license = await page.request.get('/sounds/LICENSE.md');
   expect(license.status()).toBe(200);
