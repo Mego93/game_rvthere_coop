@@ -26,8 +26,8 @@ The first deploy asks you to choose a free `workers.dev` subdomain if you have n
 | What | Command |
 |---|---|
 | Deploy a new version (ends every running room) | `npm run deploy:cf` |
-| Watch live logs | `npx wrangler tail` |
-| Roll back to the previous version | `npx wrangler rollback` |
+| Watch live logs | `cd packages/worker && npx wrangler tail` |
+| Roll back to the previous version | `cd packages/worker && npx wrangler rollback` |
 | Try it locally on the Cloudflare runtime | `npm run dev:worker` then open `http://localhost:8787/` |
 
 ## What it costs (numbers read from Cloudflare's documentation, November 2026)
@@ -39,12 +39,12 @@ The first deploy asks you to choose a free `workers.dev` subdomain if you have n
 
 Always check Cloudflare's pricing page before relying on these numbers, since they change.
 
-## Protect yourself from surprise bills (do this once, in the dashboard)
+## Protect yourself from surprise bills (do this once)
 
 The server limits connections per room and per address, but it cannot limit one visitor across many rooms. Cloudflare can:
 
-1. **Spending limit for Durable Objects:** Dashboard, Workers & Pages, Durable Objects, Settings, Spending limit. Set a monthly cap.
-2. **Rate limiting rule on `/ws`:** Dashboard, Security, WAF, Rate limiting rules. Add a rule matching the path `/ws` that allows about 20 requests per minute per IP address. This also limits how fast one visitor can create rooms (the server's own create limit applies per room, not globally).
+1. **Durable Objects spending limit** (works on the address you get from the first deploy): a monthly cap across your whole account. Once reached, affected operations are refused ("Exceeded the account's spending cap for Durable Objects") until the next billing period; nothing is deleted. Set it by following Cloudflare's page "Durable Objects: Spending limits" (https://developers.cloudflare.com/durable-objects/platform/spend-management/), which has the dashboard steps and the `cf` command.
+2. **Rate limiting rule on `/ws`** (only if you later add your own domain): WAF rules apply to a domain you own on Cloudflare, not to a `*.workers.dev` address. With a custom domain, add a rate limiting rule matching the path `/ws` (Dashboard, Security, WAF, Rate limiting rules). The Free plan only allows a 10-second period (for example 5 requests per 10 seconds per IP); paid plans allow longer periods. Until you add a domain, rely on the spending limit above.
 
 ## What players see when something restarts
 
@@ -54,7 +54,7 @@ The server limits connections per room and per address, but it cannot limit one 
 ## Limits worth knowing
 
 - One room is one Durable Object, which is single-threaded: a 6-player room uses a few percent of its CPU, so rooms do not slow each other down.
-- The per-address connection cap is counted per room, and every IPv6 address counts as a separate visitor.
+- The per-address connection cap is counted per room (12, the same as the room's own limit), so it does not add protection beyond the room cap, and every IPv6 address counts as a separate visitor.
 - Anyone can open a connection from any website (there are no accounts or cookies); abuse is handled by the two dashboard settings above.
 - Static files are served by Cloudflare, so cache headers and content types differ slightly from the Node server. The game does not depend on them.
 
