@@ -70,6 +70,7 @@ export interface LobbyHandlers {
   onConfigure(settings: RoomSettings): void;
   onStart(): void;
   onKick(playerId: string): void;
+  onCredits(): void;
 }
 
 export interface LobbyScreen {
@@ -92,6 +93,7 @@ const STYLE = `
 #lobby-players li { display: flex; gap: 8px; align-items: center; }
 .lobby-swatch { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 .lobby-name { flex: 1; }
+#lobby-credits { justify-self: center; font-size: 14px; color: #2f6f9f; }
 #lobby-error { margin: 0; min-height: 1.4em; color: #b3261e; font-size: 14px; }
 `;
 
@@ -129,7 +131,11 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   start.type = 'button';
   const error = el('p', 'lobby-error');
   error.setAttribute('role', 'alert');
-  panel.append(title, linkRow, settingsBox, players, ready, start, error);
+  const credits = el('a', 'lobby-credits', 'Credits');
+  credits.href = '/CREDITS.md';
+  credits.target = '_blank';
+  credits.rel = 'noopener';
+  panel.append(title, linkRow, settingsBox, players, ready, start, error, credits);
   root.append(style, panel);
   doc.body.append(root);
 
@@ -194,6 +200,10 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     } catch {
       // No clipboard in this context; the link stays visible to copy by hand.
     }
+  });
+  credits.addEventListener('click', (event) => {
+    event.preventDefault();
+    handlers.onCredits();
   });
   ready.addEventListener('click', () => {
     error.textContent = '';

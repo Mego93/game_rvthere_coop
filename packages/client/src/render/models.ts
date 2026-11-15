@@ -84,7 +84,11 @@ const NATURE_TINTS: Record<string, number> = {
 // City Kit walls are near white; ochre (the spec's palette) multiplies into their colour map.
 const PACK_TINTS: Record<string, number> = { 'city-commercial': 0xe6c79a, 'city-suburban': 0xe6c79a, 'city-roads': 0xeadcc4 };
 
+// Models in this pack keep the colours they came with.
+const UNTINTED_PACKS = new Set(['real']);
+
 function desert(material: THREE.Material, pack: string | undefined): THREE.Material {
+  if (UNTINTED_PACKS.has(pack ?? '')) return material;
   const standard = material as THREE.MeshStandardMaterial;
   if (!standard.isMeshStandardMaterial || standard.metalnessMap) return material;
   standard.metalness = 0;

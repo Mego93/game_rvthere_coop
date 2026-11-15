@@ -18,6 +18,7 @@ import { createKeyboardSource } from './input/keyboard';
 import { createMouseLook } from './input/mouse';
 import type { GameInput } from './input/source';
 import { createTouchSource } from './input/touch';
+import { createCredits } from './ui/credits';
 import { createHome, errorText } from './ui/home';
 import { createLobby } from './ui/lobby';
 import { createResults } from './ui/results';
@@ -146,6 +147,8 @@ let phase: Phase | null = null;
 // What the home page says when the socket next closes.
 let closeReason = CONNECTION_LOST;
 
+const credits = createCredits(document);
+
 const home = createHome(document.querySelector<HTMLElement>('#home')!, {
   onCreate(chosenName) {
     name = chosenName;
@@ -155,6 +158,7 @@ const home = createHome(document.querySelector<HTMLElement>('#home')!, {
     name = chosenName;
     request({ type: 'join', room, name, token });
   },
+  onCredits: () => credits.open(),
 });
 
 const lobby = createLobby(document, {
@@ -162,6 +166,7 @@ const lobby = createLobby(document, {
   onConfigure: (settings) => socket?.send({ type: 'configure', ...settings }),
   onStart: () => socket?.send({ type: 'start' }),
   onKick: (target) => socket?.send({ type: 'kick', playerId: target }),
+  onCredits: () => credits.open(),
 });
 
 const results = createResults(document.querySelector<HTMLElement>('#results')!, {

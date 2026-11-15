@@ -19,6 +19,7 @@ export const errorText = (reason: ErrorReason): string => ERROR_TEXT[reason];
 export interface HomeHandlers {
   onCreate(name: string): void;
   onJoin(room: string, name: string): void;
+  onCredits(): void;
 }
 
 export interface HomeView {
@@ -44,6 +45,7 @@ export function createHome(root: HTMLElement, handlers: HomeHandlers): HomeView 
   const primaryButton = find<HTMLButtonElement>('home-primary');
   const joinButton = find<HTMLButtonElement>('home-join');
   const homeLink = find('home-link');
+  const creditsLink = find('home-credits');
   // The room named by the address, when the page was opened by a room link.
   let linkedRoom: string | null = null;
 
@@ -74,6 +76,10 @@ export function createHome(root: HTMLElement, handlers: HomeHandlers): HomeView 
     handlers.onCreate(name);
   });
   joinButton.addEventListener('click', join);
+  creditsLink.addEventListener('click', (event) => {
+    event.preventDefault();
+    handlers.onCredits();
+  });
 
   return {
     show({ room, name, error: message = '' }) {
