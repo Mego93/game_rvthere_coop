@@ -329,6 +329,18 @@ export const FINISH_TRIGGER: Vec3 = deepFreeze(vec3(ROAD_WIDTH / 2, 2, 2));
 // Fuel and vehicle health are restored at least to this on a restart.
 export const RESTART_FLOOR = 0.5;
 
+// Player reset of a stuck vehicle.
+// s the reset button is held before it fires.
+export const RESET_HOLD = 1.5;
+// m/s; the vehicle must be slower than this.
+export const RESET_MAX_SPEED = 1;
+// The vehicle's up vector y below this counts as upside down or on its side.
+export const RESET_TIPPED_UP_Y = 0.3;
+// s of throttle over which the vehicle must have moved STUCK_DISTANCE to count as free.
+export const STUCK_WINDOW = 8;
+// m.
+export const STUCK_DISTANCE = 1;
+
 // Coins, stops and shops.
 // m, the coin's touch sphere.
 export const COIN_RADIUS = 0.5;

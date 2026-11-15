@@ -33,6 +33,8 @@ export interface VehicleState {
   // Fractions of a full tank and of full health.
   fuel: number;
   health: number;
+  // Set by the world while a seated player could reset the vehicle; absent means false.
+  resetReady?: boolean;
 }
 
 export interface Vehicle {
