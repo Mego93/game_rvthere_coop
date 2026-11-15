@@ -29,11 +29,18 @@ const rest = (pos: Vec3): PredictedState => ({
   carry: { x: 0, z: 0 },
   vy: 0,
   grounded: false,
+  crouched: false,
+  slideTicks: 0,
+  slideCooldown: 0,
+  slideAir: 0,
+  slideDir: { x: 0, z: 0 },
+  carrying: false,
+  holdsProp: false,
 });
 
 function driver(predictor: Predictor, start: PredictedState) {
   let state = start;
-  let before = false;
+  let before = { jump: false, crouch: false };
   return {
     get state() {
       return state;
@@ -41,7 +48,7 @@ function driver(predictor: Predictor, start: PredictedState) {
     tick(fields: Partial<InputFields> = {}) {
       const input = { ...NEUTRAL_INPUT, ...fields };
       state = predictor.stepPlayer(state, input, before);
-      before = input.jump;
+      before = { jump: input.jump, crouch: input.crouch === true };
     },
     run(ticks: number, fields: Partial<InputFields> = {}) {
       for (let i = 0; i < ticks; i++) this.tick(fields);
@@ -85,6 +92,77 @@ describe('createPredictor', () => {
     }
     expect(before).toBe(false);
     expect(Math.hypot(me.state.pos.x - FAR.x, me.state.pos.z - FAR.z)).toBeGreaterThan(1);
+    predictor.dispose();
+    world.dispose();
+  });
+
+  test('(T5) agrees with the server on a sprint, crouch and slide path, stance fields included', () => {
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+    world.addPlayer('p');
+    world.teleportPlayer('p', FAR);
+    const vehicle = world.snapshot().vehicle;
+    const predictor = createPredictor(RAPIER, world.course, lodgy);
+    predictor.setVehicle(vehicle.pos, vehicle.rot);
+    const me = driver(predictor, rest(FAR));
+    const script: Partial<InputFields>[] = [
+      ...Array.from({ length: 30 }, () => ({})),
+      ...Array.from({ length: 70 }, () => ({ moveY: 1, sprint: true, yaw: 0.2 })),
+      // The slide, steered, then the crouch held after it.
+      ...Array.from({ length: 80 }, (_, i) => ({ moveY: 1, moveX: i > 20 ? 0.5 : 0, sprint: true, crouch: true, yaw: 0.2 })),
+      ...Array.from({ length: 40 }, () => ({ moveY: 1, crouch: true, yaw: 0.2 })),
+      ...Array.from({ length: 30 }, () => ({ moveY: 1, yaw: 0.2 })),
+      // A second slide after the cooldown, ended by a jump.
+      ...Array.from({ length: 60 }, () => ({ moveY: 1, sprint: true, yaw: 0.2 })),
+      ...Array.from({ length: 10 }, () => ({ moveY: 1, sprint: true, crouch: true, yaw: 0.2 })),
+      ...Array.from({ length: 3 }, () => ({ moveY: 1, sprint: true, crouch: true, jump: true, yaw: 0.2 })),
+      ...Array.from({ length: 60 }, () => ({ moveY: 1, sprint: true, yaw: 0.2 })),
+      ...Array.from({ length: 30 }, () => ({})),
+    ];
+    let slid = 0;
+    let crouched = 0;
+    for (const fields of script) {
+      world.step(new Map([['p', { ...NEUTRAL_INPUT, seq: 0, ...fields }]]));
+      me.tick(fields);
+      const server = world.snapshot().players[0]!;
+      expect(Math.abs(server.pos.x - me.state.pos.x)).toBeLessThan(1e-12);
+      expect(Math.abs(server.pos.y - me.state.pos.y)).toBeLessThan(1e-12);
+      expect(Math.abs(server.pos.z - me.state.pos.z)).toBeLessThan(1e-12);
+      const from = predictedFrom(server);
+      expect(me.state.crouched).toBe(from.crouched);
+      expect(me.state.slideTicks).toBe(from.slideTicks);
+      expect(me.state.slideCooldown).toBe(from.slideCooldown);
+      expect(me.state.slideAir).toBe(from.slideAir);
+      expect(me.state.slideDir).toEqual(from.slideDir);
+      if (server.stance === 'slide') slid += 1;
+      if (server.stance === 'crouch') crouched += 1;
+    }
+    expect(slid).toBeGreaterThan(55);
+    expect(crouched).toBeGreaterThan(40);
+    predictor.dispose();
+    world.dispose();
+  });
+
+  test('(T5) a predictor reset from a snapshot in mid-slide carries on as the server does', () => {
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+    world.addPlayer('p');
+    world.teleportPlayer('p', FAR);
+    const predictor = createPredictor(RAPIER, world.course, lodgy);
+    predictor.setVehicle(world.snapshot().vehicle.pos, world.snapshot().vehicle.rot);
+    const step = (fields: Partial<InputFields>) => world.step(new Map([['p', { ...NEUTRAL_INPUT, seq: 0, ...fields }]]));
+    for (let i = 0; i < 30; i++) step({});
+    for (let i = 0; i < 70; i++) step({ moveY: 1, sprint: true });
+    for (let i = 0; i < 10; i++) step({ moveY: 1, sprint: true, crouch: true });
+    const reset = predictedFrom(world.snapshot().players[0]!);
+    expect(reset.slideTicks).toBeGreaterThan(0);
+    const me = driver(predictor, reset);
+    for (let i = 0; i < 80; i++) {
+      const fields = { moveY: 1, sprint: true, crouch: true };
+      step(fields);
+      me.tick(fields);
+      const server = world.snapshot().players[0]!;
+      expect(Math.abs(server.pos.x - me.state.pos.x)).toBeLessThan(1e-12);
+      expect(Math.abs(server.pos.z - me.state.pos.z)).toBeLessThan(1e-12);
+    }
     predictor.dispose();
     world.dispose();
   });
@@ -214,7 +292,7 @@ describe('createPredictor', () => {
         predictor.setVehicle(moved.pos, moved.rot);
         const face = moved.pos.z + lodgy.halfExtents.z;
         const start = rest(vec3(FAR.x, PLAYER_CONTROLLER_OFFSET, face + PLAYER_RADIUS + 0.01));
-        const next = predictor.stepPlayer(start, { ...NEUTRAL_INPUT, moveY: 1 }, false);
+        const next = predictor.stepPlayer(start, { ...NEUTRAL_INPUT, moveY: 1 }, { jump: false, crouch: false });
         if (next.pos.z < face + PLAYER_RADIUS - 0.01) bad.push(n);
       }
       expect(bad).toEqual([]);
@@ -298,7 +376,7 @@ describe('createPredictor', () => {
     const predictor = createPredictor(RAPIER, testGround, lodgy);
     const state = { ...rest(FAR), walk: { x: 1, z: 2 }, carry: { x: 3, z: 4 }, vy: 2 };
     const frozen = JSON.parse(JSON.stringify(state)) as PredictedState;
-    const next = predictor.stepPlayer(state, { ...NEUTRAL_INPUT, moveY: 1, jump: true }, false);
+    const next = predictor.stepPlayer(state, { ...NEUTRAL_INPUT, moveY: 1, jump: true }, { jump: false, crouch: false });
     expect(state).toEqual(frozen);
     expect(next).not.toBe(state);
     expect(next.pos).not.toBe(state.pos);
@@ -309,8 +387,8 @@ describe('createPredictor', () => {
 
   test('sanitises the input like the server', () => {
     const predictor = createPredictor(RAPIER, testGround, lodgy);
-    const a = predictor.stepPlayer(rest(FAR), { ...NEUTRAL_INPUT, moveX: 50, moveY: 1 }, false);
-    const b = predictor.stepPlayer(rest(FAR), { ...NEUTRAL_INPUT, moveX: 1, moveY: 1 }, false);
+    const a = predictor.stepPlayer(rest(FAR), { ...NEUTRAL_INPUT, moveX: 50, moveY: 1 }, { jump: false, crouch: false });
+    const b = predictor.stepPlayer(rest(FAR), { ...NEUTRAL_INPUT, moveX: 1, moveY: 1 }, { jump: false, crouch: false });
     expect(a).toEqual(b);
     predictor.dispose();
   });
@@ -318,11 +396,38 @@ describe('createPredictor', () => {
   test('a held jump does not re-jump without a release', () => {
     const predictor = createPredictor(RAPIER, testGround, lodgy);
     const grounded = { ...rest(FAR), grounded: true };
-    const held = predictor.stepPlayer(grounded, { ...NEUTRAL_INPUT, jump: true }, true);
-    const pressed = predictor.stepPlayer(grounded, { ...NEUTRAL_INPUT, jump: true }, false);
+    const held = predictor.stepPlayer(grounded, { ...NEUTRAL_INPUT, jump: true }, { jump: true, crouch: false });
+    const pressed = predictor.stepPlayer(grounded, { ...NEUTRAL_INPUT, jump: true }, { jump: false, crouch: false });
     expect(held.vy).toBeLessThan(0.5);
     expect(pressed.vy).toBeGreaterThan(4);
     predictor.dispose();
+  });
+
+  test('predictedFrom reads the stance, the slide and the hands', () => {
+    const base: PlayerSnapshot = {
+      playerId: 'p',
+      pos: vec3(1, 2, 3),
+      yaw: 0,
+      seat: null,
+      hands: null,
+      ground: null,
+      walk: { x: 1, z: 2 },
+      carry: { x: 3, z: 4 },
+      vy: 5,
+      grounded: true,
+      inventory: [null, null, null],
+      slot: 0,
+      hold: null,
+      health: 100,
+      downed: null,
+    };
+    expect(predictedFrom({ ...base, stance: 'crouch' }).crouched).toBe(true);
+    const sliding = predictedFrom({ ...base, stance: 'slide', slide: { ticks: 20, cooldown: 0, air: 2, dirX: 0.6, dirZ: -0.8 } });
+    expect(sliding).toMatchObject({ crouched: true, slideTicks: 20, slideCooldown: 0, slideAir: 2, slideDir: { x: 0.6, z: -0.8 } });
+    expect(predictedFrom({ ...base, stance: 'roll' as 'slide' }).crouched).toBe(false);
+    expect(predictedFrom({ ...base, slide: { ticks: 0, cooldown: 30, air: 0, dirX: 0, dirZ: 0 } })).toMatchObject({ crouched: false, slideCooldown: 30 });
+    expect(predictedFrom({ ...base, hands: 'hook' })).toMatchObject({ carrying: true, holdsProp: false });
+    expect(predictedFrom({ ...base, hands: 'crate-1' })).toMatchObject({ carrying: true, holdsProp: true });
   });
 
   test('predictedFrom copies', () => {
@@ -344,7 +449,20 @@ describe('createPredictor', () => {
       downed: null,
     };
     const copy = predictedFrom(snapshot);
-    expect(copy).toEqual({ pos: { x: 1, y: 2, z: 3 }, walk: { x: 1, z: 2 }, carry: { x: 3, z: 4 }, vy: 5, grounded: true });
+    expect(copy).toEqual({
+      pos: { x: 1, y: 2, z: 3 },
+      walk: { x: 1, z: 2 },
+      carry: { x: 3, z: 4 },
+      vy: 5,
+      grounded: true,
+      crouched: false,
+      slideTicks: 0,
+      slideCooldown: 0,
+      slideAir: 0,
+      slideDir: { x: 0, z: 0 },
+      carrying: false,
+      holdsProp: false,
+    });
     copy.pos.x = 99;
     copy.walk.x = 99;
     copy.carry.x = 99;
@@ -356,7 +474,7 @@ describe('createPredictor', () => {
   test('throws after dispose', () => {
     const predictor = createPredictor(RAPIER, testGround, lodgy);
     predictor.dispose();
-    expect(() => predictor.stepPlayer(rest(FAR), NEUTRAL_INPUT, false)).toThrow();
+    expect(() => predictor.stepPlayer(rest(FAR), NEUTRAL_INPUT, { jump: false, crouch: false })).toThrow();
     expect(() => predictor.setVehicle(vec3(0, 0, 0), IDENTITY)).toThrow();
     expect(() => predictor.dispose()).not.toThrow();
   });

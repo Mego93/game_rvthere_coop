@@ -79,6 +79,8 @@ export function interactCandidates(ctx: {
   feet: Vec3;
   yaw: number;
   pitch: number;
+  // The eye is lower while crouching.
+  crouched?: boolean;
   seat: string | null;
   hands: string | null;
   takenSeats: ReadonlySet<string>;
@@ -93,7 +95,7 @@ export function interactCandidates(ctx: {
   stops: readonly StopContext[];
 }): InteractCandidate[] {
   if (ctx.seat !== null) return [];
-  const { origin, dir } = aimRay(ctx.feet, ctx.yaw, ctx.pitch);
+  const { origin, dir } = aimRay(ctx.feet, ctx.yaw, ctx.pitch, ctx.crouched);
   const chest = add(ctx.feet, vec3(0, PUSH_HEIGHT, 0));
   const mount = add(ctx.vehiclePos, rotate(ctx.vehicleRot, ctx.config.winchMount));
   const inReach = (point: Vec3) => length(sub(point, chest)) <= HOOK_RANGE;
