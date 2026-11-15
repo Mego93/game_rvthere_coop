@@ -193,17 +193,17 @@ Course geometry is sized so the RV fits, and every segment is completable by the
 
 The cable is force-based. There is no physics joint.
 
-- The hook rests on the front bumper. While a player holds it, the cable pays out freely up to 25 m. A hook carried beyond that is pulled from the player's hands and drops.
+- The hook rests on the front bumper. While a player holds it, the cable pays out freely up to 30 m (the rope is drawn red from 26 m as a warning). A hook carried beyond that is pulled from the player's hands and drops.
 - The hook attaches to an anchor: a marked static anchor, or the anchor point that every heavy obstacle has.
 - Attaching sets the cable length to the current distance between hook and bumper.
 - A slack cable has no effect. A taut cable pulls its two ends together with a spring-and-damper force, capped at the maximum winch force. Under a load above the cap the cable stretches; it never breaks.
 - The maximum winch force is a fixed fraction of the vehicle's weight, and the cable's stiffness and damping scale with the vehicle's mass, so both vehicles winch up the same slopes at the same speed.
-- Reeling in shortens the cable at a constant speed, down to a minimum length. The cable does not shorten while its tension is at the cap. Reeling out lengthens it, up to 25 m.
+- Reeling in shortens the cable at a constant speed, down to a minimum length. The cable does not shorten while its tension is at the cap. Reeling out lengthens it, up to 30 m.
 - Attached to a static anchor, reeling in pulls the vehicle. Attached to a heavy obstacle, it drags the obstacle toward the vehicle if the vehicle is braked or heavier.
 - The winch alone stalls on a steep enough slope; throttle and pushing add to it.
 - The driver can reel, and so can a player on foot within interact range of the winch box. If both reel at once, the driver's input wins.
 - Interact at the attached anchor detaches the hook into that player's hands. Interact at the winch box while the hook is attached releases it and returns it to the bumper.
-- A hook lying on the ground can be picked up. Reeling in retracts it to the bumper. It retracts by itself if it lies more than 25 m from the bumper.
+- A hook lying on the ground can be picked up. Reeling in retracts it to the bumper. It retracts by itself if it lies more than 30 m from the bumper.
 - If the obstacle the hook is attached to is reset by the kill plane, the hook detaches and returns to the bumper.
 - The cable is drawn as a rope from bumper to hook. It collides with nothing.
 
@@ -637,7 +637,7 @@ Runner: Vitest in all packages. Tests are written before the code they cover.
 - player health: each damage source; no damage while seated; downed at 0; revive at 50; respawn after 30 s; the timer pauses during a revive hold; all downed respawn at once and each is counted; kill-plane respawn
 - inventory: fills the first free slot; refuses when full; selection; drop; no drop while seated; each item's valid target, including full tank and full health being invalid; downed teammate preferred
 - holds: bind at the press; reset on release, on an invalid target, on leaving range, on being downed or teleported; a fresh press is needed after completion
-- winch: attaches only within range of an anchor; the pull never exceeds the force cap; the cable does not shorten at the cap; reeling in pulls the vehicle toward the anchor; minimum and maximum length; over-length hook drops; a heavy obstacle can be dragged; a grounded hook retracts, and retracts by itself beyond 25 m; release at the winch box; detach when the obstacle is reset; the driver's reel wins
+- winch: attaches only within range of an anchor; the pull never exceeds the force cap; the cable does not shorten at the cap; reeling in pulls the vehicle toward the anchor; minimum and maximum length; over-length hook drops; a heavy obstacle can be dragged; a grounded hook retracts, and retracts by itself beyond 30 m; release at the winch box; detach when the obstacle is reset; the driver's reel wins
 - interact: priority order; the target nearest the aim wins within a priority; range is measured to the nearest point of a box
 - push: applied at the contact point and only into the surface; adds per player and respects the cap; rights a flipped Lodgy; none from a player standing on the object; a heavy obstacle stays locked below the pusher count and against the vehicle
 - press detection: a repeated input does not re-trigger a press

@@ -91,7 +91,9 @@ export const WINCH_DAMPING_RATIO = 1;
 export const WINCH_FORCE_PER_WEIGHT = 0.6;
 export const WINCH_REEL_SPEED = 1;
 export const WINCH_MIN_LENGTH = 1.5;
-export const WINCH_MAX_LENGTH = 25;
+export const WINCH_MAX_LENGTH = 30;
+// m, from which the winch rope is drawn red as a warning that the hook is about to leave the hands.
+export const WINCH_WARN_LENGTH = 26;
 // m, from the chest to the winch box, an anchor point or a ground hook.
 export const HOOK_RANGE = 2;
 // m above a static anchor's pose, where the hook attaches.

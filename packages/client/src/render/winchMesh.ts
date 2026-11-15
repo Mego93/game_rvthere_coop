@@ -1,7 +1,13 @@
-import type { Vec3 } from '@lodgy/shared';
+import { WINCH_WARN_LENGTH, type Vec3 } from '@lodgy/shared';
 import * as THREE from 'three';
 
 const HOOK_SIZE = 0.16;
+const ROPE_COLOR = 0x1f2937;
+const ROPE_WARN_COLOR = 0xdc2626;
+
+export function ropeColor(distance: number): number {
+  return distance >= WINCH_WARN_LENGTH ? ROPE_WARN_COLOR : ROPE_COLOR;
+}
 
 // A small box for the hook and a line for the rope; the rope's first point is the mount, its second the hook.
 export function createWinchMesh(): THREE.Group {
@@ -13,7 +19,7 @@ export function createWinchMesh(): THREE.Group {
   hook.name = 'hook';
   const rope = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
-    new THREE.LineBasicMaterial({ color: 0x1f2937 }),
+    new THREE.LineBasicMaterial({ color: ROPE_COLOR }),
   );
   rope.name = 'rope';
   rope.frustumCulled = false;
@@ -27,6 +33,7 @@ export function placeWinchMesh(group: THREE.Group, mount: Vec3, hook: Vec3, visi
   const rope = group.getObjectByName('rope') as THREE.Line;
   hookMesh.position.set(hook.x, hook.y, hook.z);
   rope.visible = visible;
+  (rope.material as THREE.LineBasicMaterial).color.setHex(ropeColor(Math.hypot(hook.x - mount.x, hook.y - mount.y, hook.z - mount.z)));
   const position = rope.geometry.getAttribute('position');
   position.setXYZ(0, mount.x, mount.y, mount.z);
   position.setXYZ(1, hook.x, hook.y, hook.z);
