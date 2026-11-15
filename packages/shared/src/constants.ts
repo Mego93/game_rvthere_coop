@@ -42,6 +42,8 @@ export const MAX_ROOMS = 50;
 export const MAX_CONNECTIONS = 360;
 // Per client address (two families at most behind one address).
 export const MAX_CONNECTIONS_PER_ADDRESS = 12;
+// Connections one room object accepts (6 players plus spectators and takeovers).
+export const MAX_CONNECTIONS_PER_ROOM = 12;
 // No valid message is anywhere near this size; larger ones close the connection.
 export const MAX_MESSAGE_BYTES = 4096;
 // Bytes queued to one socket before it is dropped as a reader that cannot keep up.
