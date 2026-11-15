@@ -6,7 +6,7 @@ Most of what is here is CC0 1.0 (public domain dedication); no attribution is re
 
 Both models are licensed CC BY 4.0 (Creative Commons Attribution 4.0 International, http://creativecommons.org/licenses/by/4.0/). Each was modified: simplified geometry and resized textures for real-time use. The licence text and these notes also sit in the folder's `License.txt`.
 
-- "Dacia Lodgy 2012-2022" by Merc_TV. Source: https://sketchfab.com/3d-models/dacia-lodgy-2012-2022-2949cd4dce264bb79b8180248b6754ec . Licence: CC BY 4.0. Used as `lodgy-merc_tv.glb`. Modified: simplified geometry and resized textures for real-time use (interior parts removed, colours assigned, wheels made separate nodes).
+- "Dacia Lodgy 2012-2022" by Merc_TV. Source: https://sketchfab.com/3d-models/dacia-lodgy-2012-2022-2949cd4dce264bb79b8180248b6754ec . Licence: CC BY 4.0. Used as `lodgy-merc_tv.glb`. Modified: simplified geometry and resized textures for real-time use (interior parts removed, colours assigned (white paint), wheels made separate nodes).
 - "Free Low-poly Vintage Hippy Camper Van" by Libau Media. Source: https://sketchfab.com/3d-models/free-low-poly-vintage-hippy-camper-van-931d18f3e94b4cd580440bdc85436734 . Licence: CC BY 4.0. Used as `camper-libau.glb`. Modified: simplified geometry and resized textures for real-time use (rescaled, turned to face -Z, lengthened between the axles).
 
 ## models/car-kit

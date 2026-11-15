@@ -200,5 +200,6 @@ test('M3: the real pack keeps its colours (no ochre tint) and its materials have
     const mesh = o as THREE.Mesh;
     if (mesh.isMesh && (mesh.material as THREE.Material).name === 'Paint') colour = (mesh.material as THREE.MeshStandardMaterial).color;
   });
-  expect((colour as unknown as THREE.Color).b).toBeGreaterThan((colour as unknown as THREE.Color).r);
+  const paintColour = colour as unknown as THREE.Color;
+  expect(Math.min(paintColour.r, paintColour.g, paintColour.b)).toBeGreaterThan(0.8);
 });
