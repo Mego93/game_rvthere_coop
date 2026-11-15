@@ -100,6 +100,16 @@ The owner's real coordinates are never written in this repository (decision of 2
 - A customization screen in the lobby; accessories (glasses) and outfits (sweatshirt, suit) chosen per player, sent in the join message, drawn on every player's character.
 - **Open**: free choice or unlockable with coins? Colours? How many items at launch? The character model is the Kenney character; adding outfits may need a new, rigged model.
 
+### Owner's answers (2026-11-15)
+- Route scale: **the full 22 km** (about 25 minutes of driving; the course needs fuel stops along the route and a fuel and repair plan to keep it finishable).
+- Movement: **free sprint (no stamina) and a slide that keeps speed** (sprint, then crouch).
+- Animals: **annoying with a small penalty**: knocked aside, cost a few seconds or a little vehicle health, scooters honk; goats cannot be killed.
+- Souleyman: **one look at every checkpoint, saves on arrival** (greeting and sound).
+- Winch: **strengthen it and add a tutorial**.
+- Customization: **free choice, locked to six characters** (one per player slot, six in all); the owner will add the pictures afterwards. Still to confirm when the pictures arrive: is each of the six a fixed character that wears the chosen glasses, sweatshirt or suit, or are the six outfits the whole choice?
+- Chat: **text plus quick phrases**, hidden in the game until opened.
+- Start scene: **the villa is the start (pool, court, gym pavilion at dusk), the airport is the finish**. The villa photos stay out of the repository; the villa scene is drawn from them, not copied.
+
 ### Order and dependencies
 26 first (small), then 27 and 28 together (course data), 29 uses 27's checkpoints, 30 and 31 both need protocol fields and come last. Every step follows the usual workflow (plan, review, owner go-ahead, tasks with review, Opus branch review, checks).
 
