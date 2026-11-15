@@ -110,15 +110,15 @@ The owner's real coordinates are never written in this repository (decision of 2
 - Chat: **text plus quick phrases**, hidden in the game until opened.
 - Start scene: **the villa is the start (pool, court, gym pavilion at dusk), the airport is the finish**. The villa photos stay out of the repository; the villa scene is drawn from them, not copied.
 
-### Step 31: the six characters (from the owner's two group photos; to confirm)
-The photos stay out of the repository. Each character is a stylised low-poly figure built from clothing and hair, not a likeness. Described from the photos, to be confirmed by the owner:
-1. Black half-zip sweater, light jeans, dark short hair, moustache.
-2. Bald, round glasses, dark button jacket over a dark tee, olive trousers, short beard.
-3. Dark navy sweater over a collared shirt, beige trousers, dark wavy hair.
-4. Cream zip cardigan with red trim over a polo, olive trousers, dark short hair.
-5. Black hoodie, beige trousers, light brown swept hair.
-6. The owner (second photo, bottom right): black tee, round glasses, dark longer hair, peace sign.
-The lobby offers these six (one per slot) and, on top, the glasses, sweatshirt and suit options. **Open**: confirm who is each character and their names (shown above the character), whether one more colour of each item is wanted, and whether the owner wants the sixth to wear round glasses by default.
+### Step 31: the six characters (confirmed by the owner)
+The photos stay out of the repository. Each character is a stylised low-poly figure built from clothing and hair, not a likeness; its name shows above it. The descriptions are right as written. Default outfits come from the photos; every player can customize on top (glasses, sweatshirt, suit and more).
+1. **Sounile**: black half-zip sweater, light jeans, short dark hair, moustache.
+2. **Rafael**: bald, round glasses (default), dark button jacket over a dark tee, olive trousers, short beard.
+3. **Nandan**: dark navy sweater over a collared shirt, beige trousers, dark wavy hair.
+4. **Alexander**: cream zip cardigan with red trim, olive trousers, short dark hair.
+5. **Luiz**: black hoodie, beige trousers, light swept hair.
+6. **Huu** (the owner): black tee, round glasses (default), dark longer hair.
+The lobby offers these six (one per slot, locked to six) with the customization options on top. The six are fixed characters; the glasses, sweatshirt, suit and other items are changeable add-ons.
 
 ### Order and dependencies
 26 first (small), then 27 and 28 together (course data), 29 uses 27's checkpoints, 30 and 31 both need protocol fields and come last. Every step follows the usual workflow (plan, review, owner go-ahead, tasks with review, Opus branch review, checks).
