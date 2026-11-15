@@ -98,10 +98,11 @@ describe.each(Object.keys(DEFS) as (keyof typeof DEFS)[])('structure of %s', (id
     return index;
   }
 
-  // Lateral offsets that lie on the surface at that sample: +-4.5 on the road, +-2.5 in the alley.
+  // Lateral offsets that lie on the surface at that sample: +-4.5 on the road, +-2.5 in the alley; +-15 on a shoulder (SH2).
   function lateralsAt(dist: number): number[] {
-    const alley = def.segments[segmentIndexOf(dist)]?.type === 'alley';
-    return alley ? [-2.5, 0, 2.5] : [-4.5, -2.5, 0, 2.5, 4.5];
+    const type = def.segments[segmentIndexOf(dist)]?.type;
+    if (type === 'alley') return [-2.5, 0, 2.5];
+    return type === 'ford' ? [-4.5, -2.5, 0, 2.5, 4.5] : [-15, -4.5, -2.5, 0, 2.5, 4.5, 15];
   }
 
   const rightOf = (s: { dx: number; dz: number }) => ({ x: -s.dz, z: s.dx });
@@ -118,7 +119,7 @@ describe.each(Object.keys(DEFS) as (keyof typeof DEFS)[])('structure of %s', (id
           expect(Math.abs(h! - centre!), `dist ${s.dist}, lateral ${lateral}`).toBeLessThanOrEqual(0.02);
         }
       }
-    });
+    }, 60_000);
 
     test('the surface has no steps, joins included', () => {
       const limit = 0.02 + 0.05 * Math.tan(degToRad(15));

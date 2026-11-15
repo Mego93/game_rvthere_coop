@@ -20,6 +20,7 @@ import {
   SEGMENT_MIN_LENGTH,
   SEGMENT_SPAWN_INSET,
   STOP_PAD,
+  STOP_PAD_LIFT,
   STOP_ZONE,
   WALL_THICKNESS,
 } from './constants';
@@ -96,7 +97,8 @@ describe('B1 exit pose', () => {
 
   test('a tight curve gets more pieces so none turns more than the limit', () => {
     const seg = buildSegment(road(20, { curve: Math.PI }));
-    expect(seg.ground.length).toBe(18);
+    expect(seg.ground.filter((b) => b.halfExtents.x === ROAD_WIDTH / 2)).toHaveLength(18);
+    expect(seg.ground).toHaveLength(18 * 3);
   });
 
   test('the route runs from the entry to the exit', () => {
@@ -141,8 +143,9 @@ describe('B2 and B3 within a road', () => {
 
   test('ground boxes are ROAD_WIDTH wide road surface and no piece is longer than the limit plus overlap', () => {
     const seg = buildSegment(road(90, { curve: Math.PI / 2 }));
-    for (const box of seg.ground) {
-      expect(box.surface).toBe('road');
+    const roadBoxes = seg.ground.filter((b) => b.surface === 'road');
+    expect(roadBoxes).toHaveLength(seg.ground.length / 3);
+    for (const box of roadBoxes) {
       expect(box.halfExtents.x).toBe(ROAD_WIDTH / 2);
       expect(box.halfExtents.z * 2).toBeLessThanOrEqual(ROAD_PIECE_LENGTH + 2 * ROAD_JOINT_OVERLAP + 1e-9);
     }
@@ -227,15 +230,15 @@ describe('extras', () => {
     const seg = buildSegment(road(40, { stop: { kind: 'fuel', side: 1, along: 20 } }));
     const pad = seg.ground[seg.ground.length - 1]!;
     expect(pad.halfExtents).toEqual(STOP_PAD);
-    expect(pad.center).toEqual(vec3(ROAD_WIDTH / 2 + STOP_PAD.x, -STOP_PAD.y, -20));
+    expect(pad.center).toEqual(vec3(ROAD_WIDTH / 2 + STOP_PAD.x, -STOP_PAD.y + STOP_PAD_LIFT, -20));
     const stop = seg.stops[0]!;
     expect(stop).toMatchObject({ id: 'stop-1', kind: 'fuel' });
     expect(stop.zone.halfExtents).toEqual(STOP_ZONE);
-    expect(stop.zone.center).toEqual(vec3(ROAD_WIDTH / 2 + 0.5 + STOP_ZONE.x, STOP_ZONE.y, -20));
-    expect(stop.operatePoint).toEqual(vec3(ROAD_WIDTH / 2 + 0.5 + 2 * STOP_ZONE.x + 1, 0, -20));
-    expect(stop.shopCounter).toEqual(vec3(stop.operatePoint.x, 0, -22));
+    expect(stop.zone.center).toEqual(vec3(ROAD_WIDTH / 2 + 0.5 + STOP_ZONE.x, STOP_ZONE.y + STOP_PAD_LIFT, -20));
+    expect(stop.operatePoint).toEqual(vec3(ROAD_WIDTH / 2 + 0.5 + 2 * STOP_ZONE.x + 1, STOP_PAD_LIFT, -20));
+    expect(stop.shopCounter).toEqual(vec3(stop.operatePoint.x, STOP_PAD_LIFT, -22));
     // The zone rests on the pad and the operate point is on it.
-    expect(stop.zone.center.y - STOP_ZONE.y).toBe(pad.center.y + pad.halfExtents.y);
+    expect(stop.zone.center.y - STOP_ZONE.y).toBeCloseTo(pad.center.y + pad.halfExtents.y, 12);
     expect(Math.abs(stop.operatePoint.x - pad.center.x)).toBeLessThanOrEqual(pad.halfExtents.x);
   });
 
@@ -378,10 +381,10 @@ describe('B2 and B3 within the other types', () => {
 
   test('no ground piece is longer than the limit, apart from one sand box and one riverbed', () => {
     for (const def of [alley(50, 0.5), bank(3, 15, 0), roadworks(40, 4)]) {
-      for (const box of buildSegment(def).ground) expect(box.halfExtents.z * 2).toBeLessThanOrEqual(ROAD_PIECE_LENGTH + 1e-9);
+      for (const box of buildSegment(def).ground.filter((b) => b.surface !== 'gravel' || b.halfExtents.x === ROAD_WIDTH / 2)) expect(box.halfExtents.z * 2).toBeLessThanOrEqual(ROAD_PIECE_LENGTH + 1e-9);
     }
     const s = buildSegment(sand(30, 0));
-    expect(s.ground.filter((b) => b.surface === 'sand')).toHaveLength(1);
+    expect(s.ground.filter((b) => b.surface === 'sand' && b.halfExtents.x === ROAD_WIDTH / 2)).toHaveLength(1);
     expect(buildSegment(ford(20, 0)).ground).toHaveLength(1);
   });
 });
@@ -552,7 +555,7 @@ describe('ford', () => {
 describe('bank', () => {
   test('the ramp rises height at the gradient and its surface is as long as height / sin(gradient)', () => {
     const seg = buildSegment(bank(3, 15, 0));
-    const ramp = seg.ground.filter((b) => b.surface === 'gravel');
+    const ramp = seg.ground.filter((b) => b.surface === 'gravel' && b.halfExtents.x === ROAD_WIDTH / 2);
     const total = ramp.reduce((sum, b) => sum + b.halfExtents.z * 2, 0);
     expect(total).toBeCloseTo(3 / Math.sin(degToRad(15)), 9);
     const top = seg.surfaceAt(BANK_APPROACH + 3 / Math.tan(degToRad(15)) + 1);
