@@ -204,3 +204,30 @@ test('releasing Meta clears every held key', () => {
   release('MetaRight');
   expect(source.sample().moveY).toBe(0);
 });
+
+test('B13: either Shift is sprint and C is crouch, both read as held and sent only when true', () => {
+  const { source, press, release } = setup();
+  expect('sprint' in source.sample()).toBe(false);
+  expect('crouch' in source.sample()).toBe(false);
+  press('ShiftLeft');
+  expect(source.sample().sprint).toBe(true);
+  expect(source.sample().sprint).toBe(true);
+  release('ShiftLeft');
+  expect('sprint' in source.sample()).toBe(false);
+  press('ShiftRight');
+  expect(source.sample().sprint).toBe(true);
+  release('ShiftRight');
+  press('KeyC');
+  expect(source.sample().crouch).toBe(true);
+  expect(source.sample().crouch).toBe(true);
+  release('KeyC');
+  expect(source.sample()).toEqual({ ...NEUTRAL_INPUT, reset: false });
+});
+
+test('B13: a window blur releases sprint and crouch', () => {
+  const { target, source, press } = setup();
+  press('ShiftLeft');
+  press('KeyC');
+  target.dispatchEvent(new Event('blur'));
+  expect(source.sample()).toEqual({ ...NEUTRAL_INPUT, reset: false });
+});

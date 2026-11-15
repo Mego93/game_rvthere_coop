@@ -16,6 +16,9 @@ export const KEY_BINDINGS: readonly { code: string; action: string }[] = [
   { code: 'KeyR', action: 'reel out' },
   { code: 'KeyG', action: 'drop item' },
   { code: 'KeyX', action: 'reset vehicle' },
+  { code: 'ShiftLeft', action: 'sprint' },
+  { code: 'ShiftRight', action: 'sprint' },
+  { code: 'KeyC', action: 'crouch or slide' },
   { code: 'Digit1', action: 'slot 1' },
   { code: 'Digit2', action: 'slot 2' },
   { code: 'Digit3', action: 'slot 3' },
@@ -79,6 +82,9 @@ export function createKeyboardSource(target: EventTarget): InputSource {
         drop: button('KeyG'),
         // A hold, not a tap: the server counts the ticks.
         reset: down.has('KeyX'),
+        // Held only, and absent when false so the neutral sample stays as it was.
+        ...(down.has('ShiftLeft') || down.has('ShiftRight') ? { sprint: true } : {}),
+        ...(down.has('KeyC') ? { crouch: true } : {}),
       };
       tapped.clear();
       return input;

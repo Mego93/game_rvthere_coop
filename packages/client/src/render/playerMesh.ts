@@ -48,6 +48,29 @@ interface Animation {
 
 const animations = new WeakMap<THREE.Object3D, Animation>();
 
+const CROUCH_SCALE = 0.6;
+const SLIDE_TILT = (25 * Math.PI) / 180;
+// The drawn stance eases in about this long, like the camera eye.
+const STANCE_EASE_SECONDS = 0.1;
+// `height` scales the body's Y (1 standing); `tilt` leans it back (radians).
+const stances = new WeakMap<THREE.Object3D, { height: number; tilt: number }>();
+
+// Crouching squashes the body (not the name) and sliding leans it back; both ease, and snap when no time has passed.
+function applyStance(mesh: THREE.Group, stance: PlayerSnapshot['stance'], seconds: number): number {
+  const state = stances.get(mesh) ?? { height: 1, tilt: 0 };
+  stances.set(mesh, state);
+  const targetHeight = stance === undefined ? 1 : CROUCH_SCALE;
+  const targetTilt = stance === 'slide' ? SLIDE_TILT : 0;
+  const k = seconds > 0 ? 1 - Math.exp(-seconds / STANCE_EASE_SECONDS) : 1;
+  state.height += (targetHeight - state.height) * k;
+  state.tilt += (targetTilt - state.tilt) * k;
+  for (const child of mesh.children) {
+    if (child.name === 'label') child.position.y = PLAYER_HEIGHT * state.height + 0.3;
+    else child.scale.y = state.height;
+  }
+  return state.tilt;
+}
+
 // The blocky character, its shirt and sleeves in the player's colour, turned to face -Z and fitted to the player's height; null when the model did not load.
 function createCharacter(colour: string): THREE.Group | null {
   if (!hasModel('character.player')) return null;
@@ -126,7 +149,8 @@ export function placePlayerMesh(mesh: THREE.Group, player: PlayerSnapshot, secon
   }
   mesh.position.set(player.pos.x, player.pos.y + (downed ? PLAYER_RADIUS : 0), player.pos.z);
   mesh.rotation.order = 'YXZ';
-  mesh.rotation.set(downed ? Math.PI / 2 : 0, player.yaw, 0);
+  const tilt = applyStance(mesh, downed ? undefined : player.stance, seconds);
+  mesh.rotation.set(downed ? Math.PI / 2 : tilt, player.yaw, 0);
 }
 
 // Names show only for other players near the camera.

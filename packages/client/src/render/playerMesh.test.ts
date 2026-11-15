@@ -1,4 +1,4 @@
-import { type PlayerSnapshot } from '@lodgy/shared';
+import { PLAYER_HEIGHT, type PlayerSnapshot } from '@lodgy/shared';
 import * as THREE from 'three';
 import { beforeAll, expect, test, vi } from 'vitest';
 import { createPlayerMesh, disposePlayerMesh, placePlayerMesh, setNameVisible } from './playerMesh';
@@ -64,4 +64,43 @@ test('A3: disposing a player leaves the shared geometry and material alone', () 
   disposePlayerMesh(mesh);
   expect(geometry).not.toHaveBeenCalled();
   expect(material).not.toHaveBeenCalled();
+});
+
+const stanced = (stance?: 'crouch' | 'slide') => ({ pos: { x: 0, y: 0, z: 0 }, yaw: 0, downed: null, ...(stance ? { stance } : {}) }) as unknown as PlayerSnapshot;
+
+test('M9: a crouched player is drawn 0.6 as tall and a slider is tilted back 25 degrees', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  placePlayerMesh(mesh, stanced(), 0);
+  expect(mesh.getObjectByName('torso')!.parent!.scale.y).toBe(1);
+  placePlayerMesh(mesh, stanced('crouch'), 0);
+  const body = mesh.children.find((child) => child.name !== 'label')!;
+  expect(body.scale.y).toBeCloseTo(0.6, 9);
+  expect(mesh.rotation.x).toBe(0);
+  placePlayerMesh(mesh, stanced('slide'), 0);
+  expect(body.scale.y).toBeCloseTo(0.6, 9);
+  expect(mesh.rotation.x).toBeCloseTo((25 * Math.PI) / 180, 9);
+});
+
+test('M9: the stance change eases over about 0.1 s and the name label keeps its size', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  const label = mesh.getObjectByName('label')!;
+  const labelScale = label.scale.y;
+  placePlayerMesh(mesh, stanced(), 0);
+  const body = mesh.children.find((child) => child.name !== 'label')!;
+  placePlayerMesh(mesh, stanced('crouch'), 0.016);
+  expect(body.scale.y).toBeLessThan(1);
+  expect(body.scale.y).toBeGreaterThan(0.6);
+  for (let i = 0; i < 30; i++) placePlayerMesh(mesh, stanced('crouch'), 0.016);
+  expect(body.scale.y).toBeCloseTo(0.6, 2);
+  expect(label.scale.y).toBe(labelScale);
+  expect(label.position.y).toBeLessThan(PLAYER_HEIGHT + 0.3);
+  for (let i = 0; i < 80; i++) placePlayerMesh(mesh, stanced(), 0.016);
+  expect(body.scale.y).toBeCloseTo(1, 2);
+  expect(label.position.y).toBeCloseTo(PLAYER_HEIGHT + 0.3, 2);
+});
+
+test('M9: a downed player is not also crouch-scaled', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  placePlayerMesh(mesh, { ...stanced('crouch'), downed: 5 } as unknown as PlayerSnapshot, 0);
+  expect(mesh.rotation.x).toBeCloseTo(Math.PI / 2, 9);
 });

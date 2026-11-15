@@ -291,3 +291,25 @@ test('every kind of cancel tells the controls to release their held buttons', ()
     expect(h.released()).toBeGreaterThan(0);
   }
 });
+
+test('B13: the sprint button is a level the UI sets, absent when off, and cancel clears it', () => {
+  const { source, button, cancel } = setup();
+  button('sprint', true);
+  expect(source.sample().sprint).toBe(true);
+  expect(source.sample().sprint).toBe(true);
+  button('sprint', false);
+  expect('sprint' in source.sample()).toBe(false);
+  button('sprint', true);
+  cancel();
+  expect('sprint' in source.sample()).toBe(false);
+});
+
+test('B13: a hidden page clears sprint, and touch never sends crouch', () => {
+  const { source, button, doc } = setup();
+  button('sprint', true);
+  (doc as { visibilityState: string }).visibilityState = 'hidden';
+  doc.dispatchEvent(new Event('visibilitychange'));
+  const sample = source.sample();
+  expect('sprint' in sample).toBe(false);
+  expect('crouch' in sample).toBe(false);
+});

@@ -450,3 +450,53 @@ test('T12: H opens the controls panel, Escape closes it, and the page boots @key
   await page.locator('#controls-close').click();
   await expect(page.locator('#controls')).toBeHidden();
 });
+
+// How far the local player walks in `ms` with the given keys held, from the overlay's predicted position.
+async function walkDistance(page: Page, keys: string[], ms: number): Promise<number> {
+  const start = (await overlayPosition(page, 'you'))!;
+  for (const key of keys) await page.keyboard.down(key);
+  await page.waitForTimeout(ms);
+  for (const key of keys) await page.keyboard.up(key);
+  const end = (await overlayPosition(page, 'you'))!;
+  return distance(end, start);
+}
+
+test('T12: holding Shift covers more ground than W alone, and holding C lowers the camera @keyboard', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  await expect.poll(() => overlayPosition(page, 'you')).not.toBeNull();
+  // Face along an open stretch: turn nothing, walk forward, then back, so both runs fit in the yard.
+  const walked = await walkDistance(page, ['KeyW'], 1000);
+  await walkDistance(page, ['KeyS'], 1000);
+  await page.waitForTimeout(300);
+  const sprinted = await walkDistance(page, ['ShiftLeft', 'KeyW'], 1000);
+  expect(sprinted).toBeGreaterThan(walked * 1.2);
+  await walkDistance(page, ['KeyS'], 1000);
+
+  const eye = () => overlayNumber(page, /^eye\s+(\S+)/m);
+  await expect.poll(eye).toBeGreaterThan(1.4);
+  const standing = await eye();
+  await page.keyboard.down('KeyC');
+  await expect.poll(eye).toBeLessThan(standing - 0.4);
+  await page.keyboard.up('KeyC');
+  await expect.poll(eye).toBeGreaterThan(standing - 0.1);
+});
+
+test('B13: the Sprint button joins #touch-actions and the column still fits the landscape screen', async ({ page, hasTouch }) => {
+  test.skip(!hasTouch, 'touch only');
+  await createRoom(page, 'Amal');
+  await startRun(page);
+  const sprint = page.locator('#touch-sprint');
+  await expect(sprint).toBeVisible();
+  await expect(sprint).toHaveAttribute('aria-pressed', 'false');
+  await sprint.tap();
+  await expect(sprint).toHaveAttribute('aria-pressed', 'true');
+  await sprint.tap();
+  await expect(sprint).toHaveAttribute('aria-pressed', 'false');
+  const viewport = page.viewportSize()!;
+  const box = (await page.locator('#touch-actions').boundingBox())!;
+  const menu = (await page.locator('#touch-menu').boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(menu.y + menu.height);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+});
