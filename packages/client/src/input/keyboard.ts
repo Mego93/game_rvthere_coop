@@ -3,9 +3,24 @@ import type { InputSource } from './source';
 
 const SLOT_KEYS: Record<string, 0 | 1 | 2> = { Digit1: 0, Digit2: 1, Digit3: 2 };
 
-const GAME_KEYS = new Set([
-  'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyE', 'KeyF', 'KeyQ', 'KeyR', 'KeyG', 'KeyX', 'Digit1', 'Digit2', 'Digit3',
-]);
+// Every key this source reads; the controls panel is checked against it.
+export const KEY_BINDINGS: readonly { code: string; action: string }[] = [
+  { code: 'KeyW', action: 'forward' },
+  { code: 'KeyS', action: 'back' },
+  { code: 'KeyA', action: 'left' },
+  { code: 'KeyD', action: 'right' },
+  { code: 'Space', action: 'jump or brake' },
+  { code: 'KeyE', action: 'interact' },
+  { code: 'KeyF', action: 'use item' },
+  { code: 'KeyQ', action: 'reel in' },
+  { code: 'KeyR', action: 'reel out' },
+  { code: 'KeyG', action: 'drop item' },
+  { code: 'KeyX', action: 'reset vehicle' },
+  { code: 'Digit1', action: 'slot 1' },
+  { code: 'Digit2', action: 'slot 2' },
+  { code: 'Digit3', action: 'slot 3' },
+];
+const GAME_KEYS = new Set(KEY_BINDINGS.map((binding) => binding.code));
 const BUTTON_KEYS = ['Space', 'KeyE', 'KeyF', 'KeyG'];
 
 export function createKeyboardSource(target: EventTarget): InputSource {

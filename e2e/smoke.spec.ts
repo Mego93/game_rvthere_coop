@@ -437,3 +437,16 @@ test('E7: the sound files are served, and a click and Start leave the page witho
   await page.locator('#run-mute').click();
   await expect(page.locator('#run-mute')).toHaveText('Mute sound');
 });
+
+test('T12: H opens the controls panel, Escape closes it, and the page boots @keyboard', async ({ page }) => {
+  await createRoom(page, 'Amal');
+  await expect(page.locator('#controls')).toBeHidden();
+  await page.keyboard.press('KeyH');
+  await expect(page.locator('#controls')).toBeVisible();
+  await expect(page.locator('#controls-list')).toContainText('Hold to reset');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#controls')).toBeHidden();
+  await page.keyboard.press('KeyH');
+  await page.locator('#controls-close').click();
+  await expect(page.locator('#controls')).toBeHidden();
+});

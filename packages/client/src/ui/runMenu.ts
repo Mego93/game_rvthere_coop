@@ -32,6 +32,7 @@ export interface RunMenuHandlers {
   onRefill(): void;
   onKick(playerId: string): void;
   onMute(): void;
+  onHelp(): void;
 }
 
 export interface RunMenu {
@@ -67,6 +68,7 @@ export function createRunMenu(doc: Document, handlers: RunMenuHandlers): RunMenu
     return element;
   };
   const muteButton = button('run-mute', 'Mute sound', handlers.onMute);
+  const helpButton = button('run-help', '? Controls', handlers.onHelp);
   const actions: Record<string, [string, () => void]> = {
     Resume: ['run-resume', handlers.onResume],
     'Restart from checkpoint': ['run-restart-checkpoint', handlers.onRestartCheckpoint],
@@ -88,7 +90,7 @@ export function createRunMenu(doc: Document, handlers: RunMenuHandlers): RunMenu
       title.textContent = 'Menu';
       const items = runMenuItems(isAdmin).map((label) => button(actions[label]![0], label, actions[label]![1]));
       const kicks = isAdmin ? kickable.map((entry) => button(`run-kick-${entry.playerId}`, `Kick ${entry.name}`, () => handlers.onKick(entry.playerId), 'run-kick')) : [];
-      root.replaceChildren(style, title, ...items, muteButton, ...kicks);
+      root.replaceChildren(style, title, ...items, muteButton, helpButton, ...kicks);
     },
     dispose() {
       root.remove();
