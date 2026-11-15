@@ -168,8 +168,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const resetHolds = new Map<string, { ticks: number; spent: boolean }>();
   const stuckWindowTicks = Math.round(STUCK_WINDOW * TICK_RATE);
   const resetHoldTicks = Math.round(RESET_HOLD * TICK_RATE);
-  // The vehicle centre over the last window, oldest first; cleared by a restart.
-  let centreHistory: Vec3[] = [];
+  // The vehicle centre over the last window as a ring: the slot at `historyNext` is the oldest once the ring is full; emptied by a restart.
+  const centreHistory: Vec3[] = Array.from({ length: stuckWindowTicks + 1 }, () => vec3(0, 0, 0));
+  let historyNext = 0;
+  let historyCount = 0;
   let throttleTicks = 0;
   let resetReady = false;
 
@@ -483,20 +485,24 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   // Rule R1: slow, and upturned, stuck under throttle for a full window, or out of fuel.
   const resetConditions = (driverThrottle: number): boolean => {
     const centre = vehicle.body.translation();
-    centreHistory.push(vec3(centre.x, centre.y, centre.z));
-    if (centreHistory.length > stuckWindowTicks + 1) centreHistory.shift();
+    centreHistory[historyNext] = vec3(centre.x, centre.y, centre.z);
+    historyNext = (historyNext + 1) % centreHistory.length;
+    historyCount = Math.min(historyCount + 1, centreHistory.length);
     throttleTicks = driverThrottle > 0 ? throttleTicks + 1 : 0;
     const v = vehicle.body.linvel();
     if (Math.hypot(v.x, v.y, v.z) >= RESET_MAX_SPEED) return false;
     if (rotate(vehicle.body.rotation(), AXIS_Y).y < RESET_TIPPED_UP_Y) return true;
     if (vehicle.fuel() <= 0) return true;
-    return throttleTicks >= stuckWindowTicks && centreHistory.length > stuckWindowTicks && length(sub(centre, centreHistory[0]!)) < STUCK_DISTANCE;
+    return throttleTicks >= stuckWindowTicks && historyCount === centreHistory.length && length(sub(centre, centreHistory[historyNext]!)) < STUCK_DISTANCE;
   };
 
   // Rule R2: a seated player holding reset while the conditions hold restarts from the checkpoint.
   const stepReset = (onFoot: ReadonlyMap<string, StepInputs>, driverThrottle: number) => {
     resetReady = false;
-    if (won) return;
+    if (won) {
+      resetHolds.clear();
+      return;
+    }
     const eligible = resetConditions(driverThrottle);
     let fire = false;
     for (const player of players.all()) {
@@ -657,8 +663,11 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       }
     }
     restarts += 1;
-    centreHistory = [];
+    historyNext = 0;
+    historyCount = 0;
     throttleTicks = 0;
+    // A hold in progress starts over; a hold that already fired still needs a fresh press.
+    for (const state of resetHolds.values()) state.ticks = 0;
     events.push({ kind: 'vehicleLost', tick });
   };
 

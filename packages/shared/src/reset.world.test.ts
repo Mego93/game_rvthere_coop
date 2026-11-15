@@ -21,6 +21,14 @@ function seated(): World {
   return world;
 }
 
+// A second player takes the next free seat.
+function seatSecond(world: World): void {
+  world.addPlayer('b');
+  for (let i = 0; i < 3; i++) world.step(new Map([['b', input({ interact: true })]]));
+  world.step(new Map());
+  expect(world.snapshot().players.find((p) => p.playerId === 'b')!.seat).not.toBeNull();
+}
+
 const flip = (world: World, held: Partial<PlayerInput> = {}) => {
   world.debugBody('vehicle')!.setRotation(quatFromAxisAngle(AXIS_X, Math.PI), true);
   world.debugBody('vehicle')!.setTranslation({ x: 20, y: 1.2, z: -20 }, true);
@@ -113,6 +121,66 @@ describe('player reset (A10)', () => {
     expect(world.snapshot().vehicle.resetReady).toBe(true);
     hold(world, HOLD_TICKS, braked);
     expect(world.status().restarts).toBe(1);
+    world.dispose();
+  });
+
+  test('(T8) crawling under 1 m/s but more than 1 m in the window with throttle held is not stuck', () => {
+    const world = seated();
+    const braked = { moveY: 1, jump: true };
+    const step = (1.6 * 1) / (STUCK_WINDOW * TICK_RATE);
+    for (let i = 0; i < 2 * STUCK_WINDOW * TICK_RATE; i++) {
+      const at = world.debugBody('vehicle')!.translation();
+      world.debugBody('vehicle')!.setTranslation({ x: at.x, y: at.y, z: at.z - step }, true);
+      world.step(new Map([['a', input(braked)]]));
+      expect(world.snapshot().vehicle.resetReady, `tick ${i}`).toBeUndefined();
+    }
+    hold(world, HOLD_TICKS, braked);
+    expect(world.status().restarts).toBe(0);
+    world.dispose();
+  });
+
+  test('(T8) a passenger can reset', () => {
+    const world = seated();
+    seatSecond(world);
+    flip(world);
+    for (let i = 0; i < HOLD_TICKS; i++) world.step(new Map([['b', input({ reset: true })]]));
+    expect(world.status().restarts).toBe(1);
+    world.dispose();
+  });
+
+  test('(T8) two seated players holding at once cause exactly one restart', () => {
+    const world = seated();
+    seatSecond(world);
+    flip(world);
+    for (let i = 0; i < 3 * HOLD_TICKS; i++) world.step(new Map([['a', input({ reset: true })], ['b', input({ reset: true })]]));
+    expect(world.status().restarts).toBe(1);
+    world.dispose();
+  });
+
+  test('(T8) no reset after the run is won', () => {
+    const world = seated();
+    world.debugBody('vehicle')!.setTranslation({ x: 0, y: 1, z: -100 }, true);
+    world.step(new Map());
+    expect(world.status().state).toBe('won');
+    flip(world);
+    expect(world.snapshot().vehicle.resetReady).toBeUndefined();
+    hold(world, 2 * HOLD_TICKS);
+    expect(world.status().restarts).toBe(0);
+    world.dispose();
+  });
+
+  test('(T8) a downed player cannot reset', () => {
+    const world = seated();
+    seatSecond(world);
+    // Only a player on foot takes damage, so the passenger steps out first.
+    for (let i = 0; i < 2; i++) world.step(new Map([['b', input({ interact: i === 0 })]]));
+    expect(world.snapshot().players.find((p) => p.playerId === 'b')!.seat).toBeNull();
+    world.debugHurt('b', 1000);
+    world.step(new Map());
+    expect(world.snapshot().players.find((p) => p.playerId === 'b')!.downed).toBeTruthy();
+    flip(world);
+    for (let i = 0; i < 2 * HOLD_TICKS; i++) world.step(new Map([['b', input({ reset: true })]]));
+    expect(world.status().restarts).toBe(0);
     world.dispose();
   });
 });
