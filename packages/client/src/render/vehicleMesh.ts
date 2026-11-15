@@ -1,5 +1,6 @@
 import type { VehicleConfig, VehicleState } from '@lodgy/shared';
 import * as THREE from 'three';
+import { SEAT_RING_SECONDS } from '../ui/hud/seatToast';
 import { fitToTarget, hasModel, instantiate, shadowed } from './models';
 
 const BODY_COLOURS: Record<VehicleConfig['id'], number> = { lodgy: 0x4a6fa5, rv: 0xefe6d2 };
@@ -193,4 +194,43 @@ export function placeVehicleMesh(mesh: THREE.Group, state: VehicleState): void {
     spin.last.copy(mesh.position);
   } else spin.last = mesh.position.clone();
   for (const wheel of spin.wheels) wheel.rotation.x = spin.angle * spin.sign;
+}
+
+const RING_INNER = 0.38;
+const RING_OUTER = 0.5;
+const RING_PEAK = 0.75;
+
+// A translucent ring in the player's colour, drawn over the body so it shows inside the model.
+export function createSeatRing(): THREE.Mesh {
+  const material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(RING_INNER, RING_OUTER, 32), material);
+  ring.rotation.x = -Math.PI / 2;
+  ring.renderOrder = 10;
+  ring.visible = false;
+  return ring;
+}
+
+// Shows the ring at the seat while `age` (seconds since boarding) is set, fading out; allocates nothing per call.
+export function placeSeatRing(ring: THREE.Mesh, vehicle: THREE.Group, config: VehicleConfig, seatId: string | null, colour: string, age: number | null): void {
+  const seat = seatId === null || age === null ? undefined : config.seats.find((candidate) => candidate.id === seatId);
+  if (!seat || age === null) {
+    ring.visible = false;
+    return;
+  }
+  if (ring.parent !== vehicle) vehicle.add(ring);
+  const material = ring.material as THREE.MeshBasicMaterial;
+  if (ring.userData.colour !== colour) {
+    ring.userData.colour = colour;
+    material.color.set(colour);
+  }
+  ring.position.set(seat.pos.x, seat.pos.y - 0.2, seat.pos.z);
+  material.opacity = RING_PEAK * Math.max(0, 1 - age / SEAT_RING_SECONDS);
+  ring.scale.setScalar(1 + 0.25 * Math.sin(age * 6));
+  ring.visible = true;
+}
+
+export function disposeSeatRing(ring: THREE.Mesh): void {
+  ring.removeFromParent();
+  ring.geometry.dispose();
+  (ring.material as THREE.Material).dispose();
 }

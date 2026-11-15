@@ -47,7 +47,8 @@ import { createScene } from './render/scene';
 import { disposeScene } from './render/disposeScene';
 import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
-import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
+import { createSeatRing, createVehicleMesh, disposeSeatRing, placeSeatRing, placeVehicleMesh } from './render/vehicleMesh';
+import { createSeatAnnouncer } from './ui/hud/seatToast';
 import { interactAction, overlayText, type OverlayData } from './ui/overlay';
 import { createHud } from './ui/hud/hud';
 import { buildHudModel } from './ui/hud/hudModel';
@@ -137,6 +138,8 @@ export function createGame(
   const vehicleMesh = createVehicleMesh(vehicleConfig, view.softwareGl);
   vehicleMesh.visible = false;
   scene.add(vehicleMesh);
+  const seatRing = createSeatRing();
+  const seatAnnouncer = createSeatAnnouncer();
   const winchMesh = createWinchMesh();
   winchMesh.visible = false;
   scene.add(winchMesh);
@@ -465,12 +468,14 @@ export function createGame(
     };
     overlay.textContent = overlayText(overlayData);
     const hudModel = buildHudModel(overlayData, { checkpoints: course.checkpoints, finish: course.finish });
+    const announced = seatAnnouncer.update(hudModel.ownSeat, now / 1000);
+    placeSeatRing(seatRing, vehicleMesh, vehicleConfig, hudModel.ownSeat?.id ?? null, lobby.players.find((info) => info.playerId === playerId)?.colour ?? '#ffffff', announced.ringAge);
     camera.updateMatrixWorld();
     const markers = hudModel.downedOthers.map((other) => {
       const projected = projectMarker(project, cameraSpaceZ, other.pos, window.innerWidth, window.innerHeight);
       return { id: other.id, name: other.name, seconds: other.seconds, ...projected };
     });
-    hud.update(hudModel, markers);
+    hud.update(hudModel, markers, announced.toast);
     hud.setVisible(lobby.phase === 'playing' && !anyOpen());
     if (view.touchUi) {
       view.touchUi.update(touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable }));
@@ -548,6 +553,7 @@ export function createGame(
       shopMenu.dispose();
       runMenu.dispose();
       hud.dispose();
+      disposeSeatRing(seatRing);
       coinMeshes.dispose();
       input.dispose();
       predictor.dispose();

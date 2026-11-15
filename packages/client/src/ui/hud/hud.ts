@@ -1,6 +1,6 @@
 import { clamp } from '@lodgy/shared';
 import { LOW_FRACTION, MAP_MARGIN, MAP_SIZE_DESKTOP, MAP_SIZE_TOUCH } from './constants';
-import { ICON_COIN, ICON_FUEL, ICON_HEALTHKIT, ICON_HEART, ICON_HULL, ICON_JERRYCAN, ICON_TOOLBOX } from './icons';
+import { ICON_COIN, ICON_FUEL, ICON_HEALTHKIT, ICON_HEART, ICON_HULL, ICON_JERRYCAN, ICON_SEAT, ICON_TOOLBOX } from './icons';
 import { splitPrompt } from './splitPrompt';
 import { ownHealthFraction, type HudModel } from './hudModel';
 import { clampToCircle, mapViewFor, routePath, toMap } from './minimap';
@@ -8,7 +8,7 @@ import { clampToCircle, mapViewFor, routePath, toMap } from './minimap';
 export interface HudMarker { id: string; name: string; seconds: number; x: number; y: number; behind: boolean }
 
 export interface Hud {
-  update(model: HudModel, markers: HudMarker[]): void;
+  update(model: HudModel, markers: HudMarker[], seatToast?: string | null): void;
   setVisible(visible: boolean): void;
   dispose(): void;
 }
@@ -50,6 +50,8 @@ const STYLE = `
 #hud .bar.fuel > i { background: var(--hud-fuel); }
 #hud .bar.low > i { background: var(--hud-bad); animation: hud-pulse 1.2s ease-in-out infinite; }
 @keyframes hud-pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+#hud-seat { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+#hud-seat-toast { position: absolute; top: calc(40px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); padding: 6px 16px; font-size: 15px; white-space: nowrap; border-radius: 999px; }
 #hud-meta { display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 600; }
 #hud-meta .wallet { display: inline-flex; align-items: center; gap: 4px; }
 #hud-meta .wallet svg.ico { color: var(--hud-accent); width: 9px; height: 9px; }
@@ -148,6 +150,9 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
   };
   const fuelBar = bar(ICON_FUEL, 'fuel');
   const vehicleHealthBar = bar(ICON_HULL, 'health');
+  const seat = el('div', vehiclePanel, 'hud-seat');
+  icon(seat, ICON_SEAT);
+  const seatText = el('span', seat);
   const meta = el('div', vehiclePanel, 'hud-meta');
   const timer = el('span', meta);
   const wallet = el('span', meta, undefined, 'wallet');
@@ -175,6 +180,9 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
   const hold = el('div', prompt, 'hud-prompt-hold', 'bar');
   const holdFill = el('i', hold);
   hold.hidden = true;
+
+  const seatToast = el('div', root, 'hud-seat-toast', 'glass');
+  seatToast.hidden = true;
 
   const downed = el('div', root, 'hud-downed', 'glass');
   downed.hidden = true;
@@ -264,7 +272,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
   };
 
   return {
-    update(model, markers) {
+    update(model, markers, toast = null) {
       toggle(compassMarker, model.compass.marker === null);
       if (model.compass.marker !== null && changed(compassMarker, 'left', model.compass.marker)) compassMarker.style.left = `${(model.compass.marker * 100).toFixed(1)}%`;
       toggle(compassLeft, model.compass.side !== -1);
@@ -288,6 +296,10 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       scale(vehicleHealthBar.fill, hull);
       flag(fuelBar.track, 'low', !!v?.fuelLow);
       flag(vehicleHealthBar.track, 'low', !!v?.healthLow);
+      toggle(seat, model.ownSeat === null);
+      text(seatText, model.ownSeat?.label ?? '');
+      toggle(seatToast, toast === null);
+      text(seatToast, toast ?? '');
       text(timer, model.timer);
       text(walletText, `$${model.wallet}`);
 

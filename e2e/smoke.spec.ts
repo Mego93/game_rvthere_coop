@@ -115,6 +115,12 @@ test('two players share a room, board the vehicle, and only the driver drives @k
   await tap(amal, 'KeyE');
   for (const page of [amal, badr]) await expect(page.locator('#overlay')).toContainText('players  Amal (driver), Badr (on foot)');
   await expect(amal.locator('#overlay')).toContainText('hint     E to leave the seat');
+  // The seat chip names the seat, and the toast shows soon after boarding and is gone after 3 s.
+  await expect(amal.locator('#hud-seat')).toHaveText('Driver');
+  await expect(amal.locator('#hud-seat-toast')).toBeVisible({ timeout: 1000 });
+  await expect(amal.locator('#hud-seat-toast')).toHaveText('You are the Driver');
+  await amal.waitForTimeout(3000);
+  await expect(amal.locator('#hud-seat-toast')).toBeHidden();
 
   // Badr's keys do nothing to the vehicle while he is on foot: the throttle stays at zero.
   await badr.keyboard.down('KeyW');
