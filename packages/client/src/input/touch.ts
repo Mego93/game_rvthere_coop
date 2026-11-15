@@ -6,7 +6,7 @@ import { JOYSTICK_DEAD_ZONE, JOYSTICK_RADIUS, LONG_PRESS, TOUCH_LOOK_SENSITIVITY
 import { createButton } from './touchButtons';
 import { createTouchTracker } from './touchTracker';
 
-export type TouchButtonName = 'interact' | 'use' | 'jump' | 'reelIn' | 'reelOut';
+export type TouchButtonName = 'interact' | 'use' | 'jump' | 'reelIn' | 'reelOut' | 'reset';
 
 // What the touch UI offers the source: button and slot presses, and a way to cancel them all.
 export interface TouchControls {
@@ -37,7 +37,7 @@ interface TouchLike {
   clientY: number;
 }
 
-const BUTTON_NAMES: TouchButtonName[] = ['interact', 'use', 'jump', 'reelIn', 'reelOut'];
+const BUTTON_NAMES: TouchButtonName[] = ['interact', 'use', 'jump', 'reelIn', 'reelOut', 'reset'];
 
 export function createTouchSource({ surface, win, doc, width, controls }: TouchSourceOptions): TouchSource {
   const tracker = createTouchTracker(width);
@@ -141,6 +141,7 @@ export function createTouchSource({ surface, win, doc, width, controls }: TouchS
         reel: ((buttons.reelIn.sample() ? 1 : 0) - (buttons.reelOut.sample() ? 1 : 0)) as -1 | 0 | 1,
         slot,
         drop,
+        reset: buttons.reset.sample(),
       };
     },
     aim() {

@@ -4,7 +4,7 @@ import type { InputSource } from './source';
 const SLOT_KEYS: Record<string, 0 | 1 | 2> = { Digit1: 0, Digit2: 1, Digit3: 2 };
 
 const GAME_KEYS = new Set([
-  'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyE', 'KeyF', 'KeyQ', 'KeyR', 'KeyG', 'Digit1', 'Digit2', 'Digit3',
+  'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyE', 'KeyF', 'KeyQ', 'KeyR', 'KeyG', 'KeyX', 'Digit1', 'Digit2', 'Digit3',
 ]);
 const BUTTON_KEYS = ['Space', 'KeyE', 'KeyF', 'KeyG'];
 
@@ -62,6 +62,8 @@ export function createKeyboardSource(target: EventTarget): InputSource {
         reel: axis('KeyR', 'KeyQ'),
         slot,
         drop: button('KeyG'),
+        // A hold, not a tap: the server counts the ticks.
+        reset: down.has('KeyX'),
       };
       tapped.clear();
       return input;

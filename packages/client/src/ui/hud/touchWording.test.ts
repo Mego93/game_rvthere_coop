@@ -11,6 +11,9 @@ describe('touchWording (T8, K1)', () => {
   test('hold use hint', () => {
     expect(touchWording('Hold F to heal yourself')).toBe('Hold Use to heal yourself');
   });
+  test('reset hint', () => {
+    expect(touchWording('Hold X to reset (60 s penalty)')).toBe('Hold Reset to reset (60 s penalty)');
+  });
   test('other text is unchanged', () => {
     expect(touchWording('Press E to board')).toBe('Press E to board');
     expect(touchWording('')).toBe('');

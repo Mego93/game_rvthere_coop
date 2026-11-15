@@ -113,10 +113,12 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
   const jump = make('touch-jump', 'Jump', (down) => buttonHandler('jump', down));
   const reelIn = make('touch-reel-in', 'Reel in', (down) => buttonHandler('reelIn', down));
   const reelOut = make('touch-reel-out', 'Reel out', (down) => buttonHandler('reelOut', down));
+  const reset = make('touch-reset', 'Reset', (down) => buttonHandler('reset', down));
   use.hidden = true;
+  reset.hidden = true;
   reelIn.hidden = true;
   reelOut.hidden = true;
-  actions.append(reelIn, reelOut, use, interact, jump);
+  actions.append(reset, reelIn, reelOut, use, interact, jump);
 
   const menu = make('touch-menu', 'Menu', (down) => down && menuHandler());
 
@@ -166,6 +168,7 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
         hide(reelIn, !view.reelVisible);
         hide(reelOut, !view.reelVisible);
       }
+      if (changed.has('resetVisible')) hide(reset, !view.resetVisible);
       if (changed.has('slots')) view.slots.forEach((kind, index) => (slotButtons[index]!.textContent = slotLabel(kind)));
       if (changed.has('slots') || changed.has('selected')) {
         slotButtons.forEach((element, index) => {

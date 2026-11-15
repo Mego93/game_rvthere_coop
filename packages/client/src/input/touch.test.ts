@@ -42,8 +42,17 @@ function setup() {
 
 test('with nothing touched it reports neutral input', () => {
   expect(setup().source.sample()).toEqual({
-    moveX: 0, moveY: 0, yaw: 0, pitch: 0, jump: false, interact: false, use: false, reel: 0, slot: 0, drop: false,
+    moveX: 0, moveY: 0, yaw: 0, pitch: 0, jump: false, interact: false, use: false, reel: 0, slot: 0, drop: false, reset: false,
   });
+});
+
+test('the reset button is held while down', () => {
+  const { source, button } = setup();
+  button('reset', true);
+  expect(source.sample().reset).toBe(true);
+  expect(source.sample().reset).toBe(true);
+  button('reset', false);
+  expect(source.sample().reset).toBe(false);
 });
 
 test('the joystick maps to moveX and moveY', () => {

@@ -52,6 +52,7 @@ function blend(a: VehicleState, b: VehicleState, t: number): VehicleState {
     steer: b.steer,
     fuel: b.fuel,
     health: b.health,
+    ...(b.resetReady ? { resetReady: true } : {}),
   };
 }
 
@@ -78,7 +79,7 @@ function copyPlayer(p: PlayerSnapshot): PlayerSnapshot {
 }
 
 function copyVehicle(v: VehicleState): VehicleState {
-  return { pos: copyVec(v.pos), rot: { ...v.rot }, linvel: copyVec(v.linvel), throttle: v.throttle, steer: v.steer, fuel: v.fuel, health: v.health };
+  return { pos: copyVec(v.pos), rot: { ...v.rot }, linvel: copyVec(v.linvel), throttle: v.throttle, steer: v.steer, fuel: v.fuel, health: v.health, ...(v.resetReady ? { resetReady: true } : {}) };
 }
 
 const copyProp = (p: PropSnapshot): PropSnapshot => ({ id: p.id, kind: p.kind, pos: copyVec(p.pos), rot: { ...p.rot } });

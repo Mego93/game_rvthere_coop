@@ -20,7 +20,7 @@ function setup() {
 }
 
 test('with no key held it reports neutral input', () => {
-  expect(setup().source.sample()).toEqual(NEUTRAL_INPUT);
+  expect(setup().source.sample()).toEqual({ ...NEUTRAL_INPUT, reset: false });
 });
 
 test('WASD map to the move axes: W forward, D right', () => {
@@ -59,6 +59,17 @@ test('Q reels in, R reels out', () => {
   expect(source.sample().reel).toBe(-1);
 });
 
+test('X holds reset and R stays reel out', () => {
+  const { source, press, release } = setup();
+  press('KeyX');
+  expect(source.sample()).toMatchObject({ reset: true, reel: 0 });
+  expect(source.sample().reset).toBe(true);
+  release('KeyX');
+  expect(source.sample().reset).toBe(false);
+  press('KeyR');
+  expect(source.sample()).toMatchObject({ reset: false, reel: -1 });
+});
+
 test('1, 2 and 3 select a slot, which stays selected after release', () => {
   const { source, press, release } = setup();
   press('Digit3');
@@ -73,7 +84,7 @@ test('losing focus releases every key', () => {
   press('KeyW');
   press('Space');
   target.dispatchEvent(new Event('blur'));
-  expect(source.sample()).toEqual(NEUTRAL_INPUT);
+  expect(source.sample()).toEqual({ ...NEUTRAL_INPUT, reset: false });
 });
 
 test('dispose stops listening', () => {
@@ -146,7 +157,7 @@ test('blur drops a pending tap', () => {
 
 test('game keys are default-prevented on keydown and keyup', () => {
   const { press, release } = setup();
-  const codes = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyE', 'KeyF', 'KeyQ', 'KeyR', 'KeyG', 'Digit1', 'Digit2', 'Digit3'];
+  const codes = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyE', 'KeyF', 'KeyQ', 'KeyR', 'KeyG', 'KeyX', 'Digit1', 'Digit2', 'Digit3'];
   for (const code of codes) {
     expect(press(code).defaultPrevented, `${code} down`).toBe(true);
     expect(release(code).defaultPrevented, `${code} up`).toBe(true);
@@ -173,7 +184,7 @@ test('a key pressed with a modifier held is not tracked (no keyup comes on macOS
   const { source, press } = setup();
   press('KeyD', { metaKey: true });
   press('Digit3', { ctrlKey: true });
-  expect(source.sample()).toEqual(NEUTRAL_INPUT);
+  expect(source.sample()).toEqual({ ...NEUTRAL_INPUT, reset: false });
 });
 
 test('a keyup with a modifier held still releases the key', () => {

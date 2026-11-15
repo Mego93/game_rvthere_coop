@@ -143,6 +143,18 @@ describe('prompt and hold (T12, R10)', () => {
     expect(build({ vehicle: doorVehicle, players: jerrycan, touch: false }).prompt).toBe('E to board   Hold F to refuel');
     expect(build({ vehicle: doorVehicle, players: jerrycan }).prompt).toBe('E to board   Hold F to refuel');
   });
+  test('(T10) canReset and the reset line follow resetReady for a seated player', () => {
+    const ready = { ...doorVehicle, resetReady: true };
+    const seated = [door({ seat: 'driver' })];
+    const model = build({ vehicle: ready, players: seated });
+    expect(model.canReset).toBe(true);
+    expect(model.prompt).toBe('E to leave the seat   Hold X to reset (60 s penalty)');
+    expect(build({ vehicle: ready, players: seated, touch: true }).prompt).toBe('Act to leave the seat   Hold Reset to reset (60 s penalty)');
+    expect(build({ vehicle: doorVehicle, players: seated }).canReset).toBe(false);
+    expect(build({ vehicle: ready, players: [door()] }).canReset).toBe(false);
+    expect(build({ vehicle: ready, players: [door({ seat: 'driver', downed: 5 })] }).canReset).toBe(false);
+    expect(build().canReset).toBe(false);
+  });
   test('nothing in reach', () => {
     expect(build().prompt).toBeNull();
   });
