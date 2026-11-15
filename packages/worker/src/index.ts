@@ -38,8 +38,9 @@ export default {
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('Upgrade required\n', { status: 426, headers: { Upgrade: 'websocket' } });
     }
-    // Gate only: every socket goes to one Object; Task 3 routes by noun.
-    const noun = url.searchParams.get('noun') ?? GATE_NOUN;
+    // `?create=1` goes to the 'gate' Object until Task 3 allocates a noun (R6); a bare /ws is refused.
+    const noun = url.searchParams.get('noun') ?? (url.searchParams.has('create') ? GATE_NOUN : null);
+    if (noun === null || !/^[a-z]+\d*$/.test(noun)) return new Response('Bad request\n', { status: 400 });
     return env.ROOM.get(env.ROOM.idFromName(noun)).fetch(request);
   },
 } satisfies ExportedHandler<Env>;

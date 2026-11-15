@@ -52,8 +52,8 @@ interface TestClient {
   socket: WebSocket;
 }
 
-async function connect(): Promise<TestClient> {
-  const socket = new WebSocket(`ws://localhost:${server.port}${SOCKET_PATH}`);
+async function connect(query = ''): Promise<TestClient> {
+  const socket = new WebSocket(`ws://localhost:${server.port}${SOCKET_PATH}${query}`);
   const received: ServerMessage[] = [];
   const waiting: (() => void)[] = [];
   socket.on('message', (data) => {
@@ -133,6 +133,20 @@ test('knows the content types the client needs', () => {
   expect(contentType('x.mp3')).toBe('audio/mpeg');
   expect(contentType('x.webmanifest')).toBe('application/manifest+json; charset=utf-8');
   expect(contentType('x.unknown')).toBe('application/octet-stream');
+});
+
+test('the room query the page adds is ignored: create and join still work', async () => {
+  const amal = await connect('?create=1');
+  amal.send({ type: 'create', name: 'Amal', token: 'query-token-amal' });
+  const { room } = await amal.waitFor((message): message is Welcome => isWelcome(message));
+
+  // The noun in the query is not the room joined; the join message decides.
+  const badr = await connect('?noun=unrelated');
+  badr.send({ type: 'join', room, name: 'Badr', token: 'query-token-badr' });
+  const welcome = await badr.waitFor((message): message is Welcome => isWelcome(message));
+  expect(welcome.room).toBe(room);
+  amal.socket.close();
+  badr.socket.close();
 });
 
 test('two clients share a room, and the one who boards the driver seat drives the vehicle both see', async () => {
