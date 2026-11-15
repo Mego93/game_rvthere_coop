@@ -71,11 +71,17 @@ The owner's real coordinates are never written in this repository (decision of 2
 - Attribution: OpenStreetMap contributors (ODbL) must be credited in CREDITS.md if its data ships.
 
 ### Step 28: a living road
+- "Also for the road, add some holes, some hills, some crazy/parkour that will make use of all items." The course gets: **holes** (potholes and craters that slow or jolt the vehicle, some deep enough to need the winch), **hills** (real slopes and crests, a hill the RV needs the winch for, a jump crest), and **parkour sections** built so that every item and tool is useful at least once: jerrycan (fuel), toolbox (repair), health kit (revive), the winch (pull over an obstacle or out of a hole), crates (fill a hole or climb), barriers (push).
 - "Not enough obstacles that are scattered; add for example animals (goats) or scooters that can annoy you when you drive (spawn when close or something); same for the bonus and items that are spawned randomly."
 - Goats and scooters appear as the vehicle nears (server-controlled so every player sees the same, with a seeded random so runs are reproducible), move across the road, and cost time or health on contact.
 - Items and bonuses spawn at random positions along the course (instead of fixed pickups), seeded per run.
 - **Open**: should a goat or scooter be hurt by a collision? Is hitting animals penalised (time or health) or forgiven? Do scooters honk or chase?
 - **Open**: how many at once (the snapshot size limit is 16 KB for the full snapshot)?
+
+### Winch and tutorial (added to step 26, or its own step 32 if it grows)
+- "Hook is not very resistant? To add in a tutorial or to make it better, I don't know." The owner feels the winch hook/cable is weak. Today the cable is a capped spring-and-damper force (a fraction of the vehicle's weight, decision 2026-11-12) and a held hook is pulled from the hands beyond 25 m.
+- Investigate before changing: measure what the cable can pull (the RV on the bank, a barrier, a vehicle out of a hole) and where the player loses the hook; then either raise the cap/stiffness (within the stability limit found by `experiments/cable`) or explain it with a short tutorial. A tutorial covers walking, boarding, driving, the winch, items, reset, the checkpoint NPC.
+- **Open**: strengthen the winch, add a tutorial, or both?
 
 ### Step 29: Souleyman
 - "Checkpoints are too obvious (the blue thing). Set it with a Moroccan NPC (check a model on Sketchfab) on the road, named Souleyman, that saves your progress."
