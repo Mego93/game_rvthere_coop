@@ -105,10 +105,13 @@ test('two players share a room, board the vehicle, and only the driver drives @k
     for (const id of ['hud-compass', 'hud-minimap', 'hud-vehicle', 'hud-health', 'hud-slots']) await expect(page.locator(`#${id}`)).toBeVisible();
     // The prompt has no size while it has no text, so it is only checked to be attached.
     await expect(page.locator('#hud-prompt')).toBeAttached();
+    await expect(page.locator('#hud-health')).toHaveClass(/\bfull\b/);
+    await expect(page.locator('#hud-compass-label')).toBeVisible();
   }
 
   // Amal stands beside the driver's door and boards as the driver.
   await expect(amal.locator('#overlay')).toContainText('hint     E to board');
+  await expect(amal.locator('#hud-prompt .keycap')).toHaveCount(1);
   await tap(amal, 'KeyE');
   for (const page of [amal, badr]) await expect(page.locator('#overlay')).toContainText('players  Amal (driver), Badr (on foot)');
   await expect(amal.locator('#overlay')).toContainText('hint     E to leave the seat');

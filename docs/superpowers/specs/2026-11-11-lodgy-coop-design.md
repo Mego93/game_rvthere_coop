@@ -569,7 +569,7 @@ Binary encoding is deferred until snapshot size is measured as a problem. Snapsh
 
 A downed teammate shows a marker above them with their remaining time, visible through walls. A downed player sees their own timer in the centre.
 
-On touch devices the joystick floats over the left half and the action buttons sit beside the inventory slots. The arrangement above was built without a mock-up pass (decision D-HUD1 in `ROADMAP.md`) and is adjusted at the owner's sign-off. A plain text debug overlay with the same values stays, hidden unless `F3` is pressed or `localStorage` `lodgy.debug` is `1`.
+On touch devices the joystick floats over the left half and the action buttons sit beside the inventory slots. The arrangement above was built without a mock-up pass (decision D-HUD1 in `ROADMAP.md`) and is adjusted at the owner's sign-off. The HUD was then restyled (decision D-HUD2): translucent panels, icons, key-cap prompts and a circular minimap, with the same positions. A plain text debug overlay with the same values stays, hidden unless `F3` is pressed or `localStorage` `lodgy.debug` is `1`.
 
 ### Sound
 
