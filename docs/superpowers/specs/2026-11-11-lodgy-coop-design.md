@@ -606,7 +606,7 @@ Hosting uses Cloudflare.
 - **During development and for play sessions:** the server runs on the owner's machine. Players on the same Wi-Fi open `http://<LAN-IP>:3000/<noun>`. Players elsewhere use a Cloudflare Tunnel, which gives the local server a public `https` address while it runs. `npm run share` starts the server with `TRUST_PROXY=1` behind a quick tunnel (no account; `cloudflared` must be installed) and prints the address.
 - **Always-on hosting** is decided at the last build step, between Cloudflare Containers (the same Node process in a container) and Workers with Durable Objects (one object per room). The choice is made then, against the platform's limits and pricing at that time. A Durable Object adapter, if chosen, replaces only the `node` adapter.
 
-The client derives the WebSocket URL from the page origin (`ws` for `http`, `wss` for `https`). The server runs from its TypeScript source with `tsx`; there is no server build step.
+Hosting on Cloudflare is built (decision D-HOST1 in `ROADMAP.md`, setup in `docs/hosting-cloudflare.md`): a Worker plus one Durable Object per room, using the same room layer. The client derives the WebSocket URL from the page origin (`ws` for `http`, `wss` for `https`). The server runs from its TypeScript source with `tsx`; there is no server build step.
 
 ## 3. Error handling
 

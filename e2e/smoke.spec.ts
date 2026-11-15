@@ -416,8 +416,7 @@ test('the full-quality render path draws the airport run without console or page
   expect(consoleErrors).toEqual([]);
 });
 
-// Cloudflare's assets give the .md licence another content type than text/markdown.
-test('E7: the sound files are served, and a click and Start leave the page without errors @node-only', async ({ page }) => {
+test('E7: the sound files are served, and a click and Start leave the page without errors', async ({ page }) => {
   const license = await page.request.get('/sounds/LICENSE.md');
   expect(license.status()).toBe(200);
   expect(license.headers()['content-type']).toContain('text/markdown');

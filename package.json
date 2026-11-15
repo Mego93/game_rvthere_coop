@@ -22,7 +22,8 @@
     "experiment:cable": "vitest run --config experiments/vitest.config.ts --reporter=verbose experiments/cable",
     "experiment:rv": "vitest run --config experiments/vitest.config.ts --reporter=verbose experiments/rv",
     "build:worker": "node scripts/vendorRapier.mjs && npm run build",
-    "dev:worker": "cd packages/worker && wrangler dev --local --port 8787 --var CREATE_PER_MINUTE:1000 --var MAX_CONNECTIONS_PER_ADDRESS:1000"
+    "dev:worker": "cd packages/worker && wrangler dev --local --port 8787 --var CREATE_PER_MINUTE:1000 --var MAX_CONNECTIONS_PER_ADDRESS:1000",
+    "deploy:cf": "npm run build:worker && cd packages/worker && wrangler deploy"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",
