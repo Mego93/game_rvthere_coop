@@ -63,3 +63,13 @@ T9 K2: `buildHudModel` with `touch: true` gives `Act to board` and `Hold Use to 
 3. `ROADMAP.md`: delete both carried rows (step 16 ray row, step 12 touch wording row), add a decision line, status `done` for this step (it has no table row: add "Step 20" row), run every check.
 
 Review after each task by a Sonnet reviewer; Opus reviews the whole branch at the end.
+
+## Amendments after the plan review (binding; where they differ from the text above, they win)
+
+R1. The premise "course 1's stop pads sit beside fences" is wrong: `placeStop` only adds a ground pad, the airport's stops are on plain roads with no walls, the only fences are the roadworks' `edgeWall`s, and road and alley ground is exactly as wide as the space between the walls, so `groundBelow` is already null past a wall. Item 1 is therefore a robustness fix for any course with ground beyond a thin wall (future courses; test variants), not a fix for a failure on course 1. T7 is dropped. The ROADMAP row's claim is corrected when the row is deleted (task 3 says so in the decision line).
+R2. W1's filter: walls are members of `WORLD|STATIC`, ground of `WORLD|GROUND|STATIC`. Use `groups(GROUP_WORLD, GROUP_STATIC)` for the ray (that skips the chassis, props, players and items) together with a `filterPredicate` (castRay's 8th argument) that rejects colliders whose membership includes `GROUP_GROUND`. No new group, no export change (W6 stands). `solid = true`; the direction is normalised and `maxToi` is the horizontal distance.
+R3. W4: a horizontal distance below 1e-6 is not blocked. The ray sits 0.9 m above the point's feet height, so walls lower than 0.9 m do not block; fences (1.2 m) do.
+R4. T7 (replacement): on a `testGround` variant whose ground continues past a fence 0.5 m thick and 1.2 m tall, with the Lodgy parked so its centre is 0.9 m from the fence face, the own-side exit point of the Lodgy (reach 1.78 m) lands beyond the fence: `findExit` returns the other side's point; with the same fence on the other side too it returns `null`.
+R5. T4 uses the `barrier` prop (1.0 m tall), not a crate, between the vehicle and the point.
+R6. T8: the "E inside the text" example is `Hold F to revive Eve` (becomes `Hold Use to revive Eve`) and `Press E to board` (unchanged).
+R7. Task 3 also updates the ROADMAP working note that says every hint still names keys (the line about step 3 or the touch hints near "every hint").
