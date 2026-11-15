@@ -98,23 +98,28 @@ describe.each(['lodgy', 'rv'] as const)('%s', (id) => {
     expect(settled(id, ON_SAND).vehicle.wheelSurfaces()).toEqual(['sand', 'sand', 'sand', 'sand']);
   });
 
-  test.runIf(id === 'lodgy')('sand slows it to less than half the distance covered on road', () => {
+  test('T2: after 6 s from rest at full throttle it is slower on sand than on road', () => {
+    const slab = withBoxes(testGround, {
+      ground: [{ center: vec3(0, 0.02, -90), halfExtents: vec3(8, 0.02, 100), rot: IDENTITY, surface: 'sand' }],
+    });
     const road = settled(id);
-    road.run(3, { throttle: 1 });
-    const onRoad = -road.vehicle.state().pos.z;
-
-    const sand = settled(id, ON_SAND);
-    sand.run(3, { throttle: 1 });
-    const onSand = ON_SAND.pos.z - sand.vehicle.state().pos.z;
-
-    expect(onSand).toBeLessThan(onRoad / 2);
+    road.run(6, { throttle: 1 });
+    const sand = createRig(RAPIER, id, ORIGIN, slab);
+    sand.run(1);
+    sand.run(6, { throttle: 1 });
+    expect(sand.vehicle.wheelSurfaces()).toEqual(['sand', 'sand', 'sand', 'sand']);
+    expect(sand.vehicle.forwardSpeed()).toBeLessThan(road.vehicle.forwardSpeed() * (id === 'rv' ? 0.5 : 0.8));
   });
 
-  test.runIf(id === 'rv')('from rest on sand at full throttle it stays bogged within 0.5 m for 10 s', () => {
+  test.runIf(id === 'rv')('T1: from rest on sand at full throttle it reaches 2 m/s within 10 s and stays on the patch', () => {
     const rig = settled(id, ON_SAND);
-    rig.run(10, { throttle: 1 });
-    const { pos } = rig.vehicle.state();
-    expect(Math.hypot(pos.x - ON_SAND.pos.x, pos.z - ON_SAND.pos.z)).toBeLessThan(0.5);
+    let reached = false;
+    for (let i = 0; i < 10 && !reached; i++) {
+      rig.run(1, { throttle: 1 });
+      reached = rig.vehicle.forwardSpeed() >= 2;
+    }
+    expect(reached).toBe(true);
+    expect(rig.vehicle.wheelSurfaces()).toEqual(['sand', 'sand', 'sand', 'sand']);
   });
 
   test.runIf(id === 'rv')('entering the sand at 12 m/s it crosses the far edge within 10 s', () => {

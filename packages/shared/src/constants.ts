@@ -65,7 +65,7 @@ export const SURFACES: Record<Surface, { grip: number; rolling: number }> = deep
   road: { grip: 1, rolling: 0.015 },
   gravel: { grip: 0.8, rolling: 0.05 },
   riverbed: { grip: 0.7, rolling: 0.15 },
-  sand: { grip: 0.6, rolling: 0.25 },
+  sand: { grip: 0.6, rolling: 0.15 },
 });
 
 export const REFERENCE_SLOPES_DEG = deepFreeze({ gentle: 8, medium: 15, steep: 25 } as const);
