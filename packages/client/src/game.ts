@@ -78,7 +78,7 @@ export interface Game {
   pushSnapshot(snapshot: SnapshotMessage): void;
   // Plays the sound of a server event as it arrives.
   onEvent(message: EventMessage): void;
-  // The controls panel opened or closed: the game stands still, and Esc is not the game's while it is open.
+  // The controls panel or the tutorial opened or closed: the game stands still, and Esc is not the game's while it is open.
   setControlsOpen(open: boolean): void;
   // Shows the mute state in the run menu.
   setMuted(muted: boolean): void;
@@ -106,6 +106,7 @@ export interface GameView {
   softwareGl?: boolean;
   onMute: () => void;
   onHelp: () => void;
+  onTutorial: () => void;
   // Whether the controls panel is open when the game starts.
   controlsOpen: boolean;
 }
@@ -217,6 +218,7 @@ export function createGame(
     onKick: (target) => closeRun({ type: 'kick', playerId: target }),
     onMute: view.onMute,
     onHelp: view.onHelp,
+    onTutorial: view.onTutorial,
   });
   runMenu.setMuted(view.muted);
   const hudRoot = document.createElement('div');

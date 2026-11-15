@@ -7,7 +7,12 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: 'list',
-  use: { baseURL: 'http://localhost:3100', trace: 'retain-on-failure' },
+  // Every test starts with the tutorial already finished (flag lodgy.tutorial.done), so its card never covers the lobby; its own spec opts out.
+  use: {
+    baseURL: 'http://localhost:3100',
+    trace: 'retain-on-failure',
+    storageState: { cookies: [], origins: [{ origin: 'http://localhost:3100', localStorage: [{ name: 'lodgy.tutorial.done', value: '1' }] }] },
+  },
   webServer: {
     command: 'npm start',
     env: { PORT: '3100', CREATE_PER_MINUTE: '1000', MAX_CONNECTIONS_PER_ADDRESS: '1000' },

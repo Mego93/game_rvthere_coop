@@ -506,3 +506,33 @@ test('B13: the Sprint button joins #touch-actions and the column still fits the 
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
 });
+
+// The config marks the tutorial done for every spec; these start with empty storage, as a first visit does.
+test.describe('T12: the tutorial', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('opens on the first lobby entry, Skip closes it and sets the flag, and the lobby button reopens it', async ({ page }) => {
+    await createRoom(page, 'Amal');
+    await expect(page.locator('#lobby')).toBeVisible();
+    await expect(page.locator('#tutorial')).toBeVisible();
+    await expect(page.locator('#tutorial-title')).toHaveText('Move and jump');
+    await page.locator('#tutorial-next').click();
+    await expect(page.locator('#tutorial-title')).toHaveText('Sprint, crouch and slide');
+    await page.locator('#tutorial-skip').click();
+    await expect(page.locator('#tutorial')).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem('lodgy.tutorial.done'))).toBe('1');
+    await page.locator('#lobby-tutorial').click();
+    await expect(page.locator('#tutorial')).toBeVisible();
+    await expect(page.locator('#tutorial-title')).toHaveText('Move and jump');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#tutorial')).toBeHidden();
+  });
+
+  test('does not open again for a later room once it was skipped', async ({ page }) => {
+    await createRoom(page, 'Amal');
+    await page.locator('#tutorial-skip').click();
+    await createRoom(page, 'Amal');
+    await expect(page.locator('#lobby')).toBeVisible();
+    await expect(page.locator('#tutorial')).toBeHidden();
+  });
+});

@@ -71,6 +71,7 @@ export interface LobbyHandlers {
   onStart(): void;
   onKick(playerId: string): void;
   onCredits(): void;
+  onTutorial(): void;
 }
 
 export interface LobbyScreen {
@@ -135,7 +136,9 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   credits.href = '/CREDITS.md';
   credits.target = '_blank';
   credits.rel = 'noopener';
-  panel.append(title, linkRow, settingsBox, players, ready, start, error, credits);
+  const tutorial = el('button', 'lobby-tutorial', 'Tutorial');
+  tutorial.type = 'button';
+  panel.append(title, linkRow, settingsBox, players, ready, start, error, tutorial, credits);
   root.append(style, panel);
   doc.body.append(root);
 
@@ -205,6 +208,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     event.preventDefault();
     handlers.onCredits();
   });
+  tutorial.addEventListener('click', () => handlers.onTutorial());
   ready.addEventListener('click', () => {
     error.textContent = '';
     handlers.onReady(!view!.localReady);
