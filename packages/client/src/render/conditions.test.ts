@@ -1,13 +1,13 @@
 import { MAX_PLAYERS, vec3, type PlayerSnapshot, type VehicleState } from '@lodgy/shared';
 import * as THREE from 'three';
 import { describe, expect, test } from 'vitest';
-import { applyConditions, conditionsLook, mixColour, RAIN_DROPS, RAIN_RADIUS, SANDSTORM_FOG } from './conditions';
+import { applyConditions, conditionsLook, configureRenderer, ENVIRONMENT_INTENSITY, EXPOSURE, FOG, mixColour, RAIN_DROPS, RAIN_RADIUS, SANDSTORM_FOG, toneMappedColour, SHADOW_HALF_EXTENT, SHADOW_MAP_SIZE, type RendererLike } from './conditions';
 
 const HALF = vec3(0.88, 0.55, 2.25);
 const near = (a: number, b: number) => expect(a).toBeCloseTo(b, 9);
 
 describe('W4: conditionsLook', () => {
-  test('midday and clear equal today\'s scene values', () => {
+  test('midday and clear keep today\'s sky and light values and add distance fog', () => {
     const look = conditionsLook('midday', 'clear');
     expect(look.sky).toBe(0xcfe6f5);
     expect(look.sunColour).toBe(0xffffff);
@@ -17,7 +17,7 @@ describe('W4: conditionsLook', () => {
     near(look.sunDirection.x, 30 / length);
     near(look.sunDirection.y, 60 / length);
     near(look.sunDirection.z, 20 / length);
-    expect(look.fog).toBeNull();
+    expect(look.fog).toEqual({ colour: 0xb3bacd, near: 150, far: 900 });
     expect(look.rain).toBe(false);
   });
 
@@ -59,17 +59,81 @@ describe('W4: conditionsLook', () => {
   });
 });
 
+describe('R2/R4: tables of the look', () => {
+  const times = ['dawn', 'midday', 'sunset', 'night'] as const;
+
+  test('exposure per time of day', () => {
+    expect(EXPOSURE).toEqual({ dawn: 0.8, midday: 1, sunset: 0.9, night: 0.6 });
+    for (const time of times) expect(conditionsLook(time, 'clear').exposure).toBe(EXPOSURE[time]);
+  });
+
+  test('environment intensity per time of day', () => {
+    expect(ENVIRONMENT_INTENSITY).toEqual({ dawn: 0.6, midday: 0.9, sunset: 0.6, night: 0.25 });
+    for (const time of times) expect(conditionsLook(time, 'clear').environmentIntensity).toBe(ENVIRONMENT_INTENSITY[time]);
+  });
+
+  test('distance fog is always on, near before far, far at most 900 and under the camera far plane', () => {
+    expect(['dawn', 'midday', 'sunset', 'night'].map((time) => [FOG[time as 'dawn'].near, FOG[time as 'dawn'].far])).toEqual([[100, 700], [150, 900], [120, 800], [80, 500]]);
+    for (const time of times) {
+      for (const weather of ['clear', 'rain', 'sandstorm'] as const) {
+        const fog = conditionsLook(time, weather).fog;
+        expect(fog.near).toBeLessThan(fog.far);
+        expect(fog.far).toBeLessThanOrEqual(900);
+        expect(fog.far).toBeLessThan(1000);
+      }
+    }
+  });
+
+  test('rain multiplies the background intensity by 0.6 and darkens the fog; a sandstorm drops the HDRI background', () => {
+    const clear = conditionsLook('sunset', 'clear');
+    const rain = conditionsLook('sunset', 'rain');
+    near(rain.backgroundIntensity, clear.backgroundIntensity * 0.6);
+    expect(rain.environmentIntensity).toBe(clear.environmentIntensity);
+    expect(rain.fog.colour).not.toBe(clear.fog.colour);
+    expect(clear.hdriBackground).toBe(true);
+    expect(rain.hdriBackground).toBe(true);
+    expect(conditionsLook('sunset', 'sandstorm').hdriBackground).toBe(false);
+  });
+
+  test('configureRenderer sets ACES, the exposure, and PCF shadows only when asked for', () => {
+    const renderer: RendererLike = { toneMapping: THREE.NoToneMapping, toneMappingExposure: 1, shadowMap: { enabled: false, type: THREE.BasicShadowMap } };
+    configureRenderer(renderer, conditionsLook('night', 'clear'), true);
+    expect(renderer.toneMapping).toBe(THREE.ACESFilmicToneMapping);
+    expect(renderer.toneMappingExposure).toBe(0.6);
+    expect(renderer.shadowMap).toEqual({ enabled: true, type: THREE.PCFShadowMap });
+    configureRenderer(renderer, conditionsLook('midday', 'clear'), false);
+    expect(renderer.toneMappingExposure).toBe(1);
+    expect(renderer.shadowMap.enabled).toBe(false);
+  });
+});
+
+describe('toneMappedColour', () => {
+  test('matches three\'s ACES curve: black stays black, mid grey brightens a little, bright values compress below 1', () => {
+    expect(toneMappedColour(0x000000, 1).getHex()).toBe(0);
+    const grey = toneMappedColour(0x808080, 1);
+    expect(grey.r).toBeGreaterThan(0.2);
+    expect(grey.r).toBeLessThan(0.5);
+    const white = toneMappedColour(0xffffff, 1);
+    expect(white.r).toBeLessThanOrEqual(1);
+    expect(white.r).toBeGreaterThan(0.7);
+    expect(toneMappedColour(0x808080, 0.5).r).toBeLessThan(grey.r);
+  });
+});
+
 describe('applyConditions', () => {
   const lights = (scene: THREE.Scene) => scene.children.filter((child) => (child as THREE.Light).isLight);
   const player = (seat: string | null): PlayerSnapshot => ({ playerId: 'p', pos: vec3(1, 0, 2), seat }) as PlayerSnapshot;
   const vehicle = { pos: vec3(0, 1, 0), rot: { x: 0, y: 0, z: 0, w: 1 } } as VehicleState;
 
-  test('midday clear sets the scene as before', () => {
+  test('midday clear sets the flat sky, the fog and two lights', () => {
     const scene = new THREE.Scene();
     applyConditions(scene, conditionsLook('midday', 'clear'), false, HALF);
-    expect((scene.background as THREE.Color).getHex()).toBe(0xcfe6f5);
-    expect(scene.fog).toBeNull();
+    expect((scene.background as THREE.Color).getHex()).toBe(toneMappedColour(0xcfe6f5, 1).getHex());
+    const fog = scene.fog as THREE.Fog;
+    expect([fog.near, fog.far]).toEqual([150, 900]);
+    expect(fog.color.getHex()).toBe(0xb3bacd);
     expect(lights(scene)).toHaveLength(2);
+    expect((lights(scene)[0] as THREE.HemisphereLight).intensity).toBeCloseTo(1.2, 9);
   });
 
   test('night has a fixed pool of lights, zero when unused or seated, and dispose removes everything', () => {
@@ -116,12 +180,59 @@ describe('applyConditions', () => {
     expect(attribute.count).toBe(RAIN_DROPS.touch);
     const array = attribute.array;
     const cam = vec3(100, 5, -40);
-    conditions.update(cam, 0.016);
+    conditions.update(cam, 0.016, cam);
     expect(points.geometry.attributes.position!.array).toBe(array);
     for (let i = 0; i < array.length; i += 3) {
       expect(Math.abs(array[i]! - cam.x)).toBeLessThanOrEqual(RAIN_RADIUS);
       expect(Math.abs(array[i + 1]! - cam.y)).toBeLessThanOrEqual(RAIN_RADIUS);
       expect(Math.abs(array[i + 2]! - cam.z)).toBeLessThanOrEqual(RAIN_RADIUS);
     }
+  });
+
+  test('the hemisphere light is 0.35 of its intensity while an HDRI is active', () => {
+    const scene = new THREE.Scene();
+    applyConditions(scene, conditionsLook('midday', 'clear'), false, HALF, true);
+    near((lights(scene)[0] as THREE.HemisphereLight).intensity, 1.2 * 0.35);
+  });
+
+  test('the sun casts a 2048 shadow only on desktop, with the bias values', () => {
+    const sunOf = (touch: boolean) => {
+      const scene = new THREE.Scene();
+      applyConditions(scene, conditionsLook('midday', 'clear'), touch, HALF);
+      return scene.children.find((child) => (child as THREE.DirectionalLight).isDirectionalLight) as THREE.DirectionalLight;
+    };
+    const desktop = sunOf(false);
+    expect(desktop.castShadow).toBe(true);
+    expect(desktop.shadow.mapSize.x).toBe(SHADOW_MAP_SIZE);
+    expect(desktop.shadow.bias).toBe(-0.0005);
+    expect(desktop.shadow.normalBias).toBe(0.02);
+    expect(desktop.shadow.camera.right).toBe(SHADOW_HALF_EXTENT);
+    expect(sunOf(true).castShadow).toBe(false);
+  });
+
+  test('shadows can be switched off on desktop, for software GL', () => {
+    const scene = new THREE.Scene();
+    applyConditions(scene, conditionsLook('midday', 'clear'), false, HALF, false, false);
+    const sun = scene.children.find((child) => (child as THREE.DirectionalLight).isDirectionalLight) as THREE.DirectionalLight;
+    expect(sun.castShadow).toBe(false);
+  });
+
+  test('the shadow box follows the focus, keeps the sun direction, and the target is in the scene', () => {
+    const scene = new THREE.Scene();
+    const conditions = applyConditions(scene, conditionsLook('midday', 'clear'), false, HALF);
+    const sun = scene.children.find((child) => (child as THREE.DirectionalLight).isDirectionalLight) as THREE.DirectionalLight;
+    const focus = vec3(500, 3, -240);
+    conditions.update(vec3(0, 0, 0), 0.016, focus);
+    expect(scene.children).toContain(sun.target);
+    const offset = sun.position.clone().sub(sun.target.position);
+    near(offset.length(), 100);
+    const direction = conditionsLook('midday', 'clear').sunDirection;
+    near(offset.x / 100, direction.x);
+    near(offset.y / 100, direction.y);
+    near(offset.z / 100, direction.z);
+    // The focus lies on the light's axis through the target, within a shadow texel of the snapped plane.
+    const toFocus = new THREE.Vector3(focus.x, focus.y, focus.z).sub(sun.target.position);
+    const across = toFocus.clone().addScaledVector(offset.clone().normalize(), -toFocus.dot(offset.clone().normalize()));
+    expect(across.length()).toBeLessThan(0.1);
   });
 });
