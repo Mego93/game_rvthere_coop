@@ -155,7 +155,7 @@ The admin picks the vehicle in the lobby. Vehicles differ in look and handling b
 | Mass | Baseline | About 2.5 times heavier |
 | Tipping | Rolls but recovers | High centre of gravity |
 | Climbing | Weak on steep slopes | Needs the winch on any real slope |
-| Soft sand | Slows a lot, and still drives | Slows a lot (rolling resistance 0.15 of its weight against its engine's 0.20), but pulls away from rest and crosses it with a run-up |
+| Soft sand | Slows a lot, and still drives | Slows a lot (rolling resistance 0.15 of its weight against its engine's 0.20), but pulls away from rest and crosses it |
 | Fuel burn | Baseline | About 1.5 times |
 | Pushing | Crew can shove it free | Barely moves; an RV on its side cannot be righted and needs a checkpoint restart |
 | Turning circle | Tight | Wide |
