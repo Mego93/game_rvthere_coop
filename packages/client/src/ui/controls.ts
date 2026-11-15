@@ -1,3 +1,4 @@
+import { FINAL_RESTART_PENALTY } from '@lodgy/shared';
 import { KEY_BINDINGS } from '../input/keyboard';
 
 export interface ControlEntry {
@@ -20,7 +21,7 @@ export const CONTROLS: readonly ControlEntry[] = [
   { group: 'Items', keys: ['Digit1', 'Digit2', 'Digit3'], action: 'Select a slot' },
   { group: 'Items', keys: ['KeyF'], action: 'Use the selected item' },
   { group: 'Items', keys: ['KeyG'], action: 'Drop the selected item' },
-  { group: 'Vehicle', keys: ['KeyX'], action: 'Hold to reset a stuck or upturned vehicle (60 s penalty)' },
+  { group: 'Vehicle', keys: ['KeyX'], action: `Hold to reset a stuck or upturned vehicle (${FINAL_RESTART_PENALTY} s penalty)` },
   { group: 'Game', keys: ['KeyH'], action: 'Show or hide this help' },
   { group: 'Game', keys: ['F3'], action: 'Show or hide the debug overlay' },
   { group: 'Game', keys: ['Escape'], action: 'Menu, or close this help' },
@@ -54,7 +55,7 @@ export interface ControlsPanel {
   isOpen(): boolean;
 }
 
-export function createControlsPanel(doc: Document, onChange: (open: boolean) => void = () => {}): ControlsPanel {
+export function createControlsPanel(doc: Document, onChange: (open: boolean) => void = () => {}, onCredits: () => void = () => {}): ControlsPanel {
   const root = doc.createElement('div');
   root.id = 'controls';
   root.hidden = true;
@@ -89,6 +90,11 @@ export function createControlsPanel(doc: Document, onChange: (open: boolean) => 
   credits.target = '_blank';
   credits.rel = 'noopener';
   credits.textContent = 'Credits';
+  credits.addEventListener('click', (event) => {
+    event.preventDefault();
+    set(false);
+    onCredits();
+  });
   const close = doc.createElement('button');
   close.id = 'controls-close';
   close.type = 'button';

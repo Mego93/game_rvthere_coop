@@ -149,7 +149,7 @@ let phase: Phase | null = null;
 let closeReason = CONNECTION_LOST;
 
 const credits = createCredits(document);
-const helpPanel = createControlsPanel(document, (open) => game?.setControlsOpen(open));
+const helpPanel = createControlsPanel(document, (open) => game?.setControlsOpen(open), () => credits.open());
 window.addEventListener('keydown', (event) => {
   if (isHelpKey(event, event.target instanceof Element ? event.target.tagName : null)) helpPanel.toggle();
 });
