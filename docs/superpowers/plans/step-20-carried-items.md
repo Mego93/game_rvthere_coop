@@ -73,3 +73,5 @@ R4. T7 (replacement): on a `testGround` variant whose ground continues past a fe
 R5. T4 uses the `barrier` prop (1.0 m tall), not a crate, between the vehicle and the point.
 R6. T8: the "E inside the text" example is `Hold F to revive Eve` (becomes `Hold Use to revive Eve`) and `Press E to board` (unchanged).
 R7. Task 3 also updates the ROADMAP working note that says every hint still names keys (the line about step 3 or the touch hints near "every hint").
+
+R8. T5 is not testable through the public API (exit points are at least 1.78 m from the seat and spawn slots are not at the vehicle centre); the 1e-6 guard stays untested.
