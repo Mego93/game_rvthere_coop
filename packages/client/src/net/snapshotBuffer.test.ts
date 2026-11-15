@@ -343,6 +343,25 @@ test('copies the health and the downed timer of a player', () => {
   expect(view.players[0]!.downed).toBe(12.5);
 });
 
+test('(T6b) stance and slide come from the newer snapshot, as new objects, and stay absent when standing', () => {
+  const slide = { ticks: 20, cooldown: 0, air: 1, dirX: 0.6, dirZ: -0.8 };
+  const sliding: PlayerSnapshot = { ...player('a', 10, 0), stance: 'slide', slide };
+  const buffer = pair([player('a', 0, 0)], [sliding]);
+  for (const now of [100, (9 + DELAY_TICKS) * TICK_DT]) {
+    const view = buffer.sample(now)!.players[0]!;
+    expect(view.stance).toBe('slide');
+    expect(view.slide).toEqual(slide);
+    view.slide!.ticks = 999;
+    expect(buffer.sample(now)!.players[0]!.slide).toEqual(slide);
+  }
+  const standing = pair([sliding], [player('a', 10, 0)]).sample((9 + DELAY_TICKS) * TICK_DT)!.players[0]!;
+  expect('stance' in standing).toBe(false);
+  expect('slide' in standing).toBe(false);
+  const crouching = pair([player('a', 0, 0)], [{ ...player('a', 10, 0), stance: 'crouch' }]).sample(100)!.players[0]!;
+  expect(crouching.stance).toBe('crouch');
+  expect('slide' in crouching).toBe(false);
+});
+
 test('before any snapshot there are no props', () => {
   expect(createSnapshotBuffer().latestProps()).toEqual([]);
 });
