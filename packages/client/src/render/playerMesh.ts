@@ -1,5 +1,6 @@
 import { PLAYER_COLOURS, PLAYER_COLOUR_PATTERN, PLAYER_HEIGHT, PLAYER_RADIUS, type PlayerSnapshot } from '@lodgy/shared';
 import * as THREE from 'three';
+import { animationsOf, hasModel, instantiate, shadowed } from './models';
 
 const HEAD_RADIUS = 0.2;
 const LABEL_WIDTH = 256;
@@ -11,26 +12,74 @@ function nameSprite(name: string): THREE.Sprite {
   canvas.height = LABEL_HEIGHT;
   const context = canvas.getContext('2d');
   if (context) {
-    context.font = 'bold 36px system-ui, sans-serif';
+    context.font = '600 30px system-ui, sans-serif';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    context.lineWidth = 6;
-    context.strokeStyle = 'rgba(0, 0, 0, 0.7)';
-    context.strokeText(name, LABEL_WIDTH / 2, LABEL_HEIGHT / 2, LABEL_WIDTH - 8);
+    context.shadowColor = 'rgba(0, 0, 0, 0.85)';
+    context.shadowBlur = 6;
+    context.shadowOffsetY = 1;
     context.fillStyle = '#fff';
     context.fillText(name, LABEL_WIDTH / 2, LABEL_HEIGHT / 2, LABEL_WIDTH - 8);
   }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
-  sprite.scale.set(1.6, 0.4, 1);
-  sprite.position.y = PLAYER_HEIGHT + 0.35;
+  sprite.scale.set(1.0, 0.25, 1);
+  sprite.position.y = PLAYER_HEIGHT + 0.3;
+  sprite.name = 'label';
   return sprite;
 }
 
-// A capsule body and a sphere head in the player's colour, a dark visor on the front (-Z), and the name above.
+// Other players' names show within this many metres.
+export const LABEL_RANGE = 40;
+const IDLE_SPEED = 0.3;
+const WALK_SPEED_FOR_CLIP = 1.6;
+const SPEED_SMOOTHING = 10;
+
+interface Animation {
+  mixer: THREE.AnimationMixer;
+  idle: THREE.AnimationAction;
+  walk: THREE.AnimationAction;
+  x: number;
+  z: number;
+  speed: number;
+  fresh: boolean;
+}
+
+const animations = new WeakMap<THREE.Object3D, Animation>();
+
+// The blocky character, its shirt and sleeves in the player's colour, turned to face -Z and fitted to the player's height; null when the model did not load.
+function createCharacter(colour: string): THREE.Group | null {
+  if (!hasModel('character.player')) return null;
+  const model = instantiate('character.player');
+  const clipList = animationsOf('character.player');
+  const idleClip = clipList.find((clip) => clip.name === 'idle');
+  const walkClip = clipList.find((clip) => clip.name === 'walk');
+  if (!model || !idleClip || !walkClip) return null;
+  const shirt = new THREE.MeshStandardMaterial({ color: colour, roughness: 1, metalness: 0 });
+  model.traverse((node) => {
+    if (node.name === 'torso' || node.name === 'arm-left' || node.name === 'arm-right') (node as THREE.Mesh).material = shirt;
+  });
+  const group = new THREE.Group();
+  group.add(shadowed(model));
+  // The file's front is +Z; players face -Z.
+  model.rotation.y = Math.PI;
+  const mixer = new THREE.AnimationMixer(model);
+  const idle = mixer.clipAction(idleClip).play();
+  const walk = mixer.clipAction(walkClip).play();
+  walk.setEffectiveWeight(0);
+  animations.set(group, { mixer, idle, walk, x: 0, z: 0, speed: 0, fresh: true });
+  return group;
+}
+
+// A character model (or a capsule body and a sphere head in the player's colour, a dark visor on the front (-Z)), and the name above.
 export function createPlayerMesh(name: string, colour: string): THREE.Group {
   const safe = PLAYER_COLOUR_PATTERN.test(colour) ? colour : PLAYER_COLOURS[0];
+  const character = createCharacter(safe);
+  if (character) {
+    character.add(nameSprite(name));
+    return character;
+  }
   const material = new THREE.MeshStandardMaterial({ color: safe, flatShading: true, roughness: 1, metalness: 0 });
   const group = new THREE.Group();
 
@@ -57,19 +106,43 @@ export function createPlayerMesh(name: string, colour: string): THREE.Group {
 }
 
 // A downed player lies on their back, rotated 90 degrees about the yaw-right axis; the capsule stays upright.
-export function placePlayerMesh(mesh: THREE.Group, player: PlayerSnapshot): void {
+export function placePlayerMesh(mesh: THREE.Group, player: PlayerSnapshot, seconds = 0): void {
   const downed = player.downed !== null;
+  const animation = animations.get(mesh);
+  if (animation && seconds > 0 && mesh.visible) {
+    // Horizontal speed from the drawn movement, smoothed; a restart's jump counts as standing.
+    const raw = animation.fresh ? 0 : Math.hypot(player.pos.x - animation.x, player.pos.z - animation.z) / seconds;
+    animation.speed += ((raw > 20 ? 0 : raw) - animation.speed) * Math.min(1, seconds * SPEED_SMOOTHING);
+    const walking = Math.min(1, Math.max(0, (animation.speed - IDLE_SPEED) / IDLE_SPEED));
+    animation.walk.setEffectiveWeight(walking);
+    animation.idle.setEffectiveWeight(1 - walking);
+    animation.walk.setEffectiveTimeScale(Math.max(0.6, animation.speed / WALK_SPEED_FOR_CLIP));
+    animation.mixer.update(seconds);
+  }
+  if (animation) {
+    animation.x = player.pos.x;
+    animation.z = player.pos.z;
+    animation.fresh = false;
+  }
   mesh.position.set(player.pos.x, player.pos.y + (downed ? PLAYER_RADIUS : 0), player.pos.z);
   mesh.rotation.order = 'YXZ';
   mesh.rotation.set(downed ? Math.PI / 2 : 0, player.yaw, 0);
 }
 
-// Frees the GPU resources of a mesh made by createPlayerMesh.
+// Names show only for other players near the camera.
+export function setNameVisible(mesh: THREE.Group, visible: boolean): void {
+  const label = mesh.getObjectByName('label');
+  if (label) label.visible = visible;
+}
+
+// Frees the GPU resources of a mesh made by createPlayerMesh; the model's shared geometry and textures stay.
 export function disposePlayerMesh(mesh: THREE.Group): void {
+  animations.get(mesh)?.mixer.stopAllAction();
   mesh.traverse((object) => {
     if (object instanceof THREE.Mesh) {
-      object.geometry.dispose();
-      (object.material as THREE.Material).dispose();
+      if (object.geometry.userData.shared !== true) object.geometry.dispose();
+      const material = object.material as THREE.Material;
+      if (material.userData.shared !== true) material.dispose();
     } else if (object instanceof THREE.Sprite) {
       object.material.map?.dispose();
       object.material.dispose();
