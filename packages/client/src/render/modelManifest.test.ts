@@ -50,6 +50,17 @@ describe('model manifest', () => {
   });
 });
 
+describe('real vehicles', () => {
+  it('both keys exist, point into the real pack and every credit names the files', () => {
+    expect(MODEL_MANIFEST['vehicle.lodgy.real'].file).toBe('real/lodgy-merc_tv.glb');
+    expect(MODEL_MANIFEST['vehicle.rv.real'].file).toBe('real/camper-libau.glb');
+    const credits = readFileSync(join(PUBLIC, 'CREDITS.md'), 'utf8');
+    for (const text of ['lodgy-merc_tv.glb', 'camper-libau.glb', 'Merc_TV', 'Libau Media', 'CC BY 4.0', 'simplified geometry and resized textures for real-time use']) {
+      expect(credits, text).toContain(text);
+    }
+  });
+});
+
 describe('model triangle budgets', () => {
   const triangles = (file: string): number => {
     const bytes = readFileSync(join(PUBLIC, 'models', file));
@@ -64,9 +75,21 @@ describe('model triangle budgets', () => {
     return total;
   };
 
-  it('A5: palms stay at most 1000 triangles, everything else at most 2500', () => {
+  it('A5: palms stay at most 1000 triangles, everything else at most 2500, the real vehicles at most 20000', () => {
     for (const key of MODEL_KEYS) {
-      expect(triangles(MODEL_MANIFEST[key].file), key).toBeLessThanOrEqual(key.includes('palm') ? 1000 : 2500);
+      const limit = MODEL_MANIFEST[key].pack === 'real' ? 20_000 : key.includes('palm') ? 1000 : 2500;
+      expect(triangles(MODEL_MANIFEST[key].file), key).toBeLessThanOrEqual(limit);
+    }
+  });
+
+  it('the real vehicle files are plain glTF: under 1.5 MB, no compression, no extensions a stock loader lacks', () => {
+    for (const key of ['vehicle.lodgy.real', 'vehicle.rv.real'] as const) {
+      const bytes = readFileSync(join(PUBLIC, 'models', MODEL_MANIFEST[key].file));
+      expect(bytes.length, key).toBeLessThan(1.5 * 1024 * 1024);
+      const json = JSON.parse(bytes.subarray(20, 20 + bytes.readUInt32LE(12)).toString()) as { extensionsUsed?: string[]; extensionsRequired?: string[] };
+      expect(json.extensionsUsed ?? [], key).toEqual([]);
+      expect(json.extensionsRequired ?? [], key).toEqual([]);
+      expect(triangles(MODEL_MANIFEST[key].file), key).toBeGreaterThan(1000);
     }
   });
 });

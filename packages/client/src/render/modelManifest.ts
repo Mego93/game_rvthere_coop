@@ -13,6 +13,9 @@ export const MODEL_MANIFEST = {
   // vehicle
   'vehicle.lodgy': model('car-kit', 'van', 4.5),
   'vehicle.rv': model('car-kit', 'delivery', 6.8),
+  // CC BY models; the vehicle fit measures them again, so the size is only a starting scale
+  'vehicle.lodgy.real': model('real', 'lodgy-merc_tv', 4.5),
+  'vehicle.rv.real': model('real', 'camper-libau', 6.8),
   // character
   'character.player': model('characters', 'character-c', 1.8),
   // prop

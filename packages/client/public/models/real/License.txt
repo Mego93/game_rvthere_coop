@@ -1,0 +1,11 @@
+Dacia Lodgy 2012-2022 by Merc_TV
+https://sketchfab.com/3d-models/dacia-lodgy-2012-2022-2949cd4dce264bb79b8180248b6754ec
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: lodgy-merc_tv.glb
+Modified: simplified geometry and resized textures for real-time use.
+
+Free Low-poly Vintage Hippy Camper Van by Libau Media
+https://sketchfab.com/3d-models/free-low-poly-vintage-hippy-camper-van-931d18f3e94b4cd580440bdc85436734
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: camper-libau.glb
+Modified: simplified geometry and resized textures for real-time use.
