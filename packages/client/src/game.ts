@@ -124,7 +124,7 @@ export function createGame(
   const conditions = applyConditions(scene, look, isTouch, vehicleConfig.halfExtents, imageLight, shadows);
   applySky(renderer, scene, look, firstLobby.timeOfDay, imageLight);
   configureRenderer(renderer, look, shadows);
-  const vehicleMesh = createVehicleMesh(vehicleConfig);
+  const vehicleMesh = createVehicleMesh(vehicleConfig, view.softwareGl);
   vehicleMesh.visible = false;
   scene.add(vehicleMesh);
   const winchMesh = createWinchMesh();
