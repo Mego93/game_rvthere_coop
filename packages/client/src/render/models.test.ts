@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { describe, expect, it } from 'vitest';
-import { fitToTarget, hasModel, instantiate, markShared, prepareModel } from './models';
+import { fitted, fitToTarget, hasModel, instantiate, markShared, prepareModel } from './models';
 
 const PUBLIC = join(import.meta.dirname, '../../public');
 const box = (min: [number, number, number], max: [number, number, number]) => ({
@@ -138,5 +138,34 @@ describe('desert look', () => {
     prepareModel(wrap(car), 1, 'car-kit');
     expect(city.color.getHex()).toBe(new THREE.Color(0xe6c79a).getHex());
     expect(car.color.getHex()).toBe(new THREE.Color(0x2ed8b8).getHex());
+  });
+});
+
+describe('fitted', () => {
+  const unit = () => {
+    const group = new THREE.Group();
+    group.add(new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4).translate(0, 0.5, 0), new THREE.MeshBasicMaterial()));
+    return group;
+  };
+  const sizeOf = (object: THREE.Object3D) => {
+    object.updateMatrixWorld(true);
+    return new THREE.Box3().setFromObject(object);
+  };
+
+  it('stretches a model to the box, standing on y 0 and centred', () => {
+    const box = sizeOf(fitted(unit(), { x: 1, y: 3, z: 2 }));
+    expect(box.getSize(new THREE.Vector3()).toArray()).toEqual([1, 3, 2].map((n) => expect.closeTo(n, 5)));
+    expect(box.min.y).toBeCloseTo(0);
+    expect((box.min.x + box.max.x) / 2).toBeCloseTo(0);
+  });
+
+  it('turns the model before fitting, so the box is in the turned frame', () => {
+    const box = sizeOf(fitted(unit(), { x: 4, y: 1, z: 2 }, Math.PI / 2));
+    expect(box.getSize(new THREE.Vector3()).toArray()).toEqual([4, 1, 2].map((n) => expect.closeTo(n, 5)));
+  });
+
+  it('an axis left out follows the mean of the others', () => {
+    const size = sizeOf(fitted(unit(), { y: 2 })).getSize(new THREE.Vector3());
+    expect(size.toArray()).toEqual([4, 2, 8].map((n) => expect.closeTo(n, 5)));
   });
 });

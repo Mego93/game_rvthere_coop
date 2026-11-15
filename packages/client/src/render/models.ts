@@ -119,11 +119,51 @@ export function prepareModel(scene: THREE.Object3D, target: ModelTarget, pack?: 
   return root;
 }
 
+export interface FitSize {
+  x?: number;
+  y?: number;
+  z?: number;
+}
+
+// A model turned by `yaw` and stretched to the given box in metres (axes left out follow the mean of the others); the wrapper's origin is the bottom centre.
+export function fitted(model: THREE.Object3D, size: FitSize, yaw = 0): THREE.Group {
+  const inner = new THREE.Group();
+  inner.add(model);
+  inner.rotation.y = yaw;
+  const wrapper = new THREE.Group();
+  wrapper.add(inner);
+  wrapper.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(wrapper);
+  const have = { x: box.max.x - box.min.x, y: box.max.y - box.min.y, z: box.max.z - box.min.z };
+  const ratios = (['x', 'y', 'z'] as const).map((axis) => (size[axis] !== undefined && have[axis] > 0 ? size[axis]! / have[axis] : null));
+  const known = ratios.filter((r): r is number => r !== null);
+  if (known.length === 0) return wrapper;
+  const mean = known.reduce((a, b) => a + b, 0) / known.length;
+  wrapper.scale.set(ratios[0] ?? mean, ratios[1] ?? mean, ratios[2] ?? mean);
+  inner.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
+  return wrapper;
+}
+
+// Casting and receiving shadows on every mesh of a model instance.
+export function shadowed<T extends THREE.Object3D>(root: T): T {
+  root.traverse((object) => {
+    object.castShadow = true;
+    object.receiveShadow = true;
+  });
+  return root;
+}
+
 const templates = new Map<ModelKey, THREE.Group>();
+const clips = new Map<ModelKey, THREE.AnimationClip[]>();
 let preloading: Promise<void> | null = null;
 
 export function hasModel(key: string): boolean {
   return templates.has(key as ModelKey);
+}
+
+// The animation clips of a model's file; they target node names, so they play on any instantiate() clone.
+export function animationsOf(key: string): readonly THREE.AnimationClip[] {
+  return clips.get(key as ModelKey) ?? [];
 }
 
 export function instantiate(key: string): THREE.Group | null {
@@ -135,10 +175,13 @@ async function load(onProgress?: (done: number, total: number) => void): Promise
   const loader = new GLTFLoader();
   let done = 0;
   const parsed = new Map<string, THREE.Object3D | null>();
+  const animations = new Map<string, THREE.AnimationClip[]>();
   await Promise.all(
     files.map(async (file) => {
       try {
-        parsed.set(file, (await loader.loadAsync(MODELS_BASE_URL + file)).scene);
+        const gltf = await loader.loadAsync(MODELS_BASE_URL + file);
+        parsed.set(file, gltf.scene);
+        animations.set(file, gltf.animations);
       } catch (error) {
         parsed.set(file, null);
         console.warn(`model ${file} failed to load`, error);
@@ -153,6 +196,7 @@ async function load(onProgress?: (done: number, total: number) => void): Promise
     try {
       // Keys that share a file each normalise their own copy of the node tree; geometry and materials stay shared.
       templates.set(key, prepareModel(scene.clone(), entry.targetSize, entry.pack));
+      clips.set(key, animations.get(entry.file) ?? []);
     } catch (error) {
       console.warn(`model ${key} could not be prepared`, error);
     }

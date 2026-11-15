@@ -147,7 +147,7 @@ export function createGame(
   const buffer = createSnapshotBuffer();
   const input = view.input();
   const playerMeshes = new Map<string, { mesh: THREE.Group; name: string; colour: string }>();
-  const propMeshes = new Map<string, { mesh: THREE.Mesh; kind: string }>();
+  const propMeshes = new Map<string, { mesh: THREE.Object3D; kind: string }>();
   // The local player's entry in the newest snapshot, not interpolated.
   let latestLocal: PlayerSnapshot | null = null;
   let seq = 0;
