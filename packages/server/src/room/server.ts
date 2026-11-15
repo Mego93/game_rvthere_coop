@@ -41,6 +41,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
   // When each address last created rooms, within CREATE_WINDOW; an address with none is not kept.
   const creates = new Map<string, number[]>();
   const createPerMinute = options.createPerMinute ?? CREATE_PER_MINUTE;
+  const maxRooms = options.maxRooms ?? MAX_ROOMS;
   let lastTick = deps.clock();
 
   const send = (connection: Connection, message: ServerMessage) => connection.send(JSON.stringify(message));
@@ -84,11 +85,12 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
   };
 
   const create = (session: Session, message: Extract<ClientMessage, { type: 'create' }>) => {
-    if (rooms.size >= MAX_ROOMS) return refuse(session, 'server_full');
+    if (rooms.size >= maxRooms) return refuse(session, 'server_full');
     const now = deps.clock();
     const times = recentCreates(session.address, now);
     if (times.length >= createPerMinute) return refuse(session, 'server_full');
-    const noun = pickNoun(deps.random, (candidate) => rooms.has(candidate));
+    const noun = options.fixedNoun ?? pickNoun(deps.random, (candidate) => rooms.has(candidate));
+    if (rooms.has(noun)) return refuse(session, 'server_full');
     const room = createRoom(deps.rapier, { noun, courses: options.courses, campaign: options.campaign }, now);
     rooms.set(noun, room);
     creates.set(session.address, [...times, now]);

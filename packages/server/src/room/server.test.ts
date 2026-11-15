@@ -835,3 +835,52 @@ test('S15: an accepted buy sends no error and puts the item in the inventory', (
   expect(amal.last('snapshot').wallet).toBe(0);
   expect(me().inventory).toContain('jerrycan');
 });
+
+test('with a fixed noun, create uses it, a second create is server_full, and another noun is unknown', () => {
+  const { connect, server } = setup({ fixedNoun: 'camel' });
+  expect(server.roomCount()).toBe(0);
+  const first = connect('a');
+  first.send({ type: 'create', name: 'Amal', token: token(1) });
+  expect(first.last('welcome').room).toBe('camel');
+  expect(server.roomCount()).toBe(1);
+
+  const second = connect('b');
+  second.send({ type: 'create', name: 'Badr', token: token(2) });
+  expect(reasons(second)).toEqual(['server_full']);
+  expect(server.roomCount()).toBe(1);
+
+  const wrong = connect('c');
+  wrong.send({ type: 'join', room: 'souk', name: 'Chadi', token: token(3) });
+  expect(reasons(wrong)).toEqual(['unknown_room']);
+
+  const right = connect('d');
+  right.send({ type: 'join', room: 'camel', name: 'Dina', token: token(4) });
+  expect(reasons(right)).toEqual([]);
+  expect(server.roomCount()).toBe(1);
+});
+
+test('with a fixed noun, join before any create is unknown_room, and the noun is free again once the room times out', () => {
+  const { connect, advance, server } = setup({ fixedNoun: 'camel' });
+  const early = connect();
+  early.send({ type: 'join', room: 'camel', name: 'Amal', token: token(1) });
+  expect(reasons(early)).toEqual(['unknown_room']);
+
+  const host = connect();
+  host.send({ type: 'create', name: 'Amal', token: token(2) });
+  host.close();
+  advance(EMPTY_ROOM_TIMEOUT);
+  expect(server.roomCount()).toBe(0);
+  const next = connect();
+  next.send({ type: 'create', name: 'Badr', token: token(3) });
+  expect(next.last('welcome').room).toBe('camel');
+});
+
+test('maxRooms lowers the room cap', () => {
+  const { connect, server } = setup({ maxRooms: 2 });
+  for (let n = 0; n < 2; n++) connect(`address-${n}`).send({ type: 'create', name: 'Amal', token: token(n) });
+  expect(server.roomCount()).toBe(2);
+  const late = connect();
+  late.send({ type: 'create', name: 'Badr', token: token(9) });
+  expect(reasons(late)).toEqual(['server_full']);
+  expect(server.roomCount()).toBe(2);
+});

@@ -37,6 +37,10 @@ export interface RoomServerOptions {
   campaign?: readonly string[];
   // `create` messages one address may send in 60 s; defaults to CREATE_PER_MINUTE.
   createPerMinute?: number;
+  // The most rooms at once; defaults to MAX_ROOMS (an existing constant, now overridable).
+  maxRooms?: number;
+  // When set, the server hosts at most this one room: `create` uses it as the noun and `join` of any other noun is unknown_room.
+  fixedNoun?: string;
 }
 
 export interface RoomServer {
