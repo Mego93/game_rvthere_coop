@@ -185,7 +185,7 @@ Course geometry is sized so the RV fits, and every segment is completable by the
 ### Push
 
 - The push is a horizontal force along the player's move input, applied at the contact point: the point of the object's box nearest to the player's push point, a fixed height above the feet. It applies only while the input points into the surface. A player's force is a constant, capped at the object's mass times a maximum acceleration, so light debris is not launched.
-- On the vehicle, forces add per player, capped at 4 pushers' worth (the first 4 in join order among those pushing it that tick). Because the force acts at the contact point, pushing can roll a flipped vehicle upright. While the vehicle is tipped more than 45° from upright, each player's push uses a larger constant, so four players can roll a Lodgy lying on its side back onto its wheels; an upturned vehicle or a tipped RV needs a checkpoint restart.
+- On the vehicle, forces add per player, capped at 4 pushers' worth (the first 4 in join order among those pushing it that tick). Because the force acts at the contact point, pushing can roll a flipped vehicle upright. While the vehicle is tipped more than 45° from upright, each player's push uses a larger constant, so four players can roll a Lodgy lying on its side back onto its wheels; an upturned vehicle or a tipped RV needs a checkpoint restart, which any seated player can trigger by holding X (see Stuck vehicle).
 - A player standing on an object applies no push to it.
 - A heavy obstacle is locked in place. It unlocks only while enough players push it at once, or while the cable attached to it is taut. The count is 1 when one player is connected, 2 for 2–3 connected players, 3 for 4–6, and follows the players currently connected. The vehicle cannot shove a locked obstacle. A heavy obstacle never rotates: unlocked, it slides.
 
@@ -473,7 +473,7 @@ Client to server:
 
 Every message is validated for shape and its numbers are clamped. A malformed message gets `bad_message` and is dropped.
 
-`input { seq, moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop }`. The client sends one per simulation tick, with `seq` starting at 1 and increasing by 1.
+`input { seq, moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop, reset? }`. The client sends one per simulation tick, with `seq` starting at 1 and increasing by 1.
 
 | Field | On foot | As driver |
 |---|---|---|
@@ -485,6 +485,7 @@ Every message is validated for shape and its numbers are clamped. A malformed me
 | `reel`: −1 out, 0, 1 in | Works within range of the winch box | Works always |
 | `slot`: 0, 1 or 2 | Selected inventory slot | Same |
 | `drop`, boolean | Drops the selected item on the press | No effect |
+| `reset?`, boolean, held (absent means false) | No effect | Any seated player: held 1.5 s while the vehicle is tipped, out of fuel or stuck, it restarts from the last checkpoint |
 
 Server to client:
 
@@ -501,7 +502,7 @@ Server to client:
 ```
 snapshot {
   tick, ackSeq, full,
-  vehicle { pos, rot, linvel, throttle, steer, fuel, health },
+  vehicle { pos, rot, linvel, throttle, steer, fuel, health, resetReady? },   // resetReady: true while a seated player could reset; absent means false
   players [ {
     playerId, pos, yaw, health,                         // health 0..100, rounded down
     walk: { x, z }, carry: { x, z }, vy, grounded,   // the walking state the predictor resets to

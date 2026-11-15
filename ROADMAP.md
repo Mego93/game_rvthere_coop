@@ -152,6 +152,8 @@ What step 2 cost and what changed because of it. Estimates are rough, plus or mi
 - A vehicle faster than about 22 m/s can lift a jumping player onto its roof (roof guard, D12).
 - The client interpolates through teleports, so after exiting a seat or respawning a player's mesh slides for one interval (visual, for the owner).
 - A quick double tap 16 ms apart can lose the second press because the world remembers the merged input.
+- On touch, a joystick dip into the dead zone while throttling restarts the 8 s stuck window (the driver's throttle reads as 0), and can release the Reset button mid-hold (step 25 review item 8).
+- With input-queue catch-up (skipped inputs), a client hold of exactly 1.5 s can reach the world as fewer than 90 ticks, so the player may need to hold slightly longer (step 25 review item 9).
 
 ## Carried into later steps
 
