@@ -18,7 +18,7 @@ import { IDENTITY, quatFromAxisAngle, rotate, vec3, yawOf, AXIS_Y, type Pose, ty
 import { aimRay, createPlayers, wishVelocity } from './player';
 import { createProps } from './props';
 import { NEUTRAL_INPUT, type InputFields } from './protocol';
-import { createRig, withBoxes } from './testRig';
+import { createRig, withBoxes, withProps } from './testRig';
 import { getVehicleConfig } from './vehicles';
 
 beforeAll(async () => {
@@ -669,6 +669,64 @@ describe('exit points', () => {
     const exit = players.findExit(LODGY.seats[0]!)!;
     expect(exit.y).toBeCloseTo(0, 1);
     expect(Number.isFinite(exit.x + exit.z)).toBe(true);
+  });
+});
+
+describe('a wall between the vehicle and a standing spot', () => {
+  const fence = (x: number, thickness = 0.5, height = 1.2, z = 0) => ({
+    center: vec3(x, height / 2, z),
+    halfExtents: vec3(thickness / 2, height / 2, 4),
+    rot: IDENTITY,
+  });
+  const ownSide = LODGY.seats[0]!;
+  const farFence = () => withBoxes(testGround, { walls: [fence(-1.15)] });
+
+  test('T1: a fence between the seat and the own-side exit point gives the other side; fences on both give null', () => {
+    const one = harness(farFence());
+    expect(one.players.findExit(ownSide)!.x).toBeCloseTo(1.78, 2);
+    const thin = harness(withBoxes(testGround, { walls: [fence(-1.3, 0.1, 2)] }));
+    expect(thin.players.findExit(ownSide)!.x).toBeCloseTo(1.78, 2);
+    const both = harness(withBoxes(testGround, { walls: [fence(-1.15), fence(1.15)] }));
+    expect(both.players.findExit(ownSide)).toBeNull();
+  });
+
+  test('T2: a wall between the vehicle and a spawn slot skips that slot; walls on all slots give the fallback', () => {
+    const left = harness(withBoxes(testGround, { walls: [fence(-1.3, 0.1, 2)] }));
+    const spot = left.players.findSpawn(null);
+    expect(spot.x).toBeCloseTo(2.08, 2);
+    expect(spot.z).toBeCloseTo(-0.7, 2);
+    const both = harness(withBoxes(testGround, { walls: [fence(-1.3, 0.1, 2), fence(1.3, 0.1, 2)] }));
+    both.players.setFallbackSpawn(vec3(5, 0, 5));
+    expect(both.players.findSpawn(null)).toEqual(vec3(5, 0, 5));
+  });
+
+  test('T3: a wall beside the point or behind the vehicle changes nothing', () => {
+    const course = withBoxes(testGround, {
+      walls: [
+        { center: vec3(-2.6, 1, 0.3), halfExtents: vec3(0.8, 1, 0.05), rot: IDENTITY },
+        { center: vec3(0, 1, 5), halfExtents: vec3(4, 1, 0.05), rot: IDENTITY },
+        { center: vec3(4, 1, 0), halfExtents: vec3(0.05, 1, 4), rot: IDENTITY },
+      ],
+    });
+    const { players } = harness(course);
+    expect(players.findExit(ownSide)!.x).toBeCloseTo(-1.78, 2);
+    expect(players.findSpawn(null).x).toBeCloseTo(-2.08, 2);
+  });
+
+  test('T4: a ground box and a 1 m barrier between the vehicle and the point do not block', () => {
+    const course = withProps(
+      withBoxes(testGround, {
+        ground: [{ center: vec3(-1.3, 1, 0), halfExtents: vec3(0.05, 1, 3), rot: IDENTITY, surface: 'road' }],
+      }),
+      [{ id: 'barrier-9', kind: 'barrier', pose: { pos: vec3(-1.27, 0, -0.45), rot: quatFromAxisAngle(AXIS_Y, Math.PI / 2) } }],
+    );
+    const { players } = harness(course);
+    expect(players.findSpawn(null).x).toBeCloseTo(-2.08, 2);
+  });
+
+  test('walls lower than the ray do not block', () => {
+    const { players } = harness(withBoxes(testGround, { walls: [fence(-1.15, 0.5, 0.5)] }));
+    expect(players.findExit(ownSide)!.x).toBeCloseTo(-1.78, 2);
   });
 });
 

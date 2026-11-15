@@ -3,6 +3,7 @@ import { clock, interactHint, useHint, type OverlayData } from '../overlay';
 import { bearingTo, compassLabel, compassTarget, edgeSide, headingOffset, markerPosition } from './compass';
 import { LOW_FRACTION, MARKER_HEIGHT } from './constants';
 import { ITEM_LABELS } from './itemLabels';
+import { touchWording } from './touchWording';
 
 export interface HudModel {
   heading: number;
@@ -54,7 +55,7 @@ export function buildHudModel(data: OverlayData, course: { checkpoints: readonly
   let prompt: string | null = null;
   if (vehicle && local && local.downed === null) {
     const hints = [interactHint(config, vehicle, local, players, aim.yaw, aim.pitch, propPoses, cable, anchors, stops), useHint(data)];
-    prompt = hints.filter((hint) => hint !== null).join('   ') || null;
+    prompt = hints.filter((hint) => hint !== null).map((hint) => (data.touch ? touchWording(hint) : hint)).join('   ') || null;
   }
 
   const mapEntities: HudModel['mapEntities'] = [];
