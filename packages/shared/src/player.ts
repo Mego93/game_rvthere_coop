@@ -18,6 +18,7 @@ import {
   PLAYER_STEP_HEIGHT,
   PLAYER_WALK_SPEED,
   HOLD_OFFSET,
+  SPAWN_WALL_RAY_HEIGHT,
   PUSH_HEIGHT,
   PUSH_TIPPED_DEG,
   SHOVE_MAX_DISTANCE,
@@ -30,7 +31,7 @@ import {
 import type { BuiltCourse } from './course';
 import type { PlayerHold } from './holds';
 import { damageAbove, relativeSpeed } from './health';
-import { GROUP_GROUND, GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
+import { GROUP_GROUND, GROUP_PLAYER, GROUP_STATIC, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, IDENTITY, add, degToRad, quatFromAxisAngle, rotate, sub, vec3, yawOf, type Pose, type Quat, type Vec3 } from './math';
 import { exitPoints } from './seats';
 import { NEUTRAL_INPUT, type InputFields } from './protocol';
@@ -226,12 +227,33 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     return hit ? fromY - hit.timeOfImpact : null;
   };
 
-  // The feet for a spot on the ground under (x, z): found as in rule S1, or null if there is none or the capsule would overlap.
-  const standingSpot = (x: number, z: number): Vec3 | null => {
+  // Static colliders that are not ground: walls and fences.
+  const wallBetween = (from: Vec3, x: number, y: number, z: number): boolean => {
+    const dx = x - from.x;
+    const dz = z - from.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance < 1e-6) return false;
+    const ray = new rapier.Ray({ x: from.x, y, z: from.z }, { x: dx / distance, y: 0, z: dz / distance });
+    const hit = physics.castRay(
+      ray,
+      distance,
+      true,
+      undefined,
+      groups(GROUP_WORLD, GROUP_STATIC),
+      undefined,
+      undefined,
+      (collider) => ((collider.collisionGroups() >>> 16) & GROUP_GROUND) === 0,
+    );
+    return hit !== null;
+  };
+
+  // The feet for a spot on the ground under (x, z): found as in rule S1, or null if there is none, the capsule would overlap, or a wall lies between `from` and the spot.
+  const standingSpot = (x: number, z: number, from: Vec3): Vec3 | null => {
     const groundY = groundBelow(x, z, vehicle.body.translation().y + SPAWN_RAY_HEIGHT);
     if (groundY === null) return null;
     const feet = vec3(x, groundY + PLAYER_CONTROLLER_OFFSET, z);
-    return overlapsAnything(feet) ? null : feet;
+    if (overlapsAnything(feet)) return null;
+    return wallBetween(from, x, feet.y + SPAWN_WALL_RAY_HEIGHT, z) ? null : feet;
   };
 
   let fallbackSpawn = course.checkpoints[0]?.spawn.pos ?? vec3(0, 0, 0);
@@ -242,7 +264,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     const others = [...entries.values()].filter(({ state }) => state.id !== forId && state.seat === null);
     for (const slot of vehicle.config.spawnSlots) {
       const at = add(body, rotate(turn, vec3(slot.x, 0, slot.z)));
-      const feet = standingSpot(at.x, at.z);
+      const feet = standingSpot(at.x, at.z, body);
       if (feet === null) continue;
       if (others.some(({ state }) => Math.hypot(state.pos.x - feet.x, state.pos.z - feet.z) < 2 * PLAYER_RADIUS)) continue;
       return feet;
@@ -251,8 +273,11 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
   };
 
   const findExit = (seat: SeatConfig): Vec3 | null => {
-    for (const point of exitPoints(vehicle.config, seat, vehicle.body.translation(), vehicle.body.rotation())) {
-      const feet = standingSpot(point.x, point.z);
+    const body = vehicle.body.translation();
+    const turn = quatFromAxisAngle(AXIS_Y, yawOf(vehicle.body.rotation()));
+    const from = add(body, rotate(turn, vec3(seat.pos.x, 0, seat.pos.z)));
+    for (const point of exitPoints(vehicle.config, seat, body, vehicle.body.rotation())) {
+      const feet = standingSpot(point.x, point.z, from);
       if (feet !== null) return feet;
     }
     return null;
