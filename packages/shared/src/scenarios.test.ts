@@ -215,9 +215,9 @@ describe.each(['lodgy', 'rv'] as const)('the %s on the winch', (id) => {
     return { ...run, gain };
   }
 
-  test('V7: climbs a 33 degree ramp and does not climb a 36 degree one', () => {
-    const a = stallAngle(33);
-    const b = stallAngle(36);
+  test('V7: climbs a 37 degree ramp and does not climb a 42 degree one', () => {
+    const a = stallAngle(37);
+    const b = stallAngle(42);
     expect(a.gain).toBeGreaterThan(0);
     expect(b.gain).toBeLessThanOrEqual(0);
     for (const run of [a, b]) {

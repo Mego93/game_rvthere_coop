@@ -88,7 +88,7 @@ export const MAX_SUSPENSION_FORCE_PER_WEIGHT = 4;
 // Stiffness in N/m per kilogram of vehicle; the tension cap is a fraction of the vehicle's weight.
 export const WINCH_STIFFNESS_PER_KG = 150;
 export const WINCH_DAMPING_RATIO = 1;
-export const WINCH_FORCE_PER_WEIGHT = 0.6;
+export const WINCH_FORCE_PER_WEIGHT = 0.65;
 export const WINCH_REEL_SPEED = 1;
 export const WINCH_MIN_LENGTH = 1.5;
 export const WINCH_MAX_LENGTH = 30;

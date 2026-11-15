@@ -80,6 +80,8 @@ Run with `npm run experiment:cable -- -t "sweep the tension cap"` (about 25 s) a
 F/W   vehicle  cap(kN)  climb 25 deg: mean tension(kN) at cap, speed(m/s), spin(rad/s) | max slope(deg) | barrier 150 kg: top speed, moved(m), reversals | out of a 0.8 m hole: 25 deg exit(s), vertical wall | anchor 8 m up, braked or free, 4/8/12 m ahead: worst pitch / tilt
 0.6   lodgy       8.8   6.5  1%  0.98 0.08   | 34 | 1.23 10.2 0 | 13.2  never | 90.0 / 92.9
 0.6   rv         22.1  16.3  1%  0.98 0.04   | 34 | 2.07  9.2 0 | 13.3  never | 85.1 / 85.1
+0.65  lodgy       9.6   6.5  1%  0.98 0.08   | 38 | 1.23 10.2 0 | 13.2  never | 90.0 / 93.2
+0.65  rv         23.9  16.3  1%  0.98 0.03   | 38 | 2.07  9.2 0 | 13.3  never | 90.0 / 90.2
 0.75  lodgy      11.0   6.5  0%  0.99 0.08   | 45 | 1.23 10.2 0 | 13.2  never | 90.0 / 92.3
 0.75  rv         27.6  16.3  0%  0.99 0.03   | 47 | 2.07  9.2 0 | 13.3  never | 90.0 / 93.8
 0.9   lodgy      13.2   6.5  0%  0.99 0.08   | 50 | 1.23 10.2 0 | 13.2  never | 90.0 / 100.4
@@ -94,7 +96,7 @@ The slope search stops at 50 degrees (the loop's end), so 50 means "at least 50"
 
 1. The cap only matters on steep slopes. On the 25 degree reference slope the cable pulls 6.5 kN (Lodgy) and 16.3 kN (RV) in steady state, which is 74% of the 0.6 cap, and the cap is reached on 1% of ticks. The climb speed is the reel speed (0.98 to 0.99 m/s) and spin is at most 0.08 rad/s at every force. The winch alone pulls both vehicles up 34 degrees at 0.6, 45 to 47 degrees at 0.75 and 50 or more at 0.9.
 2. The barrier drag and the pull out of the hole do not depend on the cap: the friction of a 150 kg barrier is about 0.7 kN, the tension stays under the cap (peaks of 4 to 12 kN are stick-slip spikes), and the reel speed sets the pace. The hole takes 13.2 s (Lodgy) and 13.3 s (RV) with a 25 degree exit ramp at every force; a vertical 0.8 m wall is never climbed by the winch alone at any force, so step 28's hole needs a ramp or throttle as well.
-3. Barrier drag is not smooth for the RV. Its top speed is 2.07 m/s (Lodgy 1.23), above reel speed + 0.5 m/s, at every force, with no reversals. The cause is the RV's stiffness (150 N/m per kg of 3750 kg against a 150 kg prop, about 10 Hz at a 60 Hz step), not the cap. This fails the B7 barrier criterion for the RV at 0.6 as well; it is recorded as a known failure in `winch.test.ts` (T8), not fixed here.
+3. Barrier drag is not smooth for the RV. Its top speed is 2.07 m/s (Lodgy 1.23), above reel speed + 0.5 m/s, at every force, with no reversals. The cause is the RV's stiffness (150 N/m per kg of 3750 kg against a 150 kg prop, about 10 Hz at a 60 Hz step), not the cap. This fails the B7 barrier criterion for the RV at 0.6 and 0.65 alike; it is recorded as a known failure in `winch.test.ts` (T8), not fixed here.
 4. The anchor 8 m above the bumper decides the force. Braked, the pitch at 4, 8 and 12 m ahead is:
 
 ```
@@ -109,7 +111,7 @@ F/W    lodgy                    rv
 ```
 
    The strict B7 rule (under 30 degrees, never flips) holds up to about 0.65 for both vehicles (0.675 fails the RV at 4 m). 0.75 fails the RV, 0.9 and 1.0 flip both. Not braked, the vehicle rolls under the anchor and the nose goes up to 77 to 90 degrees at every force including 0.6, so the criterion is only meaningful braked.
-5. Result: of the swept values only 0.6 passes B7. `WINCH_FORCE_PER_WEIGHT` stays 0.6 (the plan's target 0.9 fails). 0.65 passes by about 0.6 degrees and is the upper bound; the owner may choose it, but it was not taken because the margin is thinner than the experiment's accuracy and the cap only helps slopes above 34 degrees.
+5. Result: the owner chose 0.65 (decision of 2026-11-15, taking the upper bound of the fine sweep). `WINCH_FORCE_PER_WEIGHT` is 0.65. Margins at 0.65 against the B7 criteria, measured in the real winch by the T8 tests and in this experiment: 25 degree climb at 0.98 m/s (limit 0.9 to 1.1); spin 0.08 rad/s (limit 0.5); braked anchor 8 m up, worst pitch 29.0 degrees (Lodgy) and 29.4 degrees (RV), both at 4 m, so 1.0 and 0.6 degrees under the 30 limit, tilt equal to pitch so nothing flips; Lodgy barrier top speed 1.23 m/s (limit 1.5, 0.27 spare) with no reversals; RV barrier 2.07 m/s, the known failure of finding 3. The winch alone now pulls both vehicles up 38 degrees (34 at 0.6). The pitch margin is thin: any later change to the vehicle's mass or winch mount needs this sweep run again.
 
 The stiffness limit of finding 3 above still holds: at 0.9 the spring alone reaches the cap at 59 mm of stretch, more than three ticks of reel travel, so the reel does not stall.
 

@@ -22,7 +22,7 @@ interface CableParams {
 
 // The value the stiffness sweep was run at; the force sweep below varies it.
 const BASELINE_FORCE_PER_WEIGHT = 0.6;
-const FORCE_SWEEP = [0.6, 0.75, 0.9, 1.0];
+const FORCE_SWEEP = [0.6, 0.65, 0.75, 0.9, 1.0];
 const REEL_SPEED = 1;
 const MIN_LENGTH = 1.5;
 const START_ALONG = 8;
