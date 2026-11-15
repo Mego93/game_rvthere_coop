@@ -11,6 +11,8 @@
     "experiments/**/*.ts",
     "e2e/**/*.ts",
     "vitest.config.ts",
-    "playwright.config.ts"
+    "packages/worker/src/config.test.ts",
+    "playwright.config.ts",
+    "playwright.cf.config.ts"
   ]
 }

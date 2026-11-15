@@ -1,5 +1,6 @@
 import { COIN_RADIUS, type Placed } from '@lodgy/shared';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const TURN_RATE = 1.5;
 
@@ -10,9 +11,16 @@ export interface CoinMeshes {
 }
 
 export function createCoinMeshes(scene: THREE.Scene, coins: readonly Placed[]): CoinMeshes {
-  const geometry = new THREE.CylinderGeometry(COIN_RADIUS, COIN_RADIUS, 0.08, 24);
+  // A disc with a raised rim ring and a raised inner face, one geometry; the emissive keeps it gold where no sky reflects.
+  const parts = [
+    new THREE.CylinderGeometry(COIN_RADIUS * 0.94, COIN_RADIUS * 0.94, 0.08, 24),
+    new THREE.TorusGeometry(COIN_RADIUS * 0.94, 0.035, 8, 24).rotateX(Math.PI / 2),
+    new THREE.CylinderGeometry(COIN_RADIUS * 0.6, COIN_RADIUS * 0.6, 0.11, 20),
+  ];
+  const geometry = mergeGeometries(parts)!;
+  for (const part of parts) part.dispose();
   geometry.rotateX(Math.PI / 2);
-  const material = new THREE.MeshStandardMaterial({ color: 0xffc83d, flatShading: true, roughness: 1, metalness: 0 });
+  const material = new THREE.MeshStandardMaterial({ color: 0xffc83d, emissive: 0x3d2a00, roughness: 0.25, metalness: 0.9 });
   const meshes = coins.map((coin) => {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(coin.pose.pos.x, coin.pose.pos.y, coin.pose.pos.z);

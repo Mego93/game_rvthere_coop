@@ -65,7 +65,7 @@ test('a socket closed by the server is rejoined', async ({ browser }) => {
   const { page: amal } = await newPlayer(browser);
   let current: WebSocketRoute | null = null;
   const { page: badr } = await newPlayer(browser, async (page) => {
-    await page.routeWebSocket(/\/ws$/, (ws) => {
+    await page.routeWebSocket(/\/ws(\?.*)?$/, (ws) => {
       current = ws;
       ws.connectToServer();
     });
@@ -93,7 +93,7 @@ test('a lost WebGL context reloads the page and rejoins as the same player witho
   const { page: amal } = await newPlayer(browser);
   const welcomes: string[] = [];
   const { page: badr } = await newPlayer(browser, async (page) => {
-    await page.routeWebSocket(/\/ws$/, (ws) => {
+    await page.routeWebSocket(/\/ws(\?.*)?$/, (ws) => {
       const server = ws.connectToServer();
       server.onMessage((message) => {
         ws.send(message);

@@ -11,14 +11,27 @@ export const NOUNS: readonly string[] = [
 // Paths the server uses for something else; no room may take one.
 export const RESERVED_PATHS: readonly string[] = ['ws', 'assets', 'index', 'favicon'];
 
-// Picks a noun no live room uses. When every noun is taken, a number is appended.
-export function pickNoun(random: () => number, isTaken: (noun: string) => boolean): string {
+// Every candidate noun in the order pickNoun tries them: from a random word through all words, then the numbered variants.
+export function* nounCandidates(random: () => number): Generator<string> {
   const start = Math.floor(random() * NOUNS.length) % NOUNS.length;
   for (let suffix = 1; ; suffix++) {
     for (let i = 0; i < NOUNS.length; i++) {
       const word = NOUNS[(start + i) % NOUNS.length]!;
-      const noun = suffix === 1 ? word : `${word}${suffix}`;
-      if (!isTaken(noun)) return noun;
+      yield suffix === 1 ? word : `${word}${suffix}`;
     }
   }
 }
+
+// Picks a noun no live room uses. When every noun is taken, a number is appended.
+export function pickNoun(random: () => number, isTaken: (noun: string) => boolean): string {
+  for (const noun of nounCandidates(random)) {
+    if (!isTaken(noun)) return noun;
+  }
+  throw new Error('unreachable');
+}
+
+export const MAX_NOUN_LENGTH = 32;
+
+// A noun a room may be created or joined under: lower-case letters and an optional number, not too long, not a reserved path.
+export const isValidNoun = (noun: string): boolean =>
+  noun.length <= MAX_NOUN_LENGTH && /^[a-z]+\d*$/.test(noun) && !RESERVED_PATHS.includes(noun.replace(/\d+$/, ''));

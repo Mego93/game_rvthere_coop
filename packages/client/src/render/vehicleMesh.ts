@@ -1,5 +1,6 @@
 import type { VehicleConfig, VehicleState } from '@lodgy/shared';
 import * as THREE from 'three';
+import { fitToTarget, hasModel, instantiate } from './models';
 
 const BODY_COLOURS: Record<VehicleConfig['id'], number> = { lodgy: 0x4a6fa5, rv: 0xefe6d2 };
 
@@ -30,6 +31,57 @@ function addWheels(group: THREE.Group, config: VehicleConfig): void {
   }
 }
 
+// Which RV is drawn when the Car Kit is loaded: the step-17 boxes or the Car Kit delivery van.
+const RV_MODEL = 'delivery' as 'boxes' | 'delivery';
+const MODEL_KEY: Record<VehicleConfig['id'], string> = { lodgy: 'vehicle.lodgy', rv: 'vehicle.rv' };
+// The Car Kit's wheel radius in its own units.
+const MODEL_WHEEL_RADIUS = 0.3;
+// A step longer than this is a restart, not driving, and does not turn the wheels.
+const MAX_SPIN_STEP = 5;
+
+interface WheelSpin {
+  wheels: THREE.Object3D[];
+  radius: number;
+  angle: number;
+  last: THREE.Vector3 | null;
+}
+
+const spins = new WeakMap<THREE.Object3D, WheelSpin>();
+const forward = new THREE.Vector3();
+const step = new THREE.Vector3();
+
+// The Car Kit model fitted to the collision box: body stretched to its width and length, wheels kept round and placed at the stretched arches. Front is +Z in the file, so it is turned half a circle.
+export function createModelMesh(config: VehicleConfig): THREE.Group | null {
+  const model = instantiate(MODEL_KEY[config.id]);
+  const node = model?.children[0];
+  if (!model || !node) return null;
+  const h = config.halfExtents;
+  const bottom = config.wheelY - config.suspensionRest - config.wheelRadius;
+  node.scale.set(1, 1, 1);
+  node.position.set(0, 0, 0);
+  model.updateMatrixWorld(true);
+  const fit = fitToTarget(new THREE.Box3().setFromObject(node), { x: h.x * 2, y: h.y - bottom, z: h.z * 2 });
+  node.scale.set(fit.scale.x, fit.scale.y, fit.scale.z);
+  node.position.set(fit.offset.x, fit.offset.y + bottom, fit.offset.z);
+  const wheels = node.children.filter((child) => child.name.startsWith('wheel'));
+  const wheelScale = config.wheelRadius / MODEL_WHEEL_RADIUS;
+  for (const wheel of wheels) {
+    node.remove(wheel);
+    wheel.position.set(
+      wheel.position.x * fit.scale.x + fit.offset.x,
+      wheel.position.y * fit.scale.y + fit.offset.y + bottom,
+      wheel.position.z * fit.scale.z + fit.offset.z,
+    );
+    wheel.scale.setScalar(wheelScale);
+    model.add(wheel);
+  }
+  model.rotation.y = Math.PI;
+  const group = new THREE.Group();
+  group.add(model);
+  spins.set(group, { wheels, radius: config.wheelRadius, angle: 0, last: null });
+  return group;
+}
+
 function createRvMesh(config: VehicleConfig): THREE.Group {
   const group = new THREE.Group();
   group.add(part('body', 2.3, 2.4, 4.42, CREAM, 0, 0, 1.19));
@@ -50,8 +102,16 @@ function createRvMesh(config: VehicleConfig): THREE.Group {
   return group;
 }
 
-// The vehicle drawn as boxes: the Lodgy a body, a dark windscreen strip marking the front (-Z) and four wheels; the RV a motorhome.
+// The Car Kit model when it is loaded; else boxes: the Lodgy a body, a dark windscreen strip marking the front (-Z) and four wheels; the RV a motorhome.
 export function createVehicleMesh(config: VehicleConfig): THREE.Group {
+  if (hasModel(MODEL_KEY[config.id]) && (config.id === 'lodgy' || RV_MODEL === 'delivery')) {
+    const drawn = createModelMesh(config);
+    if (drawn) return drawn;
+  }
+  return createBoxMesh(config);
+}
+
+export function createBoxMesh(config: VehicleConfig): THREE.Group {
   if (config.id === 'rv') return createRvMesh(config);
   const h = config.halfExtents;
   const group = new THREE.Group();
@@ -64,4 +124,15 @@ export function createVehicleMesh(config: VehicleConfig): THREE.Group {
 export function placeVehicleMesh(mesh: THREE.Group, state: VehicleState): void {
   mesh.position.set(state.pos.x, state.pos.y, state.pos.z);
   mesh.quaternion.set(state.rot.x, state.rot.y, state.rot.z, state.rot.w);
+  const spin = spins.get(mesh);
+  if (!spin) return;
+  // Roll by the distance driven along the nose; the file's wheels turn about their own x, which points to the vehicle's -x.
+  if (spin.last) {
+    step.copy(mesh.position).sub(spin.last);
+    forward.set(0, 0, -1).applyQuaternion(mesh.quaternion);
+    const driven = step.dot(forward);
+    if (Math.abs(driven) < MAX_SPIN_STEP) spin.angle = (spin.angle + driven / spin.radius) % (Math.PI * 2);
+    spin.last.copy(mesh.position);
+  } else spin.last = mesh.position.clone();
+  for (const wheel of spin.wheels) wheel.rotation.x = spin.angle;
 }

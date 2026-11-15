@@ -17,3 +17,7 @@ token.json
 service-account*.json
 cookies.txt
 *-cookies*.txt
+
+# Cloudflare Worker
+packages/worker/vendor/
+.wrangler/

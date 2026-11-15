@@ -10,7 +10,8 @@ import { preloadSkies, SKY_COUNT } from './render/environment';
 import { preloadGroundTextures } from './render/groundTextures';
 import { openSocket, type CloseInfo, type GameSocket } from './net/socket';
 import { RECONNECT_IDLE, RECONNECT_WINDOW, SOCKET_OPEN_TIMEOUT, reconnectStep, resumeAction, type ReconnectEvent, type ReconnectState } from './net/reconnect';
-import { roomFromPath, socketUrl } from './route';
+import { socketUrl, type SocketIntent } from './net/socketUrl';
+import { roomFromPath } from './route';
 import { autoReloadAllowed, createMemoryStore, markAutoReload, saveMuted, saveName, savedMuted, savedName, saveRejoin, sessionToken, takeRejoin, type KeyValueStore } from './session';
 import { createInputSource } from './input/combined';
 import { createKeyboardSource } from './input/keyboard';
@@ -379,7 +380,7 @@ function startAttempt() {
   attemptTimer = null;
   if (reconnect.kind !== 'reconnecting' || pageHidden || !currentRoom) return;
   const room = currentRoom;
-  const opened = openSocket(socketUrl(location), {
+  const opened = openSocket(socketUrl(location, { noun: room }), {
     onOpen: () => {
       if (opened === attempt) opened.send({ type: 'join', room, name, token });
     },
@@ -450,7 +451,9 @@ function send(message: ClientMessage) {
     socket.send(message);
     return;
   }
-  const opened = openSocket(socketUrl(location), {
+  // The opening message says which room the socket is for: a create asks for a new one, a join names its room.
+  const intent: SocketIntent = message.type === 'create' ? { create: true } : message.type === 'join' ? { noun: message.room } : null;
+  const opened = openSocket(socketUrl(location, intent), {
     onOpen: () => opened.send(message),
     onMessage: (incoming) => onSocketMessage(opened, incoming),
     onClose: (info) => onSocketClose(opened, info),

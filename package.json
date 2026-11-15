@@ -11,14 +11,19 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/server/tsconfig.node.json && tsc -p packages/client && tsc -p tsconfig.json",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/server/tsconfig.node.json && tsc -p packages/client && tsc -p packages/worker && tsc -p tsconfig.json",
     "dev": "node scripts/dev.mjs",
     "share": "node scripts/share.mjs",
     "build": "npm run build -w @lodgy/client",
     "start": "npm run build && npm run start -w @lodgy/server",
     "e2e": "playwright test",
+    "e2e:cf": "playwright test --config playwright.cf.config.ts",
+    "check:worker": "node scripts/checkWorker.mjs",
     "experiment:cable": "vitest run --config experiments/vitest.config.ts --reporter=verbose experiments/cable",
-    "experiment:rv": "vitest run --config experiments/vitest.config.ts --reporter=verbose experiments/rv"
+    "experiment:rv": "vitest run --config experiments/vitest.config.ts --reporter=verbose experiments/rv",
+    "build:worker": "node scripts/vendorRapier.mjs && npm run build",
+    "dev:worker": "cd packages/worker && wrangler dev --local --port 8787 --var CREATE_PER_MINUTE:1000 --var MAX_CONNECTIONS_PER_ADDRESS:1000",
+    "deploy:cf": "npm run build:worker && cd packages/worker && wrangler deploy"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",

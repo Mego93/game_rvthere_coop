@@ -13,6 +13,8 @@ export const MODEL_MANIFEST = {
   // vehicle
   'vehicle.lodgy': model('car-kit', 'van', 4.5),
   'vehicle.rv': model('car-kit', 'delivery', 6.8),
+  // character
+  'character.player': model('characters', 'character-c', 1.8),
   // prop
   'prop.crate': model('car-kit', 'box', 0.6),
   'prop.cart': model('city-roads', 'dumpster', 1.6),
@@ -22,7 +24,7 @@ export const MODEL_MANIFEST = {
   'prop.light': model('city-roads', 'construction-light', 1.2),
   // anchor
   'anchor.palm': model('nature', 'tree_palm', 6),
-  'anchor.boulder': model('nature', 'rock_largeA', 2.2),
+  'anchor.boulder': model('nature', 'rock_tallA', 2.2),
   'anchor.milestone': model('nature', 'statue_obelisk', 2),
   // stop
   'stop.fuel': model('city-commercial', 'low-detail-building-wide-a', 12),

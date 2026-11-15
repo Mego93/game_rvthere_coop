@@ -22,6 +22,10 @@ Kenney, City Kit Suburban 2.0. Source: https://kenney.nl/assets/city-kit-suburba
 
 Kenney, Nature Kit 2.1. Source: https://kenney.nl/assets/nature-kit (https://opengameart.org/content/nature-kit). Licence: CC0 1.0. The pack's own `License.txt` sits in the folder.
 
+## models/characters
+
+Kenney, Blocky Characters 2.0 (`character-c`). Source: https://opengameart.org/content/blocky-characters (https://kenney.nl/assets/blocky-characters). Licence: CC0 1.0. The pack's own `License.txt` sits in the folder.
+
 ## env
 
 Sky HDRIs (1k, Radiance .hdr) from Poly Haven, https://polyhaven.com/hdris. Licence: CC0 1.0. Photography by Greg Zaal, sky edits by Jarod Guest.

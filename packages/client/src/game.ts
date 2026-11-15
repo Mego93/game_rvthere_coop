@@ -35,7 +35,7 @@ import { createSnapshotBuffer } from './net/snapshotBuffer';
 import { predictionActive } from './prediction/gate';
 import { createReconciler } from './prediction/reconciler';
 import { updateFollowCamera } from './render/followCamera';
-import { createPlayerMesh, disposePlayerMesh, placePlayerMesh } from './render/playerMesh';
+import { createPlayerMesh, disposePlayerMesh, LABEL_RANGE, placePlayerMesh, setNameVisible } from './render/playerMesh';
 import { createCoinMeshes } from './render/coinMesh';
 import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMesh';
 import { applyConditions, conditionsLook, configureRenderer } from './render/conditions';
@@ -147,7 +147,7 @@ export function createGame(
   const buffer = createSnapshotBuffer();
   const input = view.input();
   const playerMeshes = new Map<string, { mesh: THREE.Group; name: string; colour: string }>();
-  const propMeshes = new Map<string, { mesh: THREE.Mesh; kind: string }>();
+  const propMeshes = new Map<string, { mesh: THREE.Object3D; kind: string }>();
   // The local player's entry in the newest snapshot, not interpolated.
   let latestLocal: PlayerSnapshot | null = null;
   let seq = 0;
@@ -310,7 +310,7 @@ export function createGame(
   });
 
   // Seated players are hidden, not removed; meshes are remade when a player's name or colour changes, and dropped when they leave.
-  const syncPlayerMeshes = (players: PlayerSnapshot[]) => {
+  const syncPlayerMeshes = (players: PlayerSnapshot[], seconds: number) => {
     const present = new Set<string>();
     for (const player of players) {
       const info = lobby.players.find((candidate) => candidate.playerId === player.playerId);
@@ -328,7 +328,8 @@ export function createGame(
         scene.add(entry.mesh);
       }
       entry.mesh.visible = player.seat === null;
-      placePlayerMesh(entry.mesh, player);
+      placePlayerMesh(entry.mesh, player, seconds);
+      setNameVisible(entry.mesh, player.playerId !== playerId && Math.hypot(player.pos.x - camera.position.x, player.pos.y - camera.position.y, player.pos.z - camera.position.z) <= LABEL_RANGE);
     }
     for (const [id, entry] of playerMeshes) {
       if (present.has(id)) continue;
@@ -397,7 +398,7 @@ export function createGame(
       vehicleMesh.visible = true;
       placeVehicleMesh(vehicleMesh, vehicle);
     }
-    syncPlayerMeshes(players);
+    syncPlayerMeshes(players, frameSeconds);
     const cable = sampled?.cable;
     winchMesh.visible = vehicle !== null && cable !== undefined;
     if (vehicle && cable) {

@@ -32,7 +32,8 @@ test('desktop: there is no touch UI, and the overlay has the keyboard wording', 
   await expect(page.locator('#overlay')).toContainText('WASD move');
 });
 
-test('the manifest and the icons are served with their types', async ({ page, hasTouch }) => {
+// Cloudflare's assets answer with another exact content type for the manifest.
+test('the manifest and the icons are served with their types @node-only', async ({ page, hasTouch }) => {
   test.skip(hasTouch, 'desktop only');
   const manifest = await page.request.get('/manifest.webmanifest');
   expect(manifest.status()).toBe(200);

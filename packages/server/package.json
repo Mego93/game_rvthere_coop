@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./room": "./src/room/index.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/node/main.ts",
     "start": "tsx src/node/main.ts"
