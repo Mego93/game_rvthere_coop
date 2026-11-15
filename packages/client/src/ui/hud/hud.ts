@@ -24,15 +24,15 @@ const STYLE = `
 #hud .marker.glass { backdrop-filter: none; -webkit-backdrop-filter: none; }
 #hud svg.ico { width: 14px; height: 14px; display: block; }
 #hud .panel { padding: 6px 10px; }
-#hud-compass { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(320px, 40vw); height: 22px; overflow: hidden; border-radius: 11px; }
+#hud #hud-compass { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(320px, 40vw); height: 22px; overflow: hidden; border-radius: 11px; }
 #hud-compass-marker { position: absolute; top: 4px; width: 0; height: 0; }
 #hud-compass-marker::before { content: ''; position: absolute; left: -5px; top: 0; width: 10px; height: 7px; background: var(--hud-accent); clip-path: polygon(0 0, 50% 100%, 100% 0, 50% 45%); }
-#hud-compass-label { position: absolute; left: 8px; top: 1px; white-space: nowrap; font-size: 10px; line-height: 14px; opacity: 0.7; }
+#hud-compass-label { position: absolute; top: 4px; white-space: nowrap; font-size: 10px; line-height: 14px; opacity: 0.7; }
 #hud-compass-left, #hud-compass-right { position: absolute; top: 3px; color: var(--hud-accent); font-size: 13px; line-height: 1; }
 #hud-compass-left { left: 8px; }
 #hud-compass-right { right: 8px; }
 #hud-compass-centre { display: none; }
-#hud-minimap { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: calc(8px + env(safe-area-inset-left)); border-radius: 50%; overflow: hidden; box-sizing: border-box; border-color: rgba(255, 255, 255, 0.2); }
+#hud #hud-minimap { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: calc(8px + env(safe-area-inset-left)); border-radius: 50%; overflow: hidden; box-sizing: border-box; border-color: rgba(255, 255, 255, 0.2); }
 #hud.touch #hud-vehicle { top: calc(56px + env(safe-area-inset-top)); }
 #hud-minimap .route { fill: none; stroke: rgba(255, 255, 255, 0.55); stroke-width: 2; stroke-linejoin: round; }
 #hud-minimap .vehicle { fill: var(--hud-accent); }
@@ -53,7 +53,7 @@ const STYLE = `
 #hud-meta { display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 600; }
 #hud-meta .wallet { display: inline-flex; align-items: center; gap: 4px; }
 #hud-meta .wallet svg.ico { color: var(--hud-accent); width: 9px; height: 9px; }
-#hud-health { position: absolute; left: calc(8px + env(safe-area-inset-left)); bottom: calc(8px + env(safe-area-inset-bottom)); width: 120px; display: grid; grid-template-columns: 14px 1fr; gap: 6px; align-items: center; height: 14px; background: none; border: 0; padding: 0; transition: opacity 0.3s; }
+#hud #hud-health { backdrop-filter: none; -webkit-backdrop-filter: none; position: absolute; left: calc(8px + env(safe-area-inset-left)); bottom: calc(8px + env(safe-area-inset-bottom)); width: 120px; display: grid; grid-template-columns: 14px 1fr; gap: 6px; align-items: center; height: 14px; background: none; border: 0; padding: 0; transition: opacity 0.3s; }
 #hud-health.full { opacity: 0.4; }
 #hud-health svg.ico { color: var(--hud-bad); }
 #hud-slots { position: absolute; right: calc(8px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); display: flex; gap: 6px; }
@@ -73,7 +73,7 @@ const STYLE = `
 #hud-prompt-text .keycap.pill { padding: 0 8px; border-radius: 11px; }
 #hud-prompt-text .keycap.hold { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25), 0 0 0 3px var(--hud-accent); margin: 3px; }
 #hud-prompt-hold { width: 160px; height: 6px; margin: 4px auto 0; }
-#hud-downed { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); padding: 8px 20px; font-size: 22px; border-radius: 999px; border-color: var(--hud-bad); }
+#hud #hud-downed { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); padding: 8px 20px; font-size: 22px; border-radius: 999px; border-color: var(--hud-bad); }
 #hud .marker { position: absolute; transform: translate(-50%, -100%); display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; font-size: 12px; white-space: nowrap; border-radius: 999px; }
 #hud .marker::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--hud-bad); }
 @media (prefers-reduced-motion: reduce) { #hud .bar.low > i { animation: none; } #hud-slots .slot { transition: none; } #hud-health { transition: none; } }
@@ -125,7 +125,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
   const compassRight = el('div', compass, 'hud-compass-right');
   compassRight.textContent = '▶';
   const compassMarker = el('div', compass, 'hud-compass-marker');
-  const compassLabel = el('div', compassMarker, 'hud-compass-label');
+  const compassLabel = el('div', compass, 'hud-compass-label');
 
   const size = opts.touch ? MAP_SIZE_TOUCH : MAP_SIZE_DESKTOP;
   const view = mapViewFor(opts.route, size, MAP_MARGIN + size * (1 - Math.SQRT1_2) / 2);
@@ -188,7 +188,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
   const renderPrompt = (value: string) => {
     if (!changed(promptText, 'prompt', value)) return;
     promptText.replaceChildren();
-    if (value === '') return;
+    if (value.trim() === '') return;
     for (const part of splitPrompt(value)) {
       const wrap = el('span', promptText, undefined, 'part');
       if (part.key !== null) {
@@ -270,6 +270,14 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       toggle(compassLeft, model.compass.side !== -1);
       toggle(compassRight, model.compass.side !== 1);
       text(compassLabel, model.compass.label);
+      toggle(compassLabel, model.compass.label === '');
+      const m = model.compass.marker;
+      const labelPos = m !== null ? (m <= 0.7 ? `${(m * 100).toFixed(1)}%|` : `|${((1 - m) * 100).toFixed(1)}%`) : model.compass.side === 1 ? '|24px' : '24px|';
+      if (changed(compassLabel, 'pos', labelPos)) {
+        const [l, rt] = labelPos.split('|') as [string, string];
+        compassLabel.style.left = l === '' ? 'auto' : m !== null ? `calc(${l} + 8px)` : l;
+        compassLabel.style.right = rt === '' ? 'auto' : m !== null ? `calc(${rt} + 8px)` : rt;
+      }
 
       renderMap(model.mapEntities);
 
@@ -291,7 +299,11 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       model.slots.forEach((slot, i) => {
         const node = slotNodes[i];
         if (!node) return;
-        if (changed(node.icon, 'kind', slot.kind)) node.icon.innerHTML = slot.kind ? (SLOT_ICONS[slot.kind] ?? '') : '';
+        if (changed(node.icon, 'kind', slot.kind)) {
+          node.icon.replaceChildren();
+          const markup = slot.kind ? SLOT_ICONS[slot.kind] : undefined;
+          if (markup) icon(node.icon, markup);
+        }
         text(node.label, slot.label ?? '');
         flag(node.tile, 'empty', slot.kind === null);
         flag(node.tile, 'selected', slot.selected);

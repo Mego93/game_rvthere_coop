@@ -106,6 +106,7 @@ test('two players share a room, board the vehicle, and only the driver drives @k
     // The prompt has no size while it has no text, so it is only checked to be attached.
     await expect(page.locator('#hud-prompt')).toBeAttached();
     await expect(page.locator('#hud-health')).toHaveClass(/\bfull\b/);
+    await expect(page.locator('#hud-compass-label')).toBeVisible();
   }
 
   // Amal stands beside the driver's door and boards as the driver.
