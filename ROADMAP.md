@@ -43,6 +43,86 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | 23 | World art: solid shoulders and far terrain, HDRI sky and lighting, textured ground, CC0 models, decor scatter (in progress: the minimap window and new sounds are still to come) | in progress | claude/sharp-clarke-0zu1et | [plan](docs/superpowers/plans/step-23-world-art.md) | Owner, visual check |
 | 24 | Hosting on Cloudflare: a Worker serves the page and routes each room to its own Durable Object (the patched non-compat Rapier build runs in Workers); `npm run deploy:cf`; the specs run against the local Workers runtime | needs sign-off | claude/sharp-clarke-0zu1et | [plan](docs/superpowers/plans/step-24-cloudflare-hosting.md) | Owner: deploy with their Cloudflare login |
 | 25 | Obstacles on the road (crate wall, gates, roadblock), a solo-finish proof, a stuck-vehicle reset (hold X), a controls help (H) | needs sign-off | claude/sharp-clarke-0zu1et | [plan](docs/superpowers/plans/step-25-obstacles-and-recovery.md) | Owner, by playing it |
+| 26 | Feel and clarity: sprint, crouch and slide on foot; the seat you are in is shown when you board; first-person camera investigated | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner, by playing it |
+| 27 | The real route: the airport course rebuilt from the real road from the owner's villa to Marrakech airport | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner |
+| 28 | A living road: goats and scooters that appear as you approach, items and bonuses that spawn at random | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner, by playing it |
+| 29 | Souleyman: a Moroccan NPC on the road saves your progress, replacing the blue checkpoint marker | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner |
+| 30 | Lobby and chat: an animated, responsive lobby; text chat in the lobby and in the game | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner |
+| 31 | Character customization: round glasses, sweatshirt, suit and more, seen by every player | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner |
+
+## Owner feedback 2026-11-15
+
+The owner played the build after step 25 and wrote these points (kept close to their words). Each becomes the step shown. Items marked **Open** are questions for the owner; nothing is built on a guess.
+
+The owner's real coordinates are never written in this repository (decision of 2026-11-11). The route is fetched once, converted to local metres from the start and stored without latitude or longitude.
+
+### Step 26: feel and clarity
+- "Feels slow, can't sprint or crouch (with slide movement etc)." On-foot movement gains sprint, crouch and a slide (sprint then crouch). Starting values are mine; the feel is the owner's call.
+- "When entering the vehicle we don't know which seat we are in." Show the seat on boarding (driver, front passenger, rear seats) and keep it visible in the HUD while seated.
+- "I don't know if first person is better? Investigate (so more real model instead of blocky ones)." Investigate a first-person camera (on foot and in the vehicle: from the driver's seat, with the real model's interior), what it costs (the Lodgy model has its interior removed, the character is drawn only for others), and report before any build. A prototype camera behind a flag is allowed.
+- **Open**: should sprint drain a stamina bar, or be free? Is the slide only a cosmetic dip, or does it carry speed (and under what height)? Does sprint work while carrying a prop or the winch hook?
+
+### Step 27: the real route
+- "Airport is a simple straight road. If you can get the road from [the villa] to the Marrakech airport (use a maps API; unsure if Leaflet can be used)." A fetch of the real driving route succeeded through OSRM (OpenStreetMap data): 22.3 km, about 37 min by car, 725 points. Leaflet is only a browser map viewer and is not needed to build the course; it could be used later for a map preview.
+- The route is converted to segments (curves, straights, slopes) of the existing course builder, keeping the real turns and junction feel.
+- **Open**: scale. The real route is 22 km; the current course is 2.6 km. Options: about 6 to 7 km (3.5 to 1, recommended), or the full 22 km (about 25 minutes of driving, a dozen fuel stops).
+- **Open**: whether the villa itself is the start scene (the three photos show a pool house, a pickleball court and a gym pavilion at dusk) and the airport the finish.
+- **Open**: roads in the real route are all paved; keep sand, ford and bank segments by inserting them at chosen points, or follow reality only?
+- Attribution: OpenStreetMap contributors (ODbL) must be credited in CREDITS.md if its data ships.
+
+### Step 28: a living road
+- "Also for the road, add some holes, some hills, some crazy/parkour that will make use of all items." The course gets: **holes** (potholes and craters that slow or jolt the vehicle, some deep enough to need the winch), **hills** (real slopes and crests, a hill the RV needs the winch for, a jump crest), and **parkour sections** built so that every item and tool is useful at least once: jerrycan (fuel), toolbox (repair), health kit (revive), the winch (pull over an obstacle or out of a hole), crates (fill a hole or climb), barriers (push).
+- "Not enough obstacles that are scattered; add for example animals (goats) or scooters that can annoy you when you drive (spawn when close or something); same for the bonus and items that are spawned randomly."
+- Goats and scooters appear as the vehicle nears (server-controlled so every player sees the same, with a seeded random so runs are reproducible), move across the road, and cost time or health on contact.
+- Items and bonuses spawn at random positions along the course (instead of fixed pickups), seeded per run.
+- **Open**: should a goat or scooter be hurt by a collision? Is hitting animals penalised (time or health) or forgiven? Do scooters honk or chase?
+- **Open**: how many at once (the snapshot size limit is 16 KB for the full snapshot)?
+
+### Winch and tutorial (added to step 26, or its own step 32 if it grows)
+- "Hook is not very resistant? To add in a tutorial or to make it better, I don't know." The owner feels the winch hook/cable is weak. Today the cable is a capped spring-and-damper force (a fraction of the vehicle's weight, decision 2026-11-12) and a held hook is pulled from the hands beyond 25 m.
+- Investigate before changing: measure what the cable can pull (the RV on the bank, a barrier, a vehicle out of a hole) and where the player loses the hook; then either raise the cap/stiffness (within the stability limit found by `experiments/cable`) or explain it with a short tutorial. A tutorial covers walking, boarding, driving, the winch, items, reset, the checkpoint NPC.
+- **Open**: strengthen the winch, add a tutorial, or both?
+
+### Step 29: Souleyman
+- "Checkpoints are too obvious (the blue thing). Set it with a Moroccan NPC (check a model on Sketchfab) on the road, named Souleyman, that saves your progress."
+- A Moroccan character (Sketchfab, CC0 or CC-BY, low poly) stands at the road side at each checkpoint, named Souleyman; reaching him saves progress (the existing checkpoint mechanism), with a short greeting line and a sound.
+- The blue marker is removed (the minimap and compass still show the next checkpoint).
+- **Open**: one Souleyman for every checkpoint, or a different NPC each time? Is the NPC a prop the players can talk to with interact, or only a marker that triggers on arrival?
+
+### Step 30: lobby and chat
+- "The menu lobby is too simple; add some animations, with responsive content, and if possible a chat, both in game and in the lobby."
+- An animated lobby (background, transitions, player cards) that works on phone and desktop.
+- A text chat in the lobby and during the run: new protocol messages, length and rate limits, name display, simple profanity-free handling is not planned.
+- **Open**: should the chat be text only, or also quick phrases and emotes for phones? Should it be hidden by default in the game?
+
+### Step 31: character customization
+- "Add customization for the character: round glasses, sweatshirt, suit etc."
+- A customization screen in the lobby; accessories (glasses) and outfits (sweatshirt, suit) chosen per player, sent in the join message, drawn on every player's character.
+- **Open**: free choice or unlockable with coins? Colours? How many items at launch? The character model is the Kenney character; adding outfits may need a new, rigged model.
+
+### Owner's answers (2026-11-15)
+- Route scale: **the full 22 km** (about 25 minutes of driving; the course needs fuel stops along the route and a fuel and repair plan to keep it finishable).
+- Movement: **free sprint (no stamina) and a slide that keeps speed** (sprint, then crouch).
+- Animals: **annoying with a small penalty**: knocked aside, cost a few seconds or a little vehicle health, scooters honk; goats cannot be killed.
+- Souleyman: **one look at every checkpoint, saves on arrival** (greeting and sound).
+- Winch: **strengthen it and add a tutorial**.
+- Customization: **free choice, locked to six characters** (one per player slot, six in all); the owner will add the pictures afterwards. Still to confirm when the pictures arrive: is each of the six a fixed character that wears the chosen glasses, sweatshirt or suit, or are the six outfits the whole choice?
+- Chat: **text plus quick phrases**, hidden in the game until opened.
+- Start scene: **the villa is the start (pool, court, gym pavilion at dusk), the airport is the finish**. The villa photos stay out of the repository; the villa scene is drawn from them, not copied.
+
+### Step 31: the six characters (confirmed by the owner)
+The photos stay out of the repository. Each character is a stylised low-poly figure built from clothing and hair, not a likeness; its name shows above it. The descriptions are right as written. Default outfits come from the photos; every player can customize on top (glasses, sweatshirt, suit and more).
+1. **Sounile**: black half-zip sweater, light jeans, short dark hair, moustache.
+2. **Rafael**: bald, round glasses (default), dark button jacket over a dark tee, olive trousers, short beard.
+3. **Nandan**: dark navy sweater over a collared shirt, beige trousers, dark wavy hair.
+4. **Alexander**: cream zip cardigan with red trim, olive trousers, short dark hair.
+5. **Luiz**: black hoodie, beige trousers, light swept hair.
+6. **Huu** (the owner): black tee, round glasses (default), dark longer hair.
+The lobby offers these six (one per slot, locked to six) with the customization options on top. The six are fixed characters; the glasses, sweatshirt, suit and other items are changeable add-ons.
+
+### Order and dependencies
+26 first (small), then 27 and 28 together (course data), 29 uses 27's checkpoints, 30 and 31 both need protocol fields and come last. Every step follows the usual workflow (plan, review, owner go-ahead, tasks with review, Opus branch review, checks).
+
 
 ## Later specs
 
