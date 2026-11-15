@@ -63,6 +63,8 @@ export interface OverlayData {
   targetTime: number;
   // True on a touch device, which changes the control line.
   touch?: boolean;
+  // The local camera eye height above the feet, shown in the debug overlay.
+  eye?: number;
 }
 
 const STOWED: CableSnapshot = { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 0, 0), length: 0, reel: 0 };
@@ -100,6 +102,7 @@ export function interactAction(
     items: props.filter((prop) => Object.hasOwn(ITEM_KINDS, prop.kind)),
     freeSlot: local.inventory.includes(null),
     heldProps,
+    crouched: local.stance !== undefined,
     cable: cable ?? STOWED,
     anchors,
     stops: stops.map((stop) => ({
@@ -163,7 +166,7 @@ export function useHint({ lobby, config, vehicle, players, localId, aim }: Overl
 }
 
 // The debug text shown until the real HUD exists.
-export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses, cable, anchors, status, stops, targetTime, touch }: OverlayData): string {
+export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses, cable, anchors, status, stops, targetTime, touch, eye }: OverlayData): string {
   const names = lobby.players.map((player) => {
     const snapshot = players.find((candidate) => candidate.playerId === player.playerId);
     return snapshot ? `${player.name} (${snapshot.seat ?? 'on foot'})` : player.name;
@@ -197,6 +200,7 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
       lines.push(`you      ${fixed(predicted.x)} ${fixed(predicted.y)} ${fixed(predicted.z)}   (predicted)`);
       if (server) lines.push(`server   ${fixed(server.x)} ${fixed(server.y)} ${fixed(server.z)}`);
     }
+    if (eye !== undefined) lines.push(`eye      ${fixed(eye, 2)}`);
     const local = players.find((player) => player.playerId === localId);
     const hint = local ? interactHint(config, vehicle, local, players, aim.yaw, aim.pitch, propPoses, cable, anchors, stops) : null;
     if (hint) lines.push(`hint     ${hint}`);

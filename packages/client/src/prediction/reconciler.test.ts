@@ -17,19 +17,32 @@ beforeAll(async () => {
   await RAPIER.init();
 });
 
-// Exact arithmetic: x advances by moveY; vy counts jump presses.
+// Exact arithmetic: x advances by moveY; vy counts jump presses and slideCooldown crouch presses; crouch is the crouched flag and sprint a slide.
 const fake = (): Predictor => ({
   setVehicle() {},
   setProps() {},
-  stepPlayer(state, input, previousJump) {
+  stepPlayer(state, input, previous) {
     return {
       ...state,
       pos: { x: state.pos.x + input.moveY, y: state.pos.y, z: state.pos.z },
-      vy: state.vy + (input.jump && !previousJump ? 1 : 0),
+      vy: state.vy + (input.jump && !previous.jump ? 1 : 0),
+      crouched: input.crouch === true,
+      slideTicks: input.sprint === true ? 1 : 0,
+      slideCooldown: state.slideCooldown + (input.crouch === true && !previous.crouch ? 1 : 0),
     };
   },
   dispose() {},
 });
+
+const STANCE = {
+  crouched: false,
+  slideTicks: 0,
+  slideCooldown: 0,
+  slideAir: 0,
+  slideDir: { x: 0, z: 0 },
+  carrying: false,
+  holdsProp: false,
+};
 
 const at = (x: number, vy = 0): PredictedState => ({
   pos: vec3(x, 0, 0),
@@ -37,6 +50,7 @@ const at = (x: number, vy = 0): PredictedState => ({
   carry: { x: 0, z: 0 },
   vy,
   grounded: true,
+  ...STANCE,
 });
 const step = (moveY = 1, jump = false): InputFields => ({ ...NEUTRAL_INPUT, moveY, jump });
 
@@ -63,7 +77,7 @@ describe('activation and record', () => {
   test('the first correct has no offset and does not snap', () => {
     const r = active(5);
     const v = r.view(0.1, 1);
-    expect(v).toEqual({ pos: vec3(5, 0, 0), snapped: false });
+    expect(v).toEqual({ pos: vec3(5, 0, 0), snapped: false, crouched: false, sliding: false });
   });
 
   test('record predicts while active and returns the state', () => {
@@ -98,7 +112,7 @@ describe('X4 correct', () => {
   test('resetting to the same state with nothing pending changes nothing', () => {
     const r = active(7);
     r.correct(at(7), 0);
-    expect(r.view(0.1, 1)).toEqual({ pos: vec3(7, 0, 0), snapped: false });
+    expect(r.view(0.1, 1)).toEqual({ pos: vec3(7, 0, 0), snapped: false, crouched: false, sliding: false });
   });
 
   test('replay does not re-jump when the acknowledged input held jump', () => {
@@ -149,7 +163,7 @@ describe('X5 offset', () => {
     const r = active();
     r.correct(at(1.5), 0);
     const first = r.view(0.016, 1)!;
-    expect(first).toEqual({ pos: vec3(1.5, 0, 0), snapped: true });
+    expect(first).toEqual({ pos: vec3(1.5, 0, 0), snapped: true, crouched: false, sliding: false });
     expect(r.view(0.016, 1)!.snapped).toBe(false);
   });
 
@@ -157,13 +171,13 @@ describe('X5 offset', () => {
     const r = active();
     r.correct(at(0.7), 0);
     r.correct(at(1.4), 0);
-    expect(r.view(0, 1)).toEqual({ pos: vec3(1.4, 0, 0), snapped: true });
+    expect(r.view(0, 1)).toEqual({ pos: vec3(1.4, 0, 0), snapped: true, crouched: false, sliding: false });
   });
 
   test('a 0.001 m correction is ignored but the state is reset', () => {
     const r = active();
     r.correct(at(0.001), 0);
-    expect(r.view(0, 1)).toEqual({ pos: vec3(0.001, 0, 0), snapped: false });
+    expect(r.view(0, 1)).toEqual({ pos: vec3(0.001, 0, 0), snapped: false, crouched: false, sliding: false });
     expect(r.record(1, step(0))?.pos.x).toBe(0.001);
   });
 });
@@ -227,7 +241,7 @@ describe('X8 suspend', () => {
     r.correct(at(100), 6);
     expect(r.active).toBe(true);
     expect(r.record(12, step(0))?.pos.x).toBe(105);
-    expect(r.view(0, 1)).toEqual({ pos: vec3(105, 0, 0), snapped: false });
+    expect(r.view(0, 1)).toEqual({ pos: vec3(105, 0, 0), snapped: false, crouched: false, sliding: false });
   });
 
   test('inactive record keeps the last jump flag and respects the cap', () => {
@@ -257,6 +271,45 @@ describe('X9 stale acknowledgements', () => {
   });
 });
 
+describe('crouch and slide', () => {
+  const press = (crouch: boolean, sprint = false): InputFields => ({ ...NEUTRAL_INPUT, moveY: 0, crouch, sprint });
+
+  test('view reports the newest predicted tick\'s crouch and slide', () => {
+    const r = active();
+    r.record(1, press(false));
+    expect(r.view(0, 1)).toMatchObject({ crouched: false, sliding: false });
+    r.record(2, press(true));
+    expect(r.view(0, 1)).toMatchObject({ crouched: true, sliding: false });
+    r.record(3, press(true, true));
+    expect(r.view(0, 1)).toMatchObject({ crouched: true, sliding: true });
+  });
+
+  test('a crouch is a press once: held across records it counts one, a release and a new press two', () => {
+    const r = active();
+    for (let seq = 1; seq <= 3; seq++) r.record(seq, press(true));
+    expect(r.record(4, press(false))?.slideCooldown).toBe(1);
+    expect(r.record(5, press(true))?.slideCooldown).toBe(2);
+  });
+
+  test('replay after a correction keeps the crouch edge: an ack in the middle of a hold is not a new press', () => {
+    const r = active();
+    for (let seq = 1; seq <= 4; seq++) r.record(seq, press(true));
+    r.correct(at(0), 2);
+    // Inputs 3 and 4 replay on the server's state: input 3 follows an acked crouch, so no press.
+    expect(r.record(5, press(true))?.slideCooldown).toBe(0);
+    r.correct(at(0), 4);
+    expect(r.record(6, press(true))?.slideCooldown).toBe(0);
+  });
+
+  test('the edge survives a pending list trimmed past its limit', () => {
+    const r = active();
+    for (let seq = 1; seq <= PREDICTION_MAX_PENDING + 5; seq++) r.record(seq, press(true));
+    r.correct(at(0), 0);
+    // The server state, not the held crouch, decides: the oldest kept input follows a dropped crouch.
+    expect(r.record(PREDICTION_MAX_PENDING + 6, press(true))?.slideCooldown).toBe(0);
+  });
+});
+
 describe('with the real predictor', () => {
   const course = getCourse('test');
   const vehicle = getVehicleConfig('lodgy');
@@ -266,6 +319,7 @@ describe('with the real predictor', () => {
     carry: { x: 0, z: 0 },
     vy: 0,
     grounded: false,
+    ...STANCE,
   };
   const script = (i: number): InputFields => ({
     ...NEUTRAL_INPUT,
@@ -280,12 +334,12 @@ describe('with the real predictor', () => {
     const r = createReconciler(predictor);
     r.correct(start, 0);
     let state = start;
-    let before = false;
+    let before = { jump: false, crouch: false };
     let at60: PredictedState = start;
     for (let i = 1; i <= 120; i++) {
       const input = script(i);
       state = predictor.stepPlayer(state, input, before);
-      before = input.jump;
+      before = { jump: input.jump, crouch: input.crouch === true };
       if (i === 60) at60 = state;
       r.record(i, input);
     }

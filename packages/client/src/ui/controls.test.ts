@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { KEY_BINDINGS } from '../input/keyboard';
 import { FINAL_RESTART_PENALTY } from '@lodgy/shared';
-import { CONTROLS, EXTRA_CODES, createControlsPanel, isHelpKey, missingFromControls } from './controls';
+import { CONTROLS, EXTRA_CODES, createControlsPanel, isHelpKey, keyLabel, keyLabels, missingFromControls } from './controls';
 
 const plain = { code: 'KeyH', repeat: false, ctrlKey: false, metaKey: false, altKey: false };
 
@@ -73,4 +73,16 @@ test('the Credits link opens the credits panel through the callback, closes the 
 
 test('the reset line states the final restart penalty', () => {
   expect(CONTROLS.find((entry) => entry.keys.includes('KeyX'))!.action).toContain(`${FINAL_RESTART_PENALTY} s`);
+});
+
+test('B13: Shift, C and slide are listed, and both Shift codes show as one cap', () => {
+  const rows = (code: string) => CONTROLS.filter((entry) => entry.keys.includes(code)).map((entry) => entry.action);
+  expect(rows('ShiftLeft').join('|')).toMatch(/sprint/i);
+  expect(rows('ShiftRight').join('|')).toMatch(/sprint/i);
+  expect(rows('KeyC').join('|')).toMatch(/crouch/i);
+  expect(rows('KeyC').join('|')).toMatch(/slide/i);
+  expect(keyLabel('ShiftLeft')).toBe('Shift');
+  expect(keyLabel('ShiftRight')).toBe('Shift');
+  expect(keyLabels(['ShiftLeft', 'ShiftRight'])).toEqual(['Shift']);
+  expect(keyLabels(['ShiftLeft', 'KeyC'])).toEqual(['Shift', 'C']);
 });

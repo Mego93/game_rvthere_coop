@@ -1,15 +1,14 @@
-import { GRAVITY, PLAYER_HEIGHT, PLAYER_RADIUS, PROP_KINDS, TICK_DT, type PropKind } from './constants';
+import { GRAVITY, PLAYER_RADIUS, PROP_KINDS, TICK_DT, type PropKind } from './constants';
 import type { BuiltCourse } from './course';
 import { GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, add, rotate, scale, type Quat, type Vec3 } from './math';
-import { wishVelocity } from './player';
 import { sanitiseInput, type InputFields, type PlayerSnapshot } from './protocol';
 import type { PropSnapshot } from './props';
 import type { Rapier, RigidBody } from './rapier';
 import { settleQueries } from './settle';
 import { buildStatics } from './statics';
 import type { VehicleConfig } from './vehicles';
-import { createWalkController, stepWalk } from './walk';
+import { capsuleHalfSegment, createWalkController, stepWalk } from './walk';
 
 export interface PredictedState {
   pos: Vec3;
@@ -17,6 +16,14 @@ export interface PredictedState {
   carry: { x: number; z: number };
   vy: number;
   grounded: boolean;
+  crouched: boolean;
+  slideTicks: number;
+  slideCooldown: number;
+  slideAir: number;
+  slideDir: { x: number; z: number };
+  // Anything in the hands, and a prop in them; constant while the inputs replay (picking up comes from the server).
+  carrying: boolean;
+  holdsProp: boolean;
 }
 
 export interface Predictor {
@@ -24,20 +31,41 @@ export interface Predictor {
   setVehicle(pos: Vec3, rot: Quat): void;
   // Makes the prop stand-ins match this list: new ids are created, listed ones moved, absent ones removed.
   setProps(props: readonly PropSnapshot[]): void;
-  // One tick: the next state for this input. `previousJump` is the jump button of the input before.
-  stepPlayer(state: PredictedState, input: InputFields, previousJump: boolean): PredictedState;
+  // One tick: the next state for this input. `previous` holds the jump and crouch buttons of the input before.
+  stepPlayer(state: PredictedState, input: InputFields, previous: { jump: boolean; crouch: boolean }): PredictedState;
   dispose(): void;
 }
 
-const copyState = (state: PredictedState): PredictedState => ({
+export const copyState = (state: PredictedState): PredictedState => ({
   pos: { ...state.pos },
   walk: { ...state.walk },
   carry: { ...state.carry },
   vy: state.vy,
   grounded: state.grounded,
+  crouched: state.crouched,
+  slideTicks: state.slideTicks,
+  slideCooldown: state.slideCooldown,
+  slideAir: state.slideAir,
+  slideDir: { ...state.slideDir },
+  carrying: state.carrying,
+  holdsProp: state.holdsProp,
 });
 
-export const predictedFrom = (player: PlayerSnapshot): PredictedState => copyState(player);
+export const predictedFrom = (player: PlayerSnapshot): PredictedState =>
+  copyState({
+    pos: player.pos,
+    walk: player.walk,
+    carry: player.carry,
+    vy: player.vy,
+    grounded: player.grounded,
+    crouched: player.stance === 'crouch' || player.stance === 'slide',
+    slideTicks: player.slide?.ticks ?? 0,
+    slideCooldown: player.slide?.cooldown ?? 0,
+    slideAir: player.slide?.air ?? 0,
+    slideDir: { x: player.slide?.dirX ?? 0, z: player.slide?.dirZ ?? 0 },
+    carrying: player.hands !== null,
+    holdsProp: player.hands !== null && player.hands !== 'hook',
+  });
 
 export function createPredictor(rapier: Rapier, course: BuiltCourse, vehicle: VehicleConfig): Predictor {
   const physics = new rapier.World({ x: 0, y: -GRAVITY, z: 0 });
@@ -77,11 +105,17 @@ export function createPredictor(rapier: Rapier, course: BuiltCourse, vehicle: Ve
 
     const controller = createWalkController(rapier, physics);
     const collider = physics.createCollider(
-      rapier.ColliderDesc.capsule(PLAYER_HEIGHT / 2 - PLAYER_RADIUS, PLAYER_RADIUS).setCollisionGroups(
+      rapier.ColliderDesc.capsule(capsuleHalfSegment(false), PLAYER_RADIUS).setCollisionGroups(
         groups(GROUP_PLAYER, 0),
       ),
     );
-    const env = { controller, collider, groups: groups(GROUP_WORLD, GROUP_WORLD) };
+    const env = {
+      controller,
+      collider,
+      groups: groups(GROUP_WORLD, GROUP_WORLD),
+      physics,
+      standing: new rapier.Capsule(capsuleHalfSegment(false), PLAYER_RADIUS),
+    };
     let disposed = false;
     const alive = () => {
       if (disposed) throw new Error('Predictor is disposed');
@@ -118,11 +152,21 @@ export function createPredictor(rapier: Rapier, course: BuiltCourse, vehicle: Ve
         for (const id of [...propBodies.keys()]) if (!listed.has(id)) removeProp(id);
         settle();
       },
-      stepPlayer(state, input, previousJump) {
+      stepPlayer(state, input, previous) {
         alive();
         const fields = sanitiseInput(input);
         const next: PredictedState = copyState(state);
-        stepWalk(env, next, fields.jump && !previousJump, wishVelocity(fields.yaw, fields.moveX, fields.moveY));
+        stepWalk(env, next, {
+          jumpPressed: fields.jump && !previous.jump,
+          crouchPressed: fields.crouch === true && !previous.crouch,
+          crouch: fields.crouch === true,
+          sprint: fields.sprint === true,
+          carrying: state.carrying,
+          holdsProp: state.holdsProp,
+          moveX: fields.moveX,
+          moveY: fields.moveY,
+          yaw: fields.yaw,
+        });
         return next;
       },
       dispose() {

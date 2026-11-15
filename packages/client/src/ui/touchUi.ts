@@ -18,6 +18,7 @@ const STYLE = `
 #touch-ui[hidden], #touch-ui [hidden] { display: none; }
 #touch-ui button { pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; color: #fff; background: rgba(0, 0, 0, 0.45); border: 2px solid rgba(255, 255, 255, 0.7); border-radius: 50%; font: inherit; padding: 0; }
 #touch-ui button.down { background: rgba(255, 255, 255, 0.45); }
+#touch-ui button.on { border-color: #ffd34e; box-shadow: 0 0 0 2px #ffd34e; }
 #touch-actions { position: absolute; right: calc(12px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(2, 64px); gap: 10px; }
 #touch-actions button { width: 64px; height: 64px; }
 #touch-menu { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); width: 56px; height: 36px; border-radius: 10px; font-size: 12px; }
@@ -94,8 +95,18 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
     return release;
   };
 
+  // The Sprint toggle: a latched level the source reads; every release (cancel, hidden page, boarding, downed) turns it off.
+  let sprintOn = false;
+  const setSprint = (on: boolean) => {
+    if (sprintOn === on) return;
+    sprintOn = on;
+    sprint.classList.toggle('on', on);
+    sprint.setAttribute('aria-pressed', String(on));
+    buttonHandler('sprint', on);
+  };
   const releaseAll = () => {
     for (const release of releases) release();
+    setSprint(false);
   };
   const make = (id: string, label: string, onChange: (down: boolean) => void) => {
     const element = document.createElement('button');
@@ -114,11 +125,13 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
   const reelIn = make('touch-reel-in', 'Reel in', (down) => buttonHandler('reelIn', down));
   const reelOut = make('touch-reel-out', 'Reel out', (down) => buttonHandler('reelOut', down));
   const reset = make('touch-reset', 'Reset', (down) => buttonHandler('reset', down));
+  const sprint = make('touch-sprint', 'Sprint', (down) => down && setSprint(!sprintOn));
+  sprint.setAttribute('aria-pressed', 'false');
   use.hidden = true;
   reset.hidden = true;
   reelIn.hidden = true;
   reelOut.hidden = true;
-  actions.append(reset, reelIn, reelOut, use, interact, jump);
+  actions.append(sprint, reset, reelIn, reelOut, use, interact, jump);
 
   const menu = make('touch-menu', 'Menu', (down) => down && menuHandler());
 
@@ -169,6 +182,10 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
         hide(reelOut, !view.reelVisible);
       }
       if (changed.has('resetVisible')) hide(reset, !view.resetVisible);
+      if (changed.has('sprintVisible')) {
+        hide(sprint, !view.sprintVisible);
+        if (!view.sprintVisible) setSprint(false);
+      }
       if (changed.has('slots')) view.slots.forEach((kind, index) => (slotButtons[index]!.textContent = slotLabel(kind)));
       if (changed.has('slots') || changed.has('selected')) {
         slotButtons.forEach((element, index) => {

@@ -6,7 +6,7 @@ import { JOYSTICK_DEAD_ZONE, JOYSTICK_RADIUS, LONG_PRESS, TOUCH_LOOK_SENSITIVITY
 import { createButton } from './touchButtons';
 import { createTouchTracker } from './touchTracker';
 
-export type TouchButtonName = 'interact' | 'use' | 'jump' | 'reelIn' | 'reelOut' | 'reset';
+export type TouchButtonName = 'interact' | 'use' | 'jump' | 'reelIn' | 'reelOut' | 'reset' | 'sprint';
 
 // What the touch UI offers the source: button and slot presses, and a way to cancel them all.
 export interface TouchControls {
@@ -37,16 +37,18 @@ interface TouchLike {
   clientY: number;
 }
 
-const BUTTON_NAMES: TouchButtonName[] = ['interact', 'use', 'jump', 'reelIn', 'reelOut', 'reset'];
+const BUTTON_NAMES: Exclude<TouchButtonName, 'sprint'>[] = ['interact', 'use', 'jump', 'reelIn', 'reelOut', 'reset'];
 
 export function createTouchSource({ surface, win, doc, width, controls }: TouchSourceOptions): TouchSource {
   const tracker = createTouchTracker(width);
   const look = createLook();
   const buttons = Object.fromEntries(BUTTON_NAMES.map((name) => [name, createButton()])) as Record<
-    TouchButtonName,
+    Exclude<TouchButtonName, 'sprint'>,
     ReturnType<typeof createButton>
   >;
   let slot: 0 | 1 | 2 = 0;
+  // The Sprint toggle's state, set by the UI (down means on).
+  let sprint = false;
   let dropLatched = false;
   let longPress: ReturnType<typeof setTimeout> | null = null;
   // The slot whose press owns the timer.
@@ -62,6 +64,7 @@ export function createTouchSource({ surface, win, doc, width, controls }: TouchS
     tracker.cancelAll();
     for (const button of Object.values(buttons)) button.reset();
     dropLatched = false;
+    sprint = false;
     clearLongPress();
     controls.releaseAll();
   };
@@ -98,7 +101,8 @@ export function createTouchSource({ surface, win, doc, width, controls }: TouchS
 
   controls.onButton((name, down) => {
     if (disposed) return;
-    if (down) buttons[name].down();
+    if (name === 'sprint') sprint = down;
+    else if (down) buttons[name].down();
     else buttons[name].up();
   });
   controls.onSlot((pressed, down) => {
@@ -142,6 +146,7 @@ export function createTouchSource({ surface, win, doc, width, controls }: TouchS
         slot,
         drop,
         reset: buttons.reset.sample(),
+        ...(sprint ? { sprint: true } : {}),
       };
     },
     aim() {

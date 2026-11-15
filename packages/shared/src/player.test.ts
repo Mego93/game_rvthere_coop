@@ -36,7 +36,7 @@ function harness(course: BuiltCourse = testGround, spawn: Pose = ORIGIN) {
   const previous = new Map<string, InputFields>();
   const vehicleRun = { controls: { throttle: 0, steer: 0, brake: false }, beforePhysics: () => {} };
   const tick = (inputs: Record<string, Partial<InputFields>> = {}) => {
-    const map = new Map<string, { fields: InputFields; pressed: { jump: boolean; interact: boolean; drop: boolean } }>();
+    const map = new Map<string, { fields: InputFields; pressed: { jump: boolean; interact: boolean; drop: boolean; crouch: boolean } }>();
     for (const player of players.all()) {
       const fields = { ...NEUTRAL_INPUT, ...inputs[player.id] };
       const before = previous.get(player.id) ?? NEUTRAL_INPUT;
@@ -46,6 +46,7 @@ function harness(course: BuiltCourse = testGround, spawn: Pose = ORIGIN) {
           jump: fields.jump && !before.jump,
           interact: fields.interact && !before.interact,
           drop: fields.drop && !before.drop,
+          crouch: fields.crouch === true && before.crouch !== true,
         },
       });
       previous.set(player.id, fields);

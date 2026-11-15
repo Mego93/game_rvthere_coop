@@ -3,6 +3,7 @@ import {
   PREDICTION_MAX_PENDING,
   PREDICTION_SMOOTH_RATE,
   PREDICTION_TELEPORT_DISTANCE,
+  copyState,
   type InputFields,
   type PredictedState,
   type Predictor,
@@ -14,8 +15,8 @@ export interface Reconciler {
   record(seq: number, input: InputFields): PredictedState | null;
   // A snapshot arrived with the local player unseated and not on the vehicle: reset to the server's state and replay the inputs after `ackSeq`. The first call activates the reconciler.
   correct(server: PredictedState, ackSeq: number): void;
-  // The state to draw: the previous and current predicted positions blended by `alpha` (0 to 1, from the fixed stepper) plus the fading offset; `dt` advances the fade.
-  view(dt: number, alpha: number): { pos: Vec3; snapped: boolean } | null;
+  // The state to draw: the previous and current predicted positions blended by `alpha` (0 to 1, from the fixed stepper) plus the fading offset; `dt` advances the fade. `crouched` and `sliding` are the newest predicted tick's.
+  view(dt: number, alpha: number): { pos: Vec3; snapped: boolean; crouched: boolean; sliding: boolean } | null;
   // Prediction off (seated, on the vehicle, missing from the snapshot): stop predicting and clear the offset. The recorded inputs are kept.
   suspend(): void;
   readonly active: boolean;
@@ -31,7 +32,9 @@ const length = (v: Vec3) => Math.hypot(v.x, v.y, v.z);
 export function createReconciler(predictor: Predictor): Reconciler {
   let pending: Pending[] = [];
   let lastJump = false; // jump flag of the newest recorded input
+  let lastCrouch = false;
   let ackedJump = false; // jump flag of the newest input dropped from `pending`
+  let ackedCrouch = false;
   let lastAck = -1;
   let active = false;
   let current: PredictedState | null = null;
@@ -52,12 +55,14 @@ export function createReconciler(predictor: Predictor): Reconciler {
       if (pending.length > PREDICTION_MAX_PENDING) {
         const dropped = pending.splice(0, pending.length - PREDICTION_MAX_PENDING);
         ackedJump = dropped[dropped.length - 1]!.input.jump;
+        ackedCrouch = dropped[dropped.length - 1]!.input.crouch === true;
       }
       if (active && current) {
         previous = current.pos;
-        current = predictor.stepPlayer(current, input, lastJump);
+        current = predictor.stepPlayer(current, input, { jump: lastJump, crouch: lastCrouch });
       }
       lastJump = input.jump;
+      lastCrouch = input.crouch === true;
       return current;
     },
     correct(server, ackSeq) {
@@ -65,17 +70,22 @@ export function createReconciler(predictor: Predictor): Reconciler {
       lastAck = ackSeq;
       let discarded = 0;
       while (discarded < pending.length && pending[discarded]!.seq <= ackSeq) discarded += 1;
-      if (discarded > 0) ackedJump = pending[discarded - 1]!.input.jump;
+      if (discarded > 0) {
+        ackedJump = pending[discarded - 1]!.input.jump;
+        ackedCrouch = pending[discarded - 1]!.input.crouch === true;
+      }
       const lost = pending.length > 0 && ackSeq + 1 < pending[0]!.seq;
       pending = pending.slice(discarded);
 
-      let state: PredictedState = { ...server, pos: { ...server.pos }, walk: { ...server.walk }, carry: { ...server.carry } };
+      let state: PredictedState = copyState(server);
       let before = state.pos;
       let jump = ackedJump;
+      let crouch = ackedCrouch;
       for (const { input } of pending) {
         before = state.pos;
-        state = predictor.stepPlayer(state, input, jump);
+        state = predictor.stepPlayer(state, input, { jump, crouch });
         jump = input.jump;
+        crouch = input.crouch === true;
       }
 
       if (active && current) {
@@ -108,7 +118,7 @@ export function createReconciler(predictor: Predictor): Reconciler {
         y: previous.y * b + current.pos.y * a + offset.y,
         z: previous.z * b + current.pos.z * a + offset.z,
       };
-      const result = { pos, snapped };
+      const result = { pos, snapped, crouched: current.crouched, sliding: current.slideTicks > 0 };
       snapped = false;
       return result;
     },

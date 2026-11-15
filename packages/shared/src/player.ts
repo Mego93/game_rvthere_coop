@@ -8,6 +8,7 @@ import {
   VEHICLE_HIT_DAMAGE,
   VEHICLE_HIT_SPEED,
   PLAYER_CONTROLLER_OFFSET,
+  PLAYER_CROUCH_EYE_HEIGHT,
   PLAYER_EYE_HEIGHT,
   PLAYER_HEIGHT,
   PLAYER_MAX_HEALTH,
@@ -39,7 +40,7 @@ import type { Props } from './props';
 import { contactPoint, pushForce, type PushIntent } from './push';
 import type { Rapier, RapierWorld, RigidBody } from './rapier';
 import type { Vehicle } from './vehicle';
-import { createWalkController, stepWalk } from './walk';
+import { capsuleHalfSegment, capsuleHeight, createWalkController, placeCapsule, stepWalk, wishDirection } from './walk';
 import type { SeatConfig } from './vehicles';
 
 export interface GroundRef {
@@ -61,6 +62,13 @@ export interface PlayerState {
   carry: { x: number; z: number };
   vy: number;
   grounded: boolean;
+  // Crouching or sliding: the capsule is short and the eye low.
+  crouched: boolean;
+  // The slide's whole ticks left, its cooldown, its ticks in the air and its direction; see WalkState.
+  slideTicks: number;
+  slideCooldown: number;
+  slideAir: number;
+  slideDir: { x: number; z: number };
   ground: GroundRef | null;
   seat: string | null;
   // The id of the prop being held, or 'hook' for the winch hook.
@@ -86,7 +94,7 @@ export interface PendingDamage {
 
 export interface StepInputs {
   fields: InputFields;
-  pressed: { jump: boolean; interact: boolean; drop: boolean };
+  pressed: { jump: boolean; interact: boolean; drop: boolean; crouch: boolean };
 }
 
 export interface Players {
@@ -134,7 +142,7 @@ export interface Players {
 
 const NEUTRAL_STEP: StepInputs = {
   fields: NEUTRAL_INPUT,
-  pressed: { jump: false, interact: false, drop: false },
+  pressed: { jump: false, interact: false, drop: false, crouch: false },
 };
 
 const finite = (value: number): number => (Number.isFinite(value) ? value : 0);
@@ -144,28 +152,20 @@ export function holdPoseAt(feet: Vec3, yaw: number): Pose {
   return { pos: add(feet, rotate(rot, HOLD_OFFSET)), rot };
 }
 
+// The walking-speed wish: what pushing a body is based on, whatever the stance.
 export function wishVelocity(yaw: number, moveX: number, moveY: number): { x: number; z: number } {
-  const sin = Math.sin(yaw);
-  const cos = Math.cos(yaw);
-  let x = -sin * moveY + cos * moveX;
-  let z = -cos * moveY - sin * moveX;
-  const length = Math.hypot(x, z);
-  if (length > 1) {
-    x /= length;
-    z /= length;
-  }
-  return { x: x * PLAYER_WALK_SPEED, z: z * PLAYER_WALK_SPEED };
+  const dir = wishDirection(yaw, moveX, moveY);
+  return { x: dir.x * PLAYER_WALK_SPEED, z: dir.z * PLAYER_WALK_SPEED };
 }
 
-export function aimRay(pos: Vec3, yaw: number, pitch: number): { origin: Vec3; dir: Vec3 } {
+export function aimRay(pos: Vec3, yaw: number, pitch: number, crouched = false): { origin: Vec3; dir: Vec3 } {
   const cosPitch = Math.cos(pitch);
   return {
-    origin: vec3(pos.x, pos.y + PLAYER_EYE_HEIGHT, pos.z),
+    origin: vec3(pos.x, pos.y + (crouched ? PLAYER_CROUCH_EYE_HEIGHT : PLAYER_EYE_HEIGHT), pos.z),
     dir: vec3(-Math.sin(yaw) * cosPitch, Math.sin(pitch), -Math.cos(yaw) * cosPitch),
   };
 }
 
-const CAPSULE_HALF_SEGMENT = PLAYER_HEIGHT / 2 - PLAYER_RADIUS;
 const SPAWN_RAY_HEIGHT = 3;
 const SPAWN_RAY_LENGTH = 6;
 const MIN_UP_NORMAL = Math.cos(degToRad(PLAYER_MAX_SLOPE_DEG));
@@ -174,7 +174,8 @@ const conjugate = (q: Quat): Quat => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
 
 export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Vehicle, props: Props, course: BuiltCourse): Players {
   const worldGroups = groups(GROUP_WORLD, GROUP_WORLD);
-  const capsule = new rapier.Capsule(CAPSULE_HALF_SEGMENT, PLAYER_RADIUS);
+  const capsule = new rapier.Capsule(capsuleHalfSegment(false), PLAYER_RADIUS);
+  const crouchedCapsule = new rapier.Capsule(capsuleHalfSegment(true), PLAYER_RADIUS);
   const controller = createWalkController(rapier, physics);
 
   const entries = new Map<string, { state: PlayerState; collider: ReturnType<RapierWorld['createCollider']> }>();
@@ -182,20 +183,19 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
   const placeCollider = (id: string) => {
     const entry = entries.get(id);
     if (!entry) return;
-    const { pos } = entry.state;
-    entry.collider.setTranslation({ x: pos.x, y: pos.y + PLAYER_HEIGHT / 2, z: pos.z });
+    placeCapsule(entry.collider, entry.state.pos, entry.state.crouched);
   };
 
   // `body` is the first dynamic body the capsule overlaps: the vehicle, else the first unheld prop in course order.
-  const touching = (feet: Vec3): { body: string | null; statics: boolean } => {
-    const centre = { x: feet.x, y: feet.y + PLAYER_OVERLAP_LIFT + PLAYER_HEIGHT / 2, z: feet.z };
+  const touching = (feet: Vec3, crouched = false): { body: string | null; statics: boolean } => {
+    const centre = { x: feet.x, y: feet.y + PLAYER_OVERLAP_LIFT + capsuleHeight(crouched) / 2, z: feet.z };
     let hitVehicle = false;
     let statics = false;
     const hitProps = new Set<string>();
     physics.intersectionsWithShape(
       centre,
       IDENTITY,
-      capsule,
+      crouched ? crouchedCapsule : capsule,
       (collider) => {
         const prop = props.byCollider(collider.handle);
         if (collider.handle === vehicle.chassisHandle) hitVehicle = true;
@@ -283,7 +283,16 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     return null;
   };
 
+  const resetStance = (state: PlayerState) => {
+    state.crouched = false;
+    state.slideTicks = 0;
+    state.slideCooldown = 0;
+    state.slideAir = 0;
+    state.slideDir = { x: 0, z: 0 };
+  };
+
   const restAt = (state: PlayerState, pos: Vec3) => {
+    resetStance(state);
     state.pos = vec3(pos.x, pos.y, pos.z);
     state.walk = { x: 0, z: 0 };
     state.carry = { x: 0, z: 0 };
@@ -338,7 +347,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
 
   // Rule H4 (a): the body that was shoved out of, with the unit horizontal normal from it to the player.
   const shoveOut = (state: PlayerState): { bodyId: string; n: Vec3 } | null => {
-    const overlapped = touching(state.pos).body;
+    const overlapped = touching(state.pos, state.crouched).body;
     if (overlapped === null) return null;
     if (liftOntoTop(state, overlapped)) return null;
     const { body } = bodyOf(overlapped);
@@ -355,7 +364,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     const hit = { bodyId: overlapped, n: vec3(dx / distance, 0, dz / distance) };
     for (let along = SHOVE_STEP; along <= SHOVE_MAX_DISTANCE + 1e-9; along += SHOVE_STEP) {
       const candidate = vec3(state.pos.x + (dx / distance) * along, state.pos.y, state.pos.z + (dz / distance) * along);
-      const found = touching(candidate);
+      const found = touching(candidate, state.crouched);
       if (found.statics) break;
       if (found.body === null) {
         state.pos = candidate;
@@ -456,7 +465,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     state.hitCooldown.set(bodyId, HIT_COOLDOWN);
     if (live) return;
     const { body } = bodyOf(bodyId);
-    const centre = vec3(state.pos.x, state.pos.y + PLAYER_HEIGHT / 2, state.pos.z);
+    const centre = vec3(state.pos.x, state.pos.y + capsuleHeight(state.crouched) / 2, state.pos.z);
     const speed = relativeSpeed(body.linvel(), body.angvel(), body.worldCom(), centre, playerVel, n);
     const vehicleHit = bodyId === 'vehicle';
     const amount = vehicleHit ? damageAbove(speed, VEHICLE_HIT_SPEED, VEHICLE_HIT_DAMAGE) : damageAbove(speed, PROP_HIT_SPEED, PROP_HIT_DAMAGE);
@@ -465,15 +474,26 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
 
   const move = (state: PlayerState, step: StepInputs, startGround: string | null, shoved: { bodyId: string; n: Vec3 } | null) => {
     const { fields, pressed } = step;
-    const wish = wishVelocity(state.yaw, finite(fields.moveX), finite(fields.moveY));
+    const moveX = finite(fields.moveX);
+    const moveY = finite(fields.moveY);
+    const wish = wishVelocity(state.yaw, moveX, moveY);
     const wasOn = state.ground?.bodyId ?? null;
     const wasAirborne = !state.grounded;
     const entry = entries.get(state.id)!;
     const { collisions, moveVy } = stepWalk(
-      { controller, collider: entry.collider, groups: worldGroups },
+      { controller, collider: entry.collider, groups: worldGroups, physics, standing: capsule },
       state,
-      pressed.jump,
-      wish,
+      {
+        jumpPressed: pressed.jump,
+        crouchPressed: pressed.crouch,
+        crouch: fields.crouch === true,
+        sprint: fields.sprint === true,
+        carrying: state.hands !== null,
+        holdsProp: state.hands !== null && state.hands !== 'hook',
+        moveX,
+        moveY,
+        yaw: state.yaw,
+      },
     );
     let standingOn: string | null = null;
     if (state.grounded) {
@@ -507,7 +527,10 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       }
       if (contacts.size > 0) {
         const ground = startGround === null ? vec3(0, 0, 0) : velocity3At(bodyOf(startGround).body, state.pos);
-        const playerVel = vec3(state.walk.x + state.carry.x + ground.x, state.vy + ground.y, state.walk.z + state.carry.z + ground.z);
+        // Sprinting or sliding into something at rest costs nothing: the own velocity counts as at most a walk.
+        const own = Math.hypot(state.walk.x, state.walk.z);
+        const k = own > PLAYER_WALK_SPEED ? PLAYER_WALK_SPEED / own : 1;
+        const playerVel = vec3(state.walk.x * k + state.carry.x + ground.x, state.vy + ground.y, state.walk.z * k + state.carry.z + ground.z);
         for (const [bodyId, n] of contacts) registerHit(state, bodyId, n, playerVel);
       }
     }
@@ -531,6 +554,11 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         carry: { x: 0, z: 0 },
         vy: 0,
         grounded: true,
+        crouched: false,
+        slideTicks: 0,
+        slideCooldown: 0,
+        slideAir: 0,
+        slideDir: { x: 0, z: 0 },
         ground: null,
         seat: null,
         hands: null,
@@ -543,7 +571,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         hitCooldown: new Map(),
       };
       const collider = physics.createCollider(
-        rapier.ColliderDesc.capsule(CAPSULE_HALF_SEGMENT, PLAYER_RADIUS)
+        rapier.ColliderDesc.capsule(capsuleHalfSegment(false), PLAYER_RADIUS)
           .setTranslation(pos.x, pos.y + PLAYER_HEIGHT / 2, pos.z)
           .setCollisionGroups(groups(GROUP_PLAYER, 0)),
       );
@@ -611,6 +639,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         return;
       }
       if (!seatConfig(seatId)) return;
+      resetStance(state);
       releaseHeld(state, state.yaw, vec3(0, 0, 0));
       state.seat = seatId;
       state.respawnIn = null;
@@ -639,6 +668,8 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       const state = entries.get(id)?.state;
       if (!state) return;
       releaseHeld(state, state.yaw, vec3(0, 0, 0));
+      resetStance(state);
+      placeCollider(id);
       state.hold = null;
       state.downed = DOWNED_TIMEOUT;
     },
@@ -674,7 +705,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     throwHeld(id, yaw, pitch) {
       const state = entries.get(id)?.state;
       if (!state || state.hands === null) return;
-      const { dir } = aimRay(state.pos, yaw, pitch);
+      const { dir } = aimRay(state.pos, yaw, pitch, state.crouched);
       // Rule R13: a thrower on a body adds that body's velocity at their feet.
       const base = state.ground
         ? (() => {

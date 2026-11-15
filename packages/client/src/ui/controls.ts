@@ -13,6 +13,9 @@ export const EXTRA_CODES = ['F3', 'Escape', 'KeyM', 'KeyH'];
 export const CONTROLS: readonly ControlEntry[] = [
   { group: 'On foot', keys: ['KeyW', 'KeyA', 'KeyS', 'KeyD'], action: 'Walk' },
   { group: 'On foot', keys: ['Space'], action: 'Jump' },
+  { group: 'On foot', keys: ['ShiftLeft', 'ShiftRight'], action: 'Sprint (hold, moving forward; not while carrying)' },
+  { group: 'On foot', keys: ['KeyC'], action: 'Crouch (hold)' },
+  { group: 'On foot', keys: ['ShiftLeft', 'KeyC'], action: 'Slide: sprint, then press C' },
   { group: 'On foot', keys: ['KeyE'], action: 'Board, leave, hook or unhook, pick up, push' },
   { group: 'Driving', keys: ['KeyW', 'KeyA', 'KeyS', 'KeyD'], action: 'Throttle, brake and steer' },
   { group: 'Driving', keys: ['Space'], action: 'Brake' },
@@ -28,7 +31,10 @@ export const CONTROLS: readonly ControlEntry[] = [
   { group: 'Game', keys: ['KeyM'], action: 'Mute or unmute sound' },
 ];
 
-export const keyLabel = (code: string): string => code.replace(/^Key/, '').replace(/^Digit/, '');
+export const keyLabel = (code: string): string => code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Shift(Left|Right)$/, 'Shift');
+
+// The caps shown for a row: left and right Shift are one cap.
+export const keyLabels = (codes: readonly string[]): string[] => [...new Set(codes.map(keyLabel))];
 
 export const missingFromControls = (): string[] => {
   const listed = new Set(CONTROLS.flatMap((entry) => entry.keys));
@@ -71,10 +77,10 @@ export function createControlsPanel(doc: Document, onChange: (open: boolean) => 
   list.id = 'controls-list';
   for (const entry of CONTROLS) {
     const keys = doc.createElement('dt');
-    entry.keys.forEach((code, index) => {
+    keyLabels(entry.keys).forEach((label, index) => {
       if (index > 0) keys.append(' ');
       const key = doc.createElement('kbd');
-      key.textContent = keyLabel(code);
+      key.textContent = label;
       keys.append(key);
     });
     const action = doc.createElement('dd');

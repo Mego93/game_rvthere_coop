@@ -8,7 +8,7 @@ export function buildUseContext(
   config: VehicleConfig,
   aim: { yaw: number; pitch: number },
 ): UseContext {
-  const { origin, dir } = aimRay(local.pos, aim.yaw, aim.pitch);
+  const { origin, dir } = aimRay(local.pos, aim.yaw, aim.pitch, local.stance !== undefined);
   const others = players
     .filter((other) => other.playerId !== local.playerId)
     .map((other) => ({ id: other.playerId, feet: other.pos, health: other.health, downed: other.downed, seated: other.seat !== null }));

@@ -206,7 +206,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       if (downed) {
         // Rule H5: a downed player's input is neutral; previous still records the raw one.
         const { yaw, pitch, slot: held } = players.get(id)!;
-        result.set(id, { fields: { ...NEUTRAL_INPUT, yaw, pitch, slot: held }, pressed: { jump: false, interact: false, drop: false } });
+        result.set(id, { fields: { ...NEUTRAL_INPUT, yaw, pitch, slot: held }, pressed: { jump: false, interact: false, drop: false, crouch: false } });
         continue;
       }
       const fields: InputFields = {
@@ -222,6 +222,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
           jump: raw.jump === true && before.jump !== true,
           interact: raw.interact === true && before.interact !== true,
           drop: raw.drop === true && before.drop !== true,
+          crouch: raw.crouch === true && before.crouch !== true,
         },
       });
       if (raw.use === true && before.use !== true) usePressed.add(id);
@@ -278,6 +279,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         feet: player.pos,
         yaw: step.fields.yaw,
         pitch: step.fields.pitch,
+        crouched: player.crouched,
         seat: player.seat,
         hands: player.hands,
         takenSeats: taken,
@@ -296,6 +298,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         ...splitCandidates(found),
       });
       if (action?.kind === 'board') {
+        // No boarding mid-slide.
+        if (player.slideTicks > 0) continue;
         // Unreachable with the hook in the hands (interact drops it first); kept so a seat never holds it.
         releaseHook(player.id, 'stow');
         players.setSeat(player.id, action.seatId);
@@ -354,7 +358,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       const seated = player.seat !== null;
       const fields = onFoot.get(player.id)?.fields;
       // The aim is this tick's input, as for interact (R6).
-      const { origin, dir } = aimRay(player.pos, fields?.yaw ?? player.yaw, fields?.pitch ?? player.pitch);
+      const { origin, dir } = aimRay(player.pos, fields?.yaw ?? player.yaw, fields?.pitch ?? player.pitch, player.crouched);
       const ctx: UseContext = {
         self: { id: player.id, feet: player.pos, eye: origin, aim: dir, health: player.health },
         vehicle: vehicleView,
@@ -758,6 +762,18 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         slot: player.slot,
         health: Math.floor(player.health),
         downed: player.downed,
+        ...(player.slideTicks > 0 ? { stance: 'slide' as const } : player.crouched ? { stance: 'crouch' as const } : {}),
+        ...(player.slideTicks > 0 || player.slideCooldown > 0
+          ? {
+              slide: {
+                ticks: player.slideTicks,
+                cooldown: player.slideCooldown,
+                air: player.slideAir,
+                dirX: player.slideDir.x,
+                dirZ: player.slideDir.z,
+              },
+            }
+          : {}),
         hold: player.hold ? { action: player.hold.action, targetId: player.hold.targetId, progress: player.hold.progress } : null,
       })),
       props: [...props.snapshot(), ...items.snapshot()],

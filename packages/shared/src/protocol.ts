@@ -22,6 +22,8 @@ export interface PlayerInput {
   drop: boolean;
   // Absent means false, so a client without the button keeps working.
   reset?: boolean;
+  sprint?: boolean;
+  crouch?: boolean;
 }
 
 export type InputFields = Omit<PlayerInput, 'seq'>;
@@ -140,6 +142,10 @@ export interface PlayerSnapshot {
   health: number;
   // Seconds left before respawn while downed.
   downed: number | null;
+  // Absent means standing; a stance this version does not know is read as standing.
+  stance?: 'crouch' | 'slide';
+  // Present only while a slide or its cooldown runs; timers are whole ticks.
+  slide?: { ticks: number; cooldown: number; air: number; dirX: number; dirZ: number };
 }
 
 export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn'] as const;
@@ -230,12 +236,20 @@ function parseInput(data: Record<string, unknown>): PlayerInput | null {
   if (!finite(moveX) || !finite(moveY) || !finite(yaw) || !finite(pitch)) return null;
   if (typeof jump !== 'boolean' || typeof interact !== 'boolean') return null;
   if (typeof use !== 'boolean' || typeof drop !== 'boolean') return null;
-  const { reset } = data;
+  const { reset, sprint, crouch } = data;
   if (reset !== undefined && typeof reset !== 'boolean') return null;
+  if (sprint !== undefined && typeof sprint !== 'boolean') return null;
+  if (crouch !== undefined && typeof crouch !== 'boolean') return null;
   if (reel !== -1 && reel !== 0 && reel !== 1) return null;
   if (slot !== 0 && slot !== 1 && slot !== 2) return null;
   const fields = sanitiseInput({ moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop });
-  return { seq: seq as number, ...fields, ...(reset === undefined ? {} : { reset }) };
+  return {
+    seq: seq as number,
+    ...fields,
+    ...(reset === undefined ? {} : { reset }),
+    ...(sprint === undefined ? {} : { sprint }),
+    ...(crouch === undefined ? {} : { crouch }),
+  };
 }
 
 // Validates one message from a client. Returns null for anything malformed.
@@ -332,7 +346,15 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   value.health >= 0 &&
   value.health <= 100 &&
   (value.downed === null || (finite(value.downed) && value.downed >= 0)) &&
-  (value.hold === null || (isRecord(value.hold) && isText(value.hold.action) && isText(value.hold.targetId) && finite(value.hold.progress)));
+  (value.hold === null || (isRecord(value.hold) && isText(value.hold.action) && isText(value.hold.targetId) && finite(value.hold.progress))) &&
+  (value.stance === undefined || isText(value.stance)) &&
+  (value.slide === undefined ||
+    (isRecord(value.slide) &&
+      isCount(value.slide.ticks) &&
+      isCount(value.slide.cooldown) &&
+      isCount(value.slide.air) &&
+      finite(value.slide.dirX) &&
+      finite(value.slide.dirZ)));
 const isPropSnapshot = (value: unknown): value is PropSnapshot =>
   isRecord(value) && isText(value.id) && isText(value.kind) && isVec3(value.pos) && isQuat(value.rot);
 const isCableSnapshot = (value: unknown): value is CableSnapshot =>

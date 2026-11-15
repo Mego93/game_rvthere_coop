@@ -1,5 +1,6 @@
 import {
   NEUTRAL_INPUT,
+  PLAYER_CROUCH_EYE_HEIGHT,
   PLAYER_EYE_HEIGHT,
   add,
   dot,
@@ -67,6 +68,8 @@ let debugShown = (() => {
 
 // A frame longer than this (a background tab, a debugger pause) is treated as this long.
 const MAX_FRAME_SECONDS = 0.25;
+// The camera eye eases to a new stance's height in about this long.
+const EYE_EASE_SECONDS = 0.1;
 const LOOPS = ['engine', 'winch', 'rain'] as const;
 
 export interface Game {
@@ -105,6 +108,8 @@ export interface GameView {
   // Whether the controls panel is open when the game starts.
   controlsOpen: boolean;
 }
+
+const stanceFields = (stance: PlayerSnapshot['stance']): Pick<PlayerSnapshot, 'stance'> | Record<string, never> => (stance === undefined ? {} : { stance });
 
 // Draws one run: sends an input every tick and shows the vehicle and the players from the server's snapshots.
 export function createGame(
@@ -161,6 +166,10 @@ export function createGame(
   let lastPlayers: PlayerSnapshot[] = [];
   let lastProps: PropSnapshot[] = [];
   let lastDrawn: Vec3 | null = null;
+  // The local stance the last frame drew: predicted while the reconciler is active, else the newest snapshot's.
+  let drawnStance: PlayerSnapshot['stance'];
+  // The camera eye's height above the feet, eased between the standing and crouched heights.
+  let eyeHeight = PLAYER_EYE_HEIGHT;
   let menuState: ShopMenuState = CLOSED;
   let wasInteract = false;
   let lastSent: InputFields = NEUTRAL_INPUT;
@@ -303,7 +312,7 @@ export function createGame(
       const action = interactAction(
         vehicleConfig,
         lastVehicle,
-        { ...latestLocal, pos: feet },
+        { ...latestLocal, pos: feet, ...stanceFields(drawnStance) },
         lastPlayers,
         sampled.yaw,
         sampled.pitch,
@@ -387,11 +396,14 @@ export function createGame(
     const sampled = buffer.sample(now / 1000);
     const vehicle = sampled?.vehicle ?? null;
     const interpolated = sampled?.players ?? [];
-    const drawnPosition = reconciler.active ? (reconciler.view(frameSeconds, stepper.alpha())?.pos ?? null) : null;
+    const predictedView = reconciler.active ? reconciler.view(frameSeconds, stepper.alpha()) : null;
+    const drawnPosition = predictedView?.pos ?? null;
+    drawnStance = predictedView ? (predictedView.sliding ? 'slide' : predictedView.crouched ? 'crouch' : undefined) : latestLocal?.stance;
     let players = interpolated;
     if (drawnPosition && latestLocal) {
       // Seat and ground come from the newest snapshot so leaving a seat switches the view at once.
-      const drawn = { ...latestLocal, pos: drawnPosition, yaw: aim.yaw, seat: null, ground: null };
+      const { stance: _server, ...rest } = latestLocal;
+      const drawn: PlayerSnapshot = { ...rest, ...stanceFields(drawnStance), pos: drawnPosition, yaw: aim.yaw, seat: null, ground: null };
       players = interpolated.some((player) => player.playerId === playerId)
         ? interpolated.map((player) => (player.playerId === playerId ? drawn : player))
         : [...interpolated, drawn];
@@ -420,11 +432,14 @@ export function createGame(
     const onFoot = local !== undefined && local.seat === null;
     crosshair.hidden = !onFoot;
     if (local && onFoot) {
-      const head = vec3(local.pos.x, local.pos.y + PLAYER_EYE_HEIGHT, local.pos.z);
+      const eyeTarget = drawnStance === undefined ? PLAYER_EYE_HEIGHT : PLAYER_CROUCH_EYE_HEIGHT;
+      eyeHeight += (eyeTarget - eyeHeight) * (1 - Math.exp(-frameSeconds / EYE_EASE_SECONDS));
+      const head = vec3(local.pos.x, local.pos.y + eyeHeight, local.pos.z);
       const placement = cameraPlacement(head, aim.yaw, aim.pitch, cameraBoxes);
       camera.position.set(placement.position.x, placement.position.y, placement.position.z);
       camera.lookAt(placement.target.x, placement.target.y, placement.target.z);
     } else if (vehicle) {
+      eyeHeight = PLAYER_EYE_HEIGHT;
       updateFollowCamera(camera, vehicle, frameSeconds);
     }
     const latestCable = buffer.latestCable();
@@ -446,6 +461,7 @@ export function createGame(
       stops: course.stops,
       targetTime: course.targetTime,
       touch: view.touchUi !== null,
+      ...(local && onFoot ? { eye: eyeHeight } : {}),
     };
     overlay.textContent = overlayText(overlayData);
     const hudModel = buildHudModel(overlayData, { checkpoints: course.checkpoints, finish: course.finish });

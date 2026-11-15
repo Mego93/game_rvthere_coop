@@ -449,3 +449,19 @@ test('clock floors to tenths', () => {
   expect(clock(61.99)).toBe('1:01.9');
   expect(clock(0)).toBe('0:00.0');
 });
+
+test('M9: the overlay shows the camera eye height, on its own line that does not start with pos', () => {
+  const text = overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [nearDoor], localId: 'p1', predicted: null, server: null, eye: 0.95, ...noAim });
+  expect(text).toMatch(/^eye\s+0\.95$/m);
+  expect(overlayText({ lobby, config: rv, tick: 1, fps: 60, vehicle, players: [nearDoor], localId: 'p1', predicted: null, server: null, ...noAim })).not.toContain('eye ');
+});
+
+test('B6: a crouched player aims from the lower eye when the prompt is resolved', () => {
+  // Two jerrycans straight ahead, one at the standing eye height and one at the crouched eye height.
+  const standing = { ...nearDoor, pos: vec3(0, 0, 0) };
+  const can = (id: string, y: number) => ({ id, kind: 'jerrycan', pos: vec3(0, y, -1.5), rot: IDENTITY, linvel: vec3(0, 0, 0) }) as unknown as PropSnapshot;
+  const props = [can('high', 1.6), can('low', 0.95)];
+  expect(interactAction(rv, vehicle, standing, [standing], 0, 0, props, stowed, [])).toEqual({ kind: 'pickUpItem', itemId: 'high' });
+  const crouched = { ...standing, stance: 'crouch' as const };
+  expect(interactAction(rv, vehicle, crouched, [crouched], 0, 0, props, stowed, [])).toEqual({ kind: 'pickUpItem', itemId: 'low' });
+});
