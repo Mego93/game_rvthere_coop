@@ -164,7 +164,7 @@ Common to both:
 
 - Fuel drains in proportion to throttle. At 0 fuel, throttle has no effect.
 - Health drops on impacts above a speed threshold, scaled by the speed above it, and continuously while upside down.
-- A Lodgy on its side is righted by pushing. An upturned vehicle, or an RV on its side, is recovered by a checkpoint restart: a cable at the front bumper cannot roll a vehicle.
+- A Lodgy on its side is righted by pushing. An upturned vehicle, or an RV on its side, is recovered by a checkpoint restart (any seated player can hold X for it): a cable at the front bumper cannot roll a vehicle.
 - Same winch, same health pool.
 - Models are recognisable shapes without any manufacturer's name or badge.
 
@@ -255,7 +255,7 @@ Segment types in spec 1:
 
 | Type | Content | Parameters |
 |---|---|---|
-| `road` | Plain road, optionally curved or sloped | length, curve, slope, light debris count |
+| `road` | Plain road, optionally curved or sloped | length, curve, slope, light debris count, hazards (`gates`, `crateWall`, `roadblock`) |
 | `alley` | Narrow walled street cluttered with crates, carts, parked scooters | length, clutter density |
 | `sand` | Soft sand between palm trees; the vehicle slows down | length, palm (anchor) count |
 | `ford` | Shallow rocky riverbed, slow and fuel-hungry | width, rock count |
@@ -586,6 +586,8 @@ Effects only: engine loop, impact, winch loop, hook attach, pickup, item use, co
 | Jump / brake | Space | Button (label changes when seated) |
 | Throttle, reverse | W, S when driving | Joystick up, down when driving |
 | Reel in, out | Q, R | Two buttons, shown only when reeling is possible |
+| Reset a stuck vehicle | X (hold 1.5 s) | A button on touch, shown only when it can act |
+| Controls help | H | A `?` entry in the run menu on touch |
 | Select slot | 1, 2, 3 | Tap the slot |
 | Drop item | G | Long-press the slot |
 | Menu | Esc | Button |
@@ -615,7 +617,7 @@ Hosting on Cloudflare is built (decision D-HOST1 in `ROADMAP.md`, setup in `docs
 - **Refused purchase.** Too few coins, no free slot, or no shop counter in range returns `cannot_buy`.
 - **Disconnects.** The client shows a reconnecting overlay and retries after 0.5, 1, 2, 4 and then every 8 s, for 30 s from the drop, rejoining with its session token. A socket that does not open within 8 s counts as a failed attempt, and the page itself closes a connection that has heard nothing from the server for 6 s. It gives up at most 38 s after the drop. It does not retry after `kicked` or `replaced` (the server sends `replaced` to a connection whose slot another connection with the same token took over, as a duplicated tab does: "This room was opened in another tab."), or after a refusal (`unknown_room`, `room_full`, `name_taken`); a rejoin that comes back as a different player (the slot expired or was kicked) is treated as a refusal: "Your place in the room was lost." The server follows the held-slot rules.
 - **Silent connections.** A connection that stops sending, such as a backgrounded iPhone, gets neutral input after 15 ticks and is dropped after 6 s.
-- **Stuck vehicle.** A vehicle that is wedged, or out of fuel with no way to refuel, is not detected automatically. The admin uses "restart from checkpoint".
+- **Stuck vehicle.** A vehicle that is tipped, out of fuel, or has moved under 1 m in 8 s with the throttle held, and is slower than 1 m/s, can be reset by any seated player holding X for 1.5 s: a checkpoint restart with the usual penalty. The admin can still restart from the menu.
 - **Physics escapes.** Handled by the kill-plane rules: players respawn, props return to spawn, the vehicle triggers a checkpoint restart.
 - **Server restart.** Rooms are in memory; a restart ends all runs.
 
