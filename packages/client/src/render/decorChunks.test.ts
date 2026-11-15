@@ -1,6 +1,6 @@
 import { getCourse, getCourseDef } from '@lodgy/shared';
 import { describe, expect, test } from 'vitest';
-import { buildCells, CELL_LENGTH, DESKTOP_DECOR, TOUCH_DECOR, visibleCells, type DecorCell } from './decorChunks';
+import { buildCells, CELL_LENGTH, DESKTOP_DECOR, SOFTWARE_DECOR, TOUCH_DECOR, visibleCells, type DecorCell } from './decorChunks';
 import { scatterDecor, seedFromId, type DecorPlacement } from './decorScatter';
 
 const at = (x: number, z: number): DecorPlacement => ({ model: 'decor.scrub', x, y: 0, z, yaw: 0, scale: 1 });
@@ -32,6 +32,8 @@ describe('visibleCells', () => {
   test('the limits: desktop 350 m and 3000, touch 200 m and 1200', () => {
     expect(DESKTOP_DECOR).toEqual({ radius: 350, cap: 3000 });
     expect(TOUCH_DECOR).toEqual({ radius: 200, cap: 1200 });
+    expect(SOFTWARE_DECOR.radius).toBeLessThan(TOUCH_DECOR.radius);
+    expect(SOFTWARE_DECOR.cap).toBeLessThan(TOUCH_DECOR.cap);
     const dense = Array.from({ length: 12 }, (_, i) => cell(i, i * 10, 0, 400));
     expect(visibleCells(dense, { x: 0, z: 0 }, DESKTOP_DECOR.radius, DESKTOP_DECOR.cap).reduce((sum, c) => sum + c.placements.length, 0)).toBeLessThanOrEqual(3000);
     expect(visibleCells(dense, { x: 0, z: 0 }, TOUCH_DECOR.radius, TOUCH_DECOR.cap).reduce((sum, c) => sum + c.placements.length, 0)).toBeLessThanOrEqual(1200);

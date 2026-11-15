@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildCells, DESKTOP_DECOR, TOUCH_DECOR, visibleCells, type DecorCell, type DecorLimits } from './decorChunks';
+import { buildCells, DESKTOP_DECOR, SOFTWARE_DECOR, TOUCH_DECOR, visibleCells, type DecorCell, type DecorLimits } from './decorChunks';
 import type { DecorPlacement } from './decorScatter';
 import { hasModel, instantiate } from './models';
 
@@ -35,7 +35,7 @@ interface ModelParts {
 const materialId = (material: THREE.Material | THREE.Material[]) => (Array.isArray(material) ? material.map((m) => m.uuid).join(',') : material.uuid);
 
 export function createDecorRenderer(placements: readonly DecorPlacement[], route: readonly (readonly [number, number])[], { touch, softwareGl }: DecorOptions): DecorRenderer {
-  const limits: DecorLimits = touch || softwareGl ? TOUCH_DECOR : DESKTOP_DECOR;
+  const limits: DecorLimits = softwareGl ? SOFTWARE_DECOR : touch ? TOUCH_DECOR : DESKTOP_DECOR;
   const shadows = !touch && !softwareGl;
   const group = new THREE.Group();
   const primitives: Primitive[] = [];

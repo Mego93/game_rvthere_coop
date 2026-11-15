@@ -62,6 +62,16 @@ describe('createDecorRenderer', () => {
     expect(meshes(phone.group)[0]!.count).toBe(0);
   });
 
+  test('software GL has the smallest radius', () => {
+    const near = [p('decor.scrub', 0, -150)];
+    const soft = createDecorRenderer(near, route, { touch: false, softwareGl: true });
+    const phone = createDecorRenderer(near, route, { touch: true, softwareGl: false });
+    soft.update({ x: 0, z: 0 }, 1);
+    phone.update({ x: 0, z: 0 }, 1);
+    expect(meshes(soft.group)[0]!.count).toBe(0);
+    expect(meshes(phone.group)[0]!.count).toBe(1);
+  });
+
   test('updates at most once per interval and only when the visible cells change', () => {
     const decor = createDecorRenderer(placements, route, { touch: false, softwareGl: false });
     const mesh = meshes(decor.group)[0]!;

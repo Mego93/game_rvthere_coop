@@ -9,6 +9,8 @@ export interface DecorLimits {
 
 export const DESKTOP_DECOR: DecorLimits = { radius: 350, cap: 3000 };
 export const TOUCH_DECOR: DecorLimits = { radius: 200, cap: 1200 };
+// Software GL rasterises on the CPU: with more than about 100 instances a frame is slow enough to break the e2e timing.
+export const SOFTWARE_DECOR: DecorLimits = { radius: 120, cap: 100 };
 
 export interface DecorCell {
   id: number;
