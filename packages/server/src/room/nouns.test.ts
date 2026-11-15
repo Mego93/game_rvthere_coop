@@ -1,6 +1,6 @@
 import { cleanRoom } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { NOUNS, RESERVED_PATHS, nounCandidates, pickNoun } from './nouns';
+import { NOUNS, RESERVED_PATHS, isValidNoun, nounCandidates, pickNoun } from './nouns';
 
 test('every noun is a valid, unique, unreserved room name', () => {
   expect(new Set(NOUNS).size).toBe(NOUNS.length);
@@ -62,5 +62,12 @@ test('a generator never repeats a candidate and never yields a reserved path', (
       expect(RESERVED_PATHS).not.toContain(noun);
       expect(noun).toMatch(/^[a-z]+\d*$/);
     }
+  }
+});
+
+test('isValidNoun accepts words and numbered words, refuses the rest', () => {
+  for (const noun of ['camel', 'camel2', 'a', 'a'.repeat(32)]) expect(isValidNoun(noun), noun).toBe(true);
+  for (const noun of ['', 'Camel', 'ca mel', '2camel', 'camel-2', 'a'.repeat(33), ...RESERVED_PATHS, 'ws2', 'assets10', '../x']) {
+    expect(isValidNoun(noun), noun).toBe(false);
   }
 });

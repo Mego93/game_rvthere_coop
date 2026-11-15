@@ -1,5 +1,5 @@
 import { MAX_CONNECTIONS_PER_ADDRESS, MAX_CONNECTIONS_PER_ROOM, type Rapier } from '@lodgy/shared';
-import { createReporter, createRoomServer, type RoomServer } from '@lodgy/server/room';
+import { createReporter, createRoomServer, isValidNoun, type RoomServer } from '@lodgy/server/room';
 import { clientAddress } from './address';
 import { createAdmission, exceedsMessageLimit } from './admission';
 import { createClaim, type ClaimResult } from './claim';
@@ -28,13 +28,12 @@ export type UpgradeResult<Client> = { accepted: true; client: Client } | { accep
 
 export interface GameRoom<Client> {
   // `addressHeader` is the value of CF-Connecting-IP, or null.
-  upgrade(noun: string, addressHeader: string | null): UpgradeResult<Client>;
+  // `create`: the Worker forwarded a create, which is the connect that uses up the claim.
+  upgrade(noun: string, addressHeader: string | null, create?: boolean): UpgradeResult<Client>;
   claim(): ClaimResult;
   connections(): number;
   roomCount(): number;
 }
-
-const NOUN = /^[a-z]+\d*$/;
 
 export function createGameRoom<Client>(deps: GameRoomDeps<Client>): GameRoom<Client> {
   const report = createReporter(deps.onError, deps.clock);
@@ -63,8 +62,8 @@ export function createGameRoom<Client>(deps: GameRoomDeps<Client>): GameRoom<Cli
   };
 
   return {
-    upgrade(noun, addressHeader) {
-      if (!NOUN.test(noun)) return { accepted: false, status: 400 };
+    upgrade(noun, addressHeader, create = false) {
+      if (!isValidNoun(noun)) return { accepted: false, status: 400 };
       const address = clientAddress(addressHeader);
       const admitted = admission.admit(address);
       if (admitted !== 'ok') return { accepted: false, status: admitted === 'full' ? 503 : 429 };
@@ -103,7 +102,8 @@ export function createGameRoom<Client>(deps: GameRoomDeps<Client>): GameRoom<Cli
         handle = server.connect(
           {
             send: (data) => socket.send(data),
-            close: () => socket.close(),
+            // A dead peer never delivers a close event, so the slot is freed here.
+            close: () => drop(1000, ''),
           },
           address,
         );
@@ -112,7 +112,7 @@ export function createGameRoom<Client>(deps: GameRoomDeps<Client>): GameRoom<Cli
         drop(1011, 'error');
         return { accepted: false, status: 503 };
       }
-      claim.release();
+      if (create) claim.release();
 
       socket.addEventListener('message', (event) => {
         if (closed) return;

@@ -28,29 +28,25 @@ test('release frees the claim at once', () => {
   expect(claim.tryClaim(false)).toBe('free');
 });
 
-function* words(...list: string[]) {
-  yield* list;
-}
-
-test('allocate returns the first free candidate and tries them in order', async () => {
+test('allocate returns the first free noun and draws a noun per attempt', async () => {
   const tried: string[] = [];
-  const noun = await allocate(words('a', 'b', 'c', 'd'), async (n) => (tried.push(n), tried.length > 2 ? 'free' : 'taken'));
-  expect(noun).toBe('c');
-  expect(tried).toEqual(['a', 'b', 'c']);
+  let i = 0;
+  const noun = await allocate(() => 'n' + i++, async (n) => (tried.push(n), tried.length > 2 ? 'free' : 'taken'));
+  expect(noun).toBe('n2');
+  expect(tried).toEqual(['n0', 'n1', 'n2']);
 });
 
-test('allocate gives up after 20 attempts by default', async () => {
+test('allocate gives up after 20 attempts by default, or the count given', async () => {
   let calls = 0;
-  const never = (function* () {
-    for (let i = 0; ; i++) yield `n${i}`;
-  })();
-  expect(await allocate(never, async () => (calls++, 'taken'))).toBeNull();
+  expect(await allocate(() => 'a', async () => (calls++, 'taken'))).toBeNull();
   expect(calls).toBe(20);
+  calls = 0;
+  expect(await allocate(() => 'a', async () => (calls++, 'taken'), 2)).toBeNull();
+  expect(calls).toBe(2);
 });
 
-test('allocate honours a custom attempt count and an exhausted generator', async () => {
-  let calls = 0;
-  expect(await allocate(words('a', 'b', 'c'), async () => (calls++, 'taken'), 2)).toBeNull();
-  expect(calls).toBe(2);
-  expect(await allocate(words('a'), async () => 'taken')).toBeNull();
+test('every attempt draws again, so taken draws are skipped', async () => {
+  const draws = ['busy', 'busy', 'free'];
+  let i = 0;
+  expect(await allocate(() => draws[i++]!, async (n) => (n === 'free' ? 'free' : 'taken'))).toBe('free');
 });

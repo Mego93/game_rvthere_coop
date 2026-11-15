@@ -29,3 +29,9 @@ export function pickNoun(random: () => number, isTaken: (noun: string) => boolea
   }
   throw new Error('unreachable');
 }
+
+export const MAX_NOUN_LENGTH = 32;
+
+// A noun a room may be created or joined under: lower-case letters and an optional number, not too long, not a reserved path.
+export const isValidNoun = (noun: string): boolean =>
+  noun.length <= MAX_NOUN_LENGTH && /^[a-z]+\d*$/.test(noun) && !RESERVED_PATHS.includes(noun.replace(/\d+$/, ''));

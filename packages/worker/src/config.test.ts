@@ -22,10 +22,11 @@ test('the Worker runs first for the socket path only', () => {
 
 test('binding and class names match the code', () => {
   const source = read('./index.ts');
+  const routing = read('./route.ts');
   const [binding] = config.durable_objects.bindings;
   expect(source).toContain(`export class ${binding!.class_name} `);
-  expect(source).toMatch(new RegExp(`env\\.${binding!.name}\\.`));
-  expect(source).toContain(`env.${config.assets.binding}.fetch`);
+  expect(routing).toMatch(new RegExp(`env\\.${binding!.name}\\.`));
+  expect(routing).toContain(`env.${config.assets.binding}.fetch`);
   expect(config.migrations.flatMap((m) => m.new_sqlite_classes)).toContain(binding!.class_name);
   expect(config.main).toBe('src/index.ts');
 });

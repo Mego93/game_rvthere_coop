@@ -22,16 +22,15 @@ export function createClaim(now: () => number): Claim {
   };
 }
 
-// The first candidate whose claim is free, or null after `attempts` tries.
+// Tries `attempts` nouns, each from a fresh random draw so that a run of live nouns cannot use up every attempt.
 export async function allocate(
-  candidates: Iterator<string>,
+  pick: () => string,
   tryClaim: (noun: string) => Promise<ClaimResult>,
   attempts = 20,
 ): Promise<string | null> {
   for (let i = 0; i < attempts; i++) {
-    const next = candidates.next();
-    if (next.done) return null;
-    if ((await tryClaim(next.value)) === 'free') return next.value;
+    const noun = pick();
+    if ((await tryClaim(noun)) === 'free') return noun;
   }
   return null;
 }

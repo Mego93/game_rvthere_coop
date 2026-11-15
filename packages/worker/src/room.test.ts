@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { MAX_MESSAGE_BYTES, type Rapier } from '@lodgy/shared';
-import { beforeAll, expect, test, vi } from 'vitest';
+import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { createGameRoom, type GameRoomDeps, type ServerSocket } from './room';
 import { createWorkerTimer } from './workerTimer';
 
@@ -62,6 +62,8 @@ function setup(overrides: Partial<GameRoomDeps<FakeSocket>> = {}) {
 const create = { type: 'create', name: 'Amal', token: 'tokentokentoken0001xx' };
 const join = (noun: string, n: number) => ({ type: 'join', room: noun, name: 'P' + n, token: `tokentokentoken000${n}xx` });
 
+afterEach(() => vi.useRealTimers());
+
 test('an upgrade is accepted, handed to the room server, and create makes the pinned room', () => {
   const { room, sockets } = setup();
   const result = room.upgrade('tagine', '1.2.3.4');
@@ -72,7 +74,6 @@ test('an upgrade is accepted, handed to the room server, and create makes the pi
   expect(welcome.room).toBe('tagine');
   expect(room.roomCount()).toBe(1);
   expect(room.connections()).toBe(1);
-  vi.useRealTimers();
 });
 
 test('a join of another noun is unknown_room; a bad noun is 400', () => {
@@ -81,7 +82,6 @@ test('a join of another noun is unknown_room; a bad noun is 400', () => {
   room.upgrade('tagine', null);
   sockets[0]!.message(join('camel', 1));
   expect(sockets[0]!.sent.join()).toContain('unknown_room');
-  vi.useRealTimers();
 });
 
 test('binary messages close with 1003, oversized (UTF-8 bytes) with 1009', () => {
@@ -97,7 +97,6 @@ test('binary messages close with 1003, oversized (UTF-8 bytes) with 1009', () =>
   expect(multi.length).toBeLessThan(MAX_MESSAGE_BYTES);
   sockets[2]!.message(multi);
   expect(sockets[2]!.closes).toEqual([{ code: 1009 }]);
-  vi.useRealTimers();
 });
 
 test('limits answer 503 when full and 429 when one address has too many', () => {
@@ -107,7 +106,6 @@ test('limits answer 503 when full and 429 when one address has too many', () => 
   expect(room.upgrade('tagine', '1.1.1.1')).toEqual({ accepted: false, status: 429 });
   expect(room.upgrade('tagine', '2.2.2.2').accepted).toBe(true);
   expect(room.upgrade('tagine', '3.3.3.3')).toEqual({ accepted: false, status: 503 });
-  vi.useRealTimers();
 });
 
 test('the count drops exactly once however many close and error events arrive', () => {
@@ -122,7 +120,6 @@ test('the count drops exactly once however many close and error events arrive', 
   sockets[1]!.message(new ArrayBuffer(1) as unknown as string);
   sockets[1]!.emit('close');
   expect(room.connections()).toBe(0);
-  vi.useRealTimers();
 });
 
 test('timers pause when idle and resume on the next connect', () => {
@@ -139,8 +136,6 @@ test('timers pause when idle and resume on the next connect', () => {
   expect(vi.getTimerCount()).toBe(0);
   room.upgrade('tagine', null);
   expect(vi.getTimerCount()).toBeGreaterThan(0);
-  timer.pause();
-  vi.useRealTimers();
 });
 
 test('a connection that never created a room pauses the timers on close', () => {
@@ -149,16 +144,44 @@ test('a connection that never created a room pauses the timers on close', () => 
   expect(vi.getTimerCount()).toBeGreaterThan(0);
   sockets[0]!.emit('close');
   expect(vi.getTimerCount()).toBe(0);
-  vi.useRealTimers();
 });
 
 test('claim: free, taken while claimed, taken while connected, released by the first connect', () => {
   const { room, sockets } = setup();
   expect(room.claim()).toBe('free');
   expect(room.claim()).toBe('taken');
-  room.upgrade('tagine', null);
+  room.upgrade('tagine', null, true);
   expect(room.claim()).toBe('taken');
   sockets[0]!.emit('close');
   expect(room.claim()).toBe('free');
-  vi.useRealTimers();
+});
+
+test('a joiner does not release the claim; only a create does', () => {
+  const { room, sockets } = setup();
+  expect(room.claim()).toBe('free');
+  room.upgrade('tagine', null, false);
+  sockets[0]!.emit('close');
+  expect(room.claim()).toBe('taken');
+  room.upgrade('tagine', null, true);
+  sockets[1]!.emit('close');
+  expect(room.claim()).toBe('free');
+});
+
+test('a bad or reserved noun is refused with 400', () => {
+  const { room } = setup();
+  expect(room.upgrade('assets', null)).toEqual({ accepted: false, status: 400 });
+  expect(room.upgrade('a'.repeat(33), null)).toEqual({ accepted: false, status: 400 });
+});
+
+test('a connection the room server closes frees its slot at once, and the idle pause follows', () => {
+  const { room, sockets } = setup({ limits: { perRoom: 5, perAddress: 5 } });
+  room.upgrade('tagine', '1.1.1.1', true);
+  const socket = sockets[0]!;
+  expect(room.connections()).toBe(1);
+  // Silent peer: no message for SILENCE_TIMEOUT, so the room server drops it, and no close event ever arrives.
+  vi.advanceTimersByTime(120_000);
+  expect(socket.closes.length).toBeGreaterThan(0);
+  expect(room.connections()).toBe(0);
+  expect(room.claim()).toBe('free');
+  expect(vi.getTimerCount()).toBe(0);
 });
