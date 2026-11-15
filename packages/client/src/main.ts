@@ -7,6 +7,7 @@ import { createGame, type Game } from './game';
 import { isSoftwareRenderer, pixelRatioFor } from './render/renderScale';
 import { preloadAssets } from './render/models';
 import { preloadSkies, SKY_COUNT } from './render/environment';
+import { preloadGroundTextures } from './render/groundTextures';
 import { openSocket, type CloseInfo, type GameSocket } from './net/socket';
 import { RECONNECT_IDLE, RECONNECT_WINDOW, SOCKET_OPEN_TIMEOUT, reconnectStep, resumeAction, type ReconnectEvent, type ReconnectState } from './net/reconnect';
 import { roomFromPath, socketUrl } from './route';
@@ -69,9 +70,10 @@ window.addEventListener('keydown', (event) => {
 
 // The physics module loads once; creating or joining a room waits for it.
 const rapierReady = RAPIER.init();
-// Models and skies load as the page does; both resolve even when a file fails, which only warns.
+// Models, skies and ground textures load as the page does; both resolve even when a file fails, which only warns.
 let modelsProgress = 0;
 let skiesProgress = 0;
+let texturesProgress = 0;
 let assetsLoading = true;
 let requesting = false;
 const assetsReady = Promise.all([
@@ -83,11 +85,15 @@ const assetsReady = Promise.all([
     skiesProgress = done / SKY_COUNT;
     showLoading();
   }),
+  preloadGroundTextures(!window.matchMedia('(pointer: coarse)').matches, (done, total) => {
+    texturesProgress = done / total;
+    showLoading();
+  }),
 ]).then(() => {
   assetsLoading = false;
 });
 function showLoading() {
-  if (assetsLoading && requesting) home.setBusy(true, `Loading ${Math.round(((modelsProgress + skiesProgress) / 2) * 100)}%`);
+  if (assetsLoading && requesting) home.setBusy(true, `Loading ${Math.round(((modelsProgress + skiesProgress + texturesProgress) / 3) * 100)}%`);
 }
 
 const RAPIER_FAILED = 'The game could not load its physics engine. Reload the page to try again.';

@@ -109,7 +109,7 @@ export function createGame(
   let lobby = firstLobby;
   const course = getCourse(lobby.courseId);
   const cameraBoxes = [...course.ground, ...course.walls];
-  const scene = createScene(course);
+  const scene = createScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true });
   const vehicleConfig = getVehicleConfig(lobby.vehicleId);
   const look = conditionsLook(firstLobby.timeOfDay, firstLobby.weather);
   const isTouch = view.touchUi !== null;
