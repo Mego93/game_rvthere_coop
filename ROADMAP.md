@@ -43,6 +43,60 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | 23 | World art: solid shoulders and far terrain, HDRI sky and lighting, textured ground, CC0 models, decor scatter (in progress: the minimap window and new sounds are still to come) | in progress | claude/sharp-clarke-0zu1et | [plan](docs/superpowers/plans/step-23-world-art.md) | Owner, visual check |
 | 24 | Hosting on Cloudflare: a Worker serves the page and routes each room to its own Durable Object (the patched non-compat Rapier build runs in Workers); `npm run deploy:cf`; the specs run against the local Workers runtime | needs sign-off | claude/sharp-clarke-0zu1et | [plan](docs/superpowers/plans/step-24-cloudflare-hosting.md) | Owner: deploy with their Cloudflare login |
 | 25 | Obstacles on the road (crate wall, gates, roadblock), a solo-finish proof, a stuck-vehicle reset (hold X), a controls help (H) | needs sign-off | claude/sharp-clarke-0zu1et | [plan](docs/superpowers/plans/step-25-obstacles-and-recovery.md) | Owner, by playing it |
+| 26 | Feel and clarity: sprint, crouch and slide on foot; the seat you are in is shown when you board; first-person camera investigated | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner, by playing it |
+| 27 | The real route: the airport course rebuilt from the real road from the owner's villa to Marrakech airport | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner |
+| 28 | A living road: goats and scooters that appear as you approach, items and bonuses that spawn at random | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner, by playing it |
+| 29 | Souleyman: a Moroccan NPC on the road saves your progress, replacing the blue checkpoint marker | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner |
+| 30 | Lobby and chat: an animated, responsive lobby; text chat in the lobby and in the game | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner |
+| 31 | Character customization: round glasses, sweatshirt, suit and more, seen by every player | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner |
+
+## Owner feedback 2026-11-15
+
+The owner played the build after step 25 and wrote these points (kept close to their words). Each becomes the step shown. Items marked **Open** are questions for the owner; nothing is built on a guess.
+
+The owner's real coordinates are never written in this repository (decision of 2026-11-11). The route is fetched once, converted to local metres from the start and stored without latitude or longitude.
+
+### Step 26: feel and clarity
+- "Feels slow, can't sprint or crouch (with slide movement etc)." On-foot movement gains sprint, crouch and a slide (sprint then crouch). Starting values are mine; the feel is the owner's call.
+- "When entering the vehicle we don't know which seat we are in." Show the seat on boarding (driver, front passenger, rear seats) and keep it visible in the HUD while seated.
+- "I don't know if first person is better? Investigate (so more real model instead of blocky ones)." Investigate a first-person camera (on foot and in the vehicle: from the driver's seat, with the real model's interior), what it costs (the Lodgy model has its interior removed, the character is drawn only for others), and report before any build. A prototype camera behind a flag is allowed.
+- **Open**: should sprint drain a stamina bar, or be free? Is the slide only a cosmetic dip, or does it carry speed (and under what height)? Does sprint work while carrying a prop or the winch hook?
+
+### Step 27: the real route
+- "Airport is a simple straight road. If you can get the road from [the villa] to the Marrakech airport (use a maps API; unsure if Leaflet can be used)." A fetch of the real driving route succeeded through OSRM (OpenStreetMap data): 22.3 km, about 37 min by car, 725 points. Leaflet is only a browser map viewer and is not needed to build the course; it could be used later for a map preview.
+- The route is converted to segments (curves, straights, slopes) of the existing course builder, keeping the real turns and junction feel.
+- **Open**: scale. The real route is 22 km; the current course is 2.6 km. Options: about 6 to 7 km (3.5 to 1, recommended), or the full 22 km (about 25 minutes of driving, a dozen fuel stops).
+- **Open**: whether the villa itself is the start scene (the three photos show a pool house, a pickleball court and a gym pavilion at dusk) and the airport the finish.
+- **Open**: roads in the real route are all paved; keep sand, ford and bank segments by inserting them at chosen points, or follow reality only?
+- Attribution: OpenStreetMap contributors (ODbL) must be credited in CREDITS.md if its data ships.
+
+### Step 28: a living road
+- "Not enough obstacles that are scattered; add for example animals (goats) or scooters that can annoy you when you drive (spawn when close or something); same for the bonus and items that are spawned randomly."
+- Goats and scooters appear as the vehicle nears (server-controlled so every player sees the same, with a seeded random so runs are reproducible), move across the road, and cost time or health on contact.
+- Items and bonuses spawn at random positions along the course (instead of fixed pickups), seeded per run.
+- **Open**: should a goat or scooter be hurt by a collision? Is hitting animals penalised (time or health) or forgiven? Do scooters honk or chase?
+- **Open**: how many at once (the snapshot size limit is 16 KB for the full snapshot)?
+
+### Step 29: Souleyman
+- "Checkpoints are too obvious (the blue thing). Set it with a Moroccan NPC (check a model on Sketchfab) on the road, named Souleyman, that saves your progress."
+- A Moroccan character (Sketchfab, CC0 or CC-BY, low poly) stands at the road side at each checkpoint, named Souleyman; reaching him saves progress (the existing checkpoint mechanism), with a short greeting line and a sound.
+- The blue marker is removed (the minimap and compass still show the next checkpoint).
+- **Open**: one Souleyman for every checkpoint, or a different NPC each time? Is the NPC a prop the players can talk to with interact, or only a marker that triggers on arrival?
+
+### Step 30: lobby and chat
+- "The menu lobby is too simple; add some animations, with responsive content, and if possible a chat, both in game and in the lobby."
+- An animated lobby (background, transitions, player cards) that works on phone and desktop.
+- A text chat in the lobby and during the run: new protocol messages, length and rate limits, name display, simple profanity-free handling is not planned.
+- **Open**: should the chat be text only, or also quick phrases and emotes for phones? Should it be hidden by default in the game?
+
+### Step 31: character customization
+- "Add customization for the character: round glasses, sweatshirt, suit etc."
+- A customization screen in the lobby; accessories (glasses) and outfits (sweatshirt, suit) chosen per player, sent in the join message, drawn on every player's character.
+- **Open**: free choice or unlockable with coins? Colours? How many items at launch? The character model is the Kenney character; adding outfits may need a new, rigged model.
+
+### Order and dependencies
+26 first (small), then 27 and 28 together (course data), 29 uses 27's checkpoints, 30 and 31 both need protocol fields and come last. Every step follows the usual workflow (plan, review, owner go-ahead, tasks with review, Opus branch review, checks).
+
 
 ## Later specs
 
