@@ -2,7 +2,7 @@ import { TICK_DT, TICK_RATE } from '../constants';
 import type { Box, BuiltCourse } from '../course';
 import { rotate, vec3, type Quat, type Vec3 } from '../math';
 import { NEUTRAL_INPUT, type InputFields } from '../protocol';
-import type { World } from '../world';
+import type { World, WorldEvent } from '../world';
 import type { Rapier } from '../rapier';
 import { createRig } from '../testRig';
 import { getVehicleConfig, type VehicleId } from '../vehicles';
@@ -206,7 +206,7 @@ export function driveWorld(
   world: World,
   playerId: string,
   untilAlong: number,
-  opts: { timeoutTicks?: number; others?: ReadonlyMap<string, InputFields>; restart?: boolean; stop?: () => boolean } = {},
+  opts: { timeoutTicks?: number; others?: ReadonlyMap<string, InputFields>; restart?: boolean; stop?: () => boolean; events?: WorldEvent[] } = {},
 ): WorldDriveResult {
   const course = world.course;
   const timeoutTicks = opts.timeoutTicks ?? 120 * TICK_RATE;
@@ -227,6 +227,7 @@ export function driveWorld(
     const error = Math.atan2(f.x * dz - f.z * dx, f.x * dx + f.z * dz);
     const inputs = new Map<string, InputFields>(opts.others);
     inputs.set(playerId, { ...NEUTRAL_INPUT, moveY: 1, moveX: Math.max(-STEER_MAX, Math.min(STEER_MAX, STEER_GAIN * error)) });
-    world.step(inputs);
+    const stepped = world.step(inputs);
+    if (opts.events) opts.events.push(...stepped);
   }
 }

@@ -321,11 +321,16 @@ function placeHazard(h: Hazard, surfaceAt: (along: number) => SurfacePoint, id: 
   } else {
     const s = surfaceAt(h.along);
     for (const lateral of [-ROADBLOCK_LATERAL, 0, ROADBLOCK_LATERAL]) props.push(barrier(s, lateral));
-    // Fences close the shoulders so the row really blocks; they follow the road's pose at the row.
+    // Fences along the road edge plus a cross-wall over the whole shoulder at the row, so nothing drives round it; all follow the road's pose at the row.
     for (const side of [-1, 1] as const) {
       walls.push({
         center: offsetFrom(s, side * (ROAD_WIDTH / 2 + WALL_THICKNESS / 2), FENCE_HEIGHT / 2),
         halfExtents: vec3(WALL_THICKNESS / 2, FENCE_HEIGHT / 2, ROADBLOCK_FENCE_HALF),
+        rot: yawPitchQuat(s.yaw, s.pitch),
+      });
+      walls.push({
+        center: offsetFrom(s, side * (ROAD_WIDTH / 2 + SHOULDER_WIDTH / 2), FENCE_HEIGHT / 2),
+        halfExtents: vec3(SHOULDER_WIDTH / 2, FENCE_HEIGHT / 2, WALL_THICKNESS / 2),
         rot: yawPitchQuat(s.yaw, s.pitch),
       });
     }

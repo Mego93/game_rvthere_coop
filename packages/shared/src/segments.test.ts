@@ -20,6 +20,7 @@ import {
   ROAD_JOINT_OVERLAP,
   ROAD_PIECE_LENGTH,
   ROAD_WIDTH,
+  SHOULDER_WIDTH,
   SAND_APRON,
   SEGMENT_MIN_LENGTH,
   SEGMENT_SPAWN_INSET,
@@ -807,12 +808,23 @@ describe('hazards', () => {
     const seg = buildSegment(road(150, { hazards: [{ kind: 'roadblock', along: 70 }] }));
     expect(seg.props.map((p) => p.pose.pos.x)).toEqual([-3, 0, 3]);
     expect(seg.props.every((p) => p.kind === 'barrier' && Math.abs(p.pose.pos.z + 70) < 1e-9)).toBe(true);
-    expect(seg.walls).toHaveLength(2);
+    expect(seg.walls).toHaveLength(4);
     for (const side of [-1, 1]) {
-      const w = seg.walls.find((b) => Math.sign(b.center.x) === side)!;
+      const w = seg.walls.find((b) => Math.sign(b.center.x) === side && b.halfExtents.z > 1)!;
       expect(Math.abs(w.center.x)).toBeCloseTo(ROAD_WIDTH / 2 + WALL_THICKNESS / 2, 9);
       expect(w.halfExtents.z).toBeCloseTo(ROADBLOCK_FENCE_HALF, 9);
       expect(w.center.z).toBeCloseTo(-70, 9);
+      expect(w.halfExtents.y).toBeCloseTo(FENCE_HEIGHT / 2, 9);
+    }
+  });
+
+  test('T4: a cross-wall at the row covers each shoulder from the road edge to its far edge', () => {
+    const seg = buildSegment(road(150, { hazards: [{ kind: 'roadblock', along: 70 }] }));
+    for (const side of [-1, 1]) {
+      const w = seg.walls.find((b) => Math.sign(b.center.x) === side && b.halfExtents.z < 1)!;
+      expect(w.center.z).toBeCloseTo(-70, 9);
+      expect(Math.abs(w.center.x) - w.halfExtents.x).toBeCloseTo(ROAD_WIDTH / 2, 9);
+      expect(Math.abs(w.center.x) + w.halfExtents.x).toBeCloseTo(ROAD_WIDTH / 2 + SHOULDER_WIDTH, 9);
       expect(w.halfExtents.y).toBeCloseTo(FENCE_HEIGHT / 2, 9);
     }
   });
