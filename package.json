@@ -18,6 +18,7 @@
     "start": "npm run build && npm run start -w @lodgy/server",
     "e2e": "playwright test",
     "e2e:cf": "playwright test --config playwright.cf.config.ts",
+    "check:worker": "node scripts/checkWorker.mjs",
     "experiment:cable": "vitest run --config experiments/vitest.config.ts --reporter=verbose experiments/cable",
     "experiment:rv": "vitest run --config experiments/vitest.config.ts --reporter=verbose experiments/rv",
     "build:worker": "node scripts/vendorRapier.mjs && npm run build",
