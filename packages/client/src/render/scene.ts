@@ -15,10 +15,11 @@ function boxMesh(box: Box, material: THREE.Material): THREE.Mesh {
   );
   mesh.position.set(box.center.x, box.center.y, box.center.z);
   mesh.quaternion.set(box.rot.x, box.rot.y, box.rot.z, box.rot.w);
+  mesh.receiveShadow = true;
   return mesh;
 }
 
-const solid = (colour: number) => new THREE.MeshLambertMaterial({ color: colour, flatShading: true });
+const solid = (colour: number) => new THREE.MeshStandardMaterial({ color: colour, flatShading: true, roughness: 1, metalness: 0 });
 const ghost = (colour: number) =>
   new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.25, depthWrite: false });
 

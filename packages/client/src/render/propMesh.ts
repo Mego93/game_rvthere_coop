@@ -5,10 +5,10 @@ const COLOURS: Record<PropKind, number> = { crate: 0xb5833f, barrier: 0xc0392b, 
 const ITEM_COLOURS: Record<ItemKind, number> = { jerrycan: 0xd32f2f, toolbox: 0x1e6fd9, healthKit: 0xf5f5f5 };
 const UNKNOWN_HALF = 0.25;
 
-const material = (color: number) => new THREE.MeshLambertMaterial({ color, flatShading: true });
+const material = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 1, metalness: 0 });
 
 // A prop or item drawn as a box of its kind's size; a kind this client does not know is a grey 0.5 m cube.
-export function createPropMesh(kind: string): THREE.Mesh {
+function buildPropMesh(kind: string): THREE.Mesh {
   if (Object.hasOwn(ITEM_KINDS, kind)) {
     const h = ITEM_KINDS[kind as ItemKind].halfExtents;
     const box = new THREE.Mesh(new THREE.BoxGeometry(h.x * 2, h.y * 2, h.z * 2), material(ITEM_COLOURS[kind as ItemKind]));
@@ -32,6 +32,15 @@ export function createPropMesh(kind: string): THREE.Mesh {
     const band = new THREE.Mesh(new THREE.BoxGeometry(h.x * 0.4, h.y * 2.02, h.z * 2.02), material(0xf2f2f2));
     mesh.add(band);
   }
+  return mesh;
+}
+
+export function createPropMesh(kind: string): THREE.Mesh {
+  const mesh = buildPropMesh(kind);
+  mesh.traverse((object) => {
+    object.castShadow = true;
+    object.receiveShadow = true;
+  });
   return mesh;
 }
 

@@ -12,7 +12,7 @@ export interface CoinMeshes {
 export function createCoinMeshes(scene: THREE.Scene, coins: readonly Placed[]): CoinMeshes {
   const geometry = new THREE.CylinderGeometry(COIN_RADIUS, COIN_RADIUS, 0.08, 24);
   geometry.rotateX(Math.PI / 2);
-  const material = new THREE.MeshLambertMaterial({ color: 0xffc83d, flatShading: true });
+  const material = new THREE.MeshStandardMaterial({ color: 0xffc83d, flatShading: true, roughness: 1, metalness: 0 });
   const meshes = coins.map((coin) => {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(coin.pose.pos.x, coin.pose.pos.y, coin.pose.pos.z);

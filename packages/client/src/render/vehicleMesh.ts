@@ -6,9 +6,11 @@ const BODY_COLOURS: Record<VehicleConfig['id'], number> = { lodgy: 0x4a6fa5, rv:
 const part = (name: string, width: number, height: number, depth: number, colour: number, x = 0, y = 0, z = 0) => {
   const mesh = new THREE.Mesh(
     new THREE.BoxGeometry(width, height, depth),
-    new THREE.MeshLambertMaterial({ color: colour, flatShading: true }),
+    new THREE.MeshStandardMaterial({ color: colour, flatShading: true, roughness: 1, metalness: 0 }),
   );
   mesh.name = name;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   mesh.position.set(x, y, z);
   return mesh;
 };

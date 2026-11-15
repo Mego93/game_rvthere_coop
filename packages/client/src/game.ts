@@ -37,7 +37,8 @@ import { updateFollowCamera } from './render/followCamera';
 import { createPlayerMesh, disposePlayerMesh, placePlayerMesh } from './render/playerMesh';
 import { createCoinMeshes } from './render/coinMesh';
 import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMesh';
-import { applyConditions, conditionsLook } from './render/conditions';
+import { applyConditions, conditionsLook, configureRenderer } from './render/conditions';
+import { applySky, hasSky } from './render/environment';
 import { createScene } from './render/scene';
 import { disposeScene } from './render/disposeScene';
 import { cameraPlacement } from './render/shoulderCamera';
@@ -93,6 +94,7 @@ export interface GameView {
   // The page's one audio; the game turns its loops off when it stops but does not dispose it.
   audio: GameAudio;
   muted: boolean;
+  softwareGl?: boolean;
   onMute: () => void;
 }
 
@@ -109,7 +111,14 @@ export function createGame(
   const cameraBoxes = [...course.ground, ...course.walls];
   const scene = createScene(course);
   const vehicleConfig = getVehicleConfig(lobby.vehicleId);
-  const conditions = applyConditions(scene, conditionsLook(firstLobby.timeOfDay, firstLobby.weather), view.touchUi !== null, vehicleConfig.halfExtents);
+  const look = conditionsLook(firstLobby.timeOfDay, firstLobby.weather);
+  const isTouch = view.touchUi !== null;
+  // Software GL cannot afford shadows or image-based light.
+  const shadows = !isTouch && !view.softwareGl;
+  const imageLight = hasSky(firstLobby.timeOfDay) && !view.softwareGl;
+  const conditions = applyConditions(scene, look, isTouch, vehicleConfig.halfExtents, imageLight, shadows);
+  applySky(renderer, scene, look, firstLobby.timeOfDay, imageLight);
+  configureRenderer(renderer, look, shadows);
   const vehicleMesh = createVehicleMesh(vehicleConfig);
   vehicleMesh.visible = false;
   scene.add(vehicleMesh);
@@ -448,7 +457,7 @@ export function createGame(
     if (vehicle && winchOn(latestCable, lobby.phase)) audio.setLoop('winch', true, { at: add(vehicle.pos, rotate(vehicle.rot, vehicleConfig.winchMount)) });
     else audio.setLoop('winch', false);
     audio.setLoop('rain', rainOn(lobby.weather), { volume: 0.3 });
-    conditions.update(camera.position, frameSeconds);
+    conditions.update(camera.position, frameSeconds, local && onFoot ? local.pos : vehicle ? vehicle.pos : camera.position);
     conditions.setLights(vehicle, players);
     renderer.render(scene, camera);
     frameRequest = requestAnimationFrame(frame);

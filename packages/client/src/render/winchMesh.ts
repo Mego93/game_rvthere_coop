@@ -8,7 +8,7 @@ export function createWinchMesh(): THREE.Group {
   const group = new THREE.Group();
   const hook = new THREE.Mesh(
     new THREE.BoxGeometry(HOOK_SIZE, HOOK_SIZE, HOOK_SIZE),
-    new THREE.MeshLambertMaterial({ color: 0xf59e0b, flatShading: true }),
+    new THREE.MeshStandardMaterial({ color: 0xf59e0b, flatShading: true, roughness: 1, metalness: 0 }),
   );
   hook.name = 'hook';
   const rope = new THREE.Line(
