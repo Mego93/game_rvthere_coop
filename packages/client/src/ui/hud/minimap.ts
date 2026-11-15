@@ -40,3 +40,15 @@ export function clampToMap(view: MapView, point: { x: number; y: number }): { x:
     y: Math.min(Math.max(point.y, 0), view.size),
   };
 }
+
+// Keeps a point within the circular map's radius (minus a 3 px inset) by scaling it toward the centre.
+export function clampToCircle(view: MapView, point: { x: number; y: number }): { x: number; y: number } {
+  const c = view.size / 2;
+  const max = c - 3;
+  const dx = point.x - c;
+  const dy = point.y - c;
+  const d = Math.hypot(dx, dy);
+  if (d <= max) return { x: point.x, y: point.y };
+  const k = max / d;
+  return { x: c + dx * k, y: c + dy * k };
+}

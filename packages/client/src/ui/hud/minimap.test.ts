@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampToMap, mapViewFor, routePath, toMap } from './minimap';
+import { clampToCircle, clampToMap, mapViewFor, routePath, toMap } from './minimap';
 
 const long: [number, number][] = [[0, 0], [200, 10], [400, -10]];
 
@@ -84,5 +84,22 @@ describe('clampToMap', () => {
   });
   it('leaves an inside point unchanged', () => {
     expect(clampToMap(v, { x: 40, y: 60 })).toEqual({ x: 40, y: 60 });
+  });
+});
+
+describe('clampToCircle', () => {
+  const v = { scale: 1, originX: 0, originZ: 0, size: 140 };
+  it('T8 leaves inside points unchanged', () => {
+    expect(clampToCircle(v, { x: 70, y: 70 })).toEqual({ x: 70, y: 70 });
+    expect(clampToCircle(v, { x: 100, y: 60 })).toEqual({ x: 100, y: 60 });
+  });
+  it('T8 pulls a corner point onto the radius toward the centre', () => {
+    const p = clampToCircle(v, { x: 140, y: 140 });
+    expect(Math.hypot(p.x - 70, p.y - 70)).toBeCloseTo(67);
+    expect(p.x).toBeCloseTo(p.y);
+    expect(p.x).toBeGreaterThan(70);
+  });
+  it('T8 a point on the centre stays finite', () => {
+    expect(clampToCircle(v, { x: 70, y: 70 })).toEqual({ x: 70, y: 70 });
   });
 });
