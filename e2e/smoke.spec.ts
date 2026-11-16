@@ -60,7 +60,7 @@ async function createRoom(page: Page, name: string): Promise<string> {
   return new URL(page.url()).pathname.slice(1);
 }
 
-// The default course is the airport; these specs assert on the test ground, so the admin picks it in the lobby.
+// The default course is marrakech; these specs assert on the test ground, so the admin picks it in the lobby.
 async function chooseTestGround(page: Page) {
   await page.locator('#lobby-course').selectOption('test');
 }
@@ -405,7 +405,7 @@ test('a night rain run draws without WebGL errors', async ({ page }) => {
 });
 
 // ?hq keeps the lit, shadowed, textured render path on software GL, which otherwise drops it.
-test('the full-quality render path draws the airport run without console or page errors @keyboard', async ({ page }) => {
+test('the full-quality render path draws the marrakech run without console or page errors @keyboard', async ({ page }) => {
   test.setTimeout(60_000);
   const consoleErrors: string[] = [];
   page.on('console', (message) => {

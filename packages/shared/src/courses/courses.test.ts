@@ -29,7 +29,7 @@ beforeAll(async () => {
 const course = getCourse('segment-demo');
 
 test('courseIds lists every registered course', () => {
-  expect(courseIds().sort()).toEqual(['airport', 'segment-demo', 'test']);
+  expect(courseIds().sort()).toEqual(['airport', 'marrakech', 'segment-demo', 'test']);
 });
 const VEHICLE_CONFIGS = Object.values(VEHICLES);
 
@@ -50,6 +50,7 @@ describe('the registry', () => {
   });
 });
 
+// marrakech is left out: groundHeightAt is a linear scan and would run for hours over 22 km; it has its own tests in marrakech.course.test.ts.
 const DEFS = { 'segment-demo': segmentDemo, airport } as const;
 
 describe.each(Object.keys(DEFS) as (keyof typeof DEFS)[])('structure of %s', (id) => {

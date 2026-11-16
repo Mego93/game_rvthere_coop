@@ -402,7 +402,7 @@ export const HELD_SLOT_TIMEOUT = 30;
 // s a room refuses to build another world after building one, so an admin cannot rebuild at message rate.
 export const WORLD_REBUILD_COOLDOWN = 1;
 // Course ids in campaign order.
-export const CAMPAIGN: readonly string[] = deepFreeze(['airport']);
+export const CAMPAIGN: readonly string[] = deepFreeze(['marrakech']);
 
 // m from the centre line to each barrier of a gates hazard; the corridor between inner edges is 2 * (this - barrier half width).
 export const GATES_OFFSET = 2.7;

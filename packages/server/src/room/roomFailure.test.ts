@@ -44,7 +44,7 @@ beforeEach(() => {
 function setup() {
   const fake = createFakeDeps(RAPIER);
   const errors: unknown[] = [];
-  const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) });
+  const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) }, { campaign: ['airport'] });
   const host = (name: string, n: number) => {
     const client = connectFakeClient(server);
     client.send({ type: 'create', name, token: `token-${n}-abcdefghij` });
