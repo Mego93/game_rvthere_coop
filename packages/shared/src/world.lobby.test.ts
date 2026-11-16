@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { PLAYER_REVIVE_HEALTH } from './constants';
+import { PLAYER_EYE_HEIGHT, PLAYER_REVIVE_HEALTH, PROP_KINDS } from './constants';
 import { testGround } from './courses/testGround';
 import { IDENTITY, vec3 } from './math';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
@@ -442,8 +442,9 @@ describe('L3: adminTool', () => {
     const world = fresh();
     world.addPlayer('p1');
     settle(world, 30);
-    const beside = vec3(12, 0.02, 8);
-    const aim = { yaw: Math.PI / 2, pitch: -Math.atan2(1.0, 1.7) };
+    const crateHalf = PROP_KINDS.crate.halfExtents;
+    const beside = vec3(10 + crateHalf.x + 1.3, 0.02, 8);
+    const aim = { yaw: Math.PI / 2, pitch: -Math.atan2(PLAYER_EYE_HEIGHT - 2 * crateHalf.y, 1.3) };
     const press = () => {
       world.step(new Map([['p1', input({ ...aim, interact: true })]]));
       world.step(new Map([['p1', input(aim)]]));

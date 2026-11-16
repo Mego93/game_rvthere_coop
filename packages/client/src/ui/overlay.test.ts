@@ -1,6 +1,8 @@
 import {
   AXIS_Y,
   IDENTITY,
+  PLAYER_CROUCH_EYE_HEIGHT,
+  PLAYER_EYE_HEIGHT,
   getCourse,
   getVehicleConfig,
   quatFromAxisAngle,
@@ -351,9 +353,9 @@ test('M2: aiming level at the post resolves to operate, and level at the counter
   const op = fuelStop.operatePoint;
   const yawToward = (from: Vec3, to: Vec3) => Math.atan2(-(to.x - from.x), -(to.z - from.z));
   const v = parked(fuelStop, { fuel: 0.5 });
-  const near = player('p1', op.x + 0.55, op.z + 0.15);
+  const near = player('p1', op.x + 0.55, op.z - 0.4);
   expect(interactAction(rv, v, near, [near], yawToward(near.pos, op), 0, [], stowed, [], course.stops)).toEqual({ kind: 'operate', stopId: 'stop-fuel' });
-  const side = player('p1', op.x - 1, op.z);
+  const side = player('p1', op.x - 1, op.z - 0.6);
   expect(interactAction(rv, v, side, [side], yawToward(side.pos, fuelStop.shopCounter!), 0, [], stowed, [], course.stops)).toEqual({ kind: 'shop', stopId: 'stop-fuel' });
 });
 
@@ -459,8 +461,8 @@ test('M9: the overlay shows the camera eye height, on its own line that does not
 test('B6: a crouched player aims from the lower eye when the prompt is resolved', () => {
   // Two jerrycans straight ahead, one at the standing eye height and one at the crouched eye height.
   const standing = { ...nearDoor, pos: vec3(0, 0, 0) };
-  const can = (id: string, y: number) => ({ id, kind: 'jerrycan', pos: vec3(0, y, -1.5), rot: IDENTITY, linvel: vec3(0, 0, 0) }) as unknown as PropSnapshot;
-  const props = [can('high', 1.6), can('low', 0.95)];
+  const can = (id: string, y: number) => ({ id, kind: 'jerrycan', pos: vec3(0, y, -1), rot: IDENTITY, linvel: vec3(0, 0, 0) }) as unknown as PropSnapshot;
+  const props = [can('high', PLAYER_EYE_HEIGHT), can('low', PLAYER_CROUCH_EYE_HEIGHT)];
   expect(interactAction(rv, vehicle, standing, [standing], 0, 0, props, stowed, [])).toEqual({ kind: 'pickUpItem', itemId: 'high' });
   const crouched = { ...standing, stance: 'crouch' as const };
   expect(interactAction(rv, vehicle, crouched, [crouched], 0, 0, props, stowed, [])).toEqual({ kind: 'pickUpItem', itemId: 'low' });

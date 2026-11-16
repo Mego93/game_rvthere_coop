@@ -1,7 +1,7 @@
-import { PLAYER_HEIGHT, type PlayerSnapshot } from '@lodgy/shared';
+import { CHARACTER_SCALE, PLAYER_HEIGHT, PLAYER_RADIUS, type PlayerSnapshot } from '@lodgy/shared';
 import * as THREE from 'three';
 import { beforeAll, expect, test, vi } from 'vitest';
-import { createPlayerMesh, disposePlayerMesh, placePlayerMesh, setNameVisible } from './playerMesh';
+import { HEAD_RADIUS, NAME_TAG_OFFSET, createPlayerMesh, disposePlayerMesh, placePlayerMesh, setNameVisible } from './playerMesh';
 
 const shared = { geometry: new THREE.BoxGeometry(1, 1, 1), material: new THREE.MeshStandardMaterial() };
 shared.geometry.userData.shared = true;
@@ -93,14 +93,29 @@ test('M9: the stance change eases over about 0.1 s and the name label keeps its 
   for (let i = 0; i < 30; i++) placePlayerMesh(mesh, stanced('crouch'), 0.016);
   expect(body.scale.y).toBeCloseTo(0.6, 2);
   expect(label.scale.y).toBe(labelScale);
-  expect(label.position.y).toBeLessThan(PLAYER_HEIGHT + 0.3);
+  expect(label.position.y).toBeLessThan(PLAYER_HEIGHT + NAME_TAG_OFFSET);
   for (let i = 0; i < 80; i++) placePlayerMesh(mesh, stanced(), 0.016);
   expect(body.scale.y).toBeCloseTo(1, 2);
-  expect(label.position.y).toBeCloseTo(PLAYER_HEIGHT + 0.3, 2);
+  expect(label.position.y).toBeCloseTo(PLAYER_HEIGHT + NAME_TAG_OFFSET, 2);
 });
 
 test('M9: a downed player is not also crouch-scaled', () => {
   const mesh = createPlayerMesh('Amal', '#e0a030');
   placePlayerMesh(mesh, { ...stanced('crouch'), downed: 5 } as unknown as PlayerSnapshot, 0);
   expect(mesh.rotation.x).toBeCloseTo(Math.PI / 2, 9);
+});
+
+test('T9: the name tag sits above the head at the scaled offset and the label keeps its size', () => {
+  expect(NAME_TAG_OFFSET).toBeCloseTo(0.3 * CHARACTER_SCALE, 9);
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  const label = mesh.getObjectByName('label')!;
+  expect(label.position.y).toBeGreaterThan(PLAYER_HEIGHT);
+  expect(label.position.y).toBeCloseTo(PLAYER_HEIGHT + NAME_TAG_OFFSET, 9);
+  expect(label.scale.x).toBe(1);
+  expect(label.scale.y).toBe(0.25);
+});
+
+test('the fallback body scales with the character and stays positive', () => {
+  expect(HEAD_RADIUS).toBeCloseTo(0.2 * CHARACTER_SCALE, 9);
+  expect(PLAYER_HEIGHT - 2 * HEAD_RADIUS - 2 * PLAYER_RADIUS).toBeGreaterThan(0);
 });

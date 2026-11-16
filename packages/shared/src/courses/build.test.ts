@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { CHECKPOINT_TRIGGER, FINISH_PAD, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET, STOP_PAD, STOP_PAD_LIFT } from '../constants';
+import { CHECKPOINT_TRIGGER, COIN_HEIGHT, FINISH_PAD, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET, STOP_PAD, STOP_PAD_LIFT } from '../constants';
 import type { BuiltCourse } from '../course';
 import { groundHeightAt } from '../groundProbe';
 import { degToRad, rotate, vec3 } from '../math';
@@ -238,7 +238,7 @@ describe('extras after chaining', () => {
     for (const [placed, y] of [
       [built.pickups[0]!, 0],
       [built.anchors[0]!, 0],
-      [built.coins[0]!, 1],
+      [built.coins[0]!, COIN_HEIGHT],
     ] as const) {
       expect(placed.pose.pos.x).toBeCloseTo(expected.x, 9);
       expect(placed.pose.pos.y).toBeCloseTo(y, 9);

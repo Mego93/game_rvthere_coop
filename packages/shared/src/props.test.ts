@@ -48,10 +48,10 @@ describe('createProps', () => {
 
   test('the centre is half a height above the bottom face, rotated with the pose', () => {
     const config = PROP_KINDS.crate;
-    expect(propCentre({ id: 'a', kind: 'crate', pose: { pos: vec3(1, 2, 3), rot: IDENTITY } }, config)).toEqual(vec3(1, 2.3, 3));
+    expect(propCentre({ id: 'a', kind: 'crate', pose: { pos: vec3(1, 2, 3), rot: IDENTITY } }, config)).toEqual(vec3(1, 2 + config.halfExtents.y, 3));
     const rot = { x: Math.SQRT1_2, y: 0, z: 0, w: Math.SQRT1_2 };
     const centre = propCentre({ id: 'a', kind: 'crate', pose: { pos: vec3(0, 0, 0), rot } }, config);
-    expect(centre).toEqual(add(vec3(0, 0, 0), rotate(rot, vec3(0, 0.3, 0))));
+    expect(centre).toEqual(add(vec3(0, 0, 0), rotate(rot, vec3(0, config.halfExtents.y, 0))));
   });
 
   test('throws on an unknown kind', () => {
@@ -63,7 +63,7 @@ describe('createProps', () => {
     const { props, run } = rig();
     props.get('crate-1')!.body.setTranslation({ x: 10, y: 3, z: 8 }, true);
     run(2);
-    expect(props.get('crate-1')!.body.translation().y).toBeCloseTo(0.3, 2);
+    expect(props.get('crate-1')!.body.translation().y).toBeCloseTo(PROP_KINDS.crate.halfExtents.y, 2);
   });
 
   test('a prop below the kill plane returns to spawn at rest; a heavy one locks', () => {
@@ -74,7 +74,7 @@ describe('createProps', () => {
     expect(props.killPlane(testGround.killPlaneY).sort()).toEqual(['barrier-1', 'crate-1']);
     run(1);
     expect(props.get('crate-1')!.body.translation().x).toBeCloseTo(10, 2);
-    expect(props.get('crate-1')!.body.translation().y).toBeCloseTo(0.3, 2);
+    expect(props.get('crate-1')!.body.translation().y).toBeCloseTo(PROP_KINDS.crate.halfExtents.y, 2);
     expect(props.get('barrier-1')!.locked).toBe(true);
     expect(props.get('barrier-1')!.body.translation().x).toBeCloseTo(-10, 2);
   });
@@ -98,7 +98,7 @@ describe('createProps', () => {
     const box2 = physics.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(12, 3, 8));
     physics.createCollider(RAPIER.ColliderDesc.cuboid(0.2, 0.2, 0.2).setCollisionGroups(groups(GROUP_WORLD, GROUP_WORLD)), box2);
     run(2);
-    expect(crate.body.translation().y).toBeCloseTo(0.3, 2);
+    expect(crate.body.translation().y).toBeCloseTo(PROP_KINDS.crate.halfExtents.y, 2);
     expect(box2.translation().y).toBeGreaterThan(0.45);
   });
 
@@ -172,12 +172,12 @@ describe('props in the world', () => {
     world.debugBody('barrier-1')!.setTranslation({ x: 0, y: -30, z: 0 }, true);
     world.debugBody('crate-3')!.setTranslation({ x: 0, y: -30, z: 0 }, true);
     world.step(new Map());
-    expect(dist(pos(world, 'barrier-1'), vec3(-10, 0.5, 10))).toBeLessThan(0.01);
-    expect(dist(pos(world, 'crate-3'), vec3(10, 0.3, 11))).toBeLessThan(0.01);
+    expect(dist(pos(world, 'barrier-1'), vec3(-10, PROP_KINDS.barrier.halfExtents.y, 10))).toBeLessThan(0.01);
+    expect(dist(pos(world, 'crate-3'), vec3(10, PROP_KINDS.crate.halfExtents.y, 11))).toBeLessThan(0.01);
     const body = world.debugBody('crate-3')!;
     expect(Math.hypot(body.linvel().x, body.linvel().y, body.linvel().z)).toBeLessThan(0.01);
     for (let i = 0; i < 60; i++) world.step(new Map());
-    expect(dist(pos(world, 'crate-3'), vec3(10, 0.3, 11))).toBeLessThan(0.01);
+    expect(dist(pos(world, 'crate-3'), vec3(10, PROP_KINDS.crate.halfExtents.y, 11))).toBeLessThan(0.01);
   });
 
   test('createProps rejects a prop whose id is vehicle', () => {

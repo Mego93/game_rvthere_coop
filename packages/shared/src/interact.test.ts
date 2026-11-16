@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { HANDS_RANGE } from './constants';
+import { BOARD_RANGE, HANDS_RANGE } from './constants';
 import { AXIS_Y, IDENTITY, add, quatFromAxisAngle, rotate, sub, vec3, type Vec3 } from './math';
 import { aimAngleToBox, interactCandidates, resolveInteract, splitCandidates, type InteractCandidate, type StopContext } from './interact';
 import { getVehicleConfig } from './vehicles';
 import type { CableSnapshot } from './winch';
 import type { Placed } from './course';
 import type { PropSnapshot } from './props';
-import { ANCHOR_HEIGHT, HOOK_RANGE, ITEM_KINDS, PLAYER_EYE_HEIGHT, PUSH_HEIGHT, SHOP_COUNTER_HALF, SHOP_RANGE, WINCH_MAX_LENGTH } from './constants';
+import { ANCHOR_HEIGHT, HOOK_RANGE, ITEM_KINDS, PLAYER_CROUCH_EYE_HEIGHT, PLAYER_EYE_HEIGHT, PROP_KINDS, PUSH_HEIGHT, STOP_OPERATE_RANGE, SHOP_COUNTER_HALF, SHOP_RANGE, WINCH_MAX_LENGTH } from './constants';
 
 const resolve = (ctx: { seat: string | null; hands: string | null; candidates: readonly InteractCandidate[] }) =>
   resolveInteract({ holdsHook: ctx.hands === 'hook', attachCandidates: [], stopCandidates: [], ...ctx });
@@ -116,19 +116,21 @@ describe('interactCandidates', () => {
     freeSlot: true,
     stops: [] as StopContext[],
   };
-  const crateAt = (id: string, x: number, z: number) => ({ id, kind: 'crate', pos: vec3(x, 0.3, z), rot: IDENTITY });
+  const crateAt = (id: string, x: number, z: number) => ({ id, kind: 'crate', pos: vec3(x, PROP_KINDS.crate.halfExtents.y, z), rot: IDENTITY });
+  // Beside the Lodgy, inside BOARD_RANGE of its box.
+  const FX = config.halfExtents.x + 0.8 * BOARD_RANGE;
 
   test('lists boarding first, then each unheld light prop in range, in the order given', () => {
-    const found = interactCandidates({ ...base, feet: vec3(2.5, 0, 0), props: [crateAt('a', 3.2, 0), crateAt('b', 2.5, -1)] });
+    const found = interactCandidates({ ...base, feet: vec3(FX, 0, 0), props: [crateAt('a', FX + 0.7, 0), crateAt('b', FX, -1)] });
     expect(found.map((c) => c.action.kind)).toEqual(['board', 'pickUp', 'pickUp']);
     expect(found.slice(1).map((c) => (c.action as { propId: string }).propId)).toEqual(['a', 'b']);
   });
 
   test('a crouched player aims from the lower eye, so the lower of two crates ahead is the nearer to the aim', () => {
-    const at = (id: string, y: number) => ({ id, kind: 'crate', pos: vec3(2.5, y, -1.2), rot: IDENTITY });
-    const props = [at('high', 1.6), at('low', 0.55)];
+    const at = (id: string, y: number) => ({ id, kind: 'crate', pos: vec3(FX, y, -1.2), rot: IDENTITY });
+    const props = [at('high', PLAYER_EYE_HEIGHT), at('low', PLAYER_CROUCH_EYE_HEIGHT - 0.2)];
     const angles = (crouched: boolean) => {
-      const found = interactCandidates({ ...base, feet: vec3(2.5, 0, 0), crouched, props });
+      const found = interactCandidates({ ...base, feet: vec3(FX, 0, 0), crouched, props });
       const angleOf = (id: string) => found.find((c) => c.action.kind === 'pickUp' && c.action.propId === id)!.angle;
       return { high: angleOf('high'), low: angleOf('low') };
     };
@@ -152,9 +154,9 @@ describe('interactCandidates', () => {
   const itemAt = (id: string, kind: string, x: number, z: number) => ({ id, kind, pos: vec3(x, ITEM_KINDS.jerrycan.halfExtents.y, z), rot: IDENTITY });
 
   test('lists unheld items within HANDS_RANGE after the props, in the order given, only with a free slot', () => {
-    const items = [itemAt('far', 'jerrycan', 2.5 + HANDS_RANGE + 0.5 + 0.2, 0), itemAt('item-a', 'jerrycan', 3.2, 0), itemAt('item-b', 'toolbox', 2.5, -1)];
-    const feet = vec3(2.5, 0, 0);
-    const found = interactCandidates({ ...base, feet, props: [crateAt('a', 3.2, 0.5)], items });
+    const items = [itemAt('far', 'jerrycan', FX + HANDS_RANGE + 0.5 + 0.2, 0), itemAt('item-a', 'jerrycan', FX + 0.7, 0), itemAt('item-b', 'toolbox', FX, -1)];
+    const feet = vec3(FX, 0, 0);
+    const found = interactCandidates({ ...base, feet, props: [crateAt('a', FX + 0.7, 0.5)], items });
     expect(found.map((c) => c.action)).toEqual([
       { kind: 'board', seatId: expect.any(String) },
       { kind: 'pickUp', propId: 'a' },
@@ -355,11 +357,11 @@ describe('stop candidates (S3, S3b)', () => {
   });
 
   test('operate needs the feet within STOP_OPERATE_RANGE in 3D', () => {
-    const near = interactCandidates({ ...base, feet: vec3(11.5, 0, -18.01), stops: [fuelStop(true)] });
-    const far = interactCandidates({ ...base, feet: vec3(11.5, 0, -17.99), stops: [fuelStop(true)] });
+    const near = interactCandidates({ ...base, feet: vec3(11.5, 0, -20 + STOP_OPERATE_RANGE - 0.01), stops: [fuelStop(true)] });
+    const far = interactCandidates({ ...base, feet: vec3(11.5, 0, -20 + STOP_OPERATE_RANGE + 0.01), stops: [fuelStop(true)] });
     expect(kinds(near)).toContain('operate');
     expect(kinds(far)).not.toContain('operate');
-    const high = interactCandidates({ ...base, feet: vec3(11.5, 2.01, -20), stops: [fuelStop(true)] });
+    const high = interactCandidates({ ...base, feet: vec3(11.5, STOP_OPERATE_RANGE + 0.01, -20), stops: [fuelStop(true)] });
     expect(kinds(high)).not.toContain('operate');
   });
 

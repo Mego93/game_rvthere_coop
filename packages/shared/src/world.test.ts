@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { HOLD_OFFSET, RAIN_GRIP, SURFACES, PLAYER_KILL_RESPAWN_DELAY, THROW_SPEED, TICK_RATE } from './constants';
+import { HOLD_OFFSET, PLAYER_EYE_HEIGHT, PROP_KINDS, RAIN_GRIP, SURFACES, PLAYER_KILL_RESPAWN_DELAY, THROW_SPEED, TICK_RATE } from './constants';
 import { IDENTITY, add, quatFromAxisAngle, rotate, vec3, yawOf, AXIS_Y, type Vec3 } from './math';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
 import { testGround } from './courses/testGround';
@@ -623,9 +623,10 @@ test('determinism: the same inputs, boarding included, give the same snapshot', 
 });
 
 describe('hands', () => {
-  // crate-1 sits at (10, 0.3, 8); a player 1.7 m east of it who looks west and down at it has it dead ahead.
-  const BESIDE = vec3(12, 0.02, 8);
-  const AT_CRATE = { yaw: Math.PI / 2, pitch: -Math.atan2(1.0, 1.7) };
+  // crate-1 sits at (10, 0, 8); a player 1.3 m east of its face who looks west and down at its top edge has it dead ahead.
+  const CRATE = PROP_KINDS.crate.halfExtents;
+  const BESIDE = vec3(10 + CRATE.x + 1.3, 0.02, 8);
+  const AT_CRATE = { yaw: Math.PI / 2, pitch: -Math.atan2(PLAYER_EYE_HEIGHT - 2 * CRATE.y, 1.3) };
   const crateOf = (world: World, id = 'crate-1') => world.snapshot().props.find((prop) => prop.id === id)!;
   const handsOf = (world: World, id: string) => world.snapshot().players.find((player) => player.playerId === id)!.hands;
   const press = (world: World, ids: string[], fields: Partial<PlayerInput> = AT_CRATE) => {
@@ -769,7 +770,7 @@ describe('hands', () => {
     expect(handsOf(world, 'p1')).toBeNull();
     const crate = crateOf(world);
     expect(crate.pos.x).toBeCloseTo(10, 2);
-    expect(crate.pos.y).toBeCloseTo(0.3, 2);
+    expect(crate.pos.y).toBeCloseTo(CRATE.y, 2);
     expect(crate.pos.z).toBeCloseTo(8, 2);
     expect(world.debugBody('crate-1')!.isDynamic()).toBe(true);
   });

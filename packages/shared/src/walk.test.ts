@@ -162,7 +162,7 @@ describe('stepWalk', () => {
   });
 
   test('agrees with a createWorld player through a mid-air reversal of the wish', () => {
-    const feet = vec3(20, 0.02, -100);
+    const feet = vec3(0, 0.02, -90);
     const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
     world.addPlayer('p');
     world.teleportPlayer('p', feet);
@@ -195,7 +195,7 @@ describe('stepWalk', () => {
   });
 
   test('agrees with a createWorld player given the same inputs, within 1e-9 m for 300 ticks', () => {
-    const feet = vec3(20, 0.02, -100);
+    const feet = vec3(0, 0.02, -90);
     const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
     world.addPlayer('p');
     world.teleportPlayer('p', feet);
@@ -219,7 +219,7 @@ describe('stepWalk', () => {
   });
 });
 
-const OPEN = vec3(20, PLAYER_CONTROLLER_OFFSET, -100);
+const OPEN = vec3(0, PLAYER_CONTROLLER_OFFSET, -90);
 const speedOf = (state: WalkState) => Math.hypot(state.walk.x, state.walk.z);
 
 describe('stances', () => {
@@ -240,7 +240,7 @@ describe('stances', () => {
     expect(speedOf(settle({ moveY: 1, moveX: 1, sprint: true }).state)).toBeCloseTo(PLAYER_SPRINT_SPEED, 9);
   });
 
-  test('(T1) the capsule is 1.1 m tall while crouched and 1.8 m when standing, the feet unmoved', () => {
+  test('(T1) the capsule is PLAYER_CROUCH_HEIGHT tall while crouched and PLAYER_HEIGHT when standing, the feet unmoved', () => {
     const w = walker(testGround, OPEN);
     w.run(30);
     const feet = w.state.pos.y;
@@ -310,7 +310,7 @@ describe('stances', () => {
     const standing = walker(lowCeiling(), vec3(OPEN.x, PLAYER_CONTROLLER_OFFSET, OPEN.z + 6));
     standing.run(30);
     standing.run(120, { moveY: 1 });
-    expect(standing.state.pos.z).toBeGreaterThan(OPEN.z + 2.3);
+    expect(standing.state.pos.z).toBeGreaterThan(OPEN.z + 2.2);
     const crouching = walker(lowCeiling(), vec3(OPEN.x, PLAYER_CONTROLLER_OFFSET, OPEN.z + 6));
     crouching.run(30);
     crouching.run(420, { moveY: 1, crouch: true });

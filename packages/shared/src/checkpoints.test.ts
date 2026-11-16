@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { DROP_HEIGHT, ITEM_KINDS, PLAYER_CONTROLLER_OFFSET, PLAYER_RADIUS, TICK_DT, TICK_RATE } from './constants';
+import { DROP_HEIGHT, ITEM_KINDS, PLAYER_CONTROLLER_OFFSET, PLAYER_EYE_HEIGHT, PLAYER_RADIUS, PROP_KINDS, TICK_DT, TICK_RATE } from './constants';
 import type { Box } from './course';
 import { boxesOverlap, enteredCheckpoint, insideBox, recordState } from './checkpoints';
 import { testGround } from './courses/testGround';
@@ -380,8 +380,10 @@ describe('world: restart', () => {
 });
 
 describe('world: restart restores props', () => {
-  const BESIDE = vec3(12, 0.02, 8);
-  const AT_CRATE = { yaw: Math.PI / 2, pitch: -Math.atan2(1.0, 1.7) };
+  const CRATE = PROP_KINDS.crate.halfExtents;
+  // 1.3 m in front of the crate's face, aiming from the eye at its top front edge.
+  const BESIDE = vec3(10 + CRATE.x + 1.3, 0.02, 8);
+  const AT_CRATE = { yaw: Math.PI / 2, pitch: -Math.atan2(PLAYER_EYE_HEIGHT - 2 * CRATE.y, 1.3) };
   const press = (world: World) => {
     world.step(new Map([['p1', input({ ...AT_CRATE, interact: true })]]));
     world.step(new Map([['p1', input(AT_CRATE)]]));
@@ -439,14 +441,14 @@ describe('world: restart restores props', () => {
   test('(4) a crate on the vehicle spawn box at the record returns to its own spawn', () => {
     const world = withCrate();
     settle(world, 30);
-    world.debugBody('crate-9')!.setTranslation({ x: 0, y: 0.3, z: -50 }, true);
+    world.debugBody('crate-9')!.setTranslation({ x: 0, y: PROP_KINDS.crate.halfExtents.y, z: -50 }, true);
     recordCp1(world, vec3(5, 0.95, -50));
     expect(propOf(world, 'crate-9').pos.x).toBeCloseTo(0, 1);
     world.restartCheckpoint();
     world.step(new Map());
     const crate = propOf(world, 'crate-9');
     expect(crate.pos.x).toBeCloseTo(8, 6);
-    expect(crate.pos.y).toBeCloseTo(0.3, 6);
+    expect(crate.pos.y).toBeCloseTo(PROP_KINDS.crate.halfExtents.y, 6);
     expect(crate.pos.z).toBeCloseTo(-40, 6);
     expect(linvelOf(world, 'crate-9')).toBeLessThan(1e-9);
     world.dispose();
@@ -480,7 +482,7 @@ describe('world: restart restores props', () => {
     world.step(new Map());
     const crate = propOf(world, 'crate-1');
     expect(crate.pos.x).toBeCloseTo(10, 6);
-    expect(crate.pos.y).toBeCloseTo(0.3, 6);
+    expect(crate.pos.y).toBeCloseTo(PROP_KINDS.crate.halfExtents.y, 6);
     expect(crate.pos.z).toBeCloseTo(8, 6);
     expect(playerOf(world, 'p1').hands).toBeNull();
     world.dispose();
@@ -650,7 +652,7 @@ describe('world: restart places the players', () => {
     settle(world, 30);
     recordCp1(world);
     // Both bodies are elsewhere when the restart begins, so only fresh queries see them at the checkpoint.
-    world.debugBody('crate-9')!.setTranslation({ x: 30, y: 0.3, z: -20 }, true);
+    world.debugBody('crate-9')!.setTranslation({ x: 30, y: PROP_KINDS.crate.halfExtents.y, z: -20 }, true);
     world.debugBody('vehicle')!.setTranslation({ x: 30, y: 0.95, z: -10 }, true);
     world.restartCheckpoint();
     world.step(new Map());
@@ -659,7 +661,7 @@ describe('world: restart places the players', () => {
     for (const id of ['p1', 'p2', 'p3']) {
       const { pos } = playerOf(world, id);
       clearOfVehicle(world, id);
-      expect(Math.max(Math.abs(pos.x - crate.pos.x), Math.abs(pos.z - crate.pos.z)), id).toBeGreaterThan(0.3 + PLAYER_RADIUS - 1e-6);
+      expect(Math.max(Math.abs(pos.x - crate.pos.x), Math.abs(pos.z - crate.pos.z)), id).toBeGreaterThan(PROP_KINDS.crate.halfExtents.x + PLAYER_RADIUS - 1e-6);
     }
     world.dispose();
   });

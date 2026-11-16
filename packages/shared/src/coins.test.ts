@@ -10,7 +10,7 @@ const feet = vec3(0, 0, 0);
 test('S6: a coin level with the capsule body is taken within the reach and not beyond it', () => {
   expect(coinTouched(feet, vec3(reach - EPS, 1, 0))).toBe(true);
   expect(coinTouched(feet, vec3(reach + EPS, 1, 0))).toBe(false);
-  expect(reach).toBeCloseTo(0.85);
+  expect(reach).toBeCloseTo(0.68);
 });
 
 test('S6: the capsule segment ends at the radius above the feet and below the head', () => {

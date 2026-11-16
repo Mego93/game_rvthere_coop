@@ -1,8 +1,9 @@
-import { isCrouchedStance, PLAYER_COLOURS, PLAYER_COLOUR_PATTERN, PLAYER_HEIGHT, PLAYER_RADIUS, type PlayerSnapshot } from '@lodgy/shared';
+import { CHARACTER_SCALE, isCrouchedStance, PLAYER_COLOURS, PLAYER_COLOUR_PATTERN, PLAYER_HEIGHT, PLAYER_RADIUS, type PlayerSnapshot } from '@lodgy/shared';
 import * as THREE from 'three';
 import { animationsOf, hasModel, instantiate, shadowed } from './models';
 
-const HEAD_RADIUS = 0.2;
+export const HEAD_RADIUS = 0.2 * CHARACTER_SCALE;
+export const NAME_TAG_OFFSET = 0.3 * CHARACTER_SCALE;
 const LABEL_WIDTH = 256;
 const LABEL_HEIGHT = 64;
 
@@ -25,7 +26,7 @@ function nameSprite(name: string): THREE.Sprite {
   texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
   sprite.scale.set(1.0, 0.25, 1);
-  sprite.position.y = PLAYER_HEIGHT + 0.3;
+  sprite.position.y = PLAYER_HEIGHT + NAME_TAG_OFFSET;
   sprite.name = 'label';
   return sprite;
 }
@@ -65,7 +66,7 @@ function applyStance(mesh: THREE.Group, stance: PlayerSnapshot['stance'], second
   state.height += (targetHeight - state.height) * k;
   state.tilt += (targetTilt - state.tilt) * k;
   for (const child of mesh.children) {
-    if (child.name === 'label') child.position.y = PLAYER_HEIGHT * state.height + 0.3;
+    if (child.name === 'label') child.position.y = PLAYER_HEIGHT * state.height + NAME_TAG_OFFSET;
     else child.scale.y = state.height;
   }
   return state.tilt;
@@ -118,7 +119,7 @@ export function createPlayerMesh(name: string, colour: string): THREE.Group {
   group.add(head);
 
   const visor = new THREE.Mesh(
-    new THREE.BoxGeometry(0.28, 0.08, 0.1),
+    new THREE.BoxGeometry(0.28 * CHARACTER_SCALE, 0.08 * CHARACTER_SCALE, 0.1 * CHARACTER_SCALE),
     new THREE.MeshBasicMaterial({ color: 0x1f2937 }),
   );
   visor.position.set(0, PLAYER_HEIGHT - HEAD_RADIUS, -HEAD_RADIUS);

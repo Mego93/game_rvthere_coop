@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
-import { DOWNED_TIMEOUT, HEALTH_KIT_HEAL, HOLD_DURATION, PLAYER_EYE_HEIGHT, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_REVIVE_HEALTH, TICK_RATE } from './constants';
+import { DOWNED_TIMEOUT, HEALTH_KIT_HEAL, HEAL_RANGE, HOLD_DURATION, PLAYER_EYE_HEIGHT, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_REVIVE_HEALTH, TICK_RATE } from './constants';
 import { add, length, rotate, sub, vec3, type Vec3 } from './math';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
 import { createWorld, type World, type WorldEvent } from './world';
@@ -736,8 +736,8 @@ describe('health kits (W6, W7, W8, W12)', () => {
 
   test('two revivers on one target: only one revive happens, and the second kit is kept', () => {
     const world = twoRevivers();
-    stand(world, 'p1', 1.5);
-    stand(world, 'p3', 1.9);
+    stand(world, 'p1', 0.75 * HEAL_RANGE);
+    stand(world, 'p3', 0.95 * HEAL_RANGE);
     run(world, 20);
     const events = run(world, TICKS, new Map([['p1', holdBy('p1')], ['p3', holdBy('p3')]]));
     expect(kinds(events, 'revive')).toHaveLength(1);
@@ -752,8 +752,8 @@ describe('health kits (W6, W7, W8, W12)', () => {
 
   test('a revive hold ends, keeping the kit, when the target is revived by someone else mid-hold', () => {
     const world = twoRevivers();
-    stand(world, 'p1', 1.5);
-    stand(world, 'p3', 1.9);
+    stand(world, 'p1', 0.75 * HEAL_RANGE);
+    stand(world, 'p3', 0.95 * HEAL_RANGE);
     run(world, 20);
     run(world, 30, new Map([['p3', holdBy('p3')]]));
     const both = new Map([['p1', holdBy('p1')], ['p3', holdBy('p3')]]);
