@@ -44,6 +44,8 @@ export interface WalkState {
   slideCooldown: number;
   slideAir: number;
   slideDir: { x: number; z: number };
+  // Horizontal speed at the take-off of a slide jump, kept as the air speed floor until landing; 0 otherwise.
+  launch: number;
 }
 
 export interface WalkEnv {
@@ -199,6 +201,7 @@ export function stepWalk(env: StepEnv, state: WalkState, input: WalkInput): Walk
     state.vy = PLAYER_JUMP_SPEED;
     if (sliding) {
       slideJump = true;
+      state.launch = Math.hypot(state.walk.x, state.walk.z);
       endSlide(state);
     }
     if (!wantCrouch) {
@@ -211,7 +214,8 @@ export function stepWalk(env: StepEnv, state: WalkState, input: WalkInput): Walk
 
   // A slide, and a slide jump on its take-off tick, keep the slide velocity; from the next tick the air acceleration applies.
   if (!sliding) {
-    const speed = state.crouched ? PLAYER_CROUCH_SPEED : wantSprint ? PLAYER_SPRINT_SPEED : PLAYER_WALK_SPEED;
+    const stanceSpeed = state.crouched ? PLAYER_CROUCH_SPEED : wantSprint ? PLAYER_SPRINT_SPEED : PLAYER_WALK_SPEED;
+    const speed = state.grounded ? stanceSpeed : Math.max(stanceSpeed, state.launch);
     const maxChange = (state.grounded ? PLAYER_GROUND_ACCEL : PLAYER_AIR_ACCEL) * TICK_DT;
     const dx = wish.x * speed - state.walk.x;
     const dz = wish.z * speed - state.walk.z;
@@ -233,6 +237,7 @@ export function stepWalk(env: StepEnv, state: WalkState, input: WalkInput): Walk
   state.pos = vec3(state.pos.x + moved.x, state.pos.y + moved.y, state.pos.z + moved.z);
   state.grounded = controller.computedGrounded();
   if (state.grounded) {
+    state.launch = 0;
     state.vy = 0;
     state.carry = { x: 0, z: 0 };
   }

@@ -34,6 +34,7 @@ const rest = (pos: Vec3): PredictedState => ({
   slideCooldown: 0,
   slideAir: 0,
   slideDir: { x: 0, z: 0 },
+  launch: 0,
   carrying: false,
   holdsProp: false,
 });
@@ -120,6 +121,7 @@ describe('createPredictor', () => {
     ];
     let slid = 0;
     let crouched = 0;
+    let launched = 0;
     for (const fields of script) {
       world.step(new Map([['p', { ...NEUTRAL_INPUT, seq: 0, ...fields }]]));
       me.tick(fields);
@@ -133,11 +135,14 @@ describe('createPredictor', () => {
       expect(me.state.slideCooldown).toBe(from.slideCooldown);
       expect(me.state.slideAir).toBe(from.slideAir);
       expect(me.state.slideDir).toEqual(from.slideDir);
+      expect(me.state.launch).toBe(from.launch);
+      if (server.slide?.launch) launched += 1;
       if (server.stance === 'slide') slid += 1;
       if (server.stance === 'crouch') crouched += 1;
     }
     expect(slid).toBeGreaterThan(55);
     expect(crouched).toBeGreaterThan(40);
+    expect(launched).toBeGreaterThan(20);
     predictor.dispose();
     world.dispose();
   });
@@ -186,6 +191,37 @@ describe('createPredictor', () => {
     expect(Math.abs(server.pos.z - me.state.pos.z)).toBeLessThan(1e-12);
     predictor.dispose();
     world.dispose();
+  });
+
+  describe('headroom under a stand-in (B3)', () => {
+    const crouchedUnder = (place: (predictor: Predictor, x: number, y: number) => void, gone: (predictor: Predictor) => void) => {
+      const predictor = createPredictor(RAPIER, testGround, lodgy);
+      const me = driver(predictor, rest(FAR));
+      me.run(30);
+      me.run(10, { crouch: true });
+      expect(me.state.crouched).toBe(true);
+      place(predictor, FAR.x, FAR.z);
+      me.run(60);
+      expect(me.state.crouched).toBe(true);
+      gone(predictor);
+      me.run(5);
+      expect(me.state.crouched).toBe(false);
+      predictor.dispose();
+    };
+
+    test('a vehicle stand-in 1.3 m overhead keeps the player crouched', () => {
+      crouchedUnder(
+        (predictor, x, z) => predictor.setVehicle(vec3(x, 1.3 + 0.1 + lodgy.halfExtents.y, z), IDENTITY),
+        (predictor) => predictor.setVehicle(vec3(FAR.x + 30, 20, FAR.z), IDENTITY),
+      );
+    });
+
+    test('a prop stand-in 1.3 m overhead keeps the player crouched', () => {
+      crouchedUnder(
+        (predictor, x, z) => predictor.setProps([{ id: 'crate-1', kind: 'crate', pos: vec3(x, 1.3 + 0.1 + 0.3, z), rot: IDENTITY }]),
+        (predictor) => predictor.setProps([]),
+      );
+    });
   });
 
   describe('prop stand-ins', () => {
@@ -422,8 +458,8 @@ describe('createPredictor', () => {
       downed: null,
     };
     expect(predictedFrom({ ...base, stance: 'crouch' }).crouched).toBe(true);
-    const sliding = predictedFrom({ ...base, stance: 'slide', slide: { ticks: 20, cooldown: 0, air: 2, dirX: 0.6, dirZ: -0.8 } });
-    expect(sliding).toMatchObject({ crouched: true, slideTicks: 20, slideCooldown: 0, slideAir: 2, slideDir: { x: 0.6, z: -0.8 } });
+    const sliding = predictedFrom({ ...base, stance: 'slide', slide: { ticks: 20, cooldown: 0, air: 2, dirX: 0.6, dirZ: -0.8, launch: 9 } });
+    expect(sliding).toMatchObject({ crouched: true, slideTicks: 20, slideCooldown: 0, slideAir: 2, slideDir: { x: 0.6, z: -0.8 }, launch: 9 });
     expect(predictedFrom({ ...base, stance: 'roll' as 'slide' }).crouched).toBe(false);
     expect(predictedFrom({ ...base, slide: { ticks: 0, cooldown: 30, air: 0, dirX: 0, dirZ: 0 } })).toMatchObject({ crouched: false, slideCooldown: 30 });
     expect(predictedFrom({ ...base, hands: 'hook' })).toMatchObject({ carrying: true, holdsProp: false });
@@ -460,6 +496,7 @@ describe('createPredictor', () => {
       slideCooldown: 0,
       slideAir: 0,
       slideDir: { x: 0, z: 0 },
+      launch: 0,
       carrying: false,
       holdsProp: false,
     });

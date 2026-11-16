@@ -176,6 +176,18 @@ describe('timer, wallet, health (H8, H9)', () => {
   });
 });
 
+describe('own seat (S1)', () => {
+  test('is null on foot and without a snapshot', () => {
+    expect(build().ownSeat).toBeNull();
+    expect(build({ vehicle: null, players: [], status: null }).ownSeat).toBeNull();
+  });
+  test('is the local seat with its label, not another player\'s', () => {
+    expect(build({ players: [player('p1', 0, 0, { seat: 'driver' }), player('p2', 0, 0, { seat: 'seat4' })] }).ownSeat).toEqual({ id: 'driver', label: 'Driver' });
+    expect(build({ players: [player('p1', 0, 0, { seat: 'seat4' })] }).ownSeat).toEqual({ id: 'seat4', label: 'Rear left' });
+    expect(build({ players: [player('p1', 0, 0), player('p2', 0, 0, { seat: 'seat1' })] }).ownSeat).toBeNull();
+  });
+});
+
 describe('map entities (T13, R4)', () => {
   const ids = (model: ReturnType<typeof build>, kind: string) => model.mapEntities.filter((entity) => entity.kind === kind);
   test('vehicle, self on foot, others, stops, checkpoints', () => {

@@ -10,6 +10,7 @@ import {
   getCourseDef,
   getVehicleConfig,
   holdPoseAt,
+  isCrouchedStance,
   predictedFrom,
   vec3,
   type ClientMessage,
@@ -45,9 +46,11 @@ import { createDecorRenderer } from './render/decorRenderer';
 import { scatterDecor, seedFromId } from './render/decorScatter';
 import { createScene } from './render/scene';
 import { disposeScene } from './render/disposeScene';
+import { FIRST_PERSON_FOV, onFootPose, seatedPose } from './render/firstPersonCamera';
 import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
-import { createVehicleMesh, placeVehicleMesh } from './render/vehicleMesh';
+import { createSeatRing, createVehicleMesh, disposeSeatRing, placeSeatRing, placeVehicleMesh } from './render/vehicleMesh';
+import { createSeatAnnouncer } from './ui/hud/seatToast';
 import { interactAction, overlayText, type OverlayData } from './ui/overlay';
 import { createHud } from './ui/hud/hud';
 import { buildHudModel } from './ui/hud/hudModel';
@@ -77,7 +80,7 @@ export interface Game {
   pushSnapshot(snapshot: SnapshotMessage): void;
   // Plays the sound of a server event as it arrives.
   onEvent(message: EventMessage): void;
-  // The controls panel opened or closed: the game stands still, and Esc is not the game's while it is open.
+  // The controls panel or the tutorial opened or closed: the game stands still, and Esc is not the game's while it is open.
   setControlsOpen(open: boolean): void;
   // Shows the mute state in the run menu.
   setMuted(muted: boolean): void;
@@ -103,8 +106,11 @@ export interface GameView {
   audio: GameAudio;
   muted: boolean;
   softwareGl?: boolean;
+  // The first-person camera prototype (?fp); off by default.
+  firstPerson?: boolean;
   onMute: () => void;
   onHelp: () => void;
+  onTutorial: () => void;
   // Whether the controls panel is open when the game starts.
   controlsOpen: boolean;
 }
@@ -120,6 +126,8 @@ export function createGame(
 ): Game {
   const { renderer, overlay, crosshair, rapier } = view;
   let lobby = firstLobby;
+  const colourIn = (message: LobbyMessage) => message.players.find((info) => info.playerId === playerId)?.colour ?? '#ffffff';
+  let ownColour = colourIn(firstLobby);
   const course = getCourse(lobby.courseId);
   const cameraBoxes = [...course.ground, ...course.walls];
   const scene = createScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true });
@@ -137,11 +145,14 @@ export function createGame(
   const vehicleMesh = createVehicleMesh(vehicleConfig, view.softwareGl);
   vehicleMesh.visible = false;
   scene.add(vehicleMesh);
+  const seatRing = createSeatRing();
+  const seatAnnouncer = createSeatAnnouncer();
   const winchMesh = createWinchMesh();
   winchMesh.visible = false;
   scene.add(winchMesh);
   const coinMeshes = createCoinMeshes(scene, course.coins);
-  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+  const firstPerson = view.firstPerson === true;
+  const camera = new THREE.PerspectiveCamera(firstPerson ? FIRST_PERSON_FOV : 60, 1, 0.1, 1000);
   camera.position.set(0, 6, 14);
 
   const predictor = createPredictor(rapier, course, vehicleConfig);
@@ -214,6 +225,7 @@ export function createGame(
     onKick: (target) => closeRun({ type: 'kick', playerId: target }),
     onMute: view.onMute,
     onHelp: view.onHelp,
+    onTutorial: view.onTutorial,
   });
   runMenu.setMuted(view.muted);
   const hudRoot = document.createElement('div');
@@ -343,7 +355,7 @@ export function createGame(
         playerMeshes.set(player.playerId, entry);
         scene.add(entry.mesh);
       }
-      entry.mesh.visible = player.seat === null;
+      entry.mesh.visible = player.seat === null && !(firstPerson && player.playerId === playerId);
       placePlayerMesh(entry.mesh, player, seconds);
       setNameVisible(entry.mesh, player.playerId !== playerId && Math.hypot(player.pos.x - camera.position.x, player.pos.y - camera.position.y, player.pos.z - camera.position.z) <= LABEL_RANGE);
     }
@@ -432,15 +444,21 @@ export function createGame(
     const onFoot = local !== undefined && local.seat === null;
     crosshair.hidden = !onFoot;
     if (local && onFoot) {
-      const eyeTarget = drawnStance === undefined ? PLAYER_EYE_HEIGHT : PLAYER_CROUCH_EYE_HEIGHT;
+      const eyeTarget = isCrouchedStance(drawnStance) ? PLAYER_CROUCH_EYE_HEIGHT : PLAYER_EYE_HEIGHT;
       eyeHeight += (eyeTarget - eyeHeight) * (1 - Math.exp(-frameSeconds / EYE_EASE_SECONDS));
       const head = vec3(local.pos.x, local.pos.y + eyeHeight, local.pos.z);
-      const placement = cameraPlacement(head, aim.yaw, aim.pitch, cameraBoxes);
+      const placement = firstPerson ? onFootPose(local.pos, eyeHeight, aim.yaw, aim.pitch) : cameraPlacement(head, aim.yaw, aim.pitch, cameraBoxes);
       camera.position.set(placement.position.x, placement.position.y, placement.position.z);
       camera.lookAt(placement.target.x, placement.target.y, placement.target.z);
     } else if (vehicle) {
       eyeHeight = PLAYER_EYE_HEIGHT;
-      updateFollowCamera(camera, vehicle, frameSeconds);
+      const seatedEye = firstPerson && local?.seat ? seatedPose(vehicle.pos, vehicle.rot, vehicleConfig, local.seat, aim.yaw, aim.pitch) : null;
+      if (seatedEye) {
+        camera.position.set(seatedEye.position.x, seatedEye.position.y, seatedEye.position.z);
+        camera.lookAt(seatedEye.target.x, seatedEye.target.y, seatedEye.target.z);
+      } else {
+        updateFollowCamera(camera, vehicle, frameSeconds);
+      }
     }
     const latestCable = buffer.latestCable();
     const overlayData: OverlayData = {
@@ -465,12 +483,14 @@ export function createGame(
     };
     overlay.textContent = overlayText(overlayData);
     const hudModel = buildHudModel(overlayData, { checkpoints: course.checkpoints, finish: course.finish });
+    const announced = seatAnnouncer.update(hudModel.ownSeat, now / 1000);
+    placeSeatRing(seatRing, vehicleMesh, vehicleConfig, hudModel.ownSeat?.id ?? null, ownColour, announced.ringAge);
     camera.updateMatrixWorld();
     const markers = hudModel.downedOthers.map((other) => {
       const projected = projectMarker(project, cameraSpaceZ, other.pos, window.innerWidth, window.innerHeight);
       return { id: other.id, name: other.name, seconds: other.seconds, ...projected };
     });
-    hud.update(hudModel, markers);
+    hud.update(hudModel, markers, announced.toast);
     hud.setVisible(lobby.phase === 'playing' && !anyOpen());
     if (view.touchUi) {
       view.touchUi.update(touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable }));
@@ -496,6 +516,7 @@ export function createGame(
   return {
     setLobby(next) {
       lobby = next;
+      ownColour = colourIn(next);
       updateRunMenu();
       showMenuButton();
       if (next.phase === 'playing') {
@@ -548,6 +569,7 @@ export function createGame(
       shopMenu.dispose();
       runMenu.dispose();
       hud.dispose();
+      disposeSeatRing(seatRing);
       coinMeshes.dispose();
       input.dispose();
       predictor.dispose();

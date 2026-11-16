@@ -69,6 +69,7 @@ export interface PlayerState {
   slideCooldown: number;
   slideAir: number;
   slideDir: { x: number; z: number };
+  launch: number;
   ground: GroundRef | null;
   seat: string | null;
   // The id of the prop being held, or 'hook' for the winch hook.
@@ -283,12 +284,17 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
     return null;
   };
 
-  const resetStance = (state: PlayerState) => {
-    state.crouched = false;
+  const clearSlide = (state: PlayerState) => {
     state.slideTicks = 0;
     state.slideCooldown = 0;
     state.slideAir = 0;
     state.slideDir = { x: 0, z: 0 };
+    state.launch = 0;
+  };
+
+  const resetStance = (state: PlayerState) => {
+    state.crouched = false;
+    clearSlide(state);
   };
 
   const restAt = (state: PlayerState, pos: Vec3) => {
@@ -559,6 +565,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         slideCooldown: 0,
         slideAir: 0,
         slideDir: { x: 0, z: 0 },
+        launch: 0,
         ground: null,
         seat: null,
         hands: null,
@@ -668,7 +675,8 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       const state = entries.get(id)?.state;
       if (!state) return;
       releaseHeld(state, state.yaw, vec3(0, 0, 0));
-      resetStance(state);
+      // Crouched stays: under a low ceiling the stepper stands the player up once it fits.
+      clearSlide(state);
       placeCollider(id);
       state.hold = null;
       state.downed = DOWNED_TIMEOUT;

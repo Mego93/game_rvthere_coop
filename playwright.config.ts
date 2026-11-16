@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { tutorialDone } from './e2e/tutorialDone';
 
 // The smoke test runs against the real server serving the built client, as players would use it.
 export default defineConfig({
@@ -7,7 +8,11 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: 'list',
-  use: { baseURL: 'http://localhost:3100', trace: 'retain-on-failure' },
+  use: {
+    baseURL: 'http://localhost:3100',
+    trace: 'retain-on-failure',
+    storageState: tutorialDone('http://localhost:3100'),
+  },
   webServer: {
     command: 'npm start',
     env: { PORT: '3100', CREATE_PER_MINUTE: '1000', MAX_CONNECTIONS_PER_ADDRESS: '1000' },

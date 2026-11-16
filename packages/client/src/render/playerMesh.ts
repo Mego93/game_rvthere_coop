@@ -1,4 +1,4 @@
-import { PLAYER_COLOURS, PLAYER_COLOUR_PATTERN, PLAYER_HEIGHT, PLAYER_RADIUS, type PlayerSnapshot } from '@lodgy/shared';
+import { isCrouchedStance, PLAYER_COLOURS, PLAYER_COLOUR_PATTERN, PLAYER_HEIGHT, PLAYER_RADIUS, type PlayerSnapshot } from '@lodgy/shared';
 import * as THREE from 'three';
 import { animationsOf, hasModel, instantiate, shadowed } from './models';
 
@@ -59,7 +59,7 @@ const stances = new WeakMap<THREE.Object3D, { height: number; tilt: number }>();
 function applyStance(mesh: THREE.Group, stance: PlayerSnapshot['stance'], seconds: number): number {
   const state = stances.get(mesh) ?? { height: 1, tilt: 0 };
   stances.set(mesh, state);
-  const targetHeight = stance === undefined ? 1 : CROUCH_SCALE;
+  const targetHeight = isCrouchedStance(stance) ? CROUCH_SCALE : 1;
   const targetTilt = stance === 'slide' ? SLIDE_TILT : 0;
   const k = seconds > 0 ? 1 - Math.exp(-seconds / STANCE_EASE_SECONDS) : 1;
   state.height += (targetHeight - state.height) * k;

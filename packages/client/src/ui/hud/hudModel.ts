@@ -3,6 +3,7 @@ import { clock, interactHint, useHint, type OverlayData } from '../overlay';
 import { bearingTo, compassLabel, compassTarget, edgeSide, headingOffset, markerPosition } from './compass';
 import { LOW_FRACTION, MARKER_HEIGHT } from './constants';
 import { ITEM_LABELS } from './itemLabels';
+import { seatLabel } from './seatLabels';
 import { touchWording } from './touchWording';
 
 export interface HudModel {
@@ -12,6 +13,7 @@ export interface HudModel {
   timer: string;
   wallet: number;
   ownHealth: number;
+  ownSeat: { id: string; label: string } | null;
   slots: { kind: string | null; label: string | null; selected: boolean }[];
   prompt: string | null;
   canReset: boolean;
@@ -96,6 +98,7 @@ export function buildHudModel(data: OverlayData, course: { checkpoints: readonly
     timer: clock(status?.elapsed ?? 0),
     wallet: status?.wallet ?? 0,
     ownHealth: local?.health ?? 0,
+    ownSeat: local && local.seat !== null ? { id: local.seat, label: seatLabel(local.seat) ?? local.seat } : null,
     slots,
     prompt,
     canReset,

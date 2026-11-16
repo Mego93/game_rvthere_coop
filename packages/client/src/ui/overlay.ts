@@ -2,6 +2,7 @@ import {
   dot,
   finalTime,
   interactCandidates,
+  isCrouchedStance,
   ITEM_KINDS,
   resolveInteract,
   rotate,
@@ -102,7 +103,7 @@ export function interactAction(
     items: props.filter((prop) => Object.hasOwn(ITEM_KINDS, prop.kind)),
     freeSlot: local.inventory.includes(null),
     heldProps,
-    crouched: local.stance !== undefined,
+    crouched: isCrouchedStance(local.stance),
     cable: cable ?? STOWED,
     anchors,
     stops: stops.map((stop) => ({

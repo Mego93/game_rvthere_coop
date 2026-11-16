@@ -1,0 +1,151 @@
+import { WINCH_MAX_LENGTH, WINCH_WARN_LENGTH } from '@lodgy/shared';
+import { expect, test } from 'vitest';
+import { CONTROLS, createControlsPanel, keyLabels } from './controls';
+import { TUTORIAL_FLAG, TUTORIAL_STEPS, createTutorial, markTutorialDone, shouldAutoShowTutorial, tutorialText } from './tutorial';
+
+const capsOf = (id: string) => TUTORIAL_STEPS.find((step) => step.id === id)!.caps;
+const labelsOf = (action: RegExp) => keyLabels(CONTROLS.find((entry) => action.test(entry.action))!.keys);
+
+test('T10: the steps come in the planned order, each with a title and text', () => {
+  expect(TUTORIAL_STEPS.map((step) => step.id)).toEqual(['move', 'sprint', 'board', 'drive', 'winch', 'items', 'reset', 'help']);
+  for (const step of TUTORIAL_STEPS) {
+    expect(step.title).not.toBe('');
+    expect(step.text).not.toBe('');
+    expect(step.touchText).not.toBe('');
+  }
+});
+
+test('T10: the key caps are built from CONTROLS, so they cannot drift', () => {
+  expect(capsOf('move')).toEqual([...labelsOf(/^Walk/), ...labelsOf(/^Jump/)]);
+  expect(capsOf('sprint')).toEqual([...new Set([...labelsOf(/^Sprint/), ...labelsOf(/^Crouch/)])]);
+  expect(capsOf('board')).toEqual(labelsOf(/^Board/));
+  expect(capsOf('drive')).toEqual([...labelsOf(/^Throttle/), ...labelsOf(/^Brake/)]);
+  expect(capsOf('winch')).toEqual([...labelsOf(/^Board/), ...labelsOf(/^Reel in/), ...labelsOf(/^Reel out/)]);
+  expect(capsOf('items')).toEqual([...labelsOf(/^Select a slot/), ...labelsOf(/^Use the selected/)]);
+  expect(capsOf('reset')).toEqual(['X']);
+  expect(capsOf('help')).toEqual(['H']);
+});
+
+test('T10: the winch step states the reach and the red rope from the constants', () => {
+  const winch = TUTORIAL_STEPS.find((step) => step.id === 'winch')!;
+  for (const text of [winch.text, winch.touchText]) {
+    expect(text).toContain(`${WINCH_MAX_LENGTH} m`);
+    expect(text).toContain(`${WINCH_WARN_LENGTH} m`);
+    expect(text).toMatch(/red/);
+  }
+});
+
+test('T10: touch text names the touch buttons and no key caps', () => {
+  expect(tutorialText(TUTORIAL_STEPS[0]!, true)).toBe(TUTORIAL_STEPS[0]!.touchText);
+  expect(tutorialText(TUTORIAL_STEPS[0]!, false)).toBe(TUTORIAL_STEPS[0]!.text);
+  const all = TUTORIAL_STEPS.map((step) => step.touchText).join(' ');
+  for (const button of ['Act', 'Use', 'Jump', 'Sprint', 'Reel in', 'Reel out', 'Reset', 'Menu']) expect(all).toContain(button);
+  expect(all).not.toMatch(/\bpress [A-Z0-9]\b|\bhold [A-Z]\b|\bShift\b|\bX\b/i);
+});
+
+const memory = (initial: Record<string, string> = {}) => {
+  const values = new Map(Object.entries(initial));
+  return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => void values.set(key, value) };
+};
+const throwing = {
+  getItem: () => {
+    throw new Error('blocked');
+  },
+  setItem: () => {
+    throw new Error('blocked');
+  },
+};
+
+test('T10: the tutorial shows when the flag is unset and not yet shown on this page load', () => {
+  expect(shouldAutoShowTutorial(memory(), false)).toBe(true);
+  expect(shouldAutoShowTutorial(memory({ [TUTORIAL_FLAG]: '1' }), false)).toBe(false);
+  expect(shouldAutoShowTutorial(memory(), true)).toBe(false);
+});
+
+test('T10: marking it done writes the flag, and a throwing storage neither throws nor stops one show per page load', () => {
+  const store = memory();
+  markTutorialDone(store);
+  expect(store.getItem(TUTORIAL_FLAG)).toBe('1');
+  expect(shouldAutoShowTutorial(store, false)).toBe(false);
+  expect(() => markTutorialDone(throwing)).not.toThrow();
+  expect(shouldAutoShowTutorial(throwing, false)).toBe(true);
+  expect(shouldAutoShowTutorial(throwing, true)).toBe(false);
+  expect(shouldAutoShowTutorial(null, false)).toBe(true);
+});
+
+test('T10: each desktop text names each of its key caps, as a word', () => {
+  for (const step of TUTORIAL_STEPS) {
+    for (const cap of step.caps) expect(step.text, `${step.id}: ${cap}`).toMatch(new RegExp(`(^|[^A-Za-z0-9])${cap}([^A-Za-z0-9]|$)`));
+  }
+  const text = (id: string) => TUTORIAL_STEPS.find((step) => step.id === id)!.text;
+  expect(text('sprint')).toContain('Hold Shift');
+  expect(text('items')).toContain('1, 2 or 3');
+  expect(text('move')).toContain('W, A, S or D');
+});
+
+test('B16e: the board text states the driver door and nearest free seat rule, desktop and touch', () => {
+  const board = TUTORIAL_STEPS.find((step) => step.id === 'board')!;
+  for (const text of [board.text, board.touchText]) {
+    expect(text).toContain('At the driver door you take the driver seat if it is free');
+    expect(text).toContain('anywhere else you take the nearest free seat');
+    expect(text).not.toMatch(/driver seat first/);
+  }
+  expect(board.touchText).toContain('tap Act to board');
+});
+
+class FakeEl {
+  id = '';
+  hidden = false;
+  href = '';
+  target = '';
+  rel = '';
+  type = '';
+  textContent = '';
+  style: Record<string, string> = {};
+  children: FakeEl[] = [];
+  listeners = new Map<string, ((event: unknown) => void)[]>();
+  constructor(readonly tag: string) {}
+  append(...nodes: (FakeEl | string)[]) {
+    for (const node of nodes) if (typeof node !== 'string') this.children.push(node);
+  }
+  replaceChildren(...nodes: FakeEl[]) {
+    this.children = nodes;
+  }
+  setAttribute() {}
+  focus() {}
+  addEventListener(type: string, fn: (event: unknown) => void) {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]);
+  }
+}
+
+const pageWith = () => {
+  const window = new EventTarget();
+  const body = new FakeEl('body');
+  const doc = { createElement: (tag: string) => new FakeEl(tag), body, defaultView: window } as unknown as Document;
+  const escape = () => window.dispatchEvent(Object.assign(new Event('keydown', { cancelable: true }), { key: 'Escape' }));
+  return { doc, escape, body };
+};
+
+test('B16c: Escape on the tutorial counts as Skip and sets the done flag', () => {
+  const { doc, escape } = pageWith();
+  const store = memory();
+  const tutorial = createTutorial(doc, { touch: false, store });
+  tutorial.open();
+  expect(tutorial.isOpen()).toBe(true);
+  escape();
+  expect(tutorial.isOpen()).toBe(false);
+  expect(store.getItem(TUTORIAL_FLAG)).toBe('1');
+});
+
+test('B16c: one Escape closes the tutorial on top and leaves the controls panel open, the next closes the panel', () => {
+  const { doc, escape } = pageWith();
+  const tutorial = createTutorial(doc, { touch: false, store: memory() });
+  const help = createControlsPanel(doc);
+  help.open();
+  tutorial.open();
+  escape();
+  expect(tutorial.isOpen()).toBe(false);
+  expect(help.isOpen()).toBe(true);
+  escape();
+  expect(help.isOpen()).toBe(false);
+});

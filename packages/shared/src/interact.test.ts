@@ -6,7 +6,7 @@ import { getVehicleConfig } from './vehicles';
 import type { CableSnapshot } from './winch';
 import type { Placed } from './course';
 import type { PropSnapshot } from './props';
-import { ANCHOR_HEIGHT, HOOK_RANGE, ITEM_KINDS, PLAYER_EYE_HEIGHT, PUSH_HEIGHT, SHOP_COUNTER_HALF, SHOP_RANGE } from './constants';
+import { ANCHOR_HEIGHT, HOOK_RANGE, ITEM_KINDS, PLAYER_EYE_HEIGHT, PUSH_HEIGHT, SHOP_COUNTER_HALF, SHOP_RANGE, WINCH_MAX_LENGTH } from './constants';
 
 const resolve = (ctx: { seat: string | null; hands: string | null; candidates: readonly InteractCandidate[] }) =>
   resolveInteract({ holdsHook: ctx.hands === 'hook', attachCandidates: [], stopCandidates: [], ...ctx });
@@ -122,6 +122,18 @@ describe('interactCandidates', () => {
     const found = interactCandidates({ ...base, feet: vec3(2.5, 0, 0), props: [crateAt('a', 3.2, 0), crateAt('b', 2.5, -1)] });
     expect(found.map((c) => c.action.kind)).toEqual(['board', 'pickUp', 'pickUp']);
     expect(found.slice(1).map((c) => (c.action as { propId: string }).propId)).toEqual(['a', 'b']);
+  });
+
+  test('a crouched player aims from the lower eye, so the lower of two crates ahead is the nearer to the aim', () => {
+    const at = (id: string, y: number) => ({ id, kind: 'crate', pos: vec3(2.5, y, -1.2), rot: IDENTITY });
+    const props = [at('high', 1.6), at('low', 0.55)];
+    const angles = (crouched: boolean) => {
+      const found = interactCandidates({ ...base, feet: vec3(2.5, 0, 0), crouched, props });
+      const angleOf = (id: string) => found.find((c) => c.action.kind === 'pickUp' && c.action.propId === id)!.angle;
+      return { high: angleOf('high'), low: angleOf('low') };
+    };
+    expect(angles(false).high).toBeLessThan(angles(false).low);
+    expect(angles(true).low).toBeLessThan(angles(true).high);
   });
 
   test('leaves out a prop beyond HANDS_RANGE, a held one, a heavy one and an unknown kind', () => {
@@ -274,6 +286,16 @@ describe('interactCandidates and the hook', () => {
     expect(found).toEqual([]);
     const split = splitCandidates(found);
     expect(resolveInteract({ seat: null, hands: 'hook', holdsHook: true, ...split })).toEqual({ kind: 'dropHook' });
+  });
+
+  test('T9: holding the hook, an anchor is offered up to WINCH_MAX_LENGTH from the mount and not beyond (no dead band)', () => {
+    const at = (distance: number) => {
+      const anchors = [post('edge', mount.x, mount.z - distance)];
+      const feet = vec3(mount.x, ANCHOR_HEIGHT - PUSH_HEIGHT, mount.z - distance + 1);
+      return kinds(interactCandidates({ ...base, hands: 'hook', feet, anchors }));
+    };
+    expect(at(WINCH_MAX_LENGTH - 0.3)).toEqual(['attachHook']);
+    expect(at(WINCH_MAX_LENGTH + 0.3)).toEqual([]);
   });
 
   test('holding the hook: a barrier offers its top face; a crate offers nothing', () => {

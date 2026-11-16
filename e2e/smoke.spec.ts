@@ -28,7 +28,7 @@ const distance = (a: readonly number[], b: readonly number[]) => Math.hypot(...a
 const pageErrors: string[] = [];
 const watch = (page: Page) => page.on('pageerror', (error) => pageErrors.push(error.message));
 
-// A page in its own browser context, so it has its own session storage: a separate player.
+// A page in its own browser context, so it has its own session storage: a separate player (it inherits the config's storage state, tutorial done).
 const contexts: BrowserContext[] = [];
 async function newPlayerPage(browser: Browser): Promise<Page> {
   const context = await browser.newContext();
@@ -115,6 +115,12 @@ test('two players share a room, board the vehicle, and only the driver drives @k
   await tap(amal, 'KeyE');
   for (const page of [amal, badr]) await expect(page.locator('#overlay')).toContainText('players  Amal (driver), Badr (on foot)');
   await expect(amal.locator('#overlay')).toContainText('hint     E to leave the seat');
+  // The seat chip names the seat, and the toast shows soon after boarding and is gone after 3 s.
+  await expect(amal.locator('#hud-seat')).toHaveText('Driver');
+  await expect(amal.locator('#hud-seat-toast')).toBeVisible({ timeout: 1000 });
+  await expect(amal.locator('#hud-seat-toast')).toHaveText('You are the Driver');
+  await amal.waitForTimeout(3000);
+  await expect(amal.locator('#hud-seat-toast')).toBeHidden();
 
   // Badr's keys do nothing to the vehicle while he is on foot: the throttle stays at zero.
   await badr.keyboard.down('KeyW');
@@ -499,4 +505,34 @@ test('B13: the Sprint button joins #touch-actions and the column still fits the 
   expect(box.y).toBeGreaterThanOrEqual(menu.y + menu.height);
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+});
+
+// The config marks the tutorial done for every spec; these start with empty storage, as a first visit does.
+test.describe('T12: the tutorial', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('opens on the first lobby entry, Skip closes it and sets the flag, and the lobby button reopens it', async ({ page }) => {
+    await createRoom(page, 'Amal');
+    await expect(page.locator('#lobby')).toBeVisible();
+    await expect(page.locator('#tutorial')).toBeVisible();
+    await expect(page.locator('#tutorial-title')).toHaveText('Move and jump');
+    await page.locator('#tutorial-next').click();
+    await expect(page.locator('#tutorial-title')).toHaveText('Sprint, crouch and slide');
+    await page.locator('#tutorial-skip').click();
+    await expect(page.locator('#tutorial')).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem('lodgy.tutorial.done'))).toBe('1');
+    await page.locator('#lobby-tutorial').click();
+    await expect(page.locator('#tutorial')).toBeVisible();
+    await expect(page.locator('#tutorial-title')).toHaveText('Move and jump');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#tutorial')).toBeHidden();
+  });
+
+  test('does not open again for a later room once it was skipped', async ({ page }) => {
+    await createRoom(page, 'Amal');
+    await page.locator('#tutorial-skip').click();
+    await createRoom(page, 'Amal');
+    await expect(page.locator('#lobby')).toBeVisible();
+    await expect(page.locator('#tutorial')).toBeHidden();
+  });
 });

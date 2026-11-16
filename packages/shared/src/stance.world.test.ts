@@ -1,11 +1,13 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 import {
+  DOWNED_TIMEOUT,
   PLAYER_CONTROLLER_OFFSET,
   PLAYER_CROUCH_EYE_HEIGHT,
   PLAYER_EYE_HEIGHT,
   PLAYER_MAX_HEALTH,
   PLAYER_RADIUS,
+  TICK_RATE,
 } from './constants';
 import { IDENTITY, vec3 } from './math';
 import { aimRay } from './player';
@@ -96,7 +98,10 @@ describe('refusals and resets', () => {
     world.debugHurt('p', 1000);
     run(world, 1);
     expect(me(world).downed).not.toBeNull();
+    // Crouched stays through the downing; the stepper stands the player up as soon as it fits (here: at once, in the open).
+    run(world, 2);
     expect('stance' in me(world)).toBe(false);
+    expect('slide' in me(world)).toBe(false);
   });
 
   test('boarding is refused mid-slide and works otherwise', () => {
@@ -178,6 +183,60 @@ describe('a low tunnel', () => {
     expect(Math.abs(me(world).pos.y - inside.y)).toBeLessThan(0.01);
     run(world, 400, { moveY: 1 });
     expect(me(world).pos.z).toBeLessThan(OPEN.z - 8.5);
+    expect('stance' in me(world)).toBe(false);
+  });
+});
+
+describe('downed under a low ceiling (B16b)', () => {
+  test('a player downed crouched in a 1.3 m tunnel stays crouched and unmoved, then walks after the respawn', () => {
+    const course = withBoxes(testGround, {
+      walls: [{ center: vec3(OPEN.x, 1.55, OPEN.z - 3), halfExtents: vec3(3, 0.25, 5), rot: IDENTITY }],
+    });
+    const world = make(course);
+    world.addPlayer('idle');
+    world.teleportPlayer('idle', vec3(40, PLAYER_CONTROLLER_OFFSET, 40));
+    world.teleportPlayer('p', vec3(OPEN.x, PLAYER_CONTROLLER_OFFSET, OPEN.z + 6));
+    run(world, 30);
+    run(world, 200, { moveY: 1, crouch: true });
+    run(world, 10);
+    const inside = me(world).pos;
+    expect(inside.z).toBeLessThan(OPEN.z - 1);
+    world.debugHurt('p', 1000);
+    run(world, 120);
+    expect(me(world).downed).not.toBeNull();
+    expect(me(world).stance).toBe('crouch');
+    expect(Math.hypot(me(world).pos.x - inside.x, me(world).pos.z - inside.z)).toBeLessThan(0.01);
+    expect(Math.abs(me(world).pos.y - inside.y)).toBeLessThan(0.01);
+    run(world, Math.round(DOWNED_TIMEOUT * TICK_RATE) + 10);
+    expect(me(world).downed).toBeNull();
+    expect('stance' in me(world)).toBe(false);
+    run(world, 30);
+    const spawned = me(world).pos;
+    run(world, 60, { moveY: 1 });
+    expect(Math.hypot(me(world).pos.x - spawned.x, me(world).pos.z - spawned.z)).toBeGreaterThan(3);
+  });
+});
+
+describe('headroom under a dynamic body (B3)', () => {
+  // A vehicle or a crate frozen 1.3 m above the feet: it clears a crouched capsule and hits a standing one.
+  test.each([
+    ['the vehicle', 'vehicle', 0.55],
+    ['a crate', 'crate-1', 0.3],
+  ])('%s overhead keeps a crouched player crouched until it is gone', (_name, id, half) => {
+    const world = make();
+    world.addPlayer('idle');
+    world.teleportPlayer('idle', vec3(40, PLAYER_CONTROLLER_OFFSET, 40));
+    world.teleportPlayer('p', OPEN);
+    run(world, 30);
+    run(world, 10, { crouch: true });
+    const body = world.debugBody(id)!;
+    body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
+    body.setTranslation(vec3(OPEN.x, 1.3 + 0.1 + half, OPEN.z), true);
+    run(world, 60);
+    expect(me(world).stance).toBe('crouch');
+    expect(Math.abs(me(world).pos.y - OPEN.y)).toBeLessThan(0.05);
+    body.setTranslation(vec3(OPEN.x + 30, 20, OPEN.z), true);
+    run(world, 5);
     expect('stance' in me(world)).toBe(false);
   });
 });

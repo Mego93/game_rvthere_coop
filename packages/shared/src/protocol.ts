@@ -120,6 +120,9 @@ export interface ResultsMessage {
   campaignTotal?: number;
 }
 
+// Crouched capsule and low eye: 'crouch' and 'slide'; absent, or a stance this version does not know, is standing.
+export const isCrouchedStance = (stance: PlayerSnapshot['stance'] | string | undefined): boolean => stance === 'crouch' || stance === 'slide';
+
 export interface PlayerSnapshot {
   playerId: string;
   // The feet.
@@ -145,7 +148,7 @@ export interface PlayerSnapshot {
   // Absent means standing; a stance this version does not know is read as standing.
   stance?: 'crouch' | 'slide';
   // Present only while a slide or its cooldown runs; timers are whole ticks.
-  slide?: { ticks: number; cooldown: number; air: number; dirX: number; dirZ: number };
+  slide?: { ticks: number; cooldown: number; air: number; dirX: number; dirZ: number; launch?: number };
 }
 
 export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn'] as const;
@@ -354,7 +357,8 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
       isCount(value.slide.cooldown) &&
       isCount(value.slide.air) &&
       finite(value.slide.dirX) &&
-      finite(value.slide.dirZ)));
+      finite(value.slide.dirZ) &&
+      (value.slide.launch === undefined || (finite(value.slide.launch) && value.slide.launch >= 0))));
 const isPropSnapshot = (value: unknown): value is PropSnapshot =>
   isRecord(value) && isText(value.id) && isText(value.kind) && isVec3(value.pos) && isQuat(value.rot);
 const isCableSnapshot = (value: unknown): value is CableSnapshot =>

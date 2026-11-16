@@ -85,7 +85,7 @@ An empty fuel tank is not a loss. It disables drive until someone refuels.
 
 ### Players
 
-Every player is a 3D character who moves freely on foot: walk, jump, and stand on anything, including the roof of the moving vehicle.
+Every player is a 3D character who moves freely on foot: walk, jump, sprint, crouch, slide, and stand on anything, including the roof of the moving vehicle.
 
 Roles are not assigned.
 
@@ -98,6 +98,14 @@ Roles are not assigned.
 - Players do not block or push objects by contact. The only force a player applies is the explicit push described under "Crew actions". A vehicle or prop that moves into a player shoves them out of the way.
 - A character is a capsule body with a sphere head, in one of six fixed colours, with the player's name above it. There is no skeletal animation.
 
+**Stances.** Walking is 4.5 m/s. All the numbers below are starting values; feel is the owner's call.
+
+- **Sprint**: hold Shift while moving forward (`moveY` above 0) to move at 7 m/s. There is no stamina. Sprint is free and forward-only: it does nothing sideways or backwards. It is blocked while anything is in the hands, a prop or the winch hook. In the air the wish speed is the sprint speed while sprint is held with `moveY` above 0.
+- **Crouch**: hold C. The capsule is 1.1 m tall instead of 1.8 m (the feet stay put) and the speed is 2.2 m/s. Crouching starts only when grounded and continues while C is held, airborne or not. Releasing C stands up only when the standing capsule fits (the test lifts by the same small amount as the overlap test, and counts the vehicle and props as well as walls and ground); until it fits the player stays crouched. Crouch is refused while a prop is held; the winch hook in the hands does not block it. Jumping while crouched is allowed only when the standing capsule fits. A crouched player in a gap lower than the standing height is not shoved or teleported.
+- **Knee slide**: pressing C afresh (the press, not the hold) while sprinting starts a slide when the player is grounded, the slide cooldown is over, and the horizontal speed at the start of the tick is at least 5.5 m/s. "Sprinting" here means Shift held, `moveY` above 0 and not already crouched. A slide is refused while a prop or the hook is held. The slide moves along the direction the player had at the start at 9 m/s, held for 0.35 s, then falls linearly to the crouch speed (2.2 m/s) so that the whole slide lasts 0.8 s (about 5.7 m). The capsule is the crouched one. Steering: the move input bends the slide direction toward the wish direction by at most 0.6 rad/s. The slide ends early when the distance moved in a tick, divided by the tick, is below 1 m/s (a wall), when the player has been off the ground for more than 12 ticks (0.2 s), or when a prop is picked up. When it ends, a cooldown of 1 s runs; the player stays crouched while C is held and stands otherwise (when it fits). Jumping during a slide ends it and keeps the slide's horizontal speed through the air: the air speed is at least that take-off speed until the player lands.
+- Boarding is refused during a slide. Boarding, teleports, respawns and restarts reset crouch, slide and cooldown. Crouching changes only where the aim ray starts (the lower eye, see "Conventions"); every reach (hook, hands, board, use) is defined as before. Pushing is by the move input, so a crouched push gives the same force as walking. Fall damage is unchanged, and a slide on the ground does not hurt. Held props and coins use the standing height.
+- Touch has a Sprint toggle and no crouch or slide.
+
 **Spawn slots.** Each vehicle config lists six positions around the vehicle. A slot is valid when it has ground beneath it, nothing overlapping it, and no other player (not the one being placed) standing within two body radii of it horizontally; so players placed one after another take successive slots. Whenever a rule says "beside the vehicle" or "in a spawn slot", the player goes to the first valid slot; if none is valid, to the last checkpoint's spawn pose. A run starts with all players in spawn slots.
 
 ### Player health
@@ -105,8 +113,8 @@ Roles are not assigned.
 - A player has 100 health. It does not regenerate.
 - A player is hurt by: landing from a fall above a speed threshold; being hit by the vehicle above a relative speed threshold; being hit by any prop moving above a speed threshold. Damage scales with the speed above the threshold.
 - A seated player takes no damage.
-- The speed of a hit is the closing speed along the contact normal, so walking into a resting vehicle or prop costs nothing. One body hurts a player at most once per continuous contact; contact must break for 0.5 s before it can hurt again. The body a player stands on never hurts them.
-- At 0 health the player is **downed**: they lie where they fell, cannot move or act, drop what is in their hands, keep their inventory, and take no further damage. A downed player still falls, can be shoved, and is subject to the kill plane.
+- The speed of a hit is the closing speed along the contact normal, so walking into a resting vehicle or prop costs nothing. The player's own horizontal speed counts as at most a walk (4.5 m/s) for this, so sprinting or sliding into a resting body costs nothing either. One body hurts a player at most once per continuous contact; contact must break for 0.5 s before it can hurt again. The body a player stands on never hurts them.
+- At 0 health the player is **downed**: they lie where they fell, cannot move or act, drop what is in their hands, keep their inventory, and take no further damage. Being downed ends a slide and clears its cooldown but leaves a crouch alone, so a player downed under a low ceiling stands up through the headroom test as soon as the standing capsule fits. A downed player still falls, can be shoved, and is subject to the kill plane.
 - A teammate revives a downed player by using a health kit on them. The player gets up with 50 health.
 - If nobody revives them within 30 s, the player **respawns** beside the vehicle with 50 health, and one respawn is counted. The 30 s timer pauses while a teammate's revive hold is running on them.
 - If every connected player is downed at once, all respawn immediately, and one respawn is counted for each. A solo player therefore respawns as soon as they are downed.
@@ -193,17 +201,17 @@ Course geometry is sized so the RV fits, and every segment is completable by the
 
 The cable is force-based. There is no physics joint.
 
-- The hook rests on the front bumper. While a player holds it, the cable pays out freely up to 25 m. A hook carried beyond that is pulled from the player's hands and drops.
+- The hook rests on the front bumper. While a player holds it, the cable pays out freely up to 30 m (the rope is drawn red from 26 m as a warning). A hook carried beyond that is pulled from the player's hands and drops.
 - The hook attaches to an anchor: a marked static anchor, or the anchor point that every heavy obstacle has.
 - Attaching sets the cable length to the current distance between hook and bumper.
 - A slack cable has no effect. A taut cable pulls its two ends together with a spring-and-damper force, capped at the maximum winch force. Under a load above the cap the cable stretches; it never breaks.
 - The maximum winch force is a fixed fraction of the vehicle's weight, and the cable's stiffness and damping scale with the vehicle's mass, so both vehicles winch up the same slopes at the same speed.
-- Reeling in shortens the cable at a constant speed, down to a minimum length. The cable does not shorten while its tension is at the cap. Reeling out lengthens it, up to 25 m.
+- Reeling in shortens the cable at a constant speed, down to a minimum length. The cable does not shorten while its tension is at the cap. Reeling out lengthens it, up to 30 m.
 - Attached to a static anchor, reeling in pulls the vehicle. Attached to a heavy obstacle, it drags the obstacle toward the vehicle if the vehicle is braked or heavier.
 - The winch alone stalls on a steep enough slope; throttle and pushing add to it.
 - The driver can reel, and so can a player on foot within interact range of the winch box. If both reel at once, the driver's input wins.
 - Interact at the attached anchor detaches the hook into that player's hands. Interact at the winch box while the hook is attached releases it and returns it to the bumper.
-- A hook lying on the ground can be picked up. Reeling in retracts it to the bumper. It retracts by itself if it lies more than 25 m from the bumper.
+- A hook lying on the ground can be picked up. Reeling in retracts it to the bumper. It retracts by itself if it lies more than 30 m from the bumper.
 - If the obstacle the hook is attached to is reset by the kill plane, the hook detaches and returns to the bumper.
 - The cable is drawn as a rope from bumper to hook. It collides with nothing.
 
@@ -306,7 +314,7 @@ Every package follows these, so that code written separately agrees.
 - Axes: right-handed, +Y up. Forward is −Z and right is +X in a vehicle's or player's local frame.
 - Yaw: rotation about +Y. Yaw 0 faces −Z; positive yaw turns left. Pitch: positive looks up.
 - Compass: in the world frame, north is −Z and east is +X (the sun rises in the east; the HUD compass uses the same).
-- A player's aim is a ray from a fixed eye offset above the player's position, along yaw and pitch. The server and the client compute it the same way; the camera's actual position plays no part.
+- A player's aim is a ray from the eye above the player's position, along yaw and pitch. The eye is 1.6 m above the feet standing and 0.95 m crouched or sliding, the same on the server and the client. The server and the client compute it the same way; the camera's actual position plays no part.
 - "In range" of a box-shaped object (vehicle, obstacle, counter) is measured to the nearest point of the box, not its centre.
 - The simulation tick is fixed at 1/60 s on the server and in client prediction. The client advances its simulation with a fixed-step accumulator, independent of frame rate, with at most 5 catch-up steps per frame.
 - Players, props, anchors, seats, stops and coins have string ids that are stable for a run. Ids of things created mid-run come from a counter, never from randomness.
@@ -473,7 +481,7 @@ Client to server:
 
 Every message is validated for shape and its numbers are clamped. A malformed message gets `bad_message` and is dropped.
 
-`input { seq, moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop, reset? }`. The client sends one per simulation tick, with `seq` starting at 1 and increasing by 1.
+`input { seq, moveX, moveY, yaw, pitch, jump, interact, use, reel, slot, drop, reset?, sprint?, crouch? }`. The client sends one per simulation tick, with `seq` starting at 1 and increasing by 1.
 
 | Field | On foot | As driver |
 |---|---|---|
@@ -485,7 +493,11 @@ Every message is validated for shape and its numbers are clamped. A malformed me
 | `reel`: −1 out, 0, 1 in | Works within range of the winch box | Works always |
 | `slot`: 0, 1 or 2 | Selected inventory slot | Same |
 | `drop`, boolean | Drops the selected item on the press | No effect |
+| `sprint?`, boolean, held (absent means false) | Sprint, see "Players" | No effect |
+| `crouch?`, boolean, held (absent means false) | Crouch, and with a sprint the slide | No effect |
 | `reset?`, boolean, held (absent means false) | No effect | Any seated player: held 1.5 s while the vehicle is tipped, out of fuel or stuck, it restarts from the last checkpoint |
+
+`sprint` and `crouch` are levels, not taps: when the server skips an input they are not ORed across the skipped ones (only taps such as `jump` are). The press that starts a slide is read from two consecutive inputs, as for `jump`.
 
 Server to client:
 
@@ -506,6 +518,8 @@ snapshot {
   players [ {
     playerId, pos, yaw, health,                         // health 0..100, rounded down
     walk: { x, z }, carry: { x, z }, vy, grounded,   // the walking state the predictor resets to
+    stance?: 'crouch' | 'slide',                      // absent means standing
+    slide?: { ticks, cooldown, air, dirX, dirZ, launch? },   // present only while a slide, its cooldown or a slide jump's launch speed runs
     downed:  seconds left | null,
     seat:    seatId | null,
     ground:  { bodyId, localPos } | null,
@@ -522,6 +536,7 @@ snapshot {
 
 - `ackSeq` is the last input sequence number the server consumed for the receiving client, or 0 before any. Everything else is identical for every client.
 - `walk`, `carry`, `vy` and `grounded` are the player's walking state, sent for every player so that the snapshot stays identical for every client. The client resets its predicted player to them.
+- `stance` is `crouch` or `slide`; absent means standing, and a value this version does not know is read as standing. `slide` is sent for every player so that the snapshot stays identical for every client: `ticks` is the whole ticks left in the slide, `cooldown` the whole ticks left of the cooldown, `air` the ticks spent off the ground during the slide, `dirX` and `dirZ` the slide direction, and `launch` (present while greater than 0) the take-off speed of a slide jump. The counts are whole non-negative integers and the rest finite, so that the predictor and the server agree exactly. Remote players are drawn lower when crouched and tilted back when sliding.
 - `seat` and `ground` are separate: a seated player has a `seat`; a player standing on the vehicle, a prop or an obstacle has a `ground`.
 - `cable.state` is `stowed`, `held`, `ground` or `attached`.
 - `won` is true once the vehicle's centre has entered the finish; it lets the page show the finish before the results message exists (step 8, K7). `checkpoint` is the index of the last recorded checkpoint; the page shows it as index + 1.
@@ -532,7 +547,7 @@ Binary encoding is deferred until snapshot size is measured as a problem. Snapsh
 ### `client`
 
 - `net` — socket, reconnect, snapshot buffer, interpolation 100 ms in the past for the vehicle, other players, props and cable
-- `prediction` — predicts the local player's walking and jumping only
+- `prediction` — predicts the local player's walking, jumping, crouching and sliding only
 - `input` — a device-agnostic layer producing the `input` message fields. Two sources: keyboard and mouse, and touch. The source is chosen by pointer capability at load.
 - `render` — Three.js scene built from the `BuiltCourse`; low-poly meshes built in code, chosen by each element's `kind`; lighting, sky, fog and rain from the room's conditions
 - `audio` — Web Audio playback of sound effects, driven by snapshots and `event` messages
@@ -540,8 +555,8 @@ Binary encoding is deferred until snapshot size is measured as a problem. Snapsh
 
 ### Prediction
 
-- Only the local player's walking and jumping are predicted. Picking up, inventory, health, seating, pushing and everything else come from the server.
-- The client holds a prediction world built by `createPredictor` from the course's static colliders, plus stand-ins for the vehicle and props. The vehicle's stand-in is a dynamic box with the vehicle's half extents and gravity scale 0, not a kinematic or fixed one: the walking controller's autostep excludes only dynamic bodies, so a kinematic box could be stepped onto, and a fixed one is not found by queries after being moved. It is moved with `setTranslation` and `setRotation` from the latest snapshot, not the interpolated one, followed by two zero-length physics steps (in Rapier 0.21 the first zero step after moving a body removes its collider from the old place and the second inserts it at the new one). Other players are not in it.
+- Only the local player's walking, jumping, crouching and sliding are predicted. The server and the predictor run the same `stepWalk`, so stance, slide and speed agree; the reconciler tracks the crouch press beside the jump press when it replays inputs. Picking up, inventory, health, seating, pushing and everything else come from the server.
+- The client holds a prediction world built by `createPredictor` from the course's static colliders, plus stand-ins for the vehicle and props. The vehicle's stand-in is a dynamic box with the vehicle's half extents and gravity scale 0, not a kinematic or fixed one: the walking controller's autostep excludes only dynamic bodies, so a kinematic box could be stepped onto, and a fixed one is not found by queries after being moved. It is moved with `setTranslation` and `setRotation` from the latest snapshot, not the interpolated one, followed by two zero-length physics steps (in Rapier 0.21 the first zero step after moving a body removes its collider from the old place and the second inserts it at the new one). The headroom test for standing up runs against these stand-ins, so it sees the vehicle and props as the server does. Other players are not in it.
 - On each snapshot the client resets the local player to the server's state and replays the inputs after `ackSeq`. Small corrections are smoothed and large ones snap; both thresholds are constants. The client records every input it sends, also while prediction is off; when prediction resumes it replays everything after `ackSeq`. The drawn position is blended between the previous and the current predicted position by the fixed stepper's alpha, plus the fading correction.
 - Prediction is on while the latest snapshot reports the local player unseated with `ground` null, and off otherwise; turning it on resets the predictor to the snapshot's state. It is off while the player is seated, downed, or standing on the vehicle or a heavy obstacle. The player is then drawn from the snapshot, relative to that body. Input lag while riding on the roof is accepted.
 - Mismatches next to a moving vehicle are expected and are absorbed by the correction smoothing.
@@ -550,11 +565,13 @@ Binary encoding is deferred until snapshot size is measured as a problem. Snapsh
 
 - The shop menu and the in-run menu exist only on the client. Interact at a shop counter opens the shop menu; the server does nothing with that press.
 - While a menu is open, pointer lock is released and the client sends neutral input.
+- **Tutorial.** A short card sequence (Move and jump, Sprint crouch and slide, Board and seats, Drive, The winch, Items, Reset a stuck vehicle, Help) with Next, Back and Skip; its key caps and key words are built from the controls table, so they cannot drift, and on touch it uses the touch button names. It opens by itself the first time the player reaches the lobby in a page load, unless the flag `lodgy.tutorial.done` is set in `localStorage` (read and written in try/catch; if storage fails it shows once per page load). Finishing or skipping sets the flag; Escape counts as Skip. It can be opened again from a Tutorial entry in the lobby and in the run menu. While it is open the game takes no input, like any menu.
 - The shop menu closes on Esc, on leaving the counter's range, on being downed, and on any teleport.
 
 ### Camera and rendering
 
-- On foot, the camera sits behind and above the player's shoulder and moves closer when a wall is in the way. Seated, it orbits the vehicle. For now the seated camera is the vehicle follow camera behind the vehicle.
+- On foot, the camera sits behind and above the player's shoulder and moves closer when a wall is in the way. Seated, it orbits the vehicle. For now the seated camera is the vehicle follow camera behind the vehicle. The eye on foot eases between the standing and crouched heights (0.1 s).
+- An optional first-person prototype is on with `?fp` in the URL or `localStorage` `lodgy.fp` = `1`. It is off by default and not listed in the controls. Third person stays the default; the findings and the recommendation are in `docs/research/first-person.md`.
 - If the WebGL context is lost, as iOS does to background tabs, the client reloads the page and rejoins with its session token, without showing the name form. It reloads at most once per 10 s; a second loss within that time returns to the home page with "The 3D view was lost. Reload the page to continue."
 
 ### HUD
@@ -563,10 +580,13 @@ Binary encoding is deferred until snapshot size is measured as a problem. Snapsh
 |---|---|
 | Top centre | Compass: a heading strip with a marker toward the next checkpoint, or the finish after the last one |
 | Top left | Minimap: the course's stylised route, the vehicle, players, service stops and checkpoints |
-| Top right | Vehicle fuel and health, timer, wallet |
+| Top right | Vehicle fuel and health, timer, wallet; while seated, a seat chip (`#hud-seat`) with the seat's label |
 | Bottom left | The player's own health |
 | Bottom right | The three inventory slots, with the selected one highlighted |
 | Centre | A small cross-shaped crosshair, with the interact or use prompt and hold progress beneath it |
+| Under the compass | On boarding, a toast (`#hud-seat-toast`) for 2.5 s: "You are the Driver" or "You are in the rear left seat" |
+
+Seat labels: `driver` Driver, `seat1` Front passenger, `seat2` Middle left, `seat3` Middle right, `seat4` Rear left, `seat5` Rear right. On boarding, a translucent ring in the player's colour marks their seat in the world for 2 s, fading out. Names do not float over seated players: the seat chip and the ring cover it.
 
 A downed teammate shows a marker above them with their remaining time, visible through walls. A downed player sees their own timer in the centre.
 
@@ -585,6 +605,8 @@ Effects only: engine loop, impact, winch loop, hook attach, pickup, item use, co
 | Interact | E | Button |
 | Use item | F | Button, shown only when the selected item has a valid target |
 | Jump / brake | Space | Button (label changes when seated) |
+| Sprint | Shift (hold, moving forward) | A Sprint toggle button |
+| Crouch, slide | C (hold; press while sprinting to slide) | None: touch has no crouch or slide |
 | Throttle, reverse | W, S when driving | Joystick up, down when driving |
 | Reel in, out | Q, R | Two buttons, shown only when reeling is possible |
 | Reset a stuck vehicle | X (hold 1.5 s) | A button on touch, shown only when it can act |
@@ -633,11 +655,15 @@ Runner: Vitest in all packages. Tests are written before the code they cover.
 - vehicle: throttle moves it; fuel drains with throttle; empty tank disables drive; impact above the threshold reduces health in proportion; upside-down drains health; grip differs by surface; both vehicle configs load and drive
 - seats: driver door takes the driver seat; otherwise the nearest free seat; full vehicle refuses; exit beside the door, then the other side, then a spawn slot; boarding drops debris and stows the hook
 - spawn slots: first valid slot; fallback to the checkpoint when none is valid
+- stance: walk, sprint and crouch speeds; sprint needs forward input, ground and empty hands; sprint and crouch are refused while a prop is held
+- slide: start rule (sprint, fresh crouch press, speed, cooldown), the speed profile, steering, early end on a wall or in the air, the cooldown, the slide jump keeping its speed through the air, the prediction agreeing with the server on a scripted sprint, crouch and slide path
+- headroom: a crouched player stays crouched under a low ceiling and stands when it fits; a crouched player in a low tunnel is not shoved
+- hit clamp: sprinting or sliding into a resting vehicle or prop costs 0 health
 - player physics: carried by a moving body in its local frame; keeps the body's velocity on take-off; shoved out horizontally and never into a wall; contact alone moves nothing; players pass through each other
 - player health: each damage source; no damage while seated; downed at 0; revive at 50; respawn after 30 s; the timer pauses during a revive hold; all downed respawn at once and each is counted; kill-plane respawn
 - inventory: fills the first free slot; refuses when full; selection; drop; no drop while seated; each item's valid target, including full tank and full health being invalid; downed teammate preferred
 - holds: bind at the press; reset on release, on an invalid target, on leaving range, on being downed or teleported; a fresh press is needed after completion
-- winch: attaches only within range of an anchor; the pull never exceeds the force cap; the cable does not shorten at the cap; reeling in pulls the vehicle toward the anchor; minimum and maximum length; over-length hook drops; a heavy obstacle can be dragged; a grounded hook retracts, and retracts by itself beyond 25 m; release at the winch box; detach when the obstacle is reset; the driver's reel wins
+- winch: attaches only within range of an anchor; the pull never exceeds the force cap; the cable does not shorten at the cap; reeling in pulls the vehicle toward the anchor; minimum and maximum length; over-length hook drops; a heavy obstacle can be dragged; a grounded hook retracts, and retracts by itself beyond 30 m; release at the winch box; detach when the obstacle is reset; the driver's reel wins
 - interact: priority order; the target nearest the aim wins within a priority; range is measured to the nearest point of a box
 - push: applied at the contact point and only into the surface; adds per player and respects the cap; rights a flipped Lodgy; none from a player standing on the object; a heavy obstacle stays locked below the pusher count and against the vehicle
 - press detection: a repeated input does not re-trigger a press
