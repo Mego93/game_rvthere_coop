@@ -1,3 +1,4 @@
+// Fuel measurements deviate from plan A1: START_FUEL is 1 because stops refill the tank. From 50 % the RV cannot keep 20 % over any gap above about 570 m (it burns about half a tank per km); owner decision pending.
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { getVehicleConfig, VEHICLES, type VehicleId } from '../vehicles';
@@ -65,6 +66,7 @@ const pairs = fuelIndexes.slice(0, -1).map((a, n) => [a, fuelIndexes[n + 1]!] as
 // The sampled gaps: the longest, the one holding the ford group, the first and the last.
 const sampled = new Set<number>();
 {
+  // 40 m stands in for a ford or bank, which have no length field.
   const length = (n: number) => def.segments.slice(pairs[n]![0], pairs[n]![1] + 1).reduce((sum, s) => sum + ('length' in s ? s.length : 40), 0);
   let longest = 0;
   pairs.forEach((_, n) => length(n) > length(longest) && (longest = n));

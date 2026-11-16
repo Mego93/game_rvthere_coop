@@ -79,7 +79,10 @@ describe('planExtras', () => {
     const r = planExtras(base, inserted, { garageEvery: 1200 });
     for (const i of inserted) {
       const d = r.segments[i]! as Extras;
-      expect(d.stop ?? d.hazards ?? d.coins ?? d.pickups).toBeUndefined();
+      expect(d.stop).toBeUndefined();
+      expect(d.hazards).toBeUndefined();
+      expect(d.coins).toBeUndefined();
+      expect(d.pickups).toBeUndefined();
     }
   });
 
