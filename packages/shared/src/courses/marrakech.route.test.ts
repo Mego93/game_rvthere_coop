@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ROAD_MAX_PIECE_YAW, ROAD_PIECE_LENGTH, SEGMENT_MIN_LENGTH } from '../constants';
 import { buildSegment, type SegmentDef } from '../segments';
 import { buildCourse } from './build';
-import { MARRAKECH_SEGMENTS } from './marrakech.generated';
+import { MARRAKECH_INSERTED, MARRAKECH_SEGMENTS } from './marrakech.generated';
 import { planMarrakech } from './marrakech.plan';
 import { MARRAKECH_ROUTE } from './marrakech.route';
 
@@ -103,5 +103,35 @@ describe('MARRAKECH_SEGMENTS (T3 to T5)', () => {
     const ford = MARRAKECH_SEGMENTS.findIndex((def) => def.type === 'ford');
     expect(MARRAKECH_SEGMENTS[ford + 1]).toMatchObject({ type: 'road', slope: 4 });
     expect(MARRAKECH_SEGMENTS[ford + 2]!.type).toBe('bank');
+    for (const i of [ford - 1, ford + 3]) {
+      const near = MARRAKECH_SEGMENTS[i]!;
+      expect(near.type === 'road' && (near.curve || near.slope)).toBeFalsy();
+    }
+  });
+
+  it('marks the inserted segments and nothing else', () => {
+    const { segments, inserted } = planMarrakech();
+    expect(MARRAKECH_INSERTED).toEqual(inserted);
+    segments.forEach((def, i) => expect(inserted.includes(i)).toBe(def.type !== 'road' || !!def.slope));
+    expect(inserted).toHaveLength(7);
+  });
+
+  it('winds: the built route is not a straight line', () => {
+    const { route } = buildCourse({ id: 'marrakech-fit', segments: MARRAKECH_SEGMENTS, targetTime: 1800 });
+    const xs = route.map((p) => p[0]);
+    const zs = route.map((p) => p[1]);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThanOrEqual(5000);
+    expect(Math.max(...zs) - Math.min(...zs)).toBeGreaterThanOrEqual(5000);
+    let turning = 0;
+    let prev: number | undefined;
+    for (let i = 1; i < route.length; i++) {
+      const dx = route[i]![0] - route[i - 1]![0];
+      const dz = route[i]![1] - route[i - 1]![1];
+      if (Math.hypot(dx, dz) < 1e-6) continue;
+      const h = Math.atan2(-dx, -dz);
+      if (prev !== undefined) turning += Math.abs(Math.atan2(Math.sin(h - prev), Math.cos(h - prev)));
+      prev = h;
+    }
+    expect((turning * 180) / Math.PI).toBeGreaterThanOrEqual(1000);
   });
 });

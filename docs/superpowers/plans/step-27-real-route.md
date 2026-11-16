@@ -43,7 +43,7 @@ R12. **Results and HUD copy.** The lobby and results already read the course id 
 
 ## Tests (numbered)
 
-T1. `marrakech.route.ts`: first point `[0, 0]`, every step is 20 m (+-0.1), at least 1,000 points, total length within 22.14 km +-0.5 %, every number rounded to 0.1, no key or comment containing `lat`, `lon` or a coordinate pair.
+T1. `marrakech.route.ts`: first point `[0, 0]`, every step is 20 m (+-0.1), at least 1,000 points, total length 22.18 km +-0.3 %, every number rounded to 0.1, no key or comment containing `lat`, `lon` or a coordinate pair.
 T2. Generator (as a pure function `fitRoute(route)` exported from `packages/shared/src/courses/fit.ts`, tested with Vitest by a fixed small polyline): straights stay straight, a quarter circle gives one curve segment of `curve` = +-pi/2 and the length rule of R3, a sharp corner is stretched and reported, a run shorter than 15 m is merged, determinism (two runs give equal output).
 T3. Generated segments: every segment type is valid for `buildCourse`; no curved road next to a sloped one; lengths in [15, 400] except the ford and bank; the sum of lengths is within 1 % of the real route after the inserted terrain's net change.
 T4. Fidelity: the largest distance between the generated centre line and the real route is at most 60 m, and the end-point error at most 150 m (starting values; if the real figures are worse, report them and stop for the owner). A2 replaces the limits; the deviation is the nearest-point distance (the arc-matched figure is informational).
@@ -67,7 +67,7 @@ T14. End-to-end (desktop and phone): the existing smoke tests run on `test` or `
 ## Tasks
 
 1. **Route data and generator** (R1 to R4, T1 to T5). Stop and report after the fit numbers (R3) for review before Task 2: if the largest deviation exceeds 60 m or the end-point error 150 m, the main session decides.
-2. **Hazards, stops, pickups, coins and the course registration** (R5 to R9, T6 to T8, T11), with the size and speed measurement (R10, T9).
+2. **Hazards, stops, pickups, coins and the course registration** (stops and hazards skip the inserted terrain: `MARRAKECH_INSERTED` in `marrakech.generated.ts` lists the indexes of sand, alley, roadworks, ford, the slope road and bank) (R5 to R9, T6 to T8, T11), with the size and speed measurement (R10, T9).
 3. **Scripted drive and the minimap window** (R11, T10, T12).
 4. **Credits, e2e and docs** (R12, T13, T14), `ROADMAP.md` (row 27 to `needs sign-off`, decision line with the generator numbers, the spec's Course section naming `marrakech` and the minimap window), every check.
 
@@ -83,7 +83,7 @@ A1 (fuel; replaces R6 and T7). The RV's top speed is 15 m/s and it burns a tank 
 
 A2 (fit; replaces R3's end rules, T3 and T4). A literal fit drifts 550 m at the end and adds 4 % length because 28 corners need stretching by 960 m in total. The generator is closed-loop: it fits each curve, then re-aims each following straight at the real route's next junction point (heading re-based to the real heading) and absorbs the stretch by shortening following straights, never below 15 m. Starting limits (replace 60 m and 150 m): largest centre-line deviation 200 m (measured to the nearest real point; the figure matched by arc length is only reported, because stretching makes it an along-track artifact), end-point error 100 m, total length within 5 % of the real route. If the generator cannot meet them it reports the figures and Task 1 stops for the owner (this is the expected gate). The 400 m maximum is a plan rule (the builder has none): straights over 400 m are split, which adds about 10 segments.
 
-A3 (T1). The resampled route is 22.28 km: T1 says 22.28 km +-0.3 %.
+A3 (T1). The route resampled at exact 20 m chords is 22.18 km (the dense route is 22.30 km; chords cut the bends): T1 says 22.18 km +-0.3 %.
 
 A4 (built lengths; R4, T3). Built lengths: sand 110 m (50 m apron + 60 m), alley 160, roadworks 120, ford group (ford 24 + road slope 4 of 60 m + bank about 36) about 120 m. The ford group raises everything after it by about 7.2 m, as in `airport`. An inserted segment replaces a straight run of at least its built length; the leftover on each side is 0 or at least 15 m; the generator may not insert into a straight that holds a stop or a hazard. T3's total-length check is against the real route plus the inserts' net change, within the A2 limit.
 

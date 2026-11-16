@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { planMarrakech } from '../../packages/shared/src/courses/marrakech.plan';
 import type { SegmentDef } from '../../packages/shared/src/segments';
 
-const { segments, report, placements } = planMarrakech();
+const { segments, report, placements, inserted } = planMarrakech();
 
 const field = (key: string, value: unknown): string => `${key}: ${typeof value === 'string' ? `'${value}'` : JSON.stringify(value)}`;
 const line = (def: SegmentDef): string => `  { ${Object.entries(def).map(([key, value]) => field(key, value)).join(', ')} },`;
@@ -15,6 +15,9 @@ const text = [
   'export const MARRAKECH_SEGMENTS: SegmentDef[] = [',
   ...segments.map(line),
   '];',
+  '',
+  '// Indexes of the inserted terrain (sand, alley, roadworks, ford group); stops and hazards skip them.',
+  `export const MARRAKECH_INSERTED: readonly number[] = [${inserted.join(', ')}];`,
   '',
 ].join('\n');
 writeFileSync(fileURLToPath(new URL('../../packages/shared/src/courses/marrakech.generated.ts', import.meta.url)), text);

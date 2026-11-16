@@ -77,6 +77,11 @@ describe('fitRoute', () => {
     expect(r[r.length - 1]!.length).toBeGreaterThanOrEqual(120);
   });
 
+  it('throws when the tail cannot be a straight of the required length', () => {
+    expect(() => fitRoute(makeRoute([{ line: 5 }]), { lead: 0, tail: 120 })).toThrow();
+    expect(() => fitRoute(makeRoute([{ line: 20 }]), { lead: 0, tail: 120 })).not.toThrow();
+  });
+
   it('is deterministic', () => {
     const route = makeRoute([{ line: 7 }, { turn: 0.8, steps: 6 }, { line: 9 }, { turn: -1.2, steps: 2 }, { line: 12 }]);
     expect(fitRoute(route, { edge: 0 })).toEqual(fitRoute(route, { edge: 0 }));
@@ -130,7 +135,7 @@ describe('planInserts', () => {
     expect(total(segments)).toBeCloseTo(total(base) - 110 + 60, 0);
     expect(segments.filter((s) => s.type === 'sand')).toHaveLength(1);
     const at = segments.findIndex((s) => s.type === 'sand');
-    for (const near of [segments[at - 1], segments[at + 1]]) if (near?.type === 'road') expect((near.length) >= SEGMENT_MIN_LENGTH).toBe(true);
+    for (const near of [segments[at - 1], segments[at + 1]]) if (near?.type === 'road') expect(near.length >= SEGMENT_MIN_LENGTH).toBe(true);
   });
 
   it('leaves each side 0 or at least 15 m and never splits a curve', () => {
@@ -146,19 +151,57 @@ describe('planInserts', () => {
   });
 
   it('reports the distance when the nearest suitable straight is far away', () => {
-    const base = [road(300), road(300, 0.5), road(300, -0.5), road(300, 0.5), road(300, -0.5), road(300)];
+    const base = [road(300), road(300), road(300, 0.5), road(300, -0.5), road(300, 0.5), road(300, -0.5), road(300, 0.5), road(300, -0.5), road(300, 0.5), road(300)];
     const { placements } = planInserts(base, [spec(0.5, 110)]);
     expect(placements[0]!.distance).toBeGreaterThan(300);
   });
 
   it('places consecutive inserts without overlap and is deterministic', () => {
-    const base = [road(400), road(300, 0.4), road(400)];
+    const base = [road(400), road(400), road(300, 0.4), road(400), road(400)];
     const a = planInserts(base, [spec(0.3, 110), spec(0.35, 110)]);
     expect(a.segments.filter((s) => s.type === 'sand')).toHaveLength(2);
     expect(planInserts(base, [spec(0.3, 110), spec(0.35, 110)])).toEqual(a);
   });
 
+  it('never uses the first or the last segment', () => {
+    expect(() => planInserts([road(300), road(300)], [spec(0.5, 110)])).toThrow();
+    const { segments } = planInserts([road(300), road(200), road(300)], [spec(0.5, 110)]);
+    expect(segments[0]).toEqual(road(300));
+    expect(segments[segments.length - 1]).toEqual(road(300));
+  });
+
+  it('skips a straight that carries a stop, hazards or a slope', () => {
+    const stop: SegmentDef = { type: 'road', length: 300, stop: { kind: 'fuel', side: 1, along: 150 } };
+    const hazard: SegmentDef = { type: 'road', length: 300, hazards: [{ kind: 'crateWall', along: 100 }] };
+    const slope: SegmentDef = { type: 'road', length: 300, slope: 4 };
+    for (const blocked of [stop, hazard, slope]) {
+      const { segments } = planInserts([road(300), blocked, road(300), road(300)], [spec(0.4, 110)]);
+      expect(segments.filter((s) => s === blocked)).toHaveLength(1);
+      const at = segments.findIndex((s) => s.type === 'sand');
+      expect(at).toBeGreaterThan(1);
+    }
+  });
+
+  it('keeps curves out of the insert\'s neighbours and reports which segments are inserted', () => {
+    const base = [road(300), road(110), road(300, 0.5), road(110), road(300, -0.5), road(300), road(300)];
+    const { segments, inserted } = planInserts(base, [spec(0.5, 110)]);
+    const at = segments.findIndex((s) => s.type === 'sand');
+    expect(inserted).toEqual([at]);
+    for (const near of [segments[at - 1], segments[at + 1]]) expect(near?.type === 'road' && near.curve).toBeFalsy();
+  });
+
+  it('marks every segment of a group as inserted', () => {
+    const group: InsertSpec = { name: 'ford', fraction: 0.5, length: 120, segments: [{ type: 'ford', width: 24, rocks: 8 }, { type: 'road', length: 60, slope: 4 }, { type: 'bank', height: 3, gradient: 15, anchors: 3 }] };
+    const { segments, inserted } = planInserts([road(300), road(400), road(300)], [group]);
+    expect(inserted.map((i) => segments[i]!.type)).toEqual(['ford', 'road', 'bank']);
+  });
+
+  it('keeps each side at 15 m or more after rounding', () => {
+    const { segments } = planInserts([road(300), road(125.04), road(300)], [spec(0.5, 110)]);
+    for (const s of segments) if (s.type === 'road') expect(s.length).toBeGreaterThanOrEqual(SEGMENT_MIN_LENGTH);
+  });
+
   it('throws when no straight is long enough', () => {
-    expect(() => planInserts([road(50), road(60, 0.5)], [spec(0.5, 110)])).toThrow();
+    expect(() => planInserts([road(50), road(60, 0.5), road(50)], [spec(0.5, 110)])).toThrow();
   });
 });

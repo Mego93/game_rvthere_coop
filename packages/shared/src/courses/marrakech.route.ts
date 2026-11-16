@@ -1,4 +1,4 @@
-// Local metres, resampled every 20 m: x east, -z north at the start, first point at the origin. Route geometry: OpenStreetMap contributors (ODbL).
+// Local metres, one point every 20 m, first point at the origin, the first 60 m run toward -Z (x is east). Route geometry from OpenStreetMap contributors (ODbL).
 export const MARRAKECH_ROUTE: readonly (readonly [x: number, z: number])[] = [
   [0, 0],
   [-0.1, -20],

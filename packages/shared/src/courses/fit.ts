@@ -45,7 +45,6 @@ const AIM_MIN = 60;
 const AIM_LIMIT = degToRad(25);
 const EPS = 0.15;
 
-const round = (v: number, step: number): number => Math.round(v / step) * step;
 const round1 = (v: number): number => Math.round(v * 10) / 10;
 const wrapNear = (a: number, near: number): number => a - Math.round((a - near) / (2 * Math.PI)) * 2 * Math.PI;
 // Yaw convention of the road builder: yaw 0 faces -Z, a positive yaw turns toward -X.
@@ -175,7 +174,7 @@ export function fitRoute(route: Route, options: FitOptions = {}): { segments: Se
     const s = mid(run.v1 - 1);
     const e = mid(run.v2);
     straightTo(s);
-    const realCurve = (e - s);
+    const realCurve = e - s;
     const next = merged[k + 1];
     const nextStart = next ? mid(next.v1 - 1) : realLength;
     const aim = nextStart - e >= AIM_MIN ? pointAt(nextStart) : undefined;
@@ -195,7 +194,7 @@ export function fitRoute(route: Route, options: FitOptions = {}): { segments: Se
         c = c + 0.7 * (c2 - c);
       }
     }
-    c = round(c, 1e-4);
+    c = Number(c.toFixed(4));
     const length = lengthFor(c);
     const stretch = length - realCurve;
     if (stretch > 0.5) stretches++;
@@ -204,6 +203,9 @@ export function fitRoute(route: Route, options: FitOptions = {}): { segments: Se
     state = advance(state, length, c);
   });
   straightTo(realLength);
+
+  const lastSeg = out[out.length - 1];
+  if (tail > 0 && (!lastSeg || lastSeg.curve || lastSeg.length < tail)) throw new Error(`The fit cannot end on a straight of ${tail} m`);
 
   const line = centreLine(out, { x: route[0]![0], z: route[0]![1] });
   let maxDeviation = 0;
@@ -257,12 +259,13 @@ interface Item {
   defs: SegmentDef[];
   length: number;
   free: boolean;
+  inserted?: boolean;
 }
 
 const freeStraight = (def: SegmentDef): boolean => def.type === 'road' && !def.curve && !def.slope && !def.stop && !def.hazards;
 
 // Replaces a stretch of the straight nearest each target; each side that stays is 0 or at least 15 m. Net length is unchanged.
-export function planInserts(segments: readonly SegmentDef[], specs: readonly InsertSpec[]): { segments: SegmentDef[]; placements: InsertPlacement[] } {
+export function planInserts(segments: readonly SegmentDef[], specs: readonly InsertSpec[]): { segments: SegmentDef[]; placements: InsertPlacement[]; inserted: number[] } {
   let items: Item[] = segments.map((def) => ({ defs: [def], length: 'length' in def ? def.length : 0, free: freeStraight(def) }));
   const total = items.reduce((sum, item) => sum + item.length, 0);
   const placements: InsertPlacement[] = [];
@@ -274,13 +277,17 @@ export function planInserts(segments: readonly SegmentDef[], specs: readonly Ins
       const begin = start;
       start += item.length;
       const r = item.length - spec.length;
-      if (!item.free || r < -EPS) return;
+      if (!item.free || r < -EPS || index === 0 || index === items.length - 1) return;
+      const isCurve = (it: Item | undefined): boolean => it?.defs[0]?.type === 'road' && !!it.defs[0].curve;
+      const sideOk = (a: number): boolean => (a < EPS ? !isCurve(items[index - 1]) : true) && (r - a < EPS ? !isCurve(items[index + 1]) : true);
       const wanted = target - begin - spec.length / 2;
-      const choices = r < EPS ? [0] : r < SEGMENT_MIN_LENGTH ? [] : r < 2 * SEGMENT_MIN_LENGTH ? [0, r] : [0, r, Math.min(r - SEGMENT_MIN_LENGTH, Math.max(SEGMENT_MIN_LENGTH, wanted))];
+      // Interior offsets are rounded inward, so both sides stay at 15 m or more.
+      const lo = Math.ceil(SEGMENT_MIN_LENGTH * 10) / 10;
+      const hi = Math.floor((r - SEGMENT_MIN_LENGTH) * 10) / 10;
+      const choices = r < EPS ? [0] : r < SEGMENT_MIN_LENGTH ? [] : r < 2 * SEGMENT_MIN_LENGTH ? [0, r] : [0, r, Math.min(hi, Math.max(lo, round1(wanted)))];
       let a: number | undefined;
-      for (const choice of choices) if (a === undefined || Math.abs(choice - wanted) < Math.abs(a - wanted)) a = choice;
+      for (const choice of choices) if (sideOk(choice) && (a === undefined || Math.abs(choice - wanted) < Math.abs(a - wanted))) a = choice;
       if (a === undefined) return;
-      a = a === 0 || a === r ? a : round1(a);
       const at = begin + a + spec.length / 2;
       const distance = Math.abs(at - target);
       if (!best || distance < best.distance) best = { index, a, distance, at };
@@ -292,10 +299,16 @@ export function planInserts(segments: readonly SegmentDef[], specs: readonly Ins
     const road = (length: number): Item => ({ defs: [{ type: 'road', length: round1(length) }], length: round1(length), free: true });
     const replacement: Item[] = [];
     if (pre >= EPS) replacement.push(road(pre));
-    replacement.push({ defs: spec.segments, length: spec.length, free: false });
+    replacement.push({ defs: spec.segments, length: spec.length, free: false, inserted: true });
     if (post >= EPS) replacement.push(road(post));
     items = [...items.slice(0, best.index), ...replacement, ...items.slice(best.index + 1)];
     placements.push({ name: spec.name, target, at: best.at, distance: best.distance });
   }
-  return { segments: items.flatMap((item) => item.defs), placements };
+  const inserted: number[] = [];
+  let count = 0;
+  for (const item of items) {
+    if (item.inserted) for (let i = 0; i < item.defs.length; i++) inserted.push(count + i);
+    count += item.defs.length;
+  }
+  return { segments: items.flatMap((item) => item.defs), placements, inserted };
 }

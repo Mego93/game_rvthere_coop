@@ -19,8 +19,8 @@ export const MARRAKECH_INSERTS: readonly InsertSpec[] = [
   insert('roadworks', 0.86, [{ type: 'roadworks', length: 120, obstacles: 6 }]),
 ];
 
-export function planMarrakech(route: Route = MARRAKECH_ROUTE): { segments: SegmentDef[]; report: FitReport; placements: InsertPlacement[] } {
+export function planMarrakech(route: Route = MARRAKECH_ROUTE): { segments: SegmentDef[]; report: FitReport; placements: InsertPlacement[]; inserted: number[] } {
   const fit = fitRoute(route);
   const planned = planInserts(fit.segments, MARRAKECH_INSERTS);
-  return { segments: planned.segments, report: fit.report, placements: planned.placements };
+  return { segments: planned.segments, report: fit.report, placements: planned.placements, inserted: planned.inserted };
 }
