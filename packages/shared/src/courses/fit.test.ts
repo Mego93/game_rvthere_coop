@@ -69,10 +69,10 @@ describe('fitRoute', () => {
   });
 
   it('keeps the lead and the tail straight by default', () => {
-    const route = makeRoute([{ line: 5 }, { turn: 0.6, steps: 4 }, { line: 20 }, { turn: -0.6, steps: 4 }, { line: 5 }]);
+    const route = makeRoute([{ line: 3 }, { turn: 0.6, steps: 4 }, { line: 20 }, { turn: -0.6, steps: 4 }, { line: 5 }]);
     const r = roads(fitRoute(route).segments);
     expect(r[0]!.curve).toBeUndefined();
-    expect(r[0]!.length).toBeGreaterThanOrEqual(120);
+    expect(r[0]!.length).toBe(80);
     expect(r[r.length - 1]!.curve).toBeUndefined();
     expect(r[r.length - 1]!.length).toBeGreaterThanOrEqual(120);
   });

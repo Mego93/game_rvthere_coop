@@ -13,8 +13,10 @@ export interface TurnRun {
 }
 
 export interface FitOptions {
-  // Metres at each end that stay straight (the villa lane and the finish straight).
+  // Metres that stay straight at the start (the villa lane, default 80) and at the end (default 120); `edge` sets both.
   edge?: number;
+  lead?: number;
+  tail?: number;
 }
 
 export interface FitReport {
@@ -110,7 +112,8 @@ function splitStraight(length: number): RoadDef[] {
 }
 
 export function fitRoute(route: Route, options: FitOptions = {}): { segments: SegmentDef[]; report: FitReport } {
-  const edge = options.edge ?? 120;
+  const lead = options.lead ?? options.edge ?? 80;
+  const tail = options.tail ?? options.edge ?? 120;
   const cum = [0];
   for (let i = 1; i < route.length; i++) cum.push(cum[i - 1]! + Math.hypot(route[i]![0] - route[i - 1]![0], route[i]![1] - route[i - 1]![1]));
   const realLength = cum[cum.length - 1]!;
@@ -131,7 +134,7 @@ export function fitRoute(route: Route, options: FitOptions = {}): { segments: Se
   const runs: TurnRun[] = [];
   for (let v = 1; v < steps; v++) {
     const d = turn(v);
-    if (Math.abs(d) < STRAIGHT_TURN || mid(v - 1) < edge || mid(v) > realLength - edge) continue;
+    if (Math.abs(d) < STRAIGHT_TURN || mid(v - 1) < lead || mid(v) > realLength - tail) continue;
     const last = runs[runs.length - 1];
     if (last && last.v2 === v - 1 && Math.sign(last.turn) === Math.sign(d)) {
       last.v2 = v;
@@ -139,10 +142,10 @@ export function fitRoute(route: Route, options: FitOptions = {}): { segments: Se
     } else runs.push({ v1: v, v2: v, turn: d });
   }
   const merged = mergeRuns(runs, arcAt);
-  if (edge > 0) {
+  if (lead > 0) {
     // Turns inside the straight lead are dropped, so one catch-up curve right after it takes the heading to the real one.
     let j = 1;
-    while (j < steps - 1 && mid(j - 1) < edge) j++;
+    while (j < steps - 1 && mid(j - 1) < lead) j++;
     const catchUp = wrapNear(h[j]!, 0);
     if (Math.abs(catchUp) >= STRAIGHT_TURN && (merged.length === 0 || merged[0]!.v1 > j)) merged.unshift({ v1: j, v2: j, turn: catchUp });
   }
@@ -162,8 +165,8 @@ export function fitRoute(route: Route, options: FitOptions = {}): { segments: Se
     }
   };
 
-  if (edge > 0) {
-    for (const seg of splitStraight(edge)) {
+  if (lead > 0) {
+    for (const seg of splitStraight(lead)) {
       out.push(seg);
       state = advance(state, seg.length, 0);
     }

@@ -60,7 +60,7 @@ describe('MARRAKECH_SEGMENTS (T3 to T5)', () => {
 
   it('keeps the villa lane straight and ends on a straight of at least 120 m', () => {
     const first = MARRAKECH_SEGMENTS[0]!;
-    expect(first).toMatchObject({ type: 'road', length: 120 });
+    expect(first).toMatchObject({ type: 'road', length: 80 });
     expect((first as { curve?: number }).curve).toBeUndefined();
     const last = MARRAKECH_SEGMENTS[MARRAKECH_SEGMENTS.length - 1]!;
     expect(last.type).toBe('road');
