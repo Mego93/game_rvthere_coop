@@ -25,6 +25,7 @@ import { createLobby } from './ui/lobby';
 import { createResults } from './ui/results';
 import { createTouchUi } from './ui/touchUi';
 import { createTutorial, shouldAutoShowTutorial } from './ui/tutorial';
+import { firstPersonEnabled } from './render/firstPersonCamera';
 
 // Some private browsing modes refuse access to storage; the page then works without remembering anything.
 function storage(get: () => Storage): KeyValueStore {
@@ -127,6 +128,8 @@ let renderer: THREE.WebGLRenderer | null = null;
 let softwareGl = false;
 // ?hq keeps the full look on software GL, for screenshots; read at load, before a room's path replaces the address.
 const fullQuality = new URLSearchParams(location.search).has('hq');
+// ?fp (or localStorage lodgy.fp = 1) turns on the first-person prototype; read at load for the same reason.
+const firstPerson = firstPersonEnabled(location.search, (() => { try { return localStorage.getItem('lodgy.fp'); } catch { return null; } })());
 // The joined socket, or the one that is joining. It is null while reconnecting.
 let socket: GameSocket | null = null;
 // The socket of a reconnect attempt, until its welcome makes it the joined socket.
@@ -320,7 +323,7 @@ function startGame(lobby: LobbyMessage) {
       ? createTouchSource({ surface: canvas, win: window, doc: document, width: () => window.innerWidth, controls })
       : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document, pointerGate));
   touchUi?.setVisible(true);
-  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, firstPerson, onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
 const clock = () => performance.now() / 1000;

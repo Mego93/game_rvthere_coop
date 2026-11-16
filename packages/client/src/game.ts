@@ -45,6 +45,7 @@ import { createDecorRenderer } from './render/decorRenderer';
 import { scatterDecor, seedFromId } from './render/decorScatter';
 import { createScene } from './render/scene';
 import { disposeScene } from './render/disposeScene';
+import { FIRST_PERSON_FOV, onFootPose, seatedPose } from './render/firstPersonCamera';
 import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createSeatRing, createVehicleMesh, disposeSeatRing, placeSeatRing, placeVehicleMesh } from './render/vehicleMesh';
@@ -104,6 +105,8 @@ export interface GameView {
   audio: GameAudio;
   muted: boolean;
   softwareGl?: boolean;
+  // The first-person camera prototype (?fp); off by default.
+  firstPerson?: boolean;
   onMute: () => void;
   onHelp: () => void;
   onTutorial: () => void;
@@ -145,7 +148,8 @@ export function createGame(
   winchMesh.visible = false;
   scene.add(winchMesh);
   const coinMeshes = createCoinMeshes(scene, course.coins);
-  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+  const firstPerson = view.firstPerson === true;
+  const camera = new THREE.PerspectiveCamera(firstPerson ? FIRST_PERSON_FOV : 60, 1, 0.1, 1000);
   camera.position.set(0, 6, 14);
 
   const predictor = createPredictor(rapier, course, vehicleConfig);
@@ -348,7 +352,7 @@ export function createGame(
         playerMeshes.set(player.playerId, entry);
         scene.add(entry.mesh);
       }
-      entry.mesh.visible = player.seat === null;
+      entry.mesh.visible = player.seat === null && !(firstPerson && player.playerId === playerId);
       placePlayerMesh(entry.mesh, player, seconds);
       setNameVisible(entry.mesh, player.playerId !== playerId && Math.hypot(player.pos.x - camera.position.x, player.pos.y - camera.position.y, player.pos.z - camera.position.z) <= LABEL_RANGE);
     }
@@ -440,12 +444,18 @@ export function createGame(
       const eyeTarget = drawnStance === undefined ? PLAYER_EYE_HEIGHT : PLAYER_CROUCH_EYE_HEIGHT;
       eyeHeight += (eyeTarget - eyeHeight) * (1 - Math.exp(-frameSeconds / EYE_EASE_SECONDS));
       const head = vec3(local.pos.x, local.pos.y + eyeHeight, local.pos.z);
-      const placement = cameraPlacement(head, aim.yaw, aim.pitch, cameraBoxes);
+      const placement = firstPerson ? onFootPose(local.pos, eyeHeight, aim.yaw, aim.pitch) : cameraPlacement(head, aim.yaw, aim.pitch, cameraBoxes);
       camera.position.set(placement.position.x, placement.position.y, placement.position.z);
       camera.lookAt(placement.target.x, placement.target.y, placement.target.z);
     } else if (vehicle) {
       eyeHeight = PLAYER_EYE_HEIGHT;
-      updateFollowCamera(camera, vehicle, frameSeconds);
+      const seatedEye = firstPerson && local?.seat ? seatedPose(vehicle.pos, vehicle.rot, vehicleConfig, local.seat, aim.yaw, aim.pitch) : null;
+      if (seatedEye) {
+        camera.position.set(seatedEye.position.x, seatedEye.position.y, seatedEye.position.z);
+        camera.lookAt(seatedEye.target.x, seatedEye.target.y, seatedEye.target.z);
+      } else {
+        updateFollowCamera(camera, vehicle, frameSeconds);
+      }
     }
     const latestCable = buffer.latestCable();
     const overlayData: OverlayData = {
