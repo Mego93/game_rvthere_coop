@@ -187,7 +187,8 @@ test('dropping an item makes the next snapshot full for every client, and the dr
   const two = join(2);
   start();
   run(SNAPSHOT_EVERY_TICKS * 2);
-  one.player.queue.push({ ...NEUTRAL_INPUT, seq: 1, interact: true });
+  // Looking down at the can: level aim at the spawn slot now picks the boarding door first.
+  one.player.queue.push({ ...NEUTRAL_INPUT, seq: 1, interact: true, pitch: -1.4 });
   run(SNAPSHOT_EVERY_TICKS * 2);
   expect(one.received[one.received.length - 1]!.players.find((p) => p.inventory[0] === 'jerrycan')).toBeDefined();
   // Quiet again: partial snapshots.

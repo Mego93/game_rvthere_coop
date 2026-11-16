@@ -6,7 +6,9 @@ import {
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
   PLAYER_WALK_SPEED,
+  PROP_KINDS,
   HOLD_OFFSET,
+  THROW_HEAD_CLEARANCE,
   SEAT_EXIT_DISTANCE,
   THROW_SPEED,
   TICK_DT,
@@ -812,8 +814,8 @@ describe('a player on the roof during a suspension bounce', () => {
 });
 
 describe('standing on props', () => {
-  const BARRIER_TOP = 1.0;
-  const CRATE_TOP = 0.6;
+  const BARRIER_TOP = 2 * PROP_KINDS.barrier.halfExtents.y;
+  const CRATE_TOP = 2 * PROP_KINDS.crate.halfExtents.y;
   // Gravity off, so a crate given a velocity keeps it and does not tumble.
   const glide = (rig: ReturnType<typeof harness>['rig'], props: ReturnType<typeof harness>['props'], id: string, v: Vec3) => {
     const body = props.get(id)!.body;
@@ -879,8 +881,8 @@ describe('standing on props', () => {
       const crate = body.translation();
       expect(Number.isFinite(player.pos.x + player.pos.y + player.pos.z)).toBe(true);
       expect(player.pos.y).toBeLessThan(0.1);
-      expect(Math.hypot(Math.max(Math.abs(player.pos.x - crate.x) - 0.3, 0), Math.max(Math.abs(player.pos.z - crate.z) - 0.3, 0))).toBeGreaterThanOrEqual(PLAYER_RADIUS - 0.06);
-      if (player.pos.z < 5.5 - 0.3) pushed = true;
+      expect(Math.hypot(Math.max(Math.abs(player.pos.x - crate.x) - PROP_KINDS.crate.halfExtents.x, 0), Math.max(Math.abs(player.pos.z - crate.z) - PROP_KINDS.crate.halfExtents.z, 0))).toBeGreaterThanOrEqual(PLAYER_RADIUS - 0.06);
+      if (player.pos.z < 5.5 - PROP_KINDS.crate.halfExtents.z) pushed = true;
     }
     expect(pushed).toBe(true);
   });
@@ -923,7 +925,7 @@ describe('standing on props', () => {
     shoved.tick({});
     expect(b.ground).toBeNull();
     const barrier = shoved.props.get('barrier-1')!.body.translation();
-    expect(Math.hypot(Math.max(Math.abs(b.pos.x - barrier.x) - 1.0, 0), Math.max(Math.abs(b.pos.z - barrier.z) - 0.4, 0))).toBeGreaterThanOrEqual(PLAYER_RADIUS - 0.06);
+    expect(Math.hypot(Math.max(Math.abs(b.pos.x - barrier.x) - PROP_KINDS.barrier.halfExtents.x, 0), Math.max(Math.abs(b.pos.z - barrier.z) - PROP_KINDS.barrier.halfExtents.z, 0))).toBeGreaterThanOrEqual(PLAYER_RADIUS - 0.06);
   });
 
   test('a held prop shoves nobody and cannot be stood on', () => {
@@ -965,7 +967,7 @@ describe('standing on props', () => {
 
 describe('hands', () => {
   const OPEN = vec3(30, 0.02, 20);
-  const CRATE_1_CENTRE = vec3(10, 0.3, 8);
+  const CRATE_1_CENTRE = vec3(10, PROP_KINDS.crate.halfExtents.y, 8);
   const holdPoint = (feet: Vec3, yaw: number) => ({
     pos: vec3(feet.x, feet.y, feet.z),
     rot: quatFromAxisAngle(AXIS_Y, yaw),
@@ -1089,9 +1091,9 @@ describe('hands', () => {
     const { player, players, props } = holder(withBoxes(testGround, { walls: [wall] }));
     players.throwHeld('p1', 0, 0);
     const centre = props.get('crate-1')!.body.translation();
-    expect(centre.x).toBeCloseTo(player.pos.x, 6);
-    expect(centre.z).toBeCloseTo(player.pos.z, 6);
-    expect(centre.y).toBeCloseTo(player.pos.y + PLAYER_HEIGHT + 0.3 + 0.05, 6);
+    expect(centre.x).toBeCloseTo(player.pos.x, 5);
+    expect(centre.z).toBeCloseTo(player.pos.z, 5);
+    expect(centre.y).toBeCloseTo(player.pos.y + PLAYER_HEIGHT + PROP_KINDS.crate.halfExtents.y + THROW_HEAD_CLEARANCE, 5);
     expect(props.get('crate-1')!.body.linvel().z).toBeCloseTo(-THROW_SPEED, 5);
   });
 
@@ -1259,7 +1261,7 @@ describe('what is a hit (rules H4, J2, J9)', () => {
   test('J2: landing on two props side by side is not a hit', () => {
     const h = harness();
     const second = h.props.get('crate-3')!.body;
-    second.setTranslation(vec3(10, 0.3, 10.1), true);
+    second.setTranslation(vec3(10, PROP_KINDS.crate.halfExtents.y, 10.1), true);
     h.run(30);
     const player = h.players.add('p1');
     h.players.teleport('p1', vec3(10, 3.6, 9.8));

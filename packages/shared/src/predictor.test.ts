@@ -21,7 +21,7 @@ beforeAll(async () => {
   await RAPIER.init();
 });
 
-const FAR = vec3(20, PLAYER_CONTROLLER_OFFSET, -100);
+const FAR = vec3(0, PLAYER_CONTROLLER_OFFSET, -90);
 const lodgy = VEHICLES.lodgy;
 const rest = (pos: Vec3): PredictedState => ({
   pos,

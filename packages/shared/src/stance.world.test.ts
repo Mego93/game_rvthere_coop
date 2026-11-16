@@ -7,6 +7,7 @@ import {
   PLAYER_EYE_HEIGHT,
   PLAYER_MAX_HEALTH,
   PLAYER_RADIUS,
+  PROP_KINDS,
   TICK_RATE,
 } from './constants';
 import { IDENTITY, vec3 } from './math';
@@ -36,7 +37,7 @@ const me = (world: World) => world.snapshot().players.find((player) => player.pl
 const run = (world: World, ticks: number, fields: Partial<PlayerInput> = {}) => {
   for (let i = 0; i < ticks; i++) world.step(new Map([['p', input(fields)]]));
 };
-const OPEN = vec3(20, PLAYER_CONTROLLER_OFFSET, -100);
+const OPEN = vec3(0, PLAYER_CONTROLLER_OFFSET, -90);
 
 describe('stance in the snapshot', () => {
   test('a standing player has no stance and no slide; crouching, sliding and the cooldown show', () => {
@@ -221,7 +222,7 @@ describe('headroom under a dynamic body (B3)', () => {
   // A vehicle or a crate frozen 1.3 m above the feet: it clears a crouched capsule and hits a standing one.
   test.each([
     ['the vehicle', 'vehicle', 0.55],
-    ['a crate', 'crate-1', 0.3],
+    ['a crate', 'crate-1', PROP_KINDS.crate.halfExtents.y],
   ])('%s overhead keeps a crouched player crouched until it is gone', (_name, id, half) => {
     const world = make();
     world.addPlayer('idle');

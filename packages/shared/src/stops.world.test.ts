@@ -87,10 +87,11 @@ describe('S5: coins', () => {
     world.step(new Map());
     expect(player(world, 'p1').seat).not.toBeNull();
     world.teleportPlayer('p2', vec3(40, 0.02, 40));
-    // Put the vehicle so the seated player's feet are on the coin.
+    // Put the vehicle so the seat is on the coin.
     const at = coin(world, 'coin-1');
     const body = world.debugBody('vehicle')!;
-    body.setTranslation({ x: at.x, y: 0.95, z: at.z }, true);
+    const seat = world.vehicleConfig.seats.find((s) => s.id === player(world, 'p1').seat)!;
+    body.setTranslation({ x: at.x - seat.pos.x, y: 0.95, z: at.z - seat.pos.z }, true);
     const events = run(world, 3);
     expect(coinTouched(player(world, 'p1').pos, at)).toBe(true);
     expect(kinds(events, 'coin')).toHaveLength(0);
@@ -704,8 +705,8 @@ describe('M13: aiming at the drawn post', () => {
     park(world, 'stop-fuel');
     world.debugVehicle().addFuel(-0.7);
     const stop = stopOf(world, 'stop-fuel');
-    // Aiming level at the post here: the angle to the ground-level point would be 71 deg, to the counter 64, and to the post's middle 58.
-    const feet = vec3(stop.operatePoint.x + 0.55, 0.02, stop.operatePoint.z + 0.15);
+    // Toward the counter (-z), so both are in range; aiming level at the post gives operate the smaller angle.
+    const feet = vec3(stop.operatePoint.x + 0.55, 0.02, stop.operatePoint.z - 0.4);
     world.teleportPlayer('p1', feet);
     run(world, 3);
     const atPost = candidatesAt(world, feet, yawToward(feet, stop.operatePoint));
@@ -713,7 +714,7 @@ describe('M13: aiming at the drawn post', () => {
     const angle = (list: typeof atPost, kind: string) => list.find((c) => c.action.kind === kind)!.angle;
     expect(angle(atPost, 'operate')).toBeLessThan(angle(atPost, 'shop'));
     // Beside the pump, away from the counter's line, aiming level at the counter gives shop.
-    const side = vec3(stop.operatePoint.x - 1, 0.02, stop.operatePoint.z);
+    const side = vec3(stop.operatePoint.x - 1, 0.02, stop.operatePoint.z - 0.6);
     const atCounterAim = candidatesAt(world, side, yawToward(side, stop.shopCounter!));
     expect(resolved(atCounterAim)).toEqual({ kind: 'shop', stopId: stop.id });
     expect(angle(atCounterAim, 'shop')).toBeLessThan(angle(atCounterAim, 'operate'));
@@ -724,15 +725,15 @@ describe('M13: aiming at the drawn post', () => {
     park(world, 'stop-fuel');
     world.debugVehicle().addFuel(-0.7);
     const stop = stopOf(world, 'stop-fuel');
-    // Aiming level at the post here: the angle to the ground-level point would be 71 deg, to the counter 64, and to the post's middle 58.
-    const feet = vec3(stop.operatePoint.x + 0.55, 0.02, stop.operatePoint.z + 0.15);
+    // Toward the counter (-z), so both are in range; aiming level at the post gives operate the smaller angle.
+    const feet = vec3(stop.operatePoint.x + 0.55, 0.02, stop.operatePoint.z - 0.4);
     world.teleportPlayer('p1', feet);
     run(world, 3);
     holdInteract(world, 'p1', 1, { pitch: 0, yaw: yawToward(feet, stop.operatePoint) });
     expect(player(world, 'p1').hold).toMatchObject({ action: 'operate', targetId: stop.id });
     run(world, 1);
     expect(player(world, 'p1').hold).toBeNull();
-    const side = vec3(stop.operatePoint.x - 1, 0.02, stop.operatePoint.z);
+    const side = vec3(stop.operatePoint.x - 1, 0.02, stop.operatePoint.z - 0.6);
     world.teleportPlayer('p1', side);
     run(world, 3);
     holdInteract(world, 'p1', 1, { pitch: 0, yaw: yawToward(side, stop.shopCounter!) });
@@ -745,7 +746,7 @@ describe('M13: aiming at the drawn post', () => {
     park(world, 'stop-fuel', 2.4);
     world.debugVehicle().addFuel(-0.7);
     const stop = stopOf(world, 'stop-fuel');
-    const feet = vec3(stop.operatePoint.x + 1, 0.02, stop.operatePoint.z);
+    const feet = vec3(stop.operatePoint.x + 1, 0.02, stop.operatePoint.z - 0.2);
     world.teleportPlayer('p1', feet);
     run(world, 3);
     const found = candidatesAt(world, feet, yawToward(feet, stop.operatePoint));

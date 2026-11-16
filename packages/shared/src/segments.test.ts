@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  ROADBLOCK_LATERAL,
   ALLEY_CLUTTER_SPACING,
   ALLEY_WALL_HEIGHT,
   ALLEY_WIDTH,
@@ -440,7 +441,8 @@ describe('surfaces', () => {
 });
 
 // Clutter starts past the RV on the checkpoint spawn, with the largest clutter half length.
-const CLUTTER_FROM = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z + 0.8;
+const CLUTTER_FROM =
+  SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z + Math.max(...(['crate', 'cart', 'scooter'] as const).map((k) => PROP_KINDS[k].halfExtents.z));
 
 describe('alley', () => {
   test('walls stand on both sides with inner faces at half the alley width', () => {
@@ -834,7 +836,8 @@ describe('hazards', () => {
     const edges = seg.props.map((p) => [p.pose.pos.x - PROP_KINDS.barrier.halfExtents.x, p.pose.pos.x + PROP_KINDS.barrier.halfExtents.x] as const).sort((a, b) => a[0] - b[0]);
     const gaps = [edges[0]![0] - -ROAD_WIDTH / 2, edges[1]![0] - edges[0]![1], edges[2]![0] - edges[1]![1], ROAD_WIDTH / 2 - edges[2]![1]];
     for (const gap of gaps) expect(gap).toBeLessThan(2 * VEHICLES.rv.halfExtents.x);
-    expect(Math.max(...gaps)).toBeCloseTo(1.0, 9);
+    for (const gap of gaps) expect(gap).toBeLessThan(2 * VEHICLES.lodgy.halfExtents.x);
+    expect(Math.max(...gaps)).toBeCloseTo(ROADBLOCK_LATERAL - 2 * PROP_KINDS.barrier.halfExtents.x, 9);
   });
 
   test('T5: the gates corridor fits the RV with a metre to spare', () => {

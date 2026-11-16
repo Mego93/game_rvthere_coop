@@ -2,6 +2,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 import {
   ANCHOR_HEIGHT,
+  HOLD_OFFSET,
+  PROP_KINDS,
   GRAVITY,
   PLAYER_EYE_HEIGHT,
   PLAYER_KILL_RESPAWN_DELAY,
@@ -234,8 +236,11 @@ describe('createWinch', () => {
     const { winch, props } = setup();
     winch.take('p1');
     winch.attach('barrier-2');
-    props.get('barrier-2')!.body.setTranslation(vec3(7, 0.5, -13), true);
-    expect(winch.state().hookPos).toEqual(vec3(7, 1, -13));
+    const barrier = PROP_KINDS.barrier;
+    props.get('barrier-2')!.body.setTranslation(vec3(7, barrier.halfExtents.y, -13), true);
+    const hook = winch.state().hookPos;
+    expect([hook.x, hook.z]).toEqual([7, -13]);
+    expect(hook.y).toBeCloseTo(barrier.halfExtents.y + barrier.anchor!.y, 6);
   });
 
   test('drop puts the hook on the ground under the point and the length is its distance', () => {
@@ -350,9 +355,12 @@ describe('anchorPoint', () => {
     const { props, course } = setup();
     const body = props.get('barrier-2')!.body;
     const at = body.translation();
-    expect(anchorPoint('barrier-2', course, props)).toEqual(vec3(at.x, at.y + 0.5, at.z));
-    body.setTranslation(vec3(1, 0.5, 2), true);
-    expect(anchorPoint('barrier-2', course, props)).toEqual(vec3(1, 1, 2));
+    const { anchor, halfExtents } = PROP_KINDS.barrier;
+    expect(anchorPoint('barrier-2', course, props)).toEqual(vec3(at.x, at.y + anchor!.y, at.z));
+    body.setTranslation(vec3(1, halfExtents.y, 2), true);
+    const moved = anchorPoint('barrier-2', course, props)!;
+    expect([moved.x, moved.z]).toEqual([1, 2]);
+    expect(moved.y).toBeCloseTo(halfExtents.y + anchor!.y, 6);
   });
 
   test('a crate and an unknown id have no anchor point', () => {
@@ -580,8 +588,8 @@ describe('the hook in the hands (world)', () => {
     expect(snapshot.cable.state).toBe('held');
     const player = me(world);
     expect(snapshot.cable.hookPos.x).toBeCloseTo(player.pos.x, 6);
-    expect(snapshot.cable.hookPos.y).toBeCloseTo(player.pos.y + 1.1, 6);
-    expect(snapshot.cable.hookPos.z).toBeCloseTo(player.pos.z - 0.75, 6);
+    expect(snapshot.cable.hookPos.y).toBeCloseTo(player.pos.y + HOLD_OFFSET.y, 6);
+    expect(snapshot.cable.hookPos.z).toBeCloseTo(player.pos.z + HOLD_OFFSET.z, 6);
     world.dispose();
   });
 
@@ -733,9 +741,10 @@ describe('the hook in the hands (world)', () => {
 
   test('a player holding a crate throws it first and never takes the hook', () => {
     const { world } = setup();
-    world.teleportPlayer('p1', vec3(10, 0.02, 9.7));
+    // 1.7 m in front of crate-1 (z = 8), facing it; crate-2 is then out of reach behind it.
+    world.teleportPlayer('p1', vec3(10, 0.02, 6.3));
     run(world, 20);
-    press(world, 'p1');
+    press(world, 'p1', { yaw: Math.PI, pitch: 0 });
     expect(me(world).hands).toBe('crate-1');
     const mount = mountOf(world);
     world.teleportPlayer('p1', vec3(mount.x, 0.02, mount.z - 1.1));

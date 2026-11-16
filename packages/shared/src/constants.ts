@@ -15,6 +15,9 @@ export const SNAPSHOT_BUFFER_SIZE = 40;
 // Fraction by which each late snapshot pulls the client's estimate of the server clock back.
 export const CLOCK_OFFSET_SMOOTHING = 0.05;
 
+// Everything at character size is its base size times this; vehicles, road, speeds, masses and forces are not scaled.
+export const CHARACTER_SCALE = 0.8;
+
 export const MAX_PLAYERS = 6;
 export const NAME_MAX_LENGTH = 16;
 export const PLAYER_COLOURS = deepFreeze(['#e4572e', '#17bebb', '#ffc914', '#76b041', '#a05cdc', '#f28cb1'] as const);
@@ -95,21 +98,21 @@ export const WINCH_MAX_LENGTH = 30;
 // m, from which the winch rope is drawn red as a warning that the hook is about to leave the hands.
 export const WINCH_WARN_LENGTH = 26;
 // m, from the chest to the winch box, an anchor point or a ground hook.
-export const HOOK_RANGE = 2;
+export const HOOK_RANGE = 2 * CHARACTER_SCALE;
 // m above a static anchor's pose, where the hook attaches.
 export const ANCHOR_HEIGHT = 0.5;
 // m, the downward search for ground under a dropped hook.
 export const HOOK_DROP_RAY = 50;
 
 // Players on foot.
-export const PLAYER_RADIUS = 0.35;
-export const PLAYER_HEIGHT = 1.8;
-export const PLAYER_EYE_HEIGHT = 1.6;
+export const PLAYER_RADIUS = 0.35 * CHARACTER_SCALE;
+export const PLAYER_HEIGHT = 1.8 * CHARACTER_SCALE;
+export const PLAYER_EYE_HEIGHT = 1.6 * CHARACTER_SCALE;
 export const PLAYER_WALK_SPEED = 4.5;
 export const PLAYER_SPRINT_SPEED = 7.0;
 export const PLAYER_CROUCH_SPEED = 2.2;
-export const PLAYER_CROUCH_HEIGHT = 1.1;
-export const PLAYER_CROUCH_EYE_HEIGHT = 0.95;
+export const PLAYER_CROUCH_HEIGHT = 1.1 * CHARACTER_SCALE;
+export const PLAYER_CROUCH_EYE_HEIGHT = 0.95 * CHARACTER_SCALE;
 // The knee slide: starts from a sprint, keeps its speed for a while, then falls to the crouch speed.
 export const PLAYER_KNEESLIDE_SPEED = 9.0;
 // s at PLAYER_KNEESLIDE_SPEED, out of PLAYER_KNEESLIDE_TIME.
@@ -126,27 +129,28 @@ export const PLAYER_KNEESLIDE_AIR_TICKS = 12;
 export const PLAYER_GROUND_ACCEL = 40;
 export const PLAYER_AIR_ACCEL = 10;
 export const PLAYER_JUMP_SPEED = 5;
+// Not scaled: the roof guard uses it, and 0.24 would tie with the ford rock's 0.24 m height.
 export const PLAYER_STEP_HEIGHT = 0.3;
-export const PLAYER_SNAP_DISTANCE = 0.3;
+export const PLAYER_SNAP_DISTANCE = 0.3 * CHARACTER_SCALE;
 export const PLAYER_MAX_SLOPE_DEG = 45;
 export const PLAYER_SLIDE_SLOPE_DEG = 50;
 export const PLAYER_CONTROLLER_OFFSET = 0.02;
 // A capsule is lifted this much when tested for overlap, so standing on the ground is not an overlap.
 export const PLAYER_OVERLAP_LIFT = 0.05;
 // Height above a standing spot's feet of the ray that checks for a wall between the vehicle and the spot.
-export const SPAWN_WALL_RAY_HEIGHT = 0.9;
+export const SPAWN_WALL_RAY_HEIGHT = 0.9 * CHARACTER_SCALE;
 export const PLAYER_KILL_RESPAWN_DELAY = 3;
-export const BOARD_RANGE = 2;
+export const BOARD_RANGE = 2 * CHARACTER_SCALE;
 export const DRIVER_DOOR_RANGE = 1.5;
 export const SEAT_EXIT_DISTANCE = 0.9;
 export const SHOVE_STEP = 0.1;
 export const SHOVE_MAX_DISTANCE = 4;
 // Client only.
 export const LOOK_SENSITIVITY = 0.0025;
-export const CAMERA_DISTANCE = 3.2;
-export const CAMERA_SHOULDER = 0.6;
-export const CAMERA_MIN_DISTANCE = 0.4;
-export const CAMERA_WALL_MARGIN = 0.2;
+export const CAMERA_DISTANCE = 3.2 * CHARACTER_SCALE;
+export const CAMERA_SHOULDER = 0.6 * CHARACTER_SCALE;
+export const CAMERA_MIN_DISTANCE = 0.4 * CHARACTER_SCALE;
+export const CAMERA_WALL_MARGIN = 0.2 * CHARACTER_SCALE;
 
 // Prediction (client).
 // A correction larger than this (m) moves the player at once.
@@ -172,10 +176,10 @@ export interface PropKindConfig {
 }
 
 export const PROP_KINDS = deepFreeze({
-  crate: { class: 'light', halfExtents: vec3(0.3, 0.3, 0.3), mass: 15, friction: 0.6, anchor: null },
-  barrier: { class: 'heavy', halfExtents: vec3(1.0, 0.5, 0.4), mass: 150, friction: 0.5, anchor: vec3(0, 0.5, 0) },
-  cart: { class: 'light', halfExtents: vec3(0.5, 0.4, 0.8), mass: 40, friction: 0.6, anchor: null },
-  scooter: { class: 'light', halfExtents: vec3(0.3, 0.45, 0.6), mass: 30, friction: 0.6, anchor: null },
+  crate: { class: 'light', halfExtents: vec3(0.3 * CHARACTER_SCALE, 0.3 * CHARACTER_SCALE, 0.3 * CHARACTER_SCALE), mass: 15, friction: 0.6, anchor: null },
+  barrier: { class: 'heavy', halfExtents: vec3(1.0 * CHARACTER_SCALE, 0.5 * CHARACTER_SCALE, 0.4 * CHARACTER_SCALE), mass: 150, friction: 0.5, anchor: vec3(0, 0.5 * CHARACTER_SCALE, 0) },
+  cart: { class: 'light', halfExtents: vec3(0.5 * CHARACTER_SCALE, 0.4 * CHARACTER_SCALE, 0.8 * CHARACTER_SCALE), mass: 40, friction: 0.6, anchor: null },
+  scooter: { class: 'light', halfExtents: vec3(0.3 * CHARACTER_SCALE, 0.45 * CHARACTER_SCALE, 0.6 * CHARACTER_SCALE), mass: 30, friction: 0.6, anchor: null },
 } satisfies Record<string, PropKindConfig>);
 export type PropKind = keyof typeof PROP_KINDS;
 
@@ -188,17 +192,17 @@ export const PUSH_TIPPED_DEG = 45;
 // m/s^2; caps the force on light things at mass times this.
 export const PUSH_MAX_ACCEL = 10;
 // m above the feet, where a player pushes.
-export const PUSH_HEIGHT = 1.0;
+export const PUSH_HEIGHT = 1.0 * CHARACTER_SCALE;
 // Pushers counted on the vehicle, in join order.
 export const PUSH_MAX_PUSHERS_VEHICLE = 4;
 // m, from the feet to the nearest point of a prop's box.
-export const HANDS_RANGE = 2;
+export const HANDS_RANGE = 2 * CHARACTER_SCALE;
 // m, a held prop's centre in the holder's yaw frame, from the feet.
-export const HOLD_OFFSET: Vec3 = deepFreeze(vec3(0, 1.1, -0.75));
+export const HOLD_OFFSET: Vec3 = deepFreeze(vec3(0, 1.1 * CHARACTER_SCALE, -0.75 * CHARACTER_SCALE));
 // m/s along the aim, added to the holder's horizontal velocity.
 export const THROW_SPEED = 7;
 // m, the gap above the head when a throw is blocked and the prop is released overhead.
-export const THROW_HEAD_CLEARANCE = 0.05;
+export const THROW_HEAD_CLEARANCE = 0.05 * CHARACTER_SCALE;
 // m or quaternion component; a smaller change is not sent.
 export const PROP_MOVED_EPSILON = 1e-4;
 
@@ -214,7 +218,7 @@ export const VEHICLE_UPSIDE_DOWN_DRAIN = 0.02;
 // s
 export const HOLD_DURATION = 3;
 // m, feet to the nearest point of the vehicle's box.
-export const USE_RANGE = 2;
+export const USE_RANGE = 2 * CHARACTER_SCALE;
 // Fuel added by a jerrycan.
 export const ITEM_REFUEL = 0.5;
 // Health added by a toolbox.
@@ -248,7 +252,7 @@ export const HIT_COOLDOWN = 0.5;
 // Health added to a hurt player.
 export const HEALTH_KIT_HEAL = 50;
 // m, feet to feet (3D), for a health kit on a teammate.
-export const HEAL_RANGE = 2;
+export const HEAL_RANGE = 2 * CHARACTER_SCALE;
 // rad; a teammate is near the crosshair within this angle of the aim.
 export const HEAL_AIM_ANGLE = 0.35;
 export interface ItemKindConfig {
@@ -258,9 +262,9 @@ export interface ItemKindConfig {
 }
 
 export const ITEM_KINDS = deepFreeze({
-  jerrycan: { halfExtents: vec3(0.12, 0.25, 0.2), mass: 20, friction: 0.8 },
-  toolbox: { halfExtents: vec3(0.25, 0.12, 0.12), mass: 10, friction: 0.8 },
-  healthKit: { halfExtents: vec3(0.18, 0.08, 0.14), mass: 2, friction: 0.8 },
+  jerrycan: { halfExtents: vec3(0.12 * CHARACTER_SCALE, 0.25 * CHARACTER_SCALE, 0.2 * CHARACTER_SCALE), mass: 20, friction: 0.8 },
+  toolbox: { halfExtents: vec3(0.25 * CHARACTER_SCALE, 0.12 * CHARACTER_SCALE, 0.12 * CHARACTER_SCALE), mass: 10, friction: 0.8 },
+  healthKit: { halfExtents: vec3(0.18 * CHARACTER_SCALE, 0.08 * CHARACTER_SCALE, 0.14 * CHARACTER_SCALE), mass: 2, friction: 0.8 },
 } satisfies Record<string, ItemKindConfig>);
 export type ItemKind = keyof typeof ITEM_KINDS;
 
@@ -316,7 +320,7 @@ export const STOP_PAD_LIFT = 0.01;
 // Half extents of a stop's parking zone.
 export const STOP_ZONE: Vec3 = deepFreeze(vec3(2.5, 2, 5));
 // m above the ground.
-export const COIN_HEIGHT = 1;
+export const COIN_HEIGHT = 1 * CHARACTER_SCALE;
 // m between the barriers of a row.
 export const ROADWORKS_BARRIER_SPACING = 3;
 // m along the road to the first row of barriers.
@@ -362,7 +366,7 @@ export const STUCK_DISTANCE = 1;
 
 // Coins, stops and shops.
 // m, the coin's touch sphere.
-export const COIN_RADIUS = 0.5;
+export const COIN_RADIUS = 0.5 * CHARACTER_SCALE;
 // s added to the final time per checkpoint restart.
 export const FINAL_RESTART_PENALTY = 60;
 // s added per player respawn.
@@ -370,11 +374,11 @@ export const FINAL_RESPAWN_PENALTY = 30;
 // s taken off per coin left in the wallet.
 export const FINAL_COIN_BONUS = 5;
 // m, feet to the operate point (3D).
-export const STOP_OPERATE_RANGE = 2;
+export const STOP_OPERATE_RANGE = 2 * CHARACTER_SCALE;
 // m, the height of the drawn pump or workbench post; the operate angle is measured to its middle.
 export const STOP_POST_HEIGHT = 1.4;
 // m, feet to the counter's box (3D).
-export const SHOP_RANGE = 2;
+export const SHOP_RANGE = 2 * CHARACTER_SCALE;
 // Coins per item.
 export const SHOP_PRICES: Record<ItemKind, number> = deepFreeze({ jerrycan: 3, toolbox: 3, healthKit: 2 });
 // Half extents of the counter box; it is centred 0.5 m above the counter point and unrotated.
@@ -414,7 +418,7 @@ export const HAZARD_END_CLEARANCE = 8;
 export const HAZARD_MIN_GAP = 20;
 // m between a hazard and the nearest debris crate.
 export const HAZARD_DEBRIS_GAP = 10;
-// m of lateral centre of the three crates across the right half of the lane.
-export const CRATE_WALL_LATERALS: readonly number[] = Object.freeze([2.0, 2.62, 3.24]);
+// m of lateral centre of the three crates across the right half of the lane, each a crate width plus 0.02 apart.
+export const CRATE_WALL_LATERALS: readonly number[] = Object.freeze([0, 1, 2].map((i) => 2.0 + i * (2 * PROP_KINDS.crate.halfExtents.x + 0.02)));
 // m, lateral offset of the outer barriers of a roadblock row (barriers at -3, 0, 3).
 export const ROADBLOCK_LATERAL = 3;
