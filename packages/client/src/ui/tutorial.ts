@@ -11,73 +11,78 @@ export interface TutorialStep {
   caps: string[];
 }
 
-// The caps of the CONTROLS row whose action starts with `action`.
-const caps = (...actions: string[]): string[] => [
-  ...new Set(
-    actions.flatMap((action) => {
-      const entry = CONTROLS.find((row) => row.action.startsWith(action));
-      if (!entry) throw new Error(`CONTROLS has no row "${action}"`);
-      return keyLabels(entry.keys);
-    }),
-  ),
-];
+const rowOf = (action: string) => {
+  const entry = CONTROLS.find((row) => row.action.startsWith(action));
+  if (!entry) throw new Error(`CONTROLS has no row "${action}"`);
+  return entry;
+};
+
+// The caps of the CONTROLS rows whose action starts with `actions`.
+const caps = (...actions: string[]): string[] => [...new Set(actions.flatMap((action) => keyLabels(rowOf(action).keys)))];
+
+// The key words of the CONTROLS row whose action starts with `action`, as prose: "E", "W, A, S or D".
+const key = (action: string): string => {
+  const labels = keyLabels(rowOf(action).keys);
+  return labels.length < 2 ? (labels[0] ?? '') : `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]}`;
+};
 
 const WINCH_RANGE = `The hook reaches ${WINCH_MAX_LENGTH} m, and the rope turns red from ${WINCH_WARN_LENGTH} m: it is about to let go.`;
+const BOARD_RULE = 'At the driver door you take the driver seat if it is free; anywhere else you take the nearest free seat.';
 
 export const TUTORIAL_STEPS: readonly TutorialStep[] = [
   {
     id: 'move',
     title: 'Move and jump',
-    text: 'Walk around and jump over small obstacles. Click the game to look around with the mouse.',
+    text: `Walk with ${key('Walk')} and jump with ${key('Jump')}. Click the game to look around with the mouse.`,
     touchText: 'Drag on the left half of the screen to walk and on the right half to look. Tap Jump to jump.',
     caps: caps('Walk', 'Jump'),
   },
   {
     id: 'sprint',
     title: 'Sprint, crouch and slide',
-    text: 'Hold Shift while moving forward to sprint. Hold C to crouch and fit under low gaps. Press C while sprinting to slide.',
+    text: `Hold ${key('Sprint')} while moving forward to sprint. Hold ${key('Crouch')} to crouch and fit under low gaps. Press ${key('Crouch')} while sprinting to slide.`,
     touchText: 'Tap Sprint to start running and tap it again to stop. Sprint only works while moving forward.',
     caps: caps('Sprint', 'Crouch'),
   },
   {
     id: 'board',
     title: 'Board and seats',
-    text: 'Walk up to the vehicle and press E to board. You take the driver seat first, then the other seats in turn. Press E again to leave.',
-    touchText: 'Walk up to the vehicle and tap Act to board. You take the driver seat first, then the other seats in turn. Tap Act again to leave.',
+    text: `Walk up to the vehicle and press ${key('Board')} to board. ${BOARD_RULE} Press ${key('Board')} again to leave.`,
+    touchText: `Walk up to the vehicle and tap Act to board. ${BOARD_RULE} Tap Act again to leave.`,
     caps: caps('Board'),
   },
   {
     id: 'drive',
     title: 'Drive',
-    text: 'The driver steers and brakes. The others ride along, and the vehicle is the same one for everyone.',
+    text: `The driver steers and accelerates with ${key('Throttle')} and brakes with ${key('Brake')}. The others ride along, and the vehicle is the same one for everyone.`,
     touchText: 'The driver uses the joystick on the left to steer and throttle, and Brake on the right. The others ride along.',
     caps: caps('Throttle', 'Brake'),
   },
   {
     id: 'winch',
     title: 'The winch',
-    text: `Press E near the hook to take it, walk to an anchor and press E to attach it. Q reels the rope in and R reels it out. ${WINCH_RANGE}`,
+    text: `Press ${key('Board')} near the hook to take it, walk to an anchor and press ${key('Board')} to attach it. ${key('Reel in')} reels the rope in and ${key('Reel out')} reels it out. ${WINCH_RANGE}`,
     touchText: `Tap Act near the hook to take it, walk to an anchor and tap Act to attach it. Reel in and Reel out change the rope length. ${WINCH_RANGE}`,
     caps: caps('Board', 'Reel in', 'Reel out'),
   },
   {
     id: 'items',
     title: 'Items',
-    text: 'Pick items up with E and choose a slot with 1, 2 or 3. Hold F to use the selected item: it works while the bar fills.',
+    text: `Pick items up with ${key('Board')} and choose a slot with ${key('Select a slot')}. Hold ${key('Use the selected')} to use the selected item: it works while the bar fills.`,
     touchText: 'Pick items up with Act and tap a slot to select it. Hold Use to use the selected item: it works while the bar fills.',
     caps: caps('Select a slot', 'Use the selected'),
   },
   {
     id: 'reset',
     title: 'Reset a stuck vehicle',
-    text: 'If the vehicle is stuck or upside down, hold X until it resets. It costs time.',
+    text: `If the vehicle is stuck or upside down, hold ${key('Hold to reset')} until it resets. It costs time.`,
     touchText: 'If the vehicle is stuck or upside down, hold Reset until it resets. It costs time.',
     caps: caps('Hold to reset'),
   },
   {
     id: 'help',
     title: 'Help',
-    text: 'Press H any time to see every control. Esc opens the menu, where you can open this tutorial again.',
+    text: `Press ${key('Show or hide this help')} any time to see every control. ${key('Menu')} opens the menu, where you can open this tutorial again.`,
     touchText: 'Tap Menu any time to open the menu. It lists the controls and opens this tutorial again.',
     caps: caps('Show or hide this help'),
   },
@@ -209,13 +214,13 @@ export function createTutorial(doc: Document, options: { touch: boolean; store: 
       render();
     }
   });
-  // Capture on window, so the game's own Escape handler does not also open the run menu.
+  // Capture on window, so the game's own Escape handler does not also open the run menu. Escape counts as Skip. Create this before the controls panel: its listener runs first and the immediate stop leaves the controls panel for the next Escape.
   doc.defaultView?.addEventListener(
     'keydown',
     (event) => {
       if (event.key !== 'Escape' || root.hidden) return;
-      event.stopPropagation();
-      set(false);
+      event.stopImmediatePropagation();
+      finish();
     },
     { capture: true },
   );

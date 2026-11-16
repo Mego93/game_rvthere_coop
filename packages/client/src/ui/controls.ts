@@ -125,7 +125,7 @@ export function createControlsPanel(doc: Document, onChange: (open: boolean) => 
     'keydown',
     (event) => {
       if (event.key !== 'Escape' || root.hidden) return;
-      event.stopPropagation();
+      event.stopImmediatePropagation();
       set(false);
     },
     { capture: true },

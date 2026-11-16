@@ -153,8 +153,9 @@ let phase: Phase | null = null;
 let closeReason = CONNECTION_LOST;
 
 const credits = createCredits(document);
-const helpPanel = createControlsPanel(document, () => game?.setControlsOpen(menuPanelOpen()), () => credits.open());
+// The tutorial first: both close on Escape in the capture phase, and the one on top (the tutorial) must take it.
 const tutorial = createTutorial(document, { touch: touchDevice, store: nameStore, onChange: () => game?.setControlsOpen(menuPanelOpen()) });
+const helpPanel = createControlsPanel(document, () => game?.setControlsOpen(menuPanelOpen()), () => credits.open());
 const menuPanelOpen = () => helpPanel.isOpen() || tutorial.isOpen();
 // Shown on its own the first time the lobby appears on this page load, unless it was finished or skipped before.
 let tutorialOffered = false;
