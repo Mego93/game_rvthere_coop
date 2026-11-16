@@ -40,6 +40,7 @@ const STANCE = {
   slideCooldown: 0,
   slideAir: 0,
   slideDir: { x: 0, z: 0 },
+  launch: 0,
   carrying: false,
   holdsProp: false,
 };

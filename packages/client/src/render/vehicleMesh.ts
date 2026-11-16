@@ -212,8 +212,17 @@ export function createSeatRing(): THREE.Mesh {
 
 // Shows the ring at the seat while `age` (seconds since boarding) is set, fading out; allocates nothing per call.
 export function placeSeatRing(ring: THREE.Mesh, vehicle: THREE.Group, config: VehicleConfig, seatId: string | null, colour: string, age: number | null): void {
-  const seat = seatId === null || age === null ? undefined : config.seats.find((candidate) => candidate.id === seatId);
-  if (!seat || age === null) {
+  if (seatId === null || age === null) {
+    ring.visible = false;
+    return;
+  }
+  // Looked up once per seat, not per frame.
+  if (ring.userData.seatId !== seatId) {
+    ring.userData.seatId = seatId;
+    ring.userData.seat = config.seats.find((candidate) => candidate.id === seatId);
+  }
+  const seat = ring.userData.seat as VehicleConfig['seats'][number] | undefined;
+  if (!seat) {
     ring.visible = false;
     return;
   }

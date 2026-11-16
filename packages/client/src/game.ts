@@ -10,6 +10,7 @@ import {
   getCourseDef,
   getVehicleConfig,
   holdPoseAt,
+  isCrouchedStance,
   predictedFrom,
   vec3,
   type ClientMessage,
@@ -125,6 +126,8 @@ export function createGame(
 ): Game {
   const { renderer, overlay, crosshair, rapier } = view;
   let lobby = firstLobby;
+  const colourIn = (message: LobbyMessage) => message.players.find((info) => info.playerId === playerId)?.colour ?? '#ffffff';
+  let ownColour = colourIn(firstLobby);
   const course = getCourse(lobby.courseId);
   const cameraBoxes = [...course.ground, ...course.walls];
   const scene = createScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true });
@@ -441,7 +444,7 @@ export function createGame(
     const onFoot = local !== undefined && local.seat === null;
     crosshair.hidden = !onFoot;
     if (local && onFoot) {
-      const eyeTarget = drawnStance === undefined ? PLAYER_EYE_HEIGHT : PLAYER_CROUCH_EYE_HEIGHT;
+      const eyeTarget = isCrouchedStance(drawnStance) ? PLAYER_CROUCH_EYE_HEIGHT : PLAYER_EYE_HEIGHT;
       eyeHeight += (eyeTarget - eyeHeight) * (1 - Math.exp(-frameSeconds / EYE_EASE_SECONDS));
       const head = vec3(local.pos.x, local.pos.y + eyeHeight, local.pos.z);
       const placement = firstPerson ? onFootPose(local.pos, eyeHeight, aim.yaw, aim.pitch) : cameraPlacement(head, aim.yaw, aim.pitch, cameraBoxes);
@@ -481,7 +484,7 @@ export function createGame(
     overlay.textContent = overlayText(overlayData);
     const hudModel = buildHudModel(overlayData, { checkpoints: course.checkpoints, finish: course.finish });
     const announced = seatAnnouncer.update(hudModel.ownSeat, now / 1000);
-    placeSeatRing(seatRing, vehicleMesh, vehicleConfig, hudModel.ownSeat?.id ?? null, lobby.players.find((info) => info.playerId === playerId)?.colour ?? '#ffffff', announced.ringAge);
+    placeSeatRing(seatRing, vehicleMesh, vehicleConfig, hudModel.ownSeat?.id ?? null, ownColour, announced.ringAge);
     camera.updateMatrixWorld();
     const markers = hudModel.downedOthers.map((other) => {
       const projected = projectMarker(project, cameraSpaceZ, other.pos, window.innerWidth, window.innerHeight);
@@ -513,6 +516,7 @@ export function createGame(
   return {
     setLobby(next) {
       lobby = next;
+      ownColour = colourIn(next);
       updateRunMenu();
       showMenuButton();
       if (next.phase === 'playing') {
