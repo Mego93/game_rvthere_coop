@@ -763,7 +763,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         health: Math.floor(player.health),
         downed: player.downed,
         ...(player.slideTicks > 0 ? { stance: 'slide' as const } : player.crouched ? { stance: 'crouch' as const } : {}),
-        ...(player.slideTicks > 0 || player.slideCooldown > 0
+        ...(player.slideTicks > 0 || player.slideCooldown > 0 || player.launch > 0
           ? {
               slide: {
                 ticks: player.slideTicks,
@@ -771,6 +771,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
                 air: player.slideAir,
                 dirX: player.slideDir.x,
                 dirZ: player.slideDir.z,
+                ...(player.launch > 0 ? { launch: player.launch } : {}),
               },
             }
           : {}),

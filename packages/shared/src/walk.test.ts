@@ -59,6 +59,7 @@ function walker(course: BuiltCourse, feet: Vec3) {
     slideCooldown: 0,
     slideAir: 0,
     slideDir: { x: 0, z: 0 },
+    launch: 0,
   };
   let before: InputFields = NEUTRAL_INPUT;
   const tick = (fields: Partial<InputFields> = {}, carry: { carrying?: boolean; holdsProp?: boolean } = {}) => {
@@ -417,6 +418,28 @@ describe('stances', () => {
     expect(w.state.vy).toBeGreaterThan(4);
     expect(speedOf(w.state)).toBeCloseTo(PLAYER_KNEESLIDE_SPEED, 9);
     expect(w.state.carry).toEqual({ x: 0, z: 0 });
+  });
+
+  test.each([
+    ['crouch held', { crouch: true }],
+    ['crouch released', { crouch: false }],
+  ])('(T4) a slide jump keeps its take-off speed for 30 air ticks, %s', (_name, held) => {
+    const w = sprintUp();
+    w.tick({ moveY: 1, sprint: true, crouch: true });
+    w.run(5, { moveY: 1, sprint: true, crouch: true });
+    w.tick({ moveY: 1, sprint: true, crouch: true, jump: true });
+    const takeOff = speedOf(w.state);
+    expect(w.state.launch).toBeCloseTo(takeOff, 12);
+    expect(takeOff).toBeGreaterThan(PLAYER_SPRINT_SPEED);
+    for (let i = 0; i < 30; i++) {
+      w.tick({ moveY: 1, sprint: true, ...held });
+      expect(w.state.grounded).toBe(false);
+      expect(speedOf(w.state)).toBeGreaterThanOrEqual(takeOff - 1e-9);
+    }
+    // Landing clears the launch speed.
+    for (let i = 0; i < 80 && !w.state.grounded; i++) w.tick({ moveY: 1, sprint: true, ...held });
+    expect(w.state.grounded).toBe(true);
+    expect(w.state.launch).toBe(0);
   });
 
   test('(T4) a slide bends toward the wish direction at 0.6 rad/s and no faster', () => {

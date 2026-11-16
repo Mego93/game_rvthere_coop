@@ -2,7 +2,7 @@ import { GRAVITY, PLAYER_RADIUS, PROP_KINDS, TICK_DT, type PropKind } from './co
 import type { BuiltCourse } from './course';
 import { GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, add, rotate, scale, type Quat, type Vec3 } from './math';
-import { sanitiseInput, type InputFields, type PlayerSnapshot } from './protocol';
+import { isCrouchedStance, sanitiseInput, type InputFields, type PlayerSnapshot } from './protocol';
 import type { PropSnapshot } from './props';
 import type { Rapier, RigidBody } from './rapier';
 import { settleQueries } from './settle';
@@ -21,6 +21,7 @@ export interface PredictedState {
   slideCooldown: number;
   slideAir: number;
   slideDir: { x: number; z: number };
+  launch: number;
   // Anything in the hands, and a prop in them; constant while the inputs replay (picking up comes from the server).
   carrying: boolean;
   holdsProp: boolean;
@@ -47,6 +48,7 @@ export const copyState = (state: PredictedState): PredictedState => ({
   slideCooldown: state.slideCooldown,
   slideAir: state.slideAir,
   slideDir: { ...state.slideDir },
+  launch: state.launch,
   carrying: state.carrying,
   holdsProp: state.holdsProp,
 });
@@ -58,11 +60,12 @@ export const predictedFrom = (player: PlayerSnapshot): PredictedState =>
     carry: player.carry,
     vy: player.vy,
     grounded: player.grounded,
-    crouched: player.stance === 'crouch' || player.stance === 'slide',
+    crouched: isCrouchedStance(player.stance),
     slideTicks: player.slide?.ticks ?? 0,
     slideCooldown: player.slide?.cooldown ?? 0,
     slideAir: player.slide?.air ?? 0,
     slideDir: { x: player.slide?.dirX ?? 0, z: player.slide?.dirZ ?? 0 },
+    launch: player.slide?.launch ?? 0,
     carrying: player.hands !== null,
     holdsProp: player.hands !== null && player.hands !== 'hook',
   });

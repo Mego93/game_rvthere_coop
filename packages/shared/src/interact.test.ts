@@ -124,6 +124,18 @@ describe('interactCandidates', () => {
     expect(found.slice(1).map((c) => (c.action as { propId: string }).propId)).toEqual(['a', 'b']);
   });
 
+  test('a crouched player aims from the lower eye, so the lower of two crates ahead is the nearer to the aim', () => {
+    const at = (id: string, y: number) => ({ id, kind: 'crate', pos: vec3(2.5, y, -1.2), rot: IDENTITY });
+    const props = [at('high', 1.6), at('low', 0.55)];
+    const angles = (crouched: boolean) => {
+      const found = interactCandidates({ ...base, feet: vec3(2.5, 0, 0), crouched, props });
+      const angleOf = (id: string) => found.find((c) => c.action.kind === 'pickUp' && c.action.propId === id)!.angle;
+      return { high: angleOf('high'), low: angleOf('low') };
+    };
+    expect(angles(false).high).toBeLessThan(angles(false).low);
+    expect(angles(true).low).toBeLessThan(angles(true).high);
+  });
+
   test('leaves out a prop beyond HANDS_RANGE, a held one, a heavy one and an unknown kind', () => {
     const far = crateAt('far', 2.5 + HANDS_RANGE + 0.5 + 0.3, 0);
     const barrier = { id: 'barrier-1', kind: 'barrier', pos: vec3(3.5, 0.5, 0), rot: IDENTITY };

@@ -1046,6 +1046,16 @@ describe('hands', () => {
     expect(Math.hypot(body.translation().x - feet.x, body.translation().z - feet.z)).toBeGreaterThan(3);
   });
 
+  test('a thrower flagged crouched throws along the same aim as a standing one (the eye height only moves the origin)', () => {
+    const throwFrom = (crouched: boolean) => {
+      const h = holder();
+      h.player.crouched = crouched;
+      h.players.throwHeld('p1', 0.4, 0.3);
+      return h.props.get('crate-1')!.body.linvel();
+    };
+    expect(throwFrom(true)).toEqual(throwFrom(false));
+  });
+
   test('a throw upward at pitch 45 degrees has the matching vertical speed', () => {
     const { players, props } = holder();
     players.throwHeld('p1', 0, Math.PI / 4);
