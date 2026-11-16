@@ -391,9 +391,7 @@ describe('T8: the cable at the chosen force is stable (B7 pass criteria)', () =>
       expect(spin).toBeLessThanOrEqual(0.5);
     });
 
-    // Measured: the RV's barrier speed peaks at 2.05 m/s at every swept force (stick-slip against a 150 kg prop, not the cap), so its criterion is recorded as a known failure.
-    const barrierTest = vehicleId === 'rv' ? test.fails : test;
-    barrierTest(`${vehicleId}: a barrier dragged by the braked vehicle is never faster than the reel speed + 0.5 m/s and never reverses`, () => {
+    const dragBarrier = () => {
       const course = withProps(testGround, [{ id: 'barrier-x', kind: 'barrier', pose: { pos: vec3(0, 0, -14), rot: IDENTITY } }]);
       const { props, winch, tick, mount } = setup(vehicleId, course);
       props.setLocked('barrier-x', false);
@@ -414,9 +412,24 @@ describe('T8: the cable at the chosen force is stable (B7 pass criteria)', () =>
           away = true;
         }
       }
-      expect(reversals).toBe(0);
-      expect(top).toBeLessThanOrEqual(WINCH_REEL_SPEED + 0.5);
-    });
+      return { top, reversals };
+    };
+
+    if (vehicleId === 'lodgy') {
+      test('lodgy: a barrier dragged by the braked vehicle is never faster than the reel speed + 0.5 m/s and never reverses', () => {
+        const { top, reversals } = dragBarrier();
+        expect(reversals).toBe(0);
+        expect(top).toBeLessThanOrEqual(WINCH_REEL_SPEED + 0.5);
+      });
+    } else {
+      // Known failure of the B7 barrier criterion, recorded as measured: the real winch peaks at 2.055 m/s (the experiment's 2.07), stick-slip against a 150 kg prop, not the cap.
+      test('rv (known failure): a dragged barrier does not reverse but peaks above the reel speed + 0.5 m/s, below 2.3 m/s', () => {
+        const { top, reversals } = dragBarrier();
+        expect(reversals).toBe(0);
+        expect(top).toBeGreaterThan(WINCH_REEL_SPEED + 0.5);
+        expect(top).toBeLessThan(2.3);
+      });
+    }
 
     test(`${vehicleId}: an anchor 8 m above the bumper, braked, pitches under 30 degrees and never flips`, () => {
       const probe = setup(vehicleId);
