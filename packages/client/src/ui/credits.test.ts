@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CREDITS_FAILED, CREDITS_URL, loadCredits } from './credits';
 
@@ -22,4 +23,16 @@ describe('loadCredits', () => {
     expect(await loadCredits(() => response('<!doctype html><title>x</title>', { type: 'text/html' }))).toBe(CREDITS_FAILED);
     expect(await loadCredits(() => Promise.reject(undefined))).toBe(CREDITS_FAILED);
   });
+});
+
+describe('OpenStreetMap credit (R12, T13)', () => {
+  const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
+  for (const [name, path] of [['root CREDITS.md', '../../../../CREDITS.md'], ['served credits', '../../public/CREDITS.md']] as const) {
+    it(`T13 ${name} credits OpenStreetMap contributors under the ODbL with the copyright link`, () => {
+      const text = read(path);
+      expect(text).toContain('OpenStreetMap contributors');
+      expect(text).toContain('ODbL');
+      expect(text).toContain('https://www.openstreetmap.org/copyright');
+    });
+  }
 });

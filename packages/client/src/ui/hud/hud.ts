@@ -3,7 +3,7 @@ import { LOW_FRACTION, MAP_MARGIN, MAP_SIZE_DESKTOP, MAP_SIZE_TOUCH } from './co
 import { ICON_COIN, ICON_FUEL, ICON_HEALTHKIT, ICON_HEART, ICON_HULL, ICON_JERRYCAN, ICON_SEAT, ICON_TOOLBOX } from './icons';
 import { splitPrompt } from './splitPrompt';
 import { ownHealthFraction, type HudModel } from './hudModel';
-import { clampToCircle, mapViewFor, routePath, toMap } from './minimap';
+import { createMapPlan, mapScene } from './mapScene';
 
 export interface HudMarker { id: string; name: string; seconds: number; x: number; y: number; behind: boolean }
 
@@ -40,6 +40,7 @@ const STYLE = `
 #hud-minimap .player { fill: #fff; }
 #hud-minimap .stop-fuel { fill: #ff8a3d; }
 #hud-minimap .stop-garage { fill: var(--hud-good); }
+#hud-minimap .finish { fill: #fff; stroke: #111; stroke-width: 1.5; }
 #hud-minimap .checkpoint { fill: none; stroke: #fff; stroke-width: 2; }
 #hud-minimap .checkpoint.reached { opacity: 0.3; }
 #hud-minimap .tick { stroke: var(--hud-info); stroke-width: 2; }
@@ -99,7 +100,12 @@ const svg = <K extends keyof SVGElementTagNameMap>(tag: K, parent: SVGElement, a
   return node;
 };
 
-export function createHud(root: HTMLElement, opts: { touch: boolean; route: readonly [number, number][] }): Hud {
+const lastPoint = (route: readonly [number, number][]) => {
+  const [x, z] = route[route.length - 1] ?? [0, 0];
+  return { x, z };
+};
+
+export function createHud(root: HTMLElement, opts: { touch: boolean; route: readonly [number, number][]; finish?: { x: number; z: number } }): Hud {
   root.id = 'hud';
   root.classList.toggle('touch', opts.touch);
   const style = document.createElement('style');
@@ -130,7 +136,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
   const compassLabel = el('div', compass, 'hud-compass-label');
 
   const size = opts.touch ? MAP_SIZE_TOUCH : MAP_SIZE_DESKTOP;
-  const view = mapViewFor(opts.route, size, MAP_MARGIN + size * (1 - Math.SQRT1_2) / 2);
+  const plan = createMapPlan(opts.route, opts.finish ?? lastPoint(opts.route), size, MAP_MARGIN + size * (1 - Math.SQRT1_2) / 2);
   const minimap = document.createElementNS(SVG_NS, 'svg');
   minimap.id = 'hud-minimap';
   minimap.setAttribute('width', String(size));
@@ -138,7 +144,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
   minimap.setAttribute('class', 'glass');
   minimap.setAttribute('viewBox', `0 0 ${size} ${size}`);
   root.append(minimap);
-  svg('path', minimap, { d: routePath(view, opts.route) }, 'route');
+  const routeNode = svg('path', minimap, { d: plan.staticPath }, 'route');
   const dots = svg('g', minimap);
 
   const vehiclePanel = el('div', root, 'hud-vehicle', 'panel glass');
@@ -207,11 +213,13 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       el('span', wrap).textContent = part.text;
     }
   };
-  const renderMap = (entities: HudModel['mapEntities']) => {
+  const renderMap = (mapEntities: HudModel['mapEntities']) => {
     const seen = new Set<string>();
-    for (const e of entities) {
+    const scene = mapScene(plan, mapEntities);
+    setAttr(routeNode, 'd', scene.path);
+    for (const { entity: e, x: px, y: py } of scene.items) {
+      const p = { x: px, y: py };
       seen.add(e.id);
-      const p = clampToCircle(view, toMap(view, e.x, e.z));
       const shape = e.kind === 'checkpoint' || e.kind === 'self' || e.kind === 'player' ? 'circle' : 'rect';
       let entry = dotNodes.get(e.id);
       if (entry && entry.kind !== e.kind) {
@@ -227,6 +235,10 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       if (e.kind === 'checkpoint') {
         setAttr(node, 'class', e.reached ? 'checkpoint reached' : 'checkpoint');
         setAttr(node, 'r', 5);
+      } else if (e.kind === 'finish') {
+        setAttr(node, 'class', 'finish');
+        setAttr(node, 'width', 9);
+        setAttr(node, 'height', 9);
       } else if (e.kind === 'stop') {
         setAttr(node, 'class', e.stopKind === 'garage' ? 'stop-garage' : 'stop-fuel');
         setAttr(node, 'width', 8);
@@ -244,7 +256,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
         setAttr(node, 'cx', p.x.toFixed(1));
         setAttr(node, 'cy', p.y.toFixed(1));
       } else {
-        const half = e.kind === 'vehicle' ? 5 : 4;
+        const half = e.kind === 'vehicle' ? 5 : e.kind === 'finish' ? 4.5 : 4;
         setAttr(node, 'x', (p.x - half).toFixed(1));
         setAttr(node, 'y', (p.y - half).toFixed(1));
       }

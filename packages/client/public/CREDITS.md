@@ -2,6 +2,8 @@
 
 Most of what is here is CC0 1.0 (public domain dedication); no attribution is required, but the sources are recorded. The two vehicle models in `models/real` are CC BY 4.0 and need the credit below. Sounds are recorded in `sounds/LICENSE.md`.
 
+Route geometry derives from OpenStreetMap data: © OpenStreetMap contributors, available under the Open Database Licence (ODbL). See https://www.openstreetmap.org/copyright .
+
 ## models/real
 
 Both models are licensed CC BY 4.0 (Creative Commons Attribution 4.0 International, http://creativecommons.org/licenses/by/4.0/). Each was modified: simplified geometry and resized textures for real-time use. The licence text and these notes also sit in the folder's `License.txt`.

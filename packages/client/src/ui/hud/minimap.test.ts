@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampToCircle, clampToMap, mapViewFor, routePath, toMap } from './minimap';
+import { clampToCircle, clampToMap, clipRouteToWindow, isWindowed, mapViewFor, routeLength, routePath, routePathRuns, toMap, WINDOW_RADIUS, windowViewFor } from './minimap';
 
 const long: [number, number][] = [[0, 0], [200, 10], [400, -10]];
 
@@ -101,5 +101,53 @@ describe('clampToCircle', () => {
   });
   it('T8 a point on the centre stays finite', () => {
     expect(clampToCircle(v, { x: 70, y: 70 })).toEqual({ x: 70, y: 70 });
+  });
+});
+
+describe('window mode (R11)', () => {
+  const longRoute: [number, number][] = Array.from({ length: 1101 }, (_, i) => [0, -i * 20]);
+
+  it('T12 routeLength sums segments; windowing starts above 3 km', () => {
+    expect(routeLength(longRoute)).toBeCloseTo(22000);
+    expect(routeLength([[0, 0]])).toBe(0);
+    expect(isWindowed(longRoute)).toBe(true);
+    expect(isWindowed([[0, 0], [3000, 0]])).toBe(false);
+    expect(isWindowed([[0, 0], [3000.5, 0]])).toBe(true);
+    expect(isWindowed([[0, 0], [2600, 0]])).toBe(false);
+  });
+
+  it('T12 windowViewFor centres the vehicle and maps 600 m to the circle edge', () => {
+    const v = windowViewFor({ x: 100, z: -5000 }, 140);
+    expect(toMap(v, 100, -5000)).toEqual({ x: 70, y: 70 });
+    expect(toMap(v, 100 + WINDOW_RADIUS, -5000).x - 70).toBeCloseTo(67);
+    expect(toMap(v, 100, -5300).y).toBeLessThan(70);
+  });
+
+  it('T12 clipRouteToWindow keeps the part near the centre with one neighbour past each edge', () => {
+    const runs = clipRouteToWindow(longRoute, { x: 0, z: -10000 }, WINDOW_RADIUS);
+    expect(runs).toHaveLength(1);
+    const run = runs[0]!;
+    expect(run.length).toBeGreaterThan(55);
+    expect(run.length).toBeLessThan(70);
+    expect(Math.min(...run.map(([, z]) => z))).toBeLessThan(-10000 - WINDOW_RADIUS);
+    expect(Math.max(...run.map(([, z]) => z))).toBeGreaterThan(-10000 + WINDOW_RADIUS);
+  });
+
+  it('T12 clipRouteToWindow splits when the route leaves and re-enters, and is empty far away', () => {
+    const out: [number, number][] = [];
+    for (let i = 0; i <= 50; i++) out.push([i * 20, 0]);
+    for (let i = 50; i >= 0; i--) out.push([i * 20, 3000]);
+    out.push([0, 0]);
+    const runs = clipRouteToWindow(out, { x: 0, z: 0 }, 100);
+    expect(runs.length).toBe(2);
+    expect(clipRouteToWindow(longRoute, { x: 50000, z: 0 }, WINDOW_RADIUS)).toEqual([]);
+  });
+
+  it('T12 routePathRuns starts each run with M', () => {
+    const v = windowViewFor({ x: 0, z: 0 }, 140);
+    const d = routePathRuns(v, [[[0, 0], [0, -10]], [[0, 100], [0, 110]]]);
+    expect(d.match(/M/g)?.length).toBe(2);
+    expect(d.match(/L/g)?.length).toBe(2);
+    expect(routePathRuns(v, [])).toBe('');
   });
 });
