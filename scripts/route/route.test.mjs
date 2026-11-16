@@ -7,7 +7,8 @@ describe('route files carry no geographic text', () => {
   for (const name of ['marrakech.route.ts', 'marrakech.generated.ts']) {
     it(name, () => {
       const source = readFileSync(new URL(name, dir), 'utf8');
-      expect(source).not.toMatch(/lat|lon/i);
+      // `lateral` is a placement field, not a coordinate.
+      expect(source).not.toMatch(/\blat\b|\blon\b|\blng\b|latitude|longitude/i);
       expect(source).not.toMatch(/\d{2}\.\d{4,}/);
     });
   }
