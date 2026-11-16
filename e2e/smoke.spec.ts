@@ -1,3 +1,4 @@
+import { PLAYER_CROUCH_EYE_HEIGHT, PLAYER_EYE_HEIGHT } from '@lodgy/shared';
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 // Reads one numeric field of the debug overlay, for example the tick or the vehicle's z position.
@@ -480,10 +481,10 @@ test('T12: holding Shift covers more ground than W alone, and holding C lowers t
   await walkDistance(page, ['KeyS'], 1000);
 
   const eye = () => overlayNumber(page, /^eye\s+(\S+)/m);
-  await expect.poll(eye).toBeGreaterThan(1.4);
+  await expect.poll(eye).toBeGreaterThan(PLAYER_EYE_HEIGHT - 0.1);
   const standing = await eye();
   await page.keyboard.down('KeyC');
-  await expect.poll(eye).toBeLessThan(standing - 0.4);
+  await expect.poll(eye).toBeLessThan(standing - (PLAYER_EYE_HEIGHT - PLAYER_CROUCH_EYE_HEIGHT) * 0.8);
   await page.keyboard.up('KeyC');
   await expect.poll(eye).toBeGreaterThan(standing - 0.1);
 });

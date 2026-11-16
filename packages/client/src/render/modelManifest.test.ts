@@ -1,6 +1,8 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { PLAYER_HEIGHT } from '@lodgy/shared';
 import { describe, expect, it } from 'vitest';
+import { fitToTarget } from './models';
 import { MODEL_KEYS, MODEL_MANIFEST } from './modelManifest';
 
 const PUBLIC = join(import.meta.dirname, '../../public');
@@ -47,6 +49,16 @@ describe('model manifest', () => {
       }
     }
     expect(total).toBeLessThan(12 * 1024 * 1024);
+  });
+});
+
+describe('character fit', () => {
+  it('T9: the character is fitted to the player height, not a literal', () => {
+    expect(MODEL_MANIFEST['character.player'].targetSize).toBe(PLAYER_HEIGHT);
+    const box = { min: { x: -0.3, y: 0, z: -0.2 }, max: { x: 0.3, y: 1.8, z: 0.2 } };
+    const { scale } = fitToTarget(box, MODEL_MANIFEST['character.player'].targetSize);
+    expect(1.8 * scale.y).toBeCloseTo(PLAYER_HEIGHT, 9);
+    expect(scale.x).toBeCloseTo(scale.y, 9);
   });
 });
 

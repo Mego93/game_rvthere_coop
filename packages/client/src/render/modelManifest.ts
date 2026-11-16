@@ -1,3 +1,5 @@
+import { PLAYER_HEIGHT } from '@lodgy/shared';
+
 export type ModelTarget = number | { x: number; y: number; z: number };
 
 // targetSize: a number is the longest side in metres (uniform scale); an object gives each axis in metres (non-uniform).
@@ -17,7 +19,7 @@ export const MODEL_MANIFEST = {
   'vehicle.lodgy.real': model('real', 'lodgy-merc_tv', 4.5),
   'vehicle.rv.real': model('real', 'camper-libau', 6.8),
   // character
-  'character.player': model('characters', 'character-c', 1.8),
+  'character.player': model('characters', 'character-c', PLAYER_HEIGHT),
   // prop
   'prop.crate': model('car-kit', 'box', 0.6),
   'prop.cart': model('city-roads', 'dumpster', 1.6),

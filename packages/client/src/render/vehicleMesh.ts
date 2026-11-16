@@ -1,4 +1,4 @@
-import type { VehicleConfig, VehicleState } from '@lodgy/shared';
+import { CHARACTER_SCALE, type VehicleConfig, type VehicleState } from '@lodgy/shared';
 import * as THREE from 'three';
 import { SEAT_RING_SECONDS } from '../ui/hud/seatToast';
 import { fitToTarget, hasModel, instantiate, shadowed } from './models';
@@ -196,8 +196,8 @@ export function placeVehicleMesh(mesh: THREE.Group, state: VehicleState): void {
   for (const wheel of spin.wheels) wheel.rotation.x = spin.angle * spin.sign;
 }
 
-const RING_INNER = 0.38;
-const RING_OUTER = 0.5;
+const RING_INNER = 0.38 * CHARACTER_SCALE;
+const RING_OUTER = 0.5 * CHARACTER_SCALE;
 const RING_PEAK = 0.75;
 
 // A translucent ring in the player's colour, drawn over the body so it shows inside the model.
