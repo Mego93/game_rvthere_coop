@@ -28,7 +28,7 @@ const distance = (a: readonly number[], b: readonly number[]) => Math.hypot(...a
 const pageErrors: string[] = [];
 const watch = (page: Page) => page.on('pageerror', (error) => pageErrors.push(error.message));
 
-// A page in its own browser context, so it has its own session storage: a separate player.
+// A page in its own browser context, so it has its own session storage: a separate player (it inherits the config's storage state, tutorial done).
 const contexts: BrowserContext[] = [];
 async function newPlayerPage(browser: Browser): Promise<Page> {
   const context = await browser.newContext();

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { tutorialDone } from './e2e/tutorialDone';
 
 // The same specs against `wrangler dev`, the Cloudflare worker with its room Durable Objects.
 export default defineConfig({
@@ -8,7 +9,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   grepInvert: /@node-only/,
-  use: { baseURL: 'http://localhost:8787', trace: 'retain-on-failure' },
+  use: { baseURL: 'http://localhost:8787', trace: 'retain-on-failure', storageState: tutorialDone('http://localhost:8787') },
   webServer: {
     command: 'npm run build:worker && npm run dev:worker',
     url: 'http://localhost:8787/',

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { tutorialDone } from './e2e/tutorialDone';
 
 // The smoke test runs against the real server serving the built client, as players would use it.
 export default defineConfig({
@@ -7,11 +8,10 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: 'list',
-  // Every test starts with the tutorial already finished (flag lodgy.tutorial.done), so its card never covers the lobby; its own spec opts out.
   use: {
     baseURL: 'http://localhost:3100',
     trace: 'retain-on-failure',
-    storageState: { cookies: [], origins: [{ origin: 'http://localhost:3100', localStorage: [{ name: 'lodgy.tutorial.done', value: '1' }] }] },
+    storageState: tutorialDone('http://localhost:3100'),
   },
   webServer: {
     command: 'npm start',
