@@ -9,7 +9,6 @@ Step 26, Part C (F1 to F3). Written after trying the `?fp` prototype. Rendering 
 - Seated the camera sits at the seat position plus (`PLAYER_EYE_HEIGHT` - `PLAYER_HEIGHT / 2`) = +0.7 m, clamped to 0.05 m below the vehicle box top. The view yaw is the vehicle yaw plus the mouse aim offset, so the head turns with the mouse and the car turns under it.
 - Field of view 75 in this mode; 60 stays the default.
 - The pose is a pure function (`render/firstPersonCamera.ts`, tested); `game.ts` only chooses it.
-- Screenshots (`?hq`): scratchpad `shots/10-tp-onfoot.png`, `10-fp-onfoot.png`, `10-tp-seated.png`, `10-fp-seated.png`.
 
 ## On foot
 
@@ -26,7 +25,7 @@ A hybrid is cheaper: first person on foot, third person (the existing follow cam
 ## Motion comfort
 
 - Head bob: none (off), as it is the main cause of discomfort; keep it off, with no option.
-- Field of view: 75 is a minimum for a mouse and desktop play; 90 is the common wide default and costs about 20 percent more geometry at the edges. Offer it as a setting if first person ships.
+- Field of view: 75 is a minimum for a mouse and desktop play; 90 is the common wide default. Offer it as a setting if first person ships.
 - Sprint: add a field-of-view lift (about +8 degrees eased over 0.2 s) so sprint feels fast; not in the prototype, to keep the change small.
 - Seated, the horizon follows the vehicle yaw only (no roll), as the third-person camera does; rolling the view with the chassis on slopes is a comfort risk and is not done. Pitch of the vehicle is also not applied.
 - Phones: a smaller screen and a thumb look control make first person more tiring; third person should stay the phone default.
