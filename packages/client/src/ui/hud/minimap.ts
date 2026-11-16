@@ -52,3 +52,37 @@ export function clampToCircle(view: MapView, point: { x: number; y: number }): {
   const k = max / d;
   return { x: c + dx * k, y: c + dy * k };
 }
+
+export const WINDOW_ROUTE_LENGTH = 3000;
+export const WINDOW_RADIUS = 600;
+
+export function routeLength(route: readonly [number, number][]): number {
+  let total = 0;
+  for (let i = 1; i < route.length; i++) total += Math.hypot(route[i]![0] - route[i - 1]![0], route[i]![1] - route[i - 1]![1]);
+  return total;
+}
+
+export const isWindowed = (route: readonly [number, number][]): boolean => routeLength(route) > WINDOW_ROUTE_LENGTH;
+
+// The circle's drawable radius (minus the 3 px inset clampToCircle uses) stands for `radius` metres.
+export function windowViewFor(centre: { x: number; z: number }, size: number, radius = WINDOW_RADIUS): MapView {
+  return { scale: (size / 2 - 3) / radius, originX: centre.x, originZ: centre.z, size };
+}
+
+// Runs of route points inside the window, each extended by its neighbour on either side so the line leaves the circle.
+export function clipRouteToWindow(route: readonly [number, number][], centre: { x: number; z: number }, radius: number): [number, number][][] {
+  const inside = route.map(([x, z]) => Math.hypot(x - centre.x, z - centre.z) <= radius);
+  const runs: [number, number][][] = [];
+  let run: [number, number][] | null = null;
+  for (let i = 0; i < route.length; i++) {
+    if (inside[i] || inside[i - 1] || inside[i + 1]) {
+      if (!run) runs.push((run = []));
+      run.push(route[i]!);
+    } else run = null;
+  }
+  return runs;
+}
+
+export function routePathRuns(view: MapView, runs: readonly (readonly [number, number][])[]): string {
+  return runs.map((run) => routePath(view, run)).join('');
+}
