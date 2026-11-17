@@ -578,7 +578,8 @@ export function createGame(
     onEvent(message) {
       const sound = soundFor(message, playerId);
       if (sound) audio.play(sound.kind, { ...(sound.positional ? { at: message.pos } : {}), ...(sound.volume === undefined ? {} : { volume: sound.volume }) });
-      eventToast.show(message.kind, performance.now() / 1000);
+      // Only the player who was brought back sees that toast.
+      if (message.kind !== 'outOfBounds' || message.playerId === playerId) eventToast.show(message.kind, performance.now() / 1000);
     },
     setControlsOpen(open) {
       controlsOpen = open;

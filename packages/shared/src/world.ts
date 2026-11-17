@@ -1,11 +1,12 @@
 import { createRouteIndex, type RouteIndex } from './routeAlong';
+import { routeFrame } from './corridor';
 import { groundHeightBelow } from './groundProbe';
 import { createItemDirector, markDropped, mixSeed, planItemDrops, rearmItems, stepItemDirector, unfireItem, type ItemDropEvent } from './itemDrops';
 import { createAnimals, type Animals } from './animals';
 import { hashSeed, planAmbient, type AmbientEvent, type AnimalSnapshot } from './ambient';
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DEFAULT_WEATHER, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather } from './constants';
+import { DEFAULT_WEATHER, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
@@ -162,7 +163,11 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const items = createItems(rapier, physics, course);
   const players = createPlayers(rapier, physics, vehicle, props, course);
   const winch = createWinch(rapier, physics, vehicle, props, course);
-  const routeIndex: RouteIndex | null = options.ambient === true || options.itemDrops === true ? createRouteIndex(course.route) : null;
+  const bounded = course.corridor !== undefined;
+  const routeIndex: RouteIndex | null = options.ambient === true || options.itemDrops === true || bounded ? createRouteIndex(course.route) : null;
+  // Out-of-bounds checks: the last nearest segment of each player and of the vehicle, as hints.
+  const boundsHints = new Map<string, number>();
+  let vehicleHint: number | undefined;
   const ambientPlan = options.ambient === true ? (options.ambientPlan ?? (course.ambient ? planAmbient(hashSeed(course.id), routeIndex!.length, course.ambient.blocked) : undefined)) : undefined;
   const animals: Animals | null = ambientPlan ? createAnimals(rapier, physics, course.route, ambientPlan) : null;
   const animalField = (): { animals?: AnimalSnapshot[] } => {
@@ -629,6 +634,40 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }
   };
 
+  // Rule 6 with T13: a player beyond OUT_OF_BOUNDS goes back to the road, on the side they left, with no cost.
+  const stepBounds = (events: WorldEvent[]) => {
+    if (!bounded || !routeIndex) return;
+    const frame = routeFrame(course);
+    for (const player of players.all()) {
+      if (player.seat !== null || player.respawnIn !== null) continue;
+      const hit = routeIndex.project(player.pos.x, player.pos.z, boundsHints.get(player.id));
+      boundsHints.set(player.id, hit.segment);
+      const at = routeIndex.pointAt(hit.along);
+      const offX = player.pos.x - at.x;
+      const offZ = player.pos.z - at.z;
+      if (Math.hypot(offX, offZ) <= OUT_OF_BOUNDS) continue;
+      // The right of the travel direction is (-tz, tx).
+      const side = offX * -at.tz + offZ * at.tx < 0 ? -1 : 1;
+      const x = at.x - at.tz * side * CORRIDOR_OOB_LANDING_OFFSET;
+      const z = at.z + at.tx * side * CORRIDOR_OOB_LANDING_OFFSET;
+      const onStop = course.stops.some((stop) => Math.hypot(stop.zone.center.x - x, stop.zone.center.z - z) < CORRIDOR_OOB_STOP_CLEAR);
+      const spot = (onStop ? null : players.standAt(x, z, frame.heightAtAlong(hit.along) + CORRIDOR_OOB_PROBE_UP)) ?? players.findSpawn(player.id);
+      releaseHook(player.id, 'stow');
+      players.dropHeld(player.id);
+      players.teleport(player.id, spot);
+      events.push({ kind: 'outOfBounds', tick, playerId: player.id, pos: { ...spot } });
+    }
+  };
+
+  const vehicleOutOfBounds = (): boolean => {
+    if (!bounded || !routeIndex) return false;
+    const centre = vehicle.body.translation();
+    const hit = routeIndex.project(centre.x, centre.z, vehicleHint);
+    vehicleHint = hit.segment;
+    const at = routeIndex.pointAt(hit.along);
+    return Math.hypot(centre.x - at.x, centre.z - at.z) > OUT_OF_BOUNDS;
+  };
+
   // Steps shared by restart and skipCheckpoint; `between` runs after the vehicle moves and before the physics steps.
   const placeCrew = (index: number, fuel: number, health: number, between: () => void) => {
     const checkpoint = course.checkpoints[index]!;
@@ -805,6 +844,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       if (pulled !== null) players.setHands(pulled, null);
       stepCoins(events);
       stepHealth(events);
+      stepBounds(events);
       killPlane(events);
       resetLastTick = new Set(props.killPlane(course.killPlaneY));
       items.killPlane(course.killPlaneY);
@@ -818,6 +858,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
           events.push({ kind: 'checkpoint', tick, pos: vec3(centre.x, centre.y, centre.z) });
         }
         // The pending flag lives only until this check; a manual restart also stops a win on its tick.
+        if (vehicleOutOfBounds()) restartPending = true;
         const restarting = vehicleLost(centre, vehicle.health(), course.killPlaneY) || restartPending;
         restartPending = false;
         if (restarting) restart(events);
