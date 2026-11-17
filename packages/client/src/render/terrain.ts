@@ -1,7 +1,9 @@
-import type { Box, BuiltCourse } from '@lodgy/shared';
+import { routeHeights, surfaceYAt, type BuiltCourse } from '@lodgy/shared';
 import * as THREE from 'three';
 import { nearestSegment } from './routeIndex';
 import { groundTexture, type SceneOptions } from './groundTextures';
+
+export { surfaceYAt };
 
 export const TERRAIN_CELL = 40;
 export const TERRAIN_MARGIN = 1000;
@@ -13,101 +15,6 @@ const FAR_DROP = 1.2;
 const FALL_PER_METRE = 0.004;
 const NEAR_ROUTE = 80;
 const RED_EARTH = 0xa65a3a;
-
-const EPS = 1e-9;
-const FROM_Y = 10000;
-
-const q = new THREE.Quaternion();
-const o = new THREE.Vector3();
-const d = new THREE.Vector3();
-const GROUND_CELL = 64;
-interface GroundIndex {
-  grid: Map<string, Box[]>;
-  // Boxes too large to register in every cell they cover; they are tested for every point.
-  big: Box[];
-}
-const groundGrids = new WeakMap<readonly Box[], GroundIndex>();
-const BIG_REACH = 1000;
-
-// The ground boxes whose bounding square can reach the point's grid cell.
-function groundNear(course: BuiltCourse, x: number, z: number): readonly Box[] {
-  let index = groundGrids.get(course.ground);
-  if (!index) {
-    index = { grid: new Map(), big: [] };
-    for (const box of course.ground) {
-      const h = box.halfExtents;
-      const reach = Math.hypot(h.x, h.y, h.z);
-      if (reach > BIG_REACH) {
-        index.big.push(box);
-        continue;
-      }
-      for (let i = Math.floor((box.center.x - reach) / GROUND_CELL); i <= Math.floor((box.center.x + reach) / GROUND_CELL); i++) {
-        for (let j = Math.floor((box.center.z - reach) / GROUND_CELL); j <= Math.floor((box.center.z + reach) / GROUND_CELL); j++) {
-          const key = `${i},${j}`;
-          const list = index.grid.get(key);
-          if (list) list.push(box);
-          else index.grid.set(key, [box]);
-        }
-      }
-    }
-    groundGrids.set(course.ground, index);
-  }
-  const near = index.grid.get(`${Math.floor(x / GROUND_CELL)},${Math.floor(z / GROUND_CELL)}`);
-  if (index.big.length === 0) return near ?? [];
-  return near ? [...near, ...index.big] : index.big;
-}
-
-// Height of the top of the highest ground box under (x, z), or null off the ground.
-export function surfaceYAt(course: BuiltCourse, x: number, z: number): number | null {
-  let best: number | null = null;
-  for (const box of groundNear(course, x, z)) {
-    const h = box.halfExtents;
-    const reach = Math.hypot(h.x, h.y, h.z);
-    if (Math.abs(x - box.center.x) > reach || Math.abs(z - box.center.z) > reach) continue;
-    q.set(-box.rot.x, -box.rot.y, -box.rot.z, box.rot.w);
-    o.set(x - box.center.x, FROM_Y - box.center.y, z - box.center.z).applyQuaternion(q);
-    d.set(0, -1, 0).applyQuaternion(q);
-    let tmin = 0;
-    let tmax = Infinity;
-    for (const axis of ['x', 'y', 'z'] as const) {
-      const half = h[axis] + (axis === 'y' ? 0 : EPS);
-      const da = d[axis];
-      const oa = o[axis];
-      if (Math.abs(da) < 1e-12) {
-        if (Math.abs(oa) > half) {
-          tmax = -1;
-          break;
-        }
-      } else {
-        const t1 = (-half - oa) / da;
-        const t2 = (half - oa) / da;
-        tmin = Math.max(tmin, Math.min(t1, t2));
-        tmax = Math.min(tmax, Math.max(t1, t2));
-      }
-    }
-    if (tmax >= tmin && (best === null || FROM_Y - tmin > best)) best = FROM_Y - tmin;
-  }
-  return best;
-}
-
-const heightCache = new WeakMap<BuiltCourse, number[]>();
-
-// The ground-top height at each route point, computed once; a point off the ground takes its neighbour's.
-function routeHeights(course: BuiltCourse): number[] {
-  let heights = heightCache.get(course);
-  if (heights) return heights;
-  const raw = course.route.map(([x, z]) => surfaceYAt(course, x, z));
-  heights = raw.map((height, i) => {
-    if (height !== null) return height;
-    for (let step = 1; step < raw.length; step++) {
-      const near = raw[i - step] ?? raw[i + step];
-      if (near !== undefined && near !== null) return near;
-    }
-    return 0;
-  });
-  heightCache.set(course, heights);
-  return heights;
-}
 
 // Distance to the route's centre line and the route's ground height at the nearest point.
 export function routeDistance(course: BuiltCourse, x: number, z: number): { distance: number; y: number } {
