@@ -8,6 +8,7 @@ async function createRoom(page: Page, name: string) {
 }
 
 async function startRun(page: Page) {
+  await page.locator('#lobby-course').selectOption('test');
   await page.locator('#lobby-start').click();
   await expect(page.locator('#lobby')).toBeHidden();
 }

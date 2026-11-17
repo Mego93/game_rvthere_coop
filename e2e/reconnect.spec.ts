@@ -40,6 +40,7 @@ async function startRun(amal: Page, badr: Page): Promise<void> {
   await badr.locator('#home-primary').click();
   await expect(badr.locator('#home')).toBeHidden();
   await badr.locator('#lobby-ready').click();
+  await amal.locator('#lobby-course').selectOption('test');
   await amal.locator('#lobby-start').click();
   for (const page of [amal, badr]) await expect(page.locator('#overlay')).toContainText('players  Amal (on foot), Badr (on foot)');
 }

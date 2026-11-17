@@ -9,6 +9,7 @@ test('the server ticks at about 60 Hz: at least 270 ticks in 5 s', async ({ page
   await page.locator('#home-name').fill('Amal');
   await page.locator('#home-primary').click();
   await expect(page.locator('#home')).toBeHidden();
+  await page.locator('#lobby-course').selectOption('test');
   await page.locator('#lobby-start').click();
   await expect(page.locator('#lobby')).toBeHidden();
   // The overlay can be hidden, so its text is read, not its visibility.
