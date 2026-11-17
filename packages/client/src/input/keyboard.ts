@@ -32,12 +32,15 @@ export function createKeyboardSource(target: EventTarget): InputSource {
   const tapped = new Set<string>();
   let slot: 0 | 1 | 2 = 0;
 
+  // Typing in a text field is not play; its keys are neither read nor claimed.
+  const inField = (event: Event) => ['INPUT', 'SELECT', 'TEXTAREA'].includes((event.target as { tagName?: string } | null)?.tagName?.toUpperCase() ?? '');
   const leaveBrowserAlone = (event: KeyboardEvent) => event.ctrlKey || event.metaKey || event.altKey;
   const claim = (event: KeyboardEvent) => {
     if (GAME_KEYS.has(event.code) && !leaveBrowserAlone(event)) event.preventDefault();
   };
 
   const onKeyDown = (event: Event) => {
+    if (inField(event)) return;
     const code = (event as KeyboardEvent).code;
     // macOS sends no keyup for a key released while Cmd is held, so such a key would stick.
     if (leaveBrowserAlone(event as KeyboardEvent)) return;
@@ -48,7 +51,8 @@ export function createKeyboardSource(target: EventTarget): InputSource {
     if (selected !== undefined) slot = selected;
   };
   const onKeyUp = (event: Event) => {
-    claim(event as KeyboardEvent);
+    // A release still counts in a field, or a key held while focus moved there would stay down.
+    if (!inField(event)) claim(event as KeyboardEvent);
     const code = (event as KeyboardEvent).code;
     if (code === 'MetaLeft' || code === 'MetaRight') down.clear();
     down.delete(code);

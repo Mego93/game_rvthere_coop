@@ -20,6 +20,13 @@ export const CHARACTER_SCALE = 0.8;
 
 export const MAX_PLAYERS = 6;
 export const NAME_MAX_LENGTH = 16;
+
+// Chat: text length counted in code points after trim; a token bucket per player on the room clock; lines kept per room.
+export const CHAT_MAX_LENGTH = 120;
+export const CHAT_BURST = 4;
+export const CHAT_REFILL_SECONDS = 1.5;
+export const CHAT_HISTORY = 30;
+export const CHAT_PHRASES = Object.freeze(['Ready!', 'Wait for me', 'Go go go', 'Slow down', 'Need fuel', 'Need a repair', 'Use the winch', 'Thanks!'] as const);
 export const PLAYER_COLOURS = deepFreeze(['#e4572e', '#17bebb', '#ffc914', '#76b041', '#a05cdc', '#f28cb1'] as const);
 
 // Per-player input queue on the server.

@@ -231,3 +231,24 @@ test('B13: a window blur releases sprint and crouch', () => {
   target.dispatchEvent(new Event('blur'));
   expect(source.sample()).toEqual({ ...NEUTRAL_INPUT, reset: false });
 });
+
+test('keys typed in an input, select or textarea are not the game\'s: not read and not claimed', () => {
+  const { target, source } = setup();
+  for (const tag of ['INPUT', 'SELECT', 'TEXTAREA']) {
+    const down = Object.assign(new Event('keydown', { cancelable: true }), { code: 'KeyW' });
+    Object.defineProperty(down, 'target', { value: { tagName: tag } });
+    target.dispatchEvent(down);
+    expect(down.defaultPrevented, tag).toBe(false);
+    expect(source.sample(), tag).toMatchObject({ moveY: 0 });
+  }
+});
+
+test('a key held when focus moved into a field is released by its keyup there, so it does not stick', () => {
+  const { target, source, press } = setup();
+  press('KeyW');
+  const up = Object.assign(new Event('keyup', { cancelable: true }), { code: 'KeyW' });
+  Object.defineProperty(up, 'target', { value: { tagName: 'INPUT' } });
+  target.dispatchEvent(up);
+  expect(up.defaultPrevented).toBe(false);
+  expect(source.sample()).toMatchObject({ moveY: 0 });
+});

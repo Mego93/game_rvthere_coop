@@ -82,8 +82,8 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
   {
     id: 'help',
     title: 'Help',
-    text: `Press ${key('Show or hide this help')} any time to see every control. ${key('Menu')} opens the menu, where you can open this tutorial again.`,
-    touchText: 'Tap Menu any time to open the menu. It lists the controls and opens this tutorial again.',
+    text: `Press ${key('Show or hide this help')} any time to see every control, and ${key('Open chat')} to chat with your crew. ${key('Menu')} opens the menu, where you can open this tutorial again.`,
+    touchText: 'Tap Menu any time to open the menu. It lists the controls and opens this tutorial again. Tap Chat to talk with your crew.',
     caps: caps('Show or hide this help'),
   },
 ];

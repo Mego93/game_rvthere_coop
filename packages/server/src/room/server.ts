@@ -197,6 +197,11 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
         return command(session, (room, player) => room.restartCourse(player));
       case 'toLobby':
         return command(session, (room, player) => room.toLobby(player));
+      case 'chat':
+        // Unlike the commands, a chat before joining is ignored, not refused.
+        if (!session.room || !session.player) return;
+        session.room.chat(session.player, message.text, now);
+        return;
       case 'kick':
         return kick(session, message.playerId);
       default:

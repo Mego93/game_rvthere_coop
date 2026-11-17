@@ -59,6 +59,7 @@ import { buildHudModel } from './ui/hud/hudModel';
 import { projectMarker } from './ui/hud/downedMarkers';
 import { CLOSED, createShopMenu, gateControl, menuFeet, menuInput, shopMenuState, type ShopMenuState } from './ui/shopMenu';
 import { createRunMenu, inputFrozen, runMenuState, type RunMenuEvent, type RunMenuState } from './ui/runMenu';
+import { isChatKey } from './ui/chat';
 import type { TouchUi } from './ui/touchUi';
 import { touchView } from './ui/touchView';
 
@@ -84,6 +85,10 @@ export interface Game {
   onEvent(message: EventMessage): void;
   // The controls panel or the tutorial opened or closed: the game stands still, and Esc is not the game's while it is open.
   setControlsOpen(open: boolean): void;
+  // The chat panel opened or closed: the game stands still while it is open.
+  setChatOpen(open: boolean): void;
+  // Opens the chat through the page when no menu or panel is open during a run; the touch Chat button uses it like T does.
+  requestChat(): void;
   // Shows the mute state in the run menu.
   setMuted(muted: boolean): void;
   // Shows "Cannot buy" in the shop menu if it is open.
@@ -115,6 +120,10 @@ export interface GameView {
   onTutorial: () => void;
   // Whether the controls panel is open when the game starts.
   controlsOpen: boolean;
+  // Whether the chat panel is open when the game starts.
+  chatOpen: boolean;
+  // T was pressed in a state where chat may open; the page opens its panel.
+  onChat: () => void;
 }
 
 const stanceFields = (stance: PlayerSnapshot['stance']): Pick<PlayerSnapshot, 'stance'> | Record<string, never> => (stance === undefined ? {} : { stance });
@@ -192,7 +201,8 @@ export function createGame(
   const gate = gateControl(view.pointerGate);
   let runState: RunMenuState = { open: false };
   let controlsOpen = view.controlsOpen;
-  const anyOpen = () => menuState.open || runState.open || controlsOpen;
+  let chatOpen = view.chatOpen;
+  const anyOpen = () => menuState.open || runState.open || controlsOpen || chatOpen;
   const frozen = () => inputFrozen(anyOpen(), lobby.phase);
   // The lock change this causes is not the player's Esc.
   let releasedByGame = false;
@@ -256,8 +266,10 @@ export function createGame(
   };
   // The corner button is only for the run.
   const showMenuButton = () => {
-    const button = document.getElementById('touch-menu');
-    if (button) button.hidden = lobby.phase !== 'playing';
+    for (const id of ['touch-menu', 'touch-chat']) {
+      const button = document.getElementById(id);
+      if (button) button.hidden = lobby.phase !== 'playing';
+    }
   };
   updateRunMenu();
   showMenuButton();
@@ -287,10 +299,20 @@ export function createGame(
     onBuy: (item: ItemKind) => send({ type: 'buy', item }),
     onClose: () => refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, true),
   });
+  const requestChat = () => {
+    if (lobby.phase === 'playing' && !anyOpen()) view.onChat();
+  };
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.code === 'F3') {
       event.preventDefault();
       if (!event.repeat) overlay.hidden = debugShown = !debugShown;
+      return;
+    }
+    // anyOpen() covers the run menu, the shop, help, the tutorial and an open chat; the page's own T check skips fields.
+    if (isChatKey(event, event.target instanceof Element ? event.target.tagName : null)) {
+      // Without this the T would be typed into the input that opening focuses.
+      event.preventDefault();
+      requestChat();
       return;
     }
     if (event.code !== 'Escape' || event.repeat) return;
@@ -558,6 +580,13 @@ export function createGame(
     },
     setControlsOpen(open) {
       controlsOpen = open;
+      if (open) releaseLock();
+      gate.follow(frozen());
+    },
+    requestChat,
+    setChatOpen(open) {
+      chatOpen = open;
+      // Before the lock is released the panel's focus would leave the pointer captured.
       if (open) releaseLock();
       gate.follow(frozen());
     },

@@ -18,6 +18,7 @@ import { createKeyboardSource } from './input/keyboard';
 import { createMouseLook } from './input/mouse';
 import type { GameInput } from './input/source';
 import { createTouchSource } from './input/touch';
+import { createChatLog, createChatPanel, createChatSender, submitChat } from './ui/chat';
 import { createCredits } from './ui/credits';
 import { createControlsPanel, isHelpKey } from './ui/controls';
 import { createHome, errorText } from './ui/home';
@@ -175,6 +176,49 @@ const home = createHome(document.querySelector<HTMLElement>('#home')!, {
   onCredits: () => credits.open(),
 });
 
+// Owned here, not by the game, so lines survive between runs and a reconnect; cleared when the room is left.
+const chatLog = createChatLog();
+const chatSender = createChatSender();
+const sendChat = (text: string) => submitChat(text, chatSender, clock(), (cleaned) => socket?.send({ type: 'chat', text: cleaned }));
+// Created after the help panel and the tutorial, so their Escape handlers run first.
+const chatPanel = createChatPanel(document, {
+  onSubmit: sendChat,
+  onOpenChange: (open) => {
+    if (open) {
+      chatLog.markRead();
+      chatPanel.setLines(chatLog.lines());
+      tickChat();
+    }
+    game?.setChatOpen(open);
+  },
+});
+let renderedChat = -1;
+// Redraws the lines only when the log changed.
+function renderChat() {
+  if (renderedChat === chatLog.version()) return;
+  renderedChat = chatLog.version();
+  chatPanel.setLines(chatLog.lines());
+  lobby.setChat(chatLog.lines());
+}
+// Toasts show during a run and its results, not in the lobby, which has its own chat; they expire with time.
+function tickChat() {
+  const inRun = phase === 'playing' || phase === 'results';
+  chatPanel.setToastsAllowed(inRun);
+  chatPanel.setToasts(chatLog.recent(clock()));
+  touchUi?.setChatUnread(inRun && chatLog.unread() > 0);
+}
+// The timer runs only while a run or its results show; the lobby needs no expiry.
+let chatTimer: number | null = null;
+function syncChatTimer() {
+  const inRun = phase === 'playing' || phase === 'results';
+  if (inRun && chatTimer === null) chatTimer = window.setInterval(tickChat, 500);
+  else if (!inRun && chatTimer !== null) {
+    clearInterval(chatTimer);
+    chatTimer = null;
+  }
+  tickChat();
+}
+
 const lobby = createLobby(document, {
   onReady: (ready) => socket?.send({ type: 'ready', ready }),
   onConfigure: (settings) => socket?.send({ type: 'configure', ...settings }),
@@ -182,6 +226,7 @@ const lobby = createLobby(document, {
   onKick: (target) => socket?.send({ type: 'kick', playerId: target }),
   onCredits: () => credits.open(),
   onTutorial: () => tutorial.open(),
+  onChat: sendChat,
 });
 
 const results = createResults(document.querySelector<HTMLElement>('#results')!, {
@@ -193,6 +238,7 @@ const SOMETHING_WRONG = 'Something went wrong.';
 
 // Stops the run's drawing and input; the lobby and the home page take over the screen.
 function stopGame() {
+  chatPanel.close();
   game?.stop();
   game = null;
   touchUi?.setVisible(false);
@@ -201,17 +247,21 @@ function stopGame() {
 
 function onLobby(message: LobbyMessage) {
   phase = message.phase;
+  syncChatTimer();
   adminId = message.adminId;
   if (message.phase !== 'results') lastResults = null;
   if (message.phase === 'lobby') {
     stopGame();
     results.hide();
     lobby.show(message, playerId);
+    chatLog.markRead();
     if (shouldAutoShowTutorial(nameStore, tutorialOffered)) tutorial.open();
     tutorialOffered = true;
     return;
   }
   lobby.hide();
+  // No chat panel outside a run; the toasts still show in the results.
+  if (message.phase !== 'playing') chatPanel.close();
   if (message.phase === 'playing') {
     results.hide();
     if (game) game.setLobby(message);
@@ -257,6 +307,13 @@ function onMessage(message: ServerMessage) {
         closeReason = SOMETHING_WRONG;
         socket?.close();
       }
+      return;
+    case 'chat':
+      chatLog.add(message, playerId, clock());
+      // Read at once while the lobby chat or the open panel shows it.
+      if (chatPanel.isOpen() || lobby.isShown()) chatLog.markRead();
+      renderChat();
+      tickChat();
       return;
     case 'snapshot':
       game?.pushSnapshot(message);
@@ -317,6 +374,8 @@ function startGame(lobby: LobbyMessage) {
     const root = document.createElement('div');
     document.body.append(root);
     touchUi = createTouchUi(root);
+    // Opened inside the touch itself, so iOS shows the keyboard.
+    touchUi.onChat(() => game?.requestChat());
   }
   const controls = touchUi;
   const input = (): GameInput =>
@@ -324,7 +383,7 @@ function startGame(lobby: LobbyMessage) {
       ? createTouchSource({ surface: canvas, win: window, doc: document, width: () => window.innerWidth, controls })
       : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document, pointerGate));
   touchUi?.setVisible(true);
-  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, firstPerson, onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, firstPerson, onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen(), chatOpen: chatPanel.isOpen(), onChat: () => chatPanel.open() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
 const clock = () => performance.now() / 1000;
@@ -351,10 +410,14 @@ function showHome(text: string) {
   stopGame();
   lobby.hide();
   results.hide();
+  chatLog.clear();
+  chatSender.reset();
   playerId = '';
   adminId = null;
   lastResults = null;
   phase = null;
+  renderChat();
+  syncChatTimer();
   home.setBusy(false);
   home.show({ room: roomFromPath(location.pathname), name, error: text });
   closeReason = CONNECTION_LOST;

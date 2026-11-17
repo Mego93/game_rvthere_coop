@@ -477,6 +477,10 @@ The lobby is a waiting room.
 - Opening `/<noun>` directly asks for a display name, then joins.
 - A noun with no live room shows an error with a link to the home page.
 
+### Chat
+
+Players chat in the lobby, during the run and (as toasts) in the results. Client message `{ type: 'chat', text }`: the text is trimmed, 1 to 120 characters counted by code point, with no control, format (so no ZWJ), private-use or unassigned character and no newline or tab; anything else is a `bad_message`. Server message `{ type: 'chat', id, playerId, name, text, at, replay? }`: `id` counts up per room from 1 and is never reset inside the room, `at` is the server clock in whole seconds (opaque to clients), name and id come from the server, never from the client. The room relays to every connected player in every phase. Each player has a token bucket of 4 messages refilling one per 1.5 s on the room clock (kept on the player, so a reconnect does not refill it); a message without a token is dropped silently. The room keeps the last 30 lines; a joining or reconnecting player gets them after `welcome`, `lobby` and `results`, oldest first, flagged `replay: true` so the client shows them as seen. There are eight quick phrases (`CHAT_PHRASES`) sent as ordinary text. In game the chat is hidden: `T` (or the phone Chat button, opened on release so iOS shows its keyboard) opens a panel and suspends game input, Enter sends and closes, Esc closes; up to three lines younger than 6 s show as fading toasts and an unread cue shows on the button. The client throttles slightly stricter than the server (refill 1.6 s). Names and texts are always set as text, never HTML.
+
 ### Protocol
 
 JSON over WebSocket.
