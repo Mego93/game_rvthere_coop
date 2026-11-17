@@ -40,7 +40,7 @@ function faceMaterial(): THREE.MeshStandardMaterial {
   return material;
 }
 
-function colourMaterial(hex: string): THREE.MeshStandardMaterial {
+export function colourMaterial(hex: string): THREE.MeshStandardMaterial {
   let material = materials.get(hex);
   if (!material) {
     material = shared(new THREE.MeshStandardMaterial({ color: hex, flatShading: true, roughness: 1, metalness: 0 }));
@@ -49,7 +49,7 @@ function colourMaterial(hex: string): THREE.MeshStandardMaterial {
   return material;
 }
 
-function cached(key: string, build: () => THREE.BufferGeometry): THREE.BufferGeometry {
+export function cached(key: string, build: () => THREE.BufferGeometry): THREE.BufferGeometry {
   let geometry = geometries.get(key);
   if (!geometry) {
     geometry = shared(build());
@@ -58,9 +58,9 @@ function cached(key: string, build: () => THREE.BufferGeometry): THREE.BufferGeo
   return geometry;
 }
 
-const unitBox = () => cached('unit', () => new THREE.BoxGeometry(1, 1, 1));
+export const unitBox = () => cached('unit', () => new THREE.BoxGeometry(1, 1, 1));
 
-function merged(key: string, boxes: readonly Box[], extra: () => THREE.BufferGeometry[] = () => []): THREE.BufferGeometry {
+export function merged(key: string, boxes: readonly Box[], extra: () => THREE.BufferGeometry[] = () => []): THREE.BufferGeometry {
   return cached(key, () => {
     const pieces = boxes.map(([w, h, d, x, y, z]) => new THREE.BoxGeometry(w, h, d).translate(x, y, z));
     return mergeGeometries([...pieces, ...extra()])!;
@@ -189,4 +189,13 @@ export function applyLook(model: THREE.Object3D, appearance: Appearance): void {
   if ((appearance.glasses === 'default' ? look.glasses : appearance.glasses) === 'round') add(head, 'glasses', glassesGeometry(), GLASSES, false);
   if (appearance.hat === 'cap') add(head, 'hat', merged('cap', CAP_BOXES), CAP, true);
   else if (appearance.hat === 'fez') add(head, 'hat', cached('fez', () => new THREE.CylinderGeometry(2.9, 4.0, 2.5, 8).translate(0, 9.05, 0)), FEZ, true);
+}
+
+// A head of one flat skin colour with the default eyes and mouth and, if `beard` is a colour, a beard in it (for figures that are not a CharacterId).
+export function dressFace(head: THREE.Object3D | undefined, skin: string, beard: string | null): void {
+  if (!head) return;
+  (head as THREE.Mesh).material = colourMaterial(skin);
+  add(head, 'eyes', faceGeometry('eyes-default', EYES.default), null, false);
+  add(head, 'mouth', faceGeometry('mouth-default', MOUTHS.default), null, false);
+  if (beard) add(head, 'facial', merged('beard', BEARD_BOXES), beard, false);
 }
