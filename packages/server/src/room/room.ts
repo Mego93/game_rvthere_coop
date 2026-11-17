@@ -448,7 +448,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       return null;
     },
     chat(player, text, now) {
-      if (!players.includes(player)) return;
+      if (!player.connected || !players.includes(player)) return;
       // The 1e-6 allowance stops floating-point error leaving the bucket just short of a whole token.
       player.chatTokens = Math.min(CHAT_BURST, player.chatTokens + Math.max(0, now - player.chatAt) / CHAT_REFILL_SECONDS);
       player.chatAt = Math.max(player.chatAt, now);

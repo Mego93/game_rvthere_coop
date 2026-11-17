@@ -85,17 +85,59 @@ test('chat is relayed in the lobby, while playing and in the results', () => {
   expect(lines(client).map((line) => line.id)).toEqual([1, 2, 3]);
 });
 
-test('the id keeps rising across toLobby and next', () => {
+test('the id keeps rising across toLobby', () => {
+  const { host, advance } = setup(true);
+  const { client } = host();
+  startRun(client);
+  advance(0.1);
+  expect(client.last('lobby').phase).toBe('results');
+  say(client, 'one');
+  client.send({ type: 'toLobby' });
+  expect(client.last('lobby').phase).toBe('lobby');
+  say(client, 'two');
+  expect(lines(client).map((line) => line.id)).toEqual([1, 2]);
+});
+
+test('the id keeps rising across next', () => {
   const { host, advance } = setup(true);
   const { client } = host();
   startRun(client);
   advance(0.1);
   say(client, 'one');
   client.send({ type: 'next' });
+  expect(client.last('lobby')).toMatchObject({ phase: 'lobby', courseId: 'segment-demo' });
   say(client, 'two');
-  client.send({ type: 'toLobby' });
-  say(client, 'three');
-  expect(lines(client).map((line) => line.id)).toEqual([1, 2, 3]);
+  expect(lines(client).map((line) => line.id)).toEqual([1, 2]);
+});
+
+test('two rooms both start their ids at 1', () => {
+  const { host, server } = setup();
+  const first = host();
+  say(first.client, 'a');
+  const second = connectFakeClient(server, 'other');
+  second.send({ type: 'create', name: 'Zed', token: token(5) });
+  say(second, 'b');
+  expect(lines(first.client).map((line) => line.id)).toEqual([1]);
+  expect(lines(second).map((line) => line.id)).toEqual([1]);
+});
+
+test("a kicked player's later chat is not relayed", () => {
+  const { host, guest } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2, 'Badr');
+  client.send({ type: 'kick', playerId: 'p2' });
+  badr.sendRaw(JSON.stringify({ type: 'chat', text: 'still here' }));
+  expect(lines(client)).toEqual([]);
+  expect(lines(badr)).toEqual([]);
+});
+
+test("a closed player's later chat is not relayed", () => {
+  const { host, guest } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2, 'Badr');
+  badr.close();
+  say(badr, 'ghost');
+  expect(lines(client)).toEqual([]);
 });
 
 test('a burst of four passes, the fifth is dropped without an error, and one passes after 1.5 s', () => {
