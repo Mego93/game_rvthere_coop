@@ -48,7 +48,7 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | 27 | The real route: the airport course rebuilt from the real road from the owner's villa to Marrakech airport | needs sign-off | | [owner feedback](#owner-feedback-2026-11-15) | Owner |
 | 28a | Hills and pits: sloped hills (one the RV needs the winch for) and shallow and deep pits (the deep ones need the winch), placed on the real route | needs sign-off | `docs/superpowers/plans/step-28a-hills-and-pits.md` | [owner feedback](#owner-feedback-2026-11-15) | Owner, by playing it |
 | 28b | Animals: goats and scooters that spawn as the vehicle nears, seeded, cost a little on contact | needs sign-off | `docs/superpowers/plans/step-28b-animals.md` | [owner feedback](#owner-feedback-2026-11-15) | Owner, by playing it |
-| 28c | Random items and bonuses spawned along the course, seeded per run | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner, by playing it |
+| 28c | Random items and bonuses spawned along the course, seeded per run | planned | `docs/superpowers/plans/step-28c-random-items.md` | [owner feedback](#owner-feedback-2026-11-15) | Owner, by playing it |
 | 28d | Parkour sections that use every item and tool at least once (jerrycan, toolbox, health kit, winch, crates, barriers) | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner, by playing it |
 | 29 | Souleyman: a Moroccan NPC on the road saves your progress, replacing the blue checkpoint marker | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner |
 | 30 | Lobby and chat: an animated, responsive lobby; text chat in the lobby and in the game | planned | | [owner feedback](#owner-feedback-2026-11-15) | Owner |
