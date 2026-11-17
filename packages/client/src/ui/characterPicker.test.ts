@@ -1,6 +1,6 @@
 import { defaultAppearance, type Appearance, type LobbyMessage, type LobbyPlayer } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { mergeAppearance, pickerView } from './characterPicker';
+import { createPickerState, mergeAppearance, pickerView } from './characterPicker';
 
 const player = (playerId: string, name: string, appearance: Appearance, connected = true): LobbyPlayer => ({
   playerId,
@@ -76,8 +76,80 @@ test('P7: mergeAppearance returns the server value and no pending when none is p
   expect(mergeAppearance(server, null)).toEqual({ appearance: server, pending: null });
 });
 
-test('P8: a pending choice on a card another player holds shows as own until an error drops it', () => {
+test('P8: a pending choice on a card another player holds still shows as own, and as taken once nothing is pending', () => {
   const raced = message([player('p1', 'Amal', defaultAppearance('sounile')), player('p2', 'Badr', defaultAppearance('huu'))]);
   expect(pickerView(raced, 'p1', defaultAppearance('huu'))!.cards[5]!.state).toBe('own');
   expect(pickerView(raced, 'p1', null)!.cards[5]!.state).toBe('taken');
+});
+
+const lobbyOf = (a: Appearance, b: Appearance) => message([player('p1', 'Amal', a), player('p2', 'Badr', b)]);
+
+test('P9: mergeAppearance keeps a differing pending look and clears an equal one', () => {
+  const server = defaultAppearance('sounile');
+  const pending = { ...server, hat: 'cap' } as const;
+  expect(mergeAppearance(server, pending)).toEqual({ appearance: pending, pending });
+  expect(mergeAppearance(server, { ...server })).toEqual({ appearance: server, pending: null });
+});
+
+test('P10: a tap on a free card gives one full look keeping the other choices', () => {
+  const state = createPickerState();
+  const own = { characterId: 'sounile', glasses: 'round', top: 'suit', hat: 'fez' } as const;
+  const sent = state.choose(lobbyOf(own, defaultAppearance('rafael')), 'p1', { characterId: 'huu' });
+  expect(sent).toEqual({ characterId: 'huu', glasses: 'round', top: 'suit', hat: 'fez' });
+});
+
+test('P11: a tap on a taken card, on the own card or on the current option sends nothing', () => {
+  const state = createPickerState();
+  const lobby = lobbyOf(defaultAppearance('sounile'), defaultAppearance('rafael'));
+  expect(state.choose(lobby, 'p1', { characterId: 'rafael' })).toBeNull();
+  expect(state.choose(lobby, 'p1', { characterId: 'sounile' })).toBeNull();
+  expect(state.choose(lobby, 'p1', { hat: 'none' })).toBeNull();
+  expect(state.choose(lobby, 'nobody', { hat: 'cap' })).toBeNull();
+});
+
+test('P12: two quick taps before an echo: the second carries the first change', () => {
+  const state = createPickerState();
+  const lobby = lobbyOf(defaultAppearance('sounile'), defaultAppearance('rafael'));
+  state.choose(lobby, 'p1', { characterId: 'luiz' });
+  expect(state.choose(lobby, 'p1', { hat: 'cap' })).toEqual({ characterId: 'luiz', glasses: 'default', top: 'default', hat: 'cap' });
+});
+
+test('P13: a matching echo clears pending', () => {
+  const state = createPickerState();
+  const lobby = lobbyOf(defaultAppearance('sounile'), defaultAppearance('rafael'));
+  const next = state.choose(lobby, 'p1', { hat: 'cap' })!;
+  expect(state.view(lobby, 'p1')!.pending).toEqual(next);
+  expect(state.view(lobbyOf(next, defaultAppearance('rafael')), 'p1')!.pending).toBeNull();
+  expect(state.view(lobby, 'p1')!.appearance).toEqual(defaultAppearance('sounile'));
+});
+
+test('P14: character_taken and bad_phase drop pending and set the note, also with nothing pending', () => {
+  const state = createPickerState();
+  const lobby = lobbyOf(defaultAppearance('sounile'), defaultAppearance('rafael'));
+  state.choose(lobby, 'p1', { characterId: 'huu' });
+  expect(state.error('character_taken', 'taken')).toBe(true);
+  expect(state.note).toBe('taken');
+  expect(state.view(lobby, 'p1')!.appearance).toEqual(defaultAppearance('sounile'));
+  expect(state.error('bad_phase', 'later')).toBe(true);
+  expect(state.note).toBe('later');
+});
+
+test('P15: other errors leave pending and the note alone', () => {
+  const state = createPickerState();
+  const lobby = lobbyOf(defaultAppearance('sounile'), defaultAppearance('rafael'));
+  state.choose(lobby, 'p1', { characterId: 'huu' });
+  expect(state.error('not_admin', 'no')).toBe(false);
+  expect(state.error(undefined, 'no')).toBe(false);
+  expect(state.note).toBe('');
+  expect(state.view(lobby, 'p1')!.appearance.characterId).toBe('huu');
+});
+
+test('P16: a new choice clears the note and reset clears everything', () => {
+  const state = createPickerState();
+  const lobby = lobbyOf(defaultAppearance('sounile'), defaultAppearance('rafael'));
+  state.error('character_taken', 'taken');
+  state.choose(lobby, 'p1', { hat: 'cap' });
+  expect(state.note).toBe('');
+  state.reset();
+  expect(state.view(lobby, 'p1')!.pending).toBeNull();
 });

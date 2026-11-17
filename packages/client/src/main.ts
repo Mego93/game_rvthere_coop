@@ -334,7 +334,7 @@ function onMessage(message: ServerMessage) {
           closeReason = errorText(message.reason);
           reconnectEvent('kicked');
           socket?.close();
-        } else if (lobby.isShown()) lobby.setError(errorText(message.reason));
+        } else if (lobby.isShown()) lobby.setError(errorText(message.reason), message.reason);
         else console.warn('Refused:', message.reason);
         return;
       }

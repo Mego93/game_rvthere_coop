@@ -1,7 +1,7 @@
 import { CHAT_LIMIT, CHAT_FORM_STYLE, createChatForm, renderChatLines, type ChatLine, type SubmitResult } from './chat';
-import { CHARACTER_NAMES, GLASSES_CHOICES, HAT_CHOICES, TIMES_OF_DAY, TOP_CHOICES, VEHICLE_IDS, WEATHERS, courseIds, type Appearance, type LobbyMessage, type RoomSettings } from '@lodgy/shared';
+import { CHARACTER_IDS, CHARACTER_NAMES, GLASSES_CHOICES, HAT_CHOICES, TIMES_OF_DAY, TOP_CHOICES, VEHICLE_IDS, WEATHERS, courseIds, type Appearance, type LobbyMessage, type RoomSettings } from '@lodgy/shared';
 import { CHARACTER_LOOKS } from '../render/characterLooks';
-import { pickerView, type PickerView } from './characterPicker';
+import { createPickerState } from './characterPicker';
 
 export const VEHICLE_LABELS: Record<string, string> = { lodgy: 'Lodgy', rv: 'RV' };
 const vehicleLabel = (id: string) => (Object.hasOwn(VEHICLE_LABELS, id) ? VEHICLE_LABELS[id] : id);
@@ -116,7 +116,8 @@ export interface LobbyScreen {
   show(message: LobbyMessage, localId: string): void;
   hide(): void;
   isShown(): boolean;
-  setError(text: string): void;
+  // The reason, when the server gave one, tells a refused look from any other error.
+  setError(text: string, reason?: string): void;
   // The chat log to show; called on every new line.
   setChat(lines: readonly ChatLine[]): void;
 }
@@ -184,13 +185,13 @@ const STYLE = `${CHAT_FORM_STYLE}
 .pt[data-top='suit'] .pt-under { background: #fff; }
 .pt-tie { left: 21px; bottom: 8px; width: 3px; height: 17px; background: #1b1d27; }
 .pt[data-top='suit'] .pt-tie { display: block; }
+.pt { isolation: isolate; }
 .pt-head { display: block; left: 11px; bottom: 26px; width: 22px; height: 22px; border-radius: 50%; background: #e0b48c; }
 .pt-hair { left: 10px; bottom: 38px; width: 24px; height: 11px; border-radius: 12px 12px 3px 3px; background: var(--hair); }
 .pt:not([data-hair='bald']) .pt-hair { display: block; }
 .pt[data-hair='wavy'] .pt-hair { left: 8px; width: 28px; height: 13px; bottom: 37px; border-radius: 10px; }
 .pt[data-hair='swept'] .pt-hair { height: 10px; border-radius: 12px 4px 3px 10px; }
-.pt[data-hair='long'] .pt-hair { height: 24px; bottom: 25px; border-radius: 12px 12px 4px 4px; z-index: 0; }
-.pt[data-hair='long'] .pt-head { z-index: 1; }
+.pt[data-hair='long'] .pt-hair { height: 24px; bottom: 25px; border-radius: 12px 12px 4px 4px; z-index: -1; }
 .pt-mou { left: 16px; bottom: 32px; width: 12px; height: 3px; border-radius: 2px; background: var(--hair); }
 .pt[data-facial='moustache'] .pt-mou { display: block; }
 .pt-beard { left: 11px; bottom: 26px; width: 22px; height: 10px; border-radius: 2px 2px 11px 11px; background: var(--hair); }
@@ -342,8 +343,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   let server: RoomSettings | null = null;
   let lastMessage: LobbyMessage | null = null;
   let localId = '';
-  let pendingLook: Appearance | null = null;
-  let pickerShown: PickerView | null = null;
+  const pickerState = createPickerState();
   const pickCards = new Map<string, { button: HTMLButtonElement; portrait: HTMLElement; sub: HTMLElement }>();
   const pickSegments = new Map<string, HTMLButtonElement>();
 
@@ -383,12 +383,10 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   };
 
   const choose = (change: Partial<Appearance>) => {
-    if (!pickerShown) return;
-    const next = { ...pickerShown.appearance, ...change };
-    if (JSON.stringify(next) === JSON.stringify(pickerShown.appearance)) return;
-    note.textContent = '';
+    if (!lastMessage) return;
+    const next = pickerState.choose(lastMessage, localId, change);
+    if (!next) return;
     error.textContent = '';
-    pendingLook = next;
     renderPicker();
     handlers.onAppearance(next);
   };
@@ -398,7 +396,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     cardsBox.setAttribute('role', 'group');
     cardsBox.setAttribute('aria-label', 'Your character');
     picker.append(heading, cardsBox);
-    for (const characterId of Object.keys(CHARACTER_LOOKS) as (keyof typeof CHARACTER_LOOKS)[]) {
+    for (const characterId of CHARACTER_IDS) {
       const button = el('button', `lobby-pick-${characterId}`);
       button.type = 'button';
       button.className = 'pick-card';
@@ -428,6 +426,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
         const button = el('button', `lobby-pick-${key}-${choice}`, OPTION_TEXT(choice));
         button.type = 'button';
         button.className = 'pick-seg';
+        button.title = OPTION_TEXT(choice);
         button.addEventListener('click', () => choose({ [key]: choice }));
         segments.append(button);
         pickSegments.set(`${key}:${choice}`, button);
@@ -440,9 +439,8 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   buildPicker();
 
   const renderPicker = () => {
-    const shown = lastMessage ? pickerView(lastMessage, localId, pendingLook) : null;
-    pickerShown = shown;
-    pendingLook = shown?.pending ?? null;
+    const shown = lastMessage ? pickerState.view(lastMessage, localId) : null;
+    note.textContent = pickerState.note;
     picker.hidden = !shown;
     if (!shown) return;
     for (const card of shown.cards) {
@@ -450,7 +448,8 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
       const own = card.state === 'own';
       parts.button.classList.toggle('own', own);
       parts.button.classList.toggle('taken', card.state === 'taken');
-      parts.button.disabled = card.state === 'taken';
+      parts.button.setAttribute('aria-disabled', String(card.state === 'taken'));
+      parts.button.setAttribute('aria-label', card.state === 'taken' ? `${card.name}, taken by ${card.holderName}${card.away ? ' (away)' : ''}` : card.name);
       parts.button.setAttribute('aria-pressed', String(own));
       parts.sub.textContent = own ? 'You' : card.state === 'taken' ? `${card.holderName}${card.away ? ' (away)' : ''}` : 'Free';
       paintPortrait(parts.portrait, own ? shown.appearance : { characterId: card.characterId, glasses: 'default', top: 'default', hat: 'none' }, own);
@@ -616,7 +615,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     },
     hide() {
       pending = {};
-      pendingLook = null;
+      pickerState.reset();
       lastMessage = null;
       note.textContent = '';
       previous = null;
@@ -628,18 +627,13 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     },
     isShown: () => !root.hidden,
     setChat: (lines) => renderChatLines(doc, chatLines, lines.slice(-CHAT_LIMIT)),
-    setError(text) {
-      // A refusal may be of a change; drop the unconfirmed ones so the next echo restores the server's values.
+    setError(text, reason) {
+      // A refusal may be of a change; drop the unconfirmed settings so the next echo restores the server's values.
       pending = {};
-      const refusedLook = pendingLook !== null;
-      if (pendingLook) {
-        // A refused character or look: show the server's again, and say why next to the picker.
-        pendingLook = null;
-        renderPicker();
-        note.textContent = text;
-      }
       if (server && renderedEditable) applySettings(server, true);
-      error.textContent = refusedLook ? '' : text;
+      const refusedLook = pickerState.error(reason, text);
+      if (refusedLook) renderPicker();
+      error.textContent = refusedLook && reason === 'character_taken' ? '' : text;
     },
   };
 }
