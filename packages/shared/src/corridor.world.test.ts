@@ -68,7 +68,7 @@ describe('plan test 2: standing on the land beside the road', () => {
     ['a straight', alongOfSegment(straight), 1],
     ['the inner side of a curve', alongOfSegment(curve), (def.segments[curve] as { curve: number }).curve > 0 ? -1 : 1],
     ['the outer side of a curve', alongOfSegment(curve), (def.segments[curve] as { curve: number }).curve > 0 ? 1 : -1],
-    ['beside the deep pit', alongOfSegment(deepPit, 0.45), 1],
+    ['beside the deep pit (just outside its wall)', alongOfSegment(deepPit, 0) - 50, 1],
     ['on the big hill', alongOfSegment(bigHill + 1, 0.5), -1],
   ];
   test.each(places)('%s: walk off the shoulder to 40 m out and stand 5 s with no respawn', (_name, along, side) => {
@@ -258,6 +258,20 @@ describe('T10: obstacles stay obstacles', () => {
   test('control: with no obstacle near, the same drive goes well past 40 m', () => {
     expect(drive(alongOfSegment(straight), 1)).toBeGreaterThan(60);
   });
+
+  test.each(firsts)('a player sprinting and jumping outward beside the %s cannot pass d = 33', (_name, along) => {
+    for (const side of [-1, 1] as const) {
+      const world = make();
+      const at = place(along, side * (ROAD_WIDTH / 2 + 3));
+      world.teleportPlayer('p', vec3(at.x, at.y + 0.5, at.z));
+      let farthest = 0;
+      for (let i = 0; i < 20 * TICK_RATE; i++) {
+        run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(at.nx, at.nz), jump: i % 30 < 3 });
+        farthest = Math.max(farthest, distance(me(world).pos.x, me(world).pos.z));
+      }
+      expect(farthest, `side ${side}`).toBeLessThan(33);
+    }
+  }, 60000);
 
   test.each(firsts)('the Lodgy driven at the land beside the %s stays on the road side of the berm', (_name, along) => {
     for (const side of [-1, 1] as const) {

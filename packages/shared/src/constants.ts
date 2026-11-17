@@ -538,17 +538,17 @@ export const CORRIDOR_SMOOTH = 60;
 export const CORRIDOR_UNDER = 0.05;
 // Relief lattice spacings (m) and weights; the weights sum to 1.
 export const CORRIDOR_NOISE = deepFreeze([
-  { spacing: 35, weight: 0.7 },
-  { spacing: 11, weight: 0.3 },
+  { spacing: 70, weight: 0.7 },
+  { spacing: 22, weight: 0.3 },
 ] as const);
-// Scales the noise so the steepest relief slope stays under 20 degrees (the unscaled lattice reaches 32); the relief then peaks near CORRIDOR_RELIEF x this.
-export const CORRIDOR_NOISE_SCALE = 0.55;
+// Scales the noise; with the 70 m and 22 m lattices the full relief keeps the steepest sampled slope under 20 degrees.
+export const CORRIDOR_NOISE_SCALE = 1;
 // m, vertices out to here take the under-the-road height, so a point on the shoulder edge never interpolates up to a raised vertex (a cell corner is at most a cell diagonal away).
 export const CORRIDOR_UNDER_UNTIL = 30 + CORRIDOR_CELL * Math.SQRT2 + 0.1;
-// Berm around an obstacle: it rises between these distances, stands CORRIDOR_BERM_HEIGHT above the road top, and falls back by CORRIDOR_BLEND_END.
-export const CORRIDOR_BERM_START = 31;
-export const CORRIDOR_BERM_CREST_START = 34;
-export const CORRIDOR_BERM_CREST_END = 37;
+// Berm around an obstacle (a visual embankment; the wall below is what stops walkers): it rises between these distances, stands CORRIDOR_BERM_HEIGHT above the road top, and falls back by CORRIDOR_BLEND_END.
+export const CORRIDOR_BERM_START = CORRIDOR_UNDER_UNTIL;
+export const CORRIDOR_BERM_CREST_START = CORRIDOR_BERM_START + 1.5;
+export const CORRIDOR_BERM_CREST_END = 38.5;
 export const CORRIDOR_BERM_HEIGHT = 3;
 // m along the route each side of an obstacle's span at full height, then the same again fading out.
 export const CORRIDOR_BERM_MARGIN = 20;
@@ -559,3 +559,8 @@ export const CORRIDOR_OOB_LANDING_OFFSET = ROAD_WIDTH / 2 + 8;
 export const CORRIDOR_OOB_STOP_CLEAR = 10;
 // m above the route height the landing probe starts.
 export const CORRIDOR_OOB_PROBE_UP = 3;
+// Wall beside the road along each obstacle span (plus the berm margin), both sides: lateral centre, thickness and height above the road, and the piece length along the route.
+export const OBSTACLE_WALL_LATERAL = 31.5;
+export const OBSTACLE_WALL_THICKNESS = 1;
+export const OBSTACLE_WALL_HEIGHT = 8;
+export const OBSTACLE_WALL_PIECE = 8;

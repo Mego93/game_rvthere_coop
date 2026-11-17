@@ -653,7 +653,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       const onStop = course.stops.some((stop) => Math.hypot(stop.zone.center.x - x, stop.zone.center.z - z) < CORRIDOR_OOB_STOP_CLEAR);
       const spot = (onStop ? null : players.standAt(x, z, frame.heightAtAlong(hit.along) + CORRIDOR_OOB_PROBE_UP)) ?? players.findSpawn(player.id);
       releaseHook(player.id, 'stow');
-      players.dropHeld(player.id);
+      // A carried prop goes back to its spawn, and a reset hold in progress is cancelled.
+      players.resetHeld(player.id);
+      resetHolds.delete(player.id);
       players.teleport(player.id, spot);
       events.push({ kind: 'outOfBounds', tick, playerId: player.id, pos: { ...spot } });
     }

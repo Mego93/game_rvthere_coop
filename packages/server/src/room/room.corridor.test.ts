@@ -12,7 +12,7 @@ beforeAll(async () => {
   await RAPIER.init();
 });
 
-test('T17: two marrakech run worlds in one room: the first build time and the memory growth are logged; the second build is cheaper and the room runs on', () => {
+test('T17: two marrakech run worlds in one room: the build times and the memory growth are logged and the room runs on (the corridor is built when the room is created)', () => {
   const course = getCourse('marrakech');
   const room = createRoom(RAPIER, { noun: 'corridor', campaign: ['marrakech'] }, 0);
   const player = room.add('P1', 'token-1-abcdefghij', { send: () => {}, close: () => {} });
@@ -42,7 +42,5 @@ test('T17: two marrakech run worlds in one room: the first build time and the me
   );
   expect(course.corridor).toBeDefined();
   expect(room.debugWorld()!.snapshot().tick).toBeGreaterThan(0);
-  // The second world reuses the cached corridor: building it costs well under the first start.
-  expect(second).toBeLessThan(first);
   room.dispose();
 });

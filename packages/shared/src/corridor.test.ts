@@ -72,7 +72,7 @@ describe('plan test 1: heights', () => {
 
   test('where d < 34 the land lies at least 0.05 m under the route height', () => {
     for (const p of samples(2000, 0, 33.9)) {
-      if (p.d > 25 && nearBerm(frame.nearest(p.x, p.z).along)) continue;
+      if (p.d > 30 && nearBerm(frame.nearest(p.x, p.z).along)) continue;
       const h = corridorHeightAt(corridor, p.x, p.z);
       expect(h, `d ${p.d}`).not.toBeNull();
       expect(h!, `d ${p.d}`).toBeLessThanOrEqual(frame.heightAt(frame.nearest(p.x, p.z)) - 0.05 + 1e-3);
@@ -176,8 +176,6 @@ describe('T3: under the road at sags', () => {
         const h = corridorHeightAt(corridor, x, z);
         if (h === null) continue;
         checked++;
-        const bermed = nearBerm(along) && Math.abs(lateral) > ROAD_WIDTH / 2 + 15;
-        if (bermed) continue;
         worst = Math.max(worst, h - top);
         expect(h, `along ${along} lateral ${lateral}`).toBeLessThanOrEqual(top - 0.04);
         expect(hit, `along ${along} lateral ${lateral}`).not.toBeNull();

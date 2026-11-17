@@ -1,6 +1,7 @@
-import { AMBIENT_ENDS, AMBIENT_MARGIN, CHECKPOINT_TRIGGER, FINISH_PAD, FINISH_TRIGGER, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET } from '../constants';
+import { AMBIENT_ENDS, AMBIENT_MARGIN, CORRIDOR_BERM_MARGIN, OBSTACLE_WALL_HEIGHT, OBSTACLE_WALL_LATERAL, OBSTACLE_WALL_PIECE, OBSTACLE_WALL_THICKNESS, CHECKPOINT_TRIGGER, FINISH_PAD, FINISH_TRIGGER, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET } from '../constants';
 import type { Box, BuiltCourse, Checkpoint, GroundBox, Placed } from '../course';
 import { add, deepFreeze, quatMul, rotate, vec3, type Pose, type Vec3 } from '../math';
+import { routeFrame } from '../corridor';
 import { createRouteIndex } from '../routeAlong';
 import { buildSegment, hazardSpan, obstacleSpans, yawPitchQuat, yawQuat, type LocalSegment, type SegmentDef } from '../segments';
 
@@ -29,6 +30,31 @@ function placer(frame: Frame) {
     pose: { pos: point(p.pose.pos), rot: quatMul(q, p.pose.rot) },
   });
   return { q, point, box, placed };
+}
+
+// Tall walls just past the shoulder along every obstacle span, both sides, so nobody walks or drives round an obstacle over the land beside it. Pieces beside another stretch of the route are left out.
+function obstacleWalls(course: BuiltCourse): Box[] {
+  const frame = routeFrame(course);
+  const walls: Box[] = [];
+  for (const span of course.corridor!.obstacles) {
+    const from = Math.max(0, span.from - CORRIDOR_BERM_MARGIN);
+    const to = Math.min(frame.total, span.to + CORRIDOR_BERM_MARGIN);
+    const pieces = Math.max(1, Math.ceil((to - from) / OBSTACLE_WALL_PIECE));
+    const length = (to - from) / pieces;
+    for (let k = 0; k < pieces; k++) {
+      const along = from + (k + 0.5) * length;
+      const c = frame.pointAt(along);
+      const y = frame.heightAtAlong(along);
+      const rot = yawQuat(Math.atan2(-c.tx, -c.tz));
+      for (const side of [-1, 1]) {
+        const x = c.x - c.tz * side * OBSTACLE_WALL_LATERAL;
+        const z = c.z + c.tx * side * OBSTACLE_WALL_LATERAL;
+        if (frame.nearest(x, z).d < OBSTACLE_WALL_LATERAL - 2) continue;
+        walls.push({ center: vec3(x, y + OBSTACLE_WALL_HEIGHT / 2 - 2, z), halfExtents: vec3(OBSTACLE_WALL_THICKNESS / 2, OBSTACLE_WALL_HEIGHT / 2 + 2, length / 2 + 0.3), rot });
+      }
+    }
+  }
+  return walls;
 }
 
 function mergeSpans(spans: { from: number; to: number }[]): { from: number; to: number }[] {
@@ -147,7 +173,10 @@ export function buildCourse(def: CourseDef): BuiltCourse {
     }
     course.ambient = { blocked };
   }
-  if (def.corridor) course.corridor = { obstacles: mergeSpans(obstacles) };
+  if (def.corridor) {
+    course.corridor = { obstacles: mergeSpans(obstacles) };
+    course.walls.push(...obstacleWalls(course));
+  }
 
   let lowest = Infinity;
   for (const b of ground) {
