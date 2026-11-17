@@ -563,4 +563,4 @@ export const CORRIDOR_OOB_PROBE_UP = 3;
 export const OBSTACLE_WALL_LATERAL = 31.5;
 export const OBSTACLE_WALL_THICKNESS = 1;
 export const OBSTACLE_WALL_HEIGHT = 8;
-export const OBSTACLE_WALL_PIECE = 8;
+export const OBSTACLE_WALL_PIECE = 4;

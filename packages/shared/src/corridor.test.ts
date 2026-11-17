@@ -1,8 +1,9 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { CORRIDOR_CELL, CORRIDOR_INNER, CORRIDOR_LAND_END, CORRIDOR_OUTER, CORRIDOR_RELIEF, CORRIDOR_RIDGE_HEIGHT, CORRIDOR_TILE_CELLS, ROAD_WIDTH, SHOULDER_WIDTH } from './constants';
-import { bermWeight, corridorHeightAt, corridorOf, corridorReliefAt, routeFrame } from './corridor';
-import { buildCourse } from './courses/build';
+import { corridorHeightAt, corridorOf, corridorReliefAt, routeFrame } from './corridor';
+import { buildCourse, obstacleWalls } from './courses/build';
+import { rotate, vec3 } from './math';
 import { getCourse, getCourseDef } from './courses/index';
 import { GROUP_GROUND, GROUP_WORLD, groups } from './groups';
 import { buildStatics } from './statics';
@@ -22,8 +23,6 @@ const marrakech = getCourse('marrakech');
 const corridor = corridorOf(marrakech)!;
 const frame = routeFrame(marrakech);
 const obstacles = marrakech.corridor!.obstacles;
-// Within a cell diagonal of a berm's influence the land beside the shoulder may rise (T10).
-const nearBerm = (along: number): boolean => [-8, 0, 8].some((shift) => bermWeight(obstacles, along + shift) > 0);
 
 // A deterministic spread of points with a nearest-route distance in [from, to].
 function samples(count: number, from: number, to: number, seed = 1): { x: number; z: number; d: number }[] {
@@ -72,7 +71,6 @@ describe('plan test 1: heights', () => {
 
   test('where d < 34 the land lies at least 0.05 m under the route height', () => {
     for (const p of samples(2000, 0, 33.9)) {
-      if (p.d > 30 && nearBerm(frame.nearest(p.x, p.z).along)) continue;
       const h = corridorHeightAt(corridor, p.x, p.z);
       expect(h, `d ${p.d}`).not.toBeNull();
       expect(h!, `d ${p.d}`).toBeLessThanOrEqual(frame.heightAt(frame.nearest(p.x, p.z)) - 0.05 + 1e-3);
@@ -186,4 +184,30 @@ describe('T3: under the road at sags', () => {
     console.info(`T3: ${checked} points, the collider is at least ${(-worst).toFixed(3)} m under the surface top at its closest`);
     expect(checked).toBeGreaterThan(80000);
   }, 60000);
+});
+
+describe('obstacle walls', () => {
+  const { runs, caps } = obstacleWalls(marrakech);
+
+  test('consecutive pieces of a wall overlap: the facing ends never leave a gap over 0.05 m, on curves included', () => {
+    let worst = -Infinity;
+    let pairs = 0;
+    for (const run of runs) {
+      for (let k = 0; k + 1 < run.length; k++) {
+        const a = run[k]!;
+        const b = run[k + 1]!;
+        const tangent = rotate(a.rot, vec3(0, 0, -1));
+        for (const edge of [-1, 1]) {
+          const endA = rotate(a.rot, vec3(edge * a.halfExtents.x, 0, -a.halfExtents.z));
+          const startB = rotate(b.rot, vec3(edge * b.halfExtents.x, 0, b.halfExtents.z));
+          const gap = (b.center.x + startB.x - (a.center.x + endA.x)) * tangent.x + (b.center.z + startB.z - (a.center.z + endA.z)) * tangent.z;
+          worst = Math.max(worst, gap);
+        }
+        pairs++;
+      }
+    }
+    console.info(`wall pieces: ${runs.flat().length} in ${runs.length} runs, ${caps.length} caps, ${pairs} joints, worst facing-end gap ${worst.toFixed(3)} m`);
+    expect(pairs).toBeGreaterThan(100);
+    expect(worst).toBeLessThanOrEqual(0.05);
+  });
 });

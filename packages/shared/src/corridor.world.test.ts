@@ -259,19 +259,65 @@ describe('T10: obstacles stay obstacles', () => {
     expect(drive(alongOfSegment(straight), 1)).toBeGreaterThan(60);
   });
 
-  test.each(firsts)('a player sprinting and jumping outward beside the %s cannot pass d = 33', (_name, along) => {
-    for (const side of [-1, 1] as const) {
-      const world = make();
-      const at = place(along, side * (ROAD_WIDTH / 2 + 3));
-      world.teleportPlayer('p', vec3(at.x, at.y + 0.5, at.z));
-      let farthest = 0;
-      for (let i = 0; i < 20 * TICK_RATE; i++) {
-        run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(at.nx, at.nz), jump: i % 30 < 3 });
-        farthest = Math.max(farthest, distance(me(world).pos.x, me(world).pos.z));
+  const spans = course.corridor!.obstacles;
+
+  test('a player sprinting and jumping outward from the middle of every obstacle span, on both sides, cannot pass d = 33', () => {
+    const world = make();
+    let worst = 0;
+    for (const span of spans) {
+      for (const side of [-1, 1] as const) {
+        const at = place((span.from + span.to) / 2, side * (ROAD_WIDTH / 2 + 3));
+        world.teleportPlayer('p', vec3(at.x, at.y + 0.5, at.z));
+        for (let i = 0; i < 8 * TICK_RATE; i++) {
+          run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(at.nx, at.nz), jump: i % 30 < 3 });
+          worst = Math.max(worst, distance(me(world).pos.x, me(world).pos.z));
+        }
       }
-      expect(farthest, `side ${side}`).toBeLessThan(33);
     }
-  }, 60000);
+    expect(spans.length).toBeGreaterThan(10);
+    expect(worst).toBeLessThan(33);
+  }, 600000);
+
+  test('a player who leaves the road 45 m before a wall run and sprints along outside the wall does not get past its end cap', () => {
+    const world = make();
+    // Caps stop short where another stretch of the route is near (the land is shared there), so only spans whose four caps run the whole way to the ridge foot are held to this.
+    const reaches: { from: number; to: number }[] = [];
+    for (const s of spans) {
+      const next = { from: Math.max(0, s.from - 40), to: Math.min(frame.total, s.to + 40) };
+      const last = reaches[reaches.length - 1];
+      if (last && next.from <= last.to) last.to = Math.max(last.to, next.to);
+      else reaches.push(next);
+    }
+    const sealed = (span: { from: number; to: number }): boolean =>
+      [span.from, span.to].every((end) =>
+        ([-1, 1] as const).every((side) => {
+          for (let l = 31.5; l <= 100; l += 4) {
+            const p = place(Math.min(frame.total, Math.max(0, end)), side * l);
+            if (distance(p.x, p.z) < l - 2) return false;
+          }
+          return true;
+        }),
+      );
+    const tested = reaches.filter(sealed);
+    console.info(`go-round walk: ${tested.length} of ${reaches.length} wall runs have full caps`);
+    expect(tested.length).toBeGreaterThan(5);
+    for (const span of tested) {
+      for (const side of [-1, 1] as const) {
+        const start = span.from - 45;
+        const at = place(start, side * (ROAD_WIDTH / 2 + 3));
+        const forward = frame.pointAt(start);
+        world.teleportPlayer('p', vec3(at.x, at.y + 0.5, at.z));
+        // Out to 45 m, then along the route's direction at that point.
+        for (let i = 0; i < 12 * TICK_RATE && distance(me(world).pos.x, me(world).pos.z) < 45; i++) run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(at.nx, at.nz) });
+        let furthest = 0;
+        for (let i = 0; i < 12 * TICK_RATE; i++) {
+          run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(forward.tx, forward.tz), jump: i % 30 < 3 });
+          furthest = Math.max(furthest, frame.nearest(me(world).pos.x, me(world).pos.z).along);
+        }
+        expect(furthest, `span ${span.from} side ${side}`).toBeLessThan(span.from + 5);
+      }
+    }
+  }, 600000);
 
   test.each(firsts)('the Lodgy driven at the land beside the %s stays on the road side of the berm', (_name, along) => {
     for (const side of [-1, 1] as const) {
