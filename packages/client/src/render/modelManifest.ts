@@ -35,11 +35,11 @@ export const MODEL_MANIFEST = {
   'anchor.palm': model('nature', 'tree_palm', 6),
   'anchor.boulder': model('sketchfab', 'rocks', 2.2),
   'anchor.milestone': model('nature', 'statue_obelisk', 2),
-  // item (step 34 uses the tajine; its size is a starting value)
+  // item
   'item.jerrycan': model('sketchfab', 'jerrycan', longest(ITEM_KINDS.jerrycan.halfExtents)),
   'item.toolbox': model('sketchfab', 'toolbox', longest(ITEM_KINDS.toolbox.halfExtents)),
   'item.healthKit': model('sketchfab', 'first-aid', longest(ITEM_KINDS.healthKit.halfExtents)),
-  'item.tajine': model('sketchfab', 'tajine', 0.4),
+  'item.tajine': model('sketchfab', 'tajine', longest(ITEM_KINDS.tajine.halfExtents)),
   coin: model('sketchfab', 'coin', COIN_RADIUS * 2),
   // animal
   'animal.goat': model('sketchfab', 'goat', longest(ANIMAL_HALF_GOAT)),

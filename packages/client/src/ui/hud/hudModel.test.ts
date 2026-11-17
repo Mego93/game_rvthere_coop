@@ -90,7 +90,7 @@ describe('slots (T9, H10)', () => {
     expect(build({ players: [] }).slots).toHaveLength(3);
   });
   test('labels', () => {
-    expect(ITEM_LABELS).toEqual({ jerrycan: 'jerrycan', toolbox: 'toolbox', healthKit: 'health kit' });
+    expect(ITEM_LABELS).toEqual({ jerrycan: 'jerrycan', toolbox: 'toolbox', healthKit: 'health kit', tajine: 'Tajine' });
   });
 });
 

@@ -17,7 +17,8 @@ import {
   type EventMessage,
   type InputFields,
   type InteractAction,
-  type ItemKind,
+  type ShopItem,
+  type Weather,
   type LobbyMessage,
   type PlayerSnapshot,
   type PropSnapshot,
@@ -145,13 +146,15 @@ export function createGame(
   const decor = createDecorRenderer(scatterDecor(course, getCourseDef(course.id), seedFromId(course.id)), course.route, { touch: view.touchUi !== null, softwareGl: view.softwareGl === true });
   scene.add(decor.group);
   const vehicleConfig = getVehicleConfig(lobby.vehicleId);
-  const look = conditionsLook(firstLobby.timeOfDay, firstLobby.weather);
+  // Random weather starts clear; the blend to the first snapshot's weather is Task 2.
+  const startWeather: Weather = firstLobby.weather === 'random' ? 'clear' : firstLobby.weather;
+  const look = conditionsLook(firstLobby.timeOfDay, startWeather);
   const isTouch = view.touchUi !== null;
   // Software GL cannot afford shadows or image-based light.
   const shadows = !isTouch && !view.softwareGl;
-  const imageLight = hasSky(firstLobby.timeOfDay, firstLobby.weather) && !view.softwareGl;
+  const imageLight = hasSky(firstLobby.timeOfDay, startWeather) && !view.softwareGl;
   const conditions = applyConditions(scene, look, isTouch, vehicleConfig.halfExtents, imageLight, shadows);
-  applySky(renderer, scene, look, firstLobby.timeOfDay, imageLight, firstLobby.weather);
+  applySky(renderer, scene, look, firstLobby.timeOfDay, imageLight, startWeather);
   configureRenderer(renderer, look, shadows);
   const vehicleMesh = createVehicleMesh(vehicleConfig, view.softwareGl);
   vehicleMesh.visible = false;
@@ -296,7 +299,7 @@ export function createGame(
     if (menuState.open) shopMenu.setWallet(buffer.latestStatus()?.wallet ?? 0);
   };
   const shopMenu = createShopMenu(document, {
-    onBuy: (item: ItemKind) => send({ type: 'buy', item }),
+    onBuy: (item: ShopItem) => send({ type: 'buy', item }),
     onClose: () => refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, true),
   });
   const requestChat = () => {
@@ -534,7 +537,7 @@ export function createGame(
     } else audio.setLoop('engine', false);
     if (vehicle && winchOn(latestCable, lobby.phase)) audio.setLoop('winch', true, { at: add(vehicle.pos, rotate(vehicle.rot, vehicleConfig.winchMount)) });
     else audio.setLoop('winch', false);
-    audio.setLoop('rain', rainOn(lobby.weather), { volume: 0.3 });
+    audio.setLoop('rain', rainOn(lobby.weather === 'random' ? 'clear' : lobby.weather), { volume: 0.3 });
     decor.update(camera.position, now / 1000);
     conditions.update(camera.position, frameSeconds, local && onFoot ? local.pos : vehicle ? vehicle.pos : camera.position);
     conditions.setLights(vehicle, players);

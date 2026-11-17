@@ -6,7 +6,7 @@ import {
   neutralInput,
   type InputFields,
   type InteractAction,
-  type ItemKind,
+  type ShopItem,
   type ServiceStop,
   type Vec3,
 } from '@lodgy/shared';
@@ -58,7 +58,7 @@ export function gateControl(gate: { blocked: boolean }): { follow(open: boolean)
   };
 }
 
-const ITEMS: { kind: ItemKind; label: string }[] = [
+const ITEMS: { kind: ShopItem; label: string }[] = [
   { kind: 'jerrycan', label: 'Jerrycan' },
   { kind: 'toolbox', label: 'Toolbox' },
   { kind: 'healthKit', label: 'Health kit' },
@@ -80,7 +80,7 @@ export interface ShopMenu {
   dispose(): void;
 }
 
-export function createShopMenu(doc: Document, handlers: { onBuy(item: ItemKind): void; onClose(): void }): ShopMenu {
+export function createShopMenu(doc: Document, handlers: { onBuy(item: ShopItem): void; onClose(): void }): ShopMenu {
   const root = doc.createElement('div');
   root.id = 'shop-menu';
   root.hidden = true;

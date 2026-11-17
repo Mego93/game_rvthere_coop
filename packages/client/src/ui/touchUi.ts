@@ -36,7 +36,7 @@ const STYLE = `
 @media (orientation: portrait) { #rotate-prompt { display: grid; } }
 `;
 
-const ITEM_LABELS: Record<ItemKind, string> = { jerrycan: 'Fuel', toolbox: 'Tools', healthKit: 'Heal' };
+const ITEM_LABELS: Record<ItemKind, string> = { jerrycan: 'Fuel', toolbox: 'Tools', healthKit: 'Heal', tajine: 'Tajine' };
 const slotLabel = (kind: ItemKind | null) => (kind === null ? '' : (ITEM_LABELS[kind] ?? kind));
 
 export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { dispose(): void } {
