@@ -1,6 +1,7 @@
-import { CHARACTER_SCALE, PLAYER_HEIGHT, PLAYER_RADIUS, type PlayerSnapshot } from '@lodgy/shared';
+import { CHARACTER_IDS, CHARACTER_SCALE, PLAYER_HEIGHT, PLAYER_RADIUS, defaultAppearance, type PlayerSnapshot } from '@lodgy/shared';
 import * as THREE from 'three';
 import { beforeAll, expect, test, vi } from 'vitest';
+import { CHARACTER_LOOKS } from './characterLooks';
 import { HEAD_RADIUS, NAME_TAG_OFFSET, createPlayerMesh, disposePlayerMesh, placePlayerMesh, setNameVisible } from './playerMesh';
 
 const shared = { geometry: new THREE.BoxGeometry(1, 1, 1), material: new THREE.MeshStandardMaterial() };
@@ -15,14 +16,19 @@ vi.mock('./models', () => ({
   ],
   instantiate: () => {
     const root = new THREE.Group();
-    for (const name of ['torso', 'arm-left', 'arm-right', 'leg-left']) {
+    for (const name of ['torso', 'arm-left', 'arm-right', 'leg-left', 'head']) {
       const mesh = new THREE.Mesh(shared.geometry, shared.material);
       mesh.name = name;
       root.add(mesh);
     }
     return root;
   },
-  shadowed: (root: THREE.Object3D) => root,
+  shadowed: (root: THREE.Object3D) => {
+    root.traverse((node) => {
+      node.castShadow = true;
+    });
+    return root;
+  },
 }));
 
 beforeAll(() => {
@@ -118,4 +124,57 @@ test('T9: the name tag sits above the head at the scaled offset and the label ke
 test('the fallback body scales with the character and stays positive', () => {
   expect(HEAD_RADIUS).toBeCloseTo(0.2 * CHARACTER_SCALE, 9);
   expect(PLAYER_HEIGHT - 2 * HEAD_RADIUS - 2 * PLAYER_RADIUS).toBeGreaterThan(0);
+});
+
+const shirtOf = (mesh: THREE.Group, name: string) => ((mesh.getObjectByName(name) as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHexString();
+
+test('S31: with an appearance the figure wears the character look and the player colour no longer tints the shirt', () => {
+  const look = CHARACTER_LOOKS.luiz;
+  const mesh = createPlayerMesh('Amal', '#e0a030', defaultAppearance('luiz'));
+  expect('#' + shirtOf(mesh, 'torso')).toBe(look.top);
+  expect('#' + shirtOf(mesh, 'leg-left')).toBe(look.trousers);
+  expect(mesh.getObjectByName('look-hair')).toBeDefined();
+  expect(mesh.getObjectByName('label')).toBeDefined();
+});
+
+test('S31: without an appearance nothing is added to the figure', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  expect(mesh.getObjectByName('look-hair')).toBeUndefined();
+  expect(shirtOf(mesh, 'torso')).toBe('e0a030');
+});
+
+test('S31: disposing one figure leaves the shared look materials and geometry of another live', () => {
+  const a = createPlayerMesh('A', '#e0a030', { ...defaultAppearance('rafael'), top: 'suit', hat: 'fez' });
+  const b = createPlayerMesh('B', '#30a0e0', { ...defaultAppearance('rafael'), top: 'suit', hat: 'fez' });
+  const spies: Array<ReturnType<typeof vi.spyOn>> = [];
+  b.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    spies.push(vi.spyOn(node.geometry, 'dispose'), vi.spyOn(node.material as THREE.Material, 'dispose'));
+  });
+  expect(spies.length).toBeGreaterThan(6);
+  disposePlayerMesh(a);
+  for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  expect((a.getObjectByName('look-hat') as THREE.Mesh).material).toBe((b.getObjectByName('look-hat') as THREE.Mesh).material);
+});
+
+test('S31: every character with every add-on stays within the mesh cap (8 added, 4 by default)', () => {
+  const added = (mesh: THREE.Group) => {
+    let count = 0;
+    mesh.traverse((node) => {
+      if (node instanceof THREE.Mesh && node.name.startsWith('look-')) count++;
+    });
+    return count;
+  };
+  for (const id of CHARACTER_IDS) {
+    expect(added(createPlayerMesh('A', '#e0a030', defaultAppearance(id)))).toBeLessThanOrEqual(4);
+    expect(added(createPlayerMesh('A', '#e0a030', { characterId: id, glasses: 'round', top: 'suit', hat: 'fez' }))).toBeLessThanOrEqual(8);
+    expect(added(createPlayerMesh('A', '#e0a030', { characterId: id, glasses: 'round', top: 'default', hat: 'cap' }))).toBeLessThanOrEqual(8);
+  }
+});
+
+test('S31: the look goes on after shadowed, so glasses and facial hair keep castShadow false', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030', defaultAppearance('rafael'));
+  expect((mesh.getObjectByName('look-glasses') as THREE.Mesh).castShadow).toBe(false);
+  expect((mesh.getObjectByName('look-facial') as THREE.Mesh).castShadow).toBe(false);
+  expect((mesh.getObjectByName('torso') as THREE.Mesh).castShadow).toBe(true);
 });
