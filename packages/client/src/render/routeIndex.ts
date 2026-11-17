@@ -1,96 +1,96 @@
 type Route = readonly (readonly [number, number])[];
 
-const CELL = 32;
+const LEAF = 8;
 
-interface Index {
-  minX: number;
-  minZ: number;
-  cols: number;
-  rows: number;
-  cells: Map<number, number[]>;
-  stamp: Int32Array;
-  query: number;
+// A binary tree over runs of consecutive segments; each node keeps the box around its run.
+interface Tree {
+  count: number;
+  minX: Float64Array;
+  maxX: Float64Array;
+  minZ: Float64Array;
+  maxZ: Float64Array;
 }
 
-const indexes = new WeakMap<Route, Index>();
+const trees = new WeakMap<Route, Tree>();
 
-function build(route: Route): Index {
-  let minX = Infinity;
-  let minZ = Infinity;
-  let maxX = -Infinity;
-  let maxZ = -Infinity;
-  for (const [x, z] of route) {
-    minX = Math.min(minX, x);
-    maxX = Math.max(maxX, x);
-    minZ = Math.min(minZ, z);
-    maxZ = Math.max(maxZ, z);
-  }
-  const cols = Math.floor((maxX - minX) / CELL) + 1;
-  const rows = Math.floor((maxZ - minZ) / CELL) + 1;
-  const cells = new Map<number, number[]>();
-  for (let i = 0; i < route.length - 1; i++) {
-    const [x0, z0] = route[i]!;
-    const [x1, z1] = route[i + 1]!;
-    const c0 = Math.floor((Math.min(x0, x1) - minX) / CELL);
-    const c1 = Math.floor((Math.max(x0, x1) - minX) / CELL);
-    const r0 = Math.floor((Math.min(z0, z1) - minZ) / CELL);
-    const r1 = Math.floor((Math.max(z0, z1) - minZ) / CELL);
-    for (let r = r0; r <= r1; r++) {
-      for (let c = c0; c <= c1; c++) {
-        const list = cells.get(r * cols + c);
-        if (list) list.push(i);
-        else cells.set(r * cols + c, [i]);
+function build(route: Route): Tree {
+  const count = route.length - 1;
+  const size = 4 * Math.max(1, Math.ceil(count / LEAF));
+  const tree: Tree = { count, minX: new Float64Array(size), maxX: new Float64Array(size), minZ: new Float64Array(size), maxZ: new Float64Array(size) };
+  const fill = (node: number, from: number, to: number) => {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    if (to - from <= LEAF) {
+      for (let i = from; i < to + 1; i++) {
+        minX = Math.min(minX, route[i]![0]);
+        maxX = Math.max(maxX, route[i]![0]);
+        minZ = Math.min(minZ, route[i]![1]);
+        maxZ = Math.max(maxZ, route[i]![1]);
+      }
+    } else {
+      const mid = (from + to) >> 1;
+      fill(node * 2 + 1, from, mid);
+      fill(node * 2 + 2, mid, to);
+      for (const child of [node * 2 + 1, node * 2 + 2]) {
+        minX = Math.min(minX, tree.minX[child]!);
+        maxX = Math.max(maxX, tree.maxX[child]!);
+        minZ = Math.min(minZ, tree.minZ[child]!);
+        maxZ = Math.max(maxZ, tree.maxZ[child]!);
       }
     }
-  }
-  return { minX, minZ, cols, rows, cells, stamp: new Int32Array(route.length), query: 0 };
+    tree.minX[node] = minX;
+    tree.maxX[node] = maxX;
+    tree.minZ[node] = minZ;
+    tree.maxZ[node] = maxZ;
+  };
+  if (count > 0) fill(0, 0, count);
+  return tree;
 }
 
-// The index of the segment nearest to (x, z) by `measure` (smaller is nearer; `squared` says it is a squared distance), the lowest index among equals, as a scan over every segment finds it. Searches grid rings outward and stops once no unsearched segment can be nearer.
+// The index of the segment nearest to (x, z) by `measure` (smaller is nearer; `squared` says it is a squared distance), the lowest index among equals, exactly as a scan over every segment finds it. Branch and bound over the tree; a box is skipped only when it is clearly farther than the best so far.
 export function nearestSegment(route: Route, x: number, z: number, measure: (i: number) => number, squared: boolean): number {
-  let index = indexes.get(route);
-  if (!index) {
-    index = build(route);
-    indexes.set(route, index);
+  let tree = trees.get(route);
+  if (!tree) {
+    tree = build(route);
+    trees.set(route, tree);
   }
-  const { minX, minZ, cols, rows, cells, stamp } = index;
-  const query = ++index.query;
-  const cx = Math.floor((x - minX) / CELL);
-  const cz = Math.floor((z - minZ) / CELL);
-  const farthest = Math.max(cx, cols - 1 - cx, cz, rows - 1 - cz, 0);
+  const { count, minX, maxX, minZ, maxZ } = tree;
   let best = Infinity;
   let bestIndex = -1;
-  const visit = (c: number, r: number) => {
-    if (c < 0 || r < 0 || c >= cols || r >= rows) return;
-    const list = cells.get(r * cols + c);
-    if (!list) return;
-    for (const i of list) {
-      if (stamp[i] === query) continue;
-      stamp[i] = query;
-      const value = measure(i);
-      if (value < best || (value === best && i < bestIndex)) {
-        best = value;
-        bestIndex = i;
+  const bound = (node: number): number => {
+    const dx = Math.max(minX[node]! - x, 0, x - maxX[node]!);
+    const dz = Math.max(minZ[node]! - z, 0, z - maxZ[node]!);
+    const sq = dx * dx + dz * dz;
+    return squared ? sq : Math.sqrt(sq);
+  };
+  // Slack so rounding in the bound never discards a segment the scan would pick.
+  const farther = (value: number) => value > best * (1 + 1e-9) + 1e-9;
+  const visit = (node: number, from: number, to: number) => {
+    if (to - from <= LEAF) {
+      for (let i = from; i < to; i++) {
+        const value = measure(i);
+        if (value < best || (value === best && i < bestIndex)) {
+          best = value;
+          bestIndex = i;
+        }
       }
+      return;
+    }
+    const mid = (from + to) >> 1;
+    const left = node * 2 + 1;
+    const right = node * 2 + 2;
+    const lb = bound(left);
+    const rb = bound(right);
+    if (lb <= rb) {
+      if (!farther(lb)) visit(left, from, mid);
+      if (!farther(rb)) visit(right, mid, to);
+    } else {
+      if (!farther(rb)) visit(right, mid, to);
+      if (!farther(lb)) visit(left, from, mid);
     }
   };
-  for (let ring = 0; ring <= farthest + 1; ring++) {
-    if (ring === 0) visit(cx, cz);
-    else {
-      for (let c = cx - ring; c <= cx + ring; c++) {
-        visit(c, cz - ring);
-        visit(c, cz + ring);
-      }
-      for (let r = cz - ring + 1; r <= cz + ring - 1; r++) {
-        visit(cx - ring, r);
-        visit(cx + ring, r);
-      }
-    }
-    if (bestIndex >= 0) {
-      // Everything unsearched is at least this far from the point (outside the searched square of cells).
-      const covered = Math.min(x - (minX + (cx - ring) * CELL), minX + (cx + ring + 1) * CELL - x, z - (minZ + (cz - ring) * CELL), minZ + (cz + ring + 1) * CELL - z);
-      if (covered > 0 && (squared ? best < covered * covered : best < covered)) break;
-    }
-  }
+  if (count > 0) visit(0, 0, count);
   return bestIndex;
 }
