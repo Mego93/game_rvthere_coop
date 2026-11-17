@@ -201,6 +201,31 @@ describe('planInserts', () => {
     for (const s of segments) if (s.type === 'road') expect(s.length).toBeGreaterThanOrEqual(SEGMENT_MIN_LENGTH);
   });
 
+  it('reports the index span of each group', () => {
+    const group: InsertSpec = { name: 'hill', fraction: 0.5, length: 120, segments: [{ type: 'road', length: 15 }, { type: 'road', length: 60, slope: 8 }, { type: 'road', length: 15 }, { type: 'road', length: 60, slope: -8 }, { type: 'road', length: 15 }] };
+    const { segments, groups } = planInserts([road(300), road(400), road(300)], [spec(0.2, 110), group]);
+    const hill = groups.find((g) => g.name === 'hill')!;
+    expect(segments.slice(hill.first, hill.last + 1).map((s) => (s.type === 'road' ? s.slope ?? 0 : 99))).toEqual([0, 8, 0, -8, 0]);
+    expect(groups.map((g) => g.name).sort()).toEqual(['hill', 'sand']);
+  });
+
+  it('keeps a spec\'s clearance from every earlier insert, on both sides', () => {
+    const base = [road(300), road(1200), road(300)];
+    const first = spec(0.5, 60);
+    const wide: InsertSpec = { ...spec(0.5, 60), clearance: 120 };
+    const { segments, inserted, groups } = planInserts(base, [first, wide]);
+    expect(inserted).toHaveLength(2);
+    const [a, b] = groups;
+    const from = (i: number) => segments.slice(0, i).reduce((sum, s) => sum + ('length' in s ? s.length : 0), 0);
+    const gap = Math.abs(from(b!.first) - from(a!.first)) - 60;
+    expect(from(b!.first)).not.toBe(from(a!.first));
+    expect(gap).toBeGreaterThanOrEqual(120 - 1e-6);
+  });
+
+  it('throws when the clearance leaves no place', () => {
+    expect(() => planInserts([road(300), road(300), road(300)], [spec(0.5, 60), { ...spec(0.5, 60), clearance: 400 }])).toThrow();
+  });
+
   it('throws when no straight is long enough', () => {
     expect(() => planInserts([road(50), road(60, 0.5), road(50)], [spec(0.5, 110)])).toThrow();
   });

@@ -13,6 +13,11 @@ import {
   GATES_SPACING,
   ROADBLOCK_FENCE_HALF,
   FORD_ROCK,
+  PIT_ANCHOR_FIRST_ALONG,
+  PIT_ANCHOR_PAIR_SPACING,
+  PIT_APPROACH,
+  PIT_DEEP_EXIT,
+  PIT_EXIT,
   PLAYER_HEIGHT,
   PLAYER_OVERLAP_LIFT,
   PLAYER_RADIUS,
@@ -29,6 +34,7 @@ import {
   STOP_PAD_LIFT,
   STOP_ZONE,
   WALL_THICKNESS,
+  WINCH_MAX_LENGTH,
 } from './constants';
 import { buildCourse } from './courses/build';
 import type { BuiltCourse, GroundBox } from './course';
@@ -294,6 +300,8 @@ const sand = (length: number, palms: number): SegmentDef => ({ type: 'sand', len
 const ford = (width: number, rocks: number): SegmentDef => ({ type: 'ford', width, rocks });
 const bank = (height: number, gradient: number, anchors: number): SegmentDef => ({ type: 'bank', height, gradient, anchors });
 const roadworks = (length: number, obstacles: number): SegmentDef => ({ type: 'roadworks', length, obstacles });
+const pit = (depth: number, gradient: number, floor: number, anchors: number, gradientOut?: number): SegmentDef => ({ type: 'pit', depth, gradient, floor, anchors, ...(gradientOut === undefined ? {} : { gradientOut }) });
+const outOf = (def: Extract<SegmentDef, { type: 'pit' }>): number => def.gradientOut ?? def.gradient;
 
 const NEW_CASES: [string, SegmentDef][] = [
   ['alley, typical', alley(50, 0.6)],
@@ -306,6 +314,9 @@ const NEW_CASES: [string, SegmentDef][] = [
   ['bank, typical', bank(3, 15, 2)],
   ['bank, 25 degrees', bank(3, 25, 0)],
   ['bank, tall and gentle', bank(6, 10, 3)],
+  ['pit, shallow', pit(0.6, 10, 6, 0)],
+  ['pit, deep and asymmetric', pit(2, 15, 8, 2, 33)],
+  ['pit, symmetric with anchors', pit(2, 25, 8, 3)],
   ['roadworks, one full row', roadworks(24, 3)],
   ['roadworks, partial row', roadworks(40, 4)],
   ['roadworks, two full rows', roadworks(40, 6)],
@@ -353,7 +364,7 @@ describe('B2 and B3 within the other types', () => {
     const seg = buildSegment(def);
     const total = routeLength(seg);
     const half = (seg.width / 2 - 0.5);
-    const maxPitch = def.type === 'bank' ? degToRad(def.gradient) : 0;
+    const maxPitch = def.type === 'bank' ? degToRad(def.gradient) : def.type === 'pit' ? degToRad(Math.max(def.gradient, outOf(def))) : 0;
     const tolerance = ROAD_JOINT_OVERLAP * Math.sin(maxPitch) + 0.02;
     for (let along = 0; along <= total + 1e-9; along += 1) {
       const s = seg.surfaceAt(Math.min(along, total));
@@ -386,7 +397,7 @@ describe('B2 and B3 within the other types', () => {
   });
 
   test('no ground piece is longer than the limit, apart from one sand box and one riverbed', () => {
-    for (const def of [alley(50, 0.5), bank(3, 15, 0), roadworks(40, 4)]) {
+    for (const def of [alley(50, 0.5), bank(3, 15, 0), pit(2, 15, 8, 0, 33), roadworks(40, 4)]) {
       for (const box of buildSegment(def).ground.filter((b) => b.surface !== 'gravel' || b.halfExtents.x === ROAD_WIDTH / 2)) expect(box.halfExtents.z * 2).toBeLessThanOrEqual(ROAD_PIECE_LENGTH + 1e-9);
     }
     const s = buildSegment(sand(30, 0));
@@ -595,6 +606,117 @@ describe('bank', () => {
   });
 });
 
+describe('pit', () => {
+  const deep = pit(2, 15, 8, 2, 33) as Extract<SegmentDef, { type: 'pit' }>;
+  const descent = 2 / Math.tan(degToRad(15));
+  const climb = 2 / Math.tan(degToRad(33));
+  const floorStart = PIT_APPROACH + descent;
+  const climbStart = floorStart + 8;
+  const exitStart = climbStart + climb;
+
+  test('the surface is at the entry height on the approach, depth below on the floor, back at the entry height on the exit', () => {
+    const seg = buildSegment(deep);
+    expect(seg.surfaceAt(PIT_APPROACH / 2).pos.y).toBeCloseTo(0, 9);
+    expect(seg.surfaceAt(PIT_APPROACH).pos.y).toBeCloseTo(0, 9);
+    expect(seg.surfaceAt(floorStart + 4).pos.y).toBeCloseTo(-2, 9);
+    expect(seg.surfaceAt(exitStart + 3).pos.y).toBeCloseTo(0, 9);
+    expect(seg.exit.pos.y).toBeCloseTo(0, 9);
+    expect(seg.exit.pos.z).toBeCloseTo(-(exitStart + PIT_EXIT), 9);
+    expect(seg.exit.yaw).toBe(0);
+  });
+
+  test('the descent is depth / sin(gradient) long and the climb uses gradientOut; the exit is flat', () => {
+    const seg = buildSegment(deep);
+    const lengthOf = (from: number, to: number) => seg.ground.filter((b) => b.surface === 'gravel' && b.halfExtents.x === ROAD_WIDTH / 2).filter((b) => b.center.z <= -from && b.center.z >= -to).reduce((sum, b) => sum + b.halfExtents.z * 2, 0);
+    expect(lengthOf(PIT_APPROACH, floorStart)).toBeCloseTo(2 / Math.sin(degToRad(15)), 9);
+    expect(lengthOf(climbStart, exitStart)).toBeCloseTo(2 / Math.sin(degToRad(33)), 9);
+    expect(seg.surfaceAt(PIT_APPROACH + 1).pitch).toBeCloseTo(-degToRad(15), 12);
+    expect(seg.surfaceAt(climbStart + 1).pitch).toBeCloseTo(degToRad(33), 12);
+    expect(seg.surfaceAt(exitStart + 1).pitch).toBe(0);
+    expect(seg.surfaceAt(floorStart + 1).pitch).toBe(0);
+  });
+
+  test('without gradientOut the climb mirrors the descent', () => {
+    const seg = buildSegment(pit(2, 20, 6, 0));
+    expect(seg.exit.pos.z).toBeCloseTo(-(PIT_APPROACH + 2 * (2 / Math.tan(degToRad(20))) + 6 + PIT_EXIT), 9);
+  });
+
+  test('surfaceAt is continuous along the whole pit', () => {
+    const seg = buildSegment(deep);
+    const total = routeLength(seg);
+    let previous = seg.surfaceAt(0).pos;
+    for (let along = 0.05; along <= total + 1e-9; along += 0.05) {
+      const p = seg.surfaceAt(Math.min(along, total)).pos;
+      expect(Math.hypot(p.x - previous.x, p.y - previous.y, p.z - previous.z)).toBeLessThanOrEqual(0.05 / Math.cos(degToRad(33)) + 1e-6);
+      previous = p;
+    }
+  });
+
+  test('road on approach, floor and exit; gravel on the two ramps', () => {
+    const seg = buildSegment(deep);
+    for (let along = 0.5; along < exitStart + PIT_EXIT; along += 0.5) {
+      if ([PIT_APPROACH, floorStart, climbStart, exitStart].some((j) => Math.abs(along - j) < 0.3)) continue;
+      const p = seg.surfaceAt(along).pos;
+      const ramp = (along > PIT_APPROACH && along < floorStart) || (along > climbStart && along < exitStart);
+      expect(surfaceNameAt(seg.ground, p.x, p.z), `along ${along}`).toBe(ramp ? 'gravel' : 'road');
+    }
+  });
+
+  test('boulders alternate sides on the exit flat, 3 m in and 2 m apart per pair, at the entry height, not inside the pit', () => {
+    const seg = buildSegment(pit(2, 15, 8, 3, 33));
+    expect(seg.anchors.map((a) => [a.id, a.kind])).toEqual([['boulder-1', 'boulder'], ['boulder-2', 'boulder'], ['boulder-3', 'boulder']]);
+    expect(seg.anchors.map((a) => a.pose.pos.x)).toEqual([-(ROAD_WIDTH / 2 - 1), ROAD_WIDTH / 2 - 1, -(ROAD_WIDTH / 2 - 1)].map((x) => expect.closeTo(x, 9)));
+    expect(seg.anchors.map((a) => -a.pose.pos.z)).toEqual(
+      [0, 0, 1].map((pair) => expect.closeTo(exitStart + PIT_ANCHOR_FIRST_ALONG + PIT_ANCHOR_PAIR_SPACING * pair, 9)),
+    );
+    for (const a of seg.anchors) {
+      expect(a.pose.pos.y).toBeCloseTo(0, 9);
+      expect(-a.pose.pos.z).toBeGreaterThan(exitStart);
+    }
+  });
+
+  test.each([
+    ['2 anchors, exit 33', pit(2, 15, 8, 2, 33)],
+    ['the deep pit, 6 anchors, PIT_DEEP_EXIT', pit(2, 15, 8, 6, PIT_DEEP_EXIT)],
+  ])('every point from the end of the approach to the exit has a boulder within the winch length (%s)', (_name, def) => {
+    const seg = buildSegment(def);
+    const total = routeLength(seg);
+    for (let along = PIT_APPROACH; along <= total + 1e-9; along += 0.5) {
+      const p = seg.surfaceAt(Math.min(along, total)).pos;
+      const nearest = Math.min(...seg.anchors.map((a) => Math.hypot(a.pose.pos.x - p.x, a.pose.pos.y - p.y, a.pose.pos.z - p.z)));
+      expect(nearest, `along ${along}`).toBeLessThanOrEqual(WINCH_MAX_LENGTH);
+    }
+  });
+
+  test('a pit with no anchors is allowed; more boulders than fit the exit flat throw', () => {
+    expect(buildSegment(pit(0.6, 10, 6, 0)).anchors).toHaveLength(0);
+    expect(() => buildSegment(pit(2, 15, 8, 20))).toThrow(/boulders/);
+  });
+
+  test('a bad depth, gradient, gradientOut or floor throws; the floor is at least 4 m', () => {
+    expect(() => buildSegment(pit(0, 15, 8, 0))).toThrow();
+    expect(() => buildSegment(pit(2, 0, 8, 0))).toThrow();
+    expect(() => buildSegment(pit(2, 90, 8, 0))).toThrow();
+    expect(() => buildSegment(pit(2, 15, 8, 0, 0))).toThrow();
+    expect(() => buildSegment(pit(2, 15, 8, 0, 90))).toThrow();
+    expect(() => buildSegment(pit(2, 15, 8, 0, 33.5))).toThrow(/33/);
+    expect(() => buildSegment(pit(2, 15, 8, 0, 33))).not.toThrow();
+    expect(() => buildSegment(pit(2, 15, 3.9, 0))).toThrow(/floor/);
+    expect(() => buildSegment(pit(2, 15, 4, 0))).not.toThrow();
+  });
+
+  test('a pit takes no stop', () => {
+    expect(() => buildSegment({ ...(pit(2, 15, 8, 0) as object), stop: { kind: 'fuel', side: 1, along: 30 } } as SegmentDef)).toThrow(/stop/);
+  });
+
+  test('the shoulders follow the road, so the pit is a trench the whole width of the ground', () => {
+    const seg = buildSegment(deep);
+    const s = seg.surfaceAt(floorStart + 4);
+    const p = offsetFrom(s, ROAD_WIDTH / 2 + 10);
+    expect(groundHeightAt(seg.ground, p.x, p.z)).toBeCloseTo(-2, 3);
+  });
+});
+
 describe('roadworks', () => {
   test('fences stand on both road edges', () => {
     const seg = buildSegment(roadworks(40, 3));
@@ -643,6 +765,8 @@ describe('counts', () => {
     ['obstacles', roadworks(40, -3)],
     ['anchors', bank(3, 15, 1.5)],
     ['anchors', bank(3, 15, -1)],
+    ['anchors', pit(2, 15, 8, 1.5)],
+    ['anchors', pit(2, 15, 8, -1)],
   ])('%s that is not a non-negative whole number throws', (_what, def) => {
     expect(() => buildSegment(def)).toThrow(/whole number/);
   });

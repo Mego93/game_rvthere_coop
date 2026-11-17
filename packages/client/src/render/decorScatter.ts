@@ -41,6 +41,7 @@ export const DECOR_DENSITY = {
   road: { scrub: 12, grass: 25, stones: 6, rocks: 2, palms: 1.2, cactus: 0.6, fields: 0.35, hills: 0.6 },
   sand: { scrub: 10, grass: 4, stones: 6, rocks: 1, palms: 4, cactus: 1.5, fields: 0, hills: 0.6 },
   ford: { scrub: 6, grass: 30, stones: 14, rocks: 4, palms: 1.5, cactus: 0, fields: 0, hills: 0.6 },
+  pit: { scrub: 12, grass: 25, stones: 6, rocks: 2, palms: 1.2, cactus: 0.6, fields: 0.35, hills: 0.6 },
   bank: { scrub: 8, grass: 12, stones: 8, rocks: 4, palms: 0.6, cactus: 0.6, fields: 0, hills: 0.6 },
   roadworks: { scrub: 6, grass: 12, stones: 6, rocks: 1.5, palms: 0.6, cactus: 0, fields: 0, hills: 0.6 },
   city: { scrub: 6, grass: 8, stones: 2, palms: 2.5, trees: 1.2, buildings: 7, houses: 4, lights: 2, poles: 2, fences: 2, hills: 0.6 },

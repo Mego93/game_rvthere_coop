@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GATES_SPACING, HAZARD_END_CLEARANCE } from '../constants';
 import { buildSegment, type SegmentDef } from '../segments';
-import { hazardRange, planExtras, spreadCount, type Extras } from './marrakech.extras';
+import { hazardRange, planExtras, spreadCount, TERRAIN_HAZARD_CLEAR, TERRAIN_DEEP_CLEAR, type Extras } from './marrakech.extras';
 
 const road = (length: number, extra: Partial<Extract<SegmentDef, { type: 'road' }>> = {}): SegmentDef => ({ type: 'road', length, ...extra });
 const longCourse = (): SegmentDef[] => Array.from({ length: 60 }, (_, i) => (i % 5 === 3 ? road(60, { curve: 0.2 }) : road(100 + (i % 3) * 20)));
@@ -92,5 +92,33 @@ describe('planExtras', () => {
 
   it('throws when the fuel gap cannot be kept', () => {
     expect(() => planExtras(Array.from({ length: 30 }, () => road(50)), [])).toThrow(/fuel/i);
+  });
+});
+
+describe('planExtras terrain exclusion', () => {
+  const base = longCourse();
+  const advance = (def: SegmentDef): number => -buildSegment(def).exit.pos.z;
+  const starts = base.reduce<number[]>((acc, def, i) => [...acc, i === 0 ? 0 : acc[i - 1]! + advance(base[i - 1]!)], []);
+  // Distance in metres from segment i to the span of segments first..last.
+  const gap = (i: number, first: number, last: number): number => Math.max(starts[first]! - (starts[i]! + advance(base[i]!)), starts[i]! - (starts[last]! + advance(base[last]!)), 0);
+  const index = (segments: SegmentDef[], pick: (d: Extract<SegmentDef, { type: 'road' }>) => boolean): number[] => segments.flatMap((d, i) => (d.type === 'road' && pick(d) ? [i] : []));
+
+  it('keeps stops and hazards 120 m (150 m for a deep pit) from a terrain span, and still plans', () => {
+    const terrain = [{ first: 20, last: 22 }, { first: 40, last: 40, deep: true }];
+    const without = planExtras(base, [20, 21, 22, 40], { garageEvery: 1200 });
+    const r = planExtras(base, [20, 21, 22, 40], { garageEvery: 1200, terrain });
+    for (const i of index(r.segments, (d) => !!d.stop)) {
+      expect(gap(i, 20, 22), `stop ${i}`).toBeGreaterThanOrEqual(TERRAIN_HAZARD_CLEAR);
+      expect(gap(i, 40, 40), `stop ${i}`).toBeGreaterThanOrEqual(TERRAIN_DEEP_CLEAR);
+    }
+    for (const i of index(r.segments, (d) => !!d.hazards)) {
+      expect(gap(i, 20, 22), `hazard ${i}`).toBeGreaterThanOrEqual(TERRAIN_HAZARD_CLEAR);
+      expect(gap(i, 40, 40), `hazard ${i}`).toBeGreaterThanOrEqual(TERRAIN_DEEP_CLEAR);
+    }
+    expect(r.segments).not.toEqual(without.segments);
+  });
+
+  it('changes nothing without terrain', () => {
+    expect(planExtras(base, [], { garageEvery: 1200, terrain: [] }).segments).toEqual(planExtras(base, [], { garageEvery: 1200 }).segments);
   });
 });

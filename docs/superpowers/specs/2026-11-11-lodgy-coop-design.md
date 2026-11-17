@@ -269,6 +269,7 @@ Segment types in spec 1:
 | `sand` | Soft sand between palm trees; the vehicle slows down | length, palm (anchor) count |
 | `ford` | Shallow rocky riverbed, slow and fuel-hungry | width, rock count |
 | `bank` | Short steep earth or gravel bank | height, gradient, anchor count |
+| `pit` | A flat approach, a descent, a flat floor, a climb and a flat exit; the exit may be steeper than the descent | depth, gradient (descent), optional gradientOut (at most 33 degrees), floor (at least 4 m), anchor count |
 | `roadworks` | Road blocked by heavy obstacles and barriers | length, obstacle count |
 
 Any segment may also place pickups, anchors, service stops and coins.
@@ -281,7 +282,7 @@ Surface types affect tyre grip and rolling resistance: road, sand, riverbed, gra
 |---|---|---|
 | 1 | From the start point west to Marrakech airport: rural track, palm grove, an oued, the city's edge, the airport road. Flat terrain. About 10 minutes. |
 
-The campaign's course is now `marrakech` (step 27): the real driving route from the villa to Marrakech airport, about 21.4 km as built (224 segments, generated from the route stored as local metres in `marrakech.route.ts`; route data from OpenStreetMap contributors, ODbL, credited in `CREDITS.md` and the lobby). Sand, an alley, two roadworks, a ford and a bank are inserted on straights; the step 25 hazards sit on five segments; 19 fuel stops (gaps up to 1.29 km) and 5 garages. The target time is 30 minutes. `airport` (2.6 km) stays as a short practice course. The minimap shows a 600 m window around the player on routes over 3 km. 1 |
+The campaign's course is now `marrakech` (step 27): the real driving route from the villa to Marrakech airport, about 21.4 km as built (224 segments, generated from the route stored as local metres in `marrakech.route.ts`; route data from OpenStreetMap contributors, ODbL, credited in `CREDITS.md` and the lobby). Sand, an alley, two roadworks, a ford and a bank are inserted on straights; the step 25 hazards sit on five segments; 19 fuel stops (gaps up to 1.29 km) and 5 garages. The target time is 30 minutes. `airport` (2.6 km) stays as a short practice course. The minimap shows a 600 m window around the player on routes over 3 km. Step 28a adds, on straights and clear of stops and hazards, three hills (a 60 m climb and descent at 8 degrees, both vehicles pass), one big hill (14 degrees with boulder anchors on the climb, the RV cannot climb it without the winch), four shallow pits (0.6 m deep, both vehicles drive through) and two deep pits (2 m deep, descent 15 degrees, exit 28 degrees, six boulders on the exit: the RV is trapped and needs the winch with full throttle while reeling; the Lodgy drives out in about 6 s). 1 |
 | 2 | To the Ourika valley | 2 |
 | 3 | Into the Atlas | 2 |
 

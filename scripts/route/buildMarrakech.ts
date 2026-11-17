@@ -1,7 +1,7 @@
 // Run: npx tsx scripts/route/buildMarrakech.ts
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { planMarrakech } from '../../packages/shared/src/courses/marrakech.plan';
+import { MARRAKECH_TERRAIN, planMarrakech } from '../../packages/shared/src/courses/marrakech.plan';
 import type { SegmentDef } from '../../packages/shared/src/segments';
 
 const { segments, report, placements, inserted, extras } = planMarrakech();
@@ -22,7 +22,7 @@ const text = [
   ...segments.map(line),
   '];',
   '',
-  '// Indexes of the inserted terrain (sand, alley, roadworks, ford group); stops and hazards skip them.',
+  '// Indexes of the inserted terrain (sand, alley, roadworks, ford group, hills, pits); stops and hazards skip them.',
   `export const MARRAKECH_INSERTED: readonly number[] = [${inserted.join(', ')}];`,
   '',
 ].join('\n');
@@ -34,8 +34,10 @@ console.log(`total length: ${km(report.totalLength)} (real route ${km(report.rea
 console.log(`largest deviation: ${report.maxDeviation.toFixed(0)} m matched by arc length, ${report.maxNearest.toFixed(0)} m to the nearest real point`);
 console.log(`end-point error: ${report.endError.toFixed(1)} m`);
 console.log(`largest stretch: ${report.maxStretch.toFixed(1)} m (${report.stretches} curves stretched)`);
-for (const p of placements) console.log(`insert ${p.name}: target ${p.target.toFixed(0)} m, at ${p.at.toFixed(0)} m, ${p.distance.toFixed(0)} m from target`);
+const names = new Set(MARRAKECH_TERRAIN.map((e) => e.name));
+for (const p of placements) console.log(`${names.has(p.name) ? 'terrain' : 'insert'} ${p.name}: target ${p.target.toFixed(0)} m, at ${p.at.toFixed(0)} m, ${p.distance.toFixed(0)} m from target`);
 
+for (const name of names) console.log(`${name}: ${placements.filter((p) => p.name === name).length}`);
 const gaps = extras.fuel.map((f, i) => f.at - (i === 0 ? 0 : extras.fuel[i - 1]!.at)).concat(extras.total - extras.fuel[extras.fuel.length - 1]!.at);
 console.log(`fuel stops: ${extras.fuel.length}; gaps (m): ${gaps.map((g) => g.toFixed(0)).join(' ')}`);
 console.log(`garages at (m): ${extras.garages.map((g) => g.at.toFixed(0)).join(' ')}`);

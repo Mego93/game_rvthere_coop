@@ -30,8 +30,20 @@ export const HAZARD_PLAN: readonly { kind: Hazard['kind']; fraction: number }[] 
 const GATES_COUNT = 4;
 const PICKUP_KINDS = ['jerrycan', 'toolbox', 'healthKit'] as const;
 
+// m kept clear of a hill or pit: 120 m, and 150 m of a deep pit, for stops and hazards.
+export const TERRAIN_HAZARD_CLEAR = 120;
+export const TERRAIN_DEEP_CLEAR = 150;
+
+// A hill or pit as the segment indexes it spans; `deep` marks the deep pit.
+export interface TerrainSpan {
+  first: number;
+  last: number;
+  deep?: boolean;
+}
+
 export interface ExtrasOptions {
   garageEvery?: number;
+  terrain?: readonly TerrainSpan[];
 }
 
 export interface ExtrasReport {
@@ -86,8 +98,7 @@ const coinsAlong = (count: number, length: number, side: { next: -1 | 1 }): Plac
     return { along: round1(along), lateral: side.next === 1 ? -2.5 : 2.5 };
   });
 
-export function planExtras(input: readonly SegmentDef[], inserted: readonly number[], options: ExtrasOptions = {}): { segments: SegmentDef[]; report: ExtrasReport } {
-  const segments: SegmentDef[] = input.map((def) => ({ ...def }));
+function layout(segments: readonly SegmentDef[], inserted: readonly number[], terrain: readonly TerrainSpan[]) {
   const last = segments.length - 1;
   const skip = new Set(inserted);
   const advance = segments.map((def) => -buildSegment(def).exit.pos.z);
@@ -98,19 +109,41 @@ export function planExtras(input: readonly SegmentDef[], inserted: readonly numb
     total += a;
   }
   const mid = (i: number): number => start[i]! + advance[i]! / 2;
+  const straight = (i: number): boolean => {
+    const def = segments[i]!;
+    return def.type === 'road' && !def.curve && !def.slope && !skip.has(i);
+  };
+  const inner = (i: number): boolean => i > 0 && i < last;
+  // Whether segment i is closer than `clear(span)` to a terrain span.
+  const nearTerrain = (i: number, clear: (span: TerrainSpan) => number): boolean =>
+    terrain.some((span) => {
+      const from = start[span.first]!;
+      const to = start[span.last]! + advance[span.last]!;
+      return Math.max(from - (start[i]! + advance[i]!), start[i]! - to, 0) < clear(span);
+    });
+  const stopCandidates = segments
+    .map((_, i) => i)
+    .filter((i) => inner(i) && straight(i) && (segments[i] as RoadDef).length >= STOP_MIN_LENGTH && !nearTerrain(i, (span) => (span.deep ? TERRAIN_DEEP_CLEAR : TERRAIN_HAZARD_CLEAR)));
+  return { skip, advance, start, total, mid, straight, inner, nearTerrain, stopCandidates };
+}
+
+// The largest gap between neighbouring stop candidates, the start and the end: a fuel chain needs at most FUEL_MAX_GAP.
+export function largestStopGap(input: readonly SegmentDef[], inserted: readonly number[], terrain: readonly TerrainSpan[]): number {
+  const { total, mid, stopCandidates } = layout(input, inserted, terrain);
+  const points = [0, ...stopCandidates.map(mid), total];
+  return Math.max(...points.slice(1).map((p, i) => p - points[i]!));
+}
+
+export function planExtras(input: readonly SegmentDef[], inserted: readonly number[], options: ExtrasOptions = {}): { segments: SegmentDef[]; report: ExtrasReport } {
+  const segments: SegmentDef[] = input.map((def) => ({ ...def }));
+  const { skip, advance, start, total, mid, straight, inner, nearTerrain, stopCandidates } = layout(segments, inserted, options.terrain ?? []);
   const roadAt = (i: number): RoadDef | null => {
     const def = segments[i]!;
     return def.type === 'road' ? def : null;
   };
-  const straight = (i: number): boolean => {
-    const def = roadAt(i);
-    return !!def && !def.curve && !def.slope && !skip.has(i);
-  };
-  const inner = (i: number): boolean => i > 0 && i < last;
   const report: ExtrasReport = { total, fuel: [], garages: [], hazards: [], pickups: [], coins: 0 };
 
   // Fuel stops: the chain of stop segments whose gaps stay nearest the target and never pass the maximum.
-  const stopCandidates = segments.map((_, i) => i).filter((i) => inner(i) && straight(i) && roadAt(i)!.length >= STOP_MIN_LENGTH);
   const best = new Map<number, { cost: number; prev: number }>();
   const gapCost = (g: number): number => (g - FUEL_TARGET_GAP) ** 2;
   for (const i of stopCandidates) {
@@ -163,6 +196,7 @@ export function planExtras(input: readonly SegmentDef[], inserted: readonly numb
     for (let i = 0; i < segments.length; i++) {
       const def = roadAt(i);
       if (!def || !inner(i) || skip.has(i) || def.stop || def.slope || hazardSegments.has(i) || !hazardRange(plan.kind, def.length)) continue;
+      if (nearTerrain(i, (span) => (span.deep ? TERRAIN_DEEP_CLEAR : TERRAIN_HAZARD_CLEAR))) continue;
       if (pick < 0 || Math.abs(mid(i) - target) < Math.abs(mid(pick) - target)) pick = i;
     }
     if (pick < 0) throw new Error(`No segment for the ${plan.kind} near ${Math.round(target)} m`);
