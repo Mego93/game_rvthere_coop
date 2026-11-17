@@ -50,4 +50,6 @@ export interface BuiltCourse {
   finish: Box;
   killPlaneY: number;
   targetTime: number;
+  // Along-route spans (m) with no ambient animals, sorted and disjoint; only on courses that opt in.
+  ambient?: { blocked: { from: number; to: number }[] };
 }

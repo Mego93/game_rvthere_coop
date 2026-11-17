@@ -436,3 +436,41 @@ export const HAZARD_DEBRIS_GAP = 10;
 export const CRATE_WALL_LATERALS: readonly number[] = Object.freeze([0, 1, 2].map((i) => 2.0 + i * (2 * PROP_KINDS.crate.halfExtents.x + 0.02)));
 // m, lateral offset of the outer barriers of a roadblock row (barriers at -3, 0, 3).
 export const ROADBLOCK_LATERAL = 3;
+
+// m of eligible route per ambient event, on average.
+export const AMBIENT_SPACING = 120;
+// m, jitter either side of an event's slot centre; keeps events at least AMBIENT_MIN_GAP apart.
+export const AMBIENT_JITTER = 30;
+// m, least distance between two events along the route.
+export const AMBIENT_MIN_GAP = 60;
+// m of route at the start and the end with no events.
+export const AMBIENT_ENDS = 150;
+// m of margin either side of a stop, hazard or terrain group with no events.
+export const AMBIENT_MARGIN = 60;
+// Share of events that are goats; the rest are scooters.
+export const AMBIENT_GOAT_SHARE = 0.7;
+// m, how far ahead of the vehicle an animal appears.
+export const AMBIENT_SPAWN_AHEAD = 120;
+// m, how far ahead of the vehicle an animal starts to cross.
+export const AMBIENT_TRIGGER = 45;
+// m, how far a spent animal may fall behind the vehicle before it is removed.
+export const AMBIENT_DESPAWN_BEHIND = 80;
+// m beyond the road edge where an animal waits.
+export const AMBIENT_EDGE_OFFSET = 1.5;
+// Most animals of each kind alive at once.
+export const AMBIENT_MAX_GOATS = 6;
+export const AMBIENT_MAX_SCOOTERS = 3;
+// m/s crossing speeds.
+export const AMBIENT_GOAT_SPEED = 2.5;
+export const AMBIENT_SCOOTER_SPEED = 4.5;
+// m beyond the far road edge where a goat stops.
+export const AMBIENT_GOAT_STOP_BEYOND = 2;
+// m beyond the road edge where a scooter is removed.
+export const AMBIENT_SCOOTER_LEAVE = 15;
+// Fraction of full health lost to one animal hit; health never falls below ANIMAL_HEALTH_FLOOR.
+export const ANIMAL_HIT_DAMAGE = 0.03;
+export const ANIMAL_HEALTH_FLOOR = 0.02;
+// m/s relative speed above which contact counts as a hit.
+export const ANIMAL_HIT_SPEED = 2.0;
+// s a hit animal stays before it is removed.
+export const ANIMAL_HIT_LINGER = 1.5;

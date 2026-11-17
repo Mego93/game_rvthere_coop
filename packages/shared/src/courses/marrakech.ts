@@ -5,4 +5,5 @@ export const marrakech: CourseDef = {
   id: 'marrakech',
   segments: MARRAKECH_SEGMENTS,
   targetTime: 1800,
+  ambient: true,
 };
