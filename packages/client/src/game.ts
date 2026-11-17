@@ -87,6 +87,8 @@ export interface Game {
   setControlsOpen(open: boolean): void;
   // The chat panel opened or closed: the game stands still while it is open.
   setChatOpen(open: boolean): void;
+  // Opens the chat through the page when no menu or panel is open during a run; the touch Chat button uses it like T does.
+  requestChat(): void;
   // Shows the mute state in the run menu.
   setMuted(muted: boolean): void;
   // Shows "Cannot buy" in the shop menu if it is open.
@@ -297,6 +299,9 @@ export function createGame(
     onBuy: (item: ItemKind) => send({ type: 'buy', item }),
     onClose: () => refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, true),
   });
+  const requestChat = () => {
+    if (lobby.phase === 'playing' && !anyOpen()) view.onChat();
+  };
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.code === 'F3') {
       event.preventDefault();
@@ -304,10 +309,10 @@ export function createGame(
       return;
     }
     // anyOpen() covers the run menu, the shop, help, the tutorial and an open chat; the page's own T check skips fields.
-    if (isChatKey(event, event.target instanceof Element ? event.target.tagName : null) && lobby.phase === 'playing' && !anyOpen()) {
+    if (isChatKey(event, event.target instanceof Element ? event.target.tagName : null)) {
       // Without this the T would be typed into the input that opening focuses.
       event.preventDefault();
-      view.onChat();
+      requestChat();
       return;
     }
     if (event.code !== 'Escape' || event.repeat) return;
@@ -578,6 +583,7 @@ export function createGame(
       if (open) releaseLock();
       gate.follow(frozen());
     },
+    requestChat,
     setChatOpen(open) {
       chatOpen = open;
       // Before the lock is released the panel's focus would leave the pointer captured.

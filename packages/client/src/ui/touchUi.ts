@@ -141,7 +141,17 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
 
   const menu = make('touch-menu', 'Menu', (down) => down && menuHandler());
 
-  const chat = make('touch-chat', 'Chat', (down) => down && chatHandler());
+  // Opens on touchend, inside the touch's own gesture, so iOS shows the keyboard for the input the handler focuses; a cancel opens nothing.
+  const chat = make('touch-chat', 'Chat', () => {});
+  let chatTouch: number | null = null;
+  chat.addEventListener('touchstart', (event) => (chatTouch = (event as TouchEvent).changedTouches[0]?.identifier ?? null), { passive: false });
+  chat.addEventListener('touchend', (event) => {
+    const ended = Array.from((event as TouchEvent).changedTouches, (touch) => touch.identifier);
+    if (chatTouch === null || !ended.includes(chatTouch)) return;
+    chatTouch = null;
+    chatHandler();
+  });
+  chat.addEventListener('touchcancel', () => (chatTouch = null));
 
   const slotBox = document.createElement('div');
   slotBox.id = 'touch-slots';

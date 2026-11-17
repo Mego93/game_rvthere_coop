@@ -1,8 +1,10 @@
-import { CHAT_BURST, CHAT_MAX_LENGTH, CHAT_PHRASES, CHAT_REFILL_SECONDS, cleanChat, type ChatMessage } from '@lodgy/shared';
+import { CHAT_BURST, CHAT_MAX_LENGTH, CHAT_PHRASES, cleanChat, type ChatMessage } from '@lodgy/shared';
 
 export const CHAT_LIMIT = 50;
 export const TOAST_SECONDS = 6;
 export const TOAST_COUNT = 3;
+// A little slower than the server's refill, so latency never makes the server drop a line the client sent.
+export const CLIENT_REFILL_SECONDS = 1.6;
 // Lines the open in-game panel shows above its input.
 const PANEL_LINES = 6;
 
@@ -20,11 +22,14 @@ export interface ChatLine {
 
 export interface ChatLog {
   // False when the line was already seen (a history replay after a reconnect).
-  add(message: Pick<ChatMessage, 'id' | 'playerId' | 'name' | 'text' | 'at'>, localId: string, now: number): boolean;
+  // A replayed line (the history sent to a joiner) is stored as seen: no toast, no unread.
+  add(message: Pick<ChatMessage, 'id' | 'playerId' | 'name' | 'text' | 'at' | 'replay'>, localId: string, now: number): boolean;
   lines(): readonly ChatLine[];
   unread(): number;
   markRead(): void;
   recent(now: number): ChatLine[];
+  // Counts every change to the lines, so a view can redraw only when it must.
+  version(): number;
   clear(): void;
 }
 
@@ -32,14 +37,16 @@ export function createChatLog(limit = CHAT_LIMIT): ChatLog {
   let held: ChatLine[] = [];
   let lastId = 0;
   let unread = 0;
+  let version = 0;
   return {
     add(message, localId, now) {
       if (message.id <= lastId) return false;
       lastId = message.id;
+      version += 1;
       const own = message.playerId === localId;
-      held.push({ id: message.id, playerId: message.playerId, name: message.name, text: message.text, at: message.at, own, receivedAt: now });
+      held.push({ id: message.id, playerId: message.playerId, name: message.name, text: message.text, at: message.at, own, receivedAt: message.replay ? Number.NEGATIVE_INFINITY : now });
       if (held.length > limit) held = held.slice(held.length - limit);
-      if (!own) unread = Math.min(unread + 1, limit);
+      if (!own && !message.replay) unread = Math.min(unread + 1, limit);
       return true;
     },
     lines: () => held,
@@ -47,8 +54,10 @@ export function createChatLog(limit = CHAT_LIMIT): ChatLog {
     markRead() {
       unread = 0;
     },
+    version: () => version,
     recent: (now) => held.filter((line) => now - line.receivedAt < TOAST_SECONDS).slice(-TOAST_COUNT),
     clear() {
+      version += 1;
       held = [];
       lastId = 0;
       unread = 0;
@@ -68,7 +77,7 @@ export function createChatSender(): ChatSender {
   let at = 0;
   return {
     take(now) {
-      tokens = Math.min(CHAT_BURST, tokens + Math.max(0, now - at) / CHAT_REFILL_SECONDS);
+      tokens = Math.min(CHAT_BURST, tokens + Math.max(0, now - at) / CLIENT_REFILL_SECONDS);
       at = now;
       if (tokens < 1) return false;
       tokens -= 1;
@@ -81,12 +90,13 @@ export function createChatSender(): ChatSender {
   };
 }
 
-export type SubmitResult = 'sent' | 'slow' | 'empty';
+// 'empty' is blank text; 'invalid' is text the server's rules refuse.
+export type SubmitResult = 'sent' | 'slow' | 'empty' | 'invalid';
 
 // Validates with the server's rules first, so a refused line never costs a token and never reaches the server.
 export function submitChat(text: string, sender: ChatSender, now: number, send: (text: string) => void): SubmitResult {
   const cleaned = cleanChat(text);
-  if (cleaned === null) return 'empty';
+  if (cleaned === null) return text.trim() === '' ? 'empty' : 'invalid';
   if (!sender.take(now)) return 'slow';
   send(cleaned);
   return 'sent';
@@ -109,6 +119,10 @@ export const CHAT_FORM_STYLE = `
 .chat-phrases { display: flex; flex-wrap: wrap; gap: 6px; }
 .chat-phrases button { color: #1d3b52; background: #e3eef6; border-color: #b9cddc; }
 .chat-note { min-height: 1.3em; margin: 0; font-size: 13px; color: #b3261e; }
+@media (max-height: 500px) {
+  .chat-phrases { flex-wrap: nowrap; overflow-x: auto; }
+  .chat-phrases button { flex: none; }
+}
 `;
 
 export interface ChatForm {
@@ -144,10 +158,11 @@ export function createChatForm(doc: Document, onSubmit: (text: string) => Submit
   element.append(row, phrases, note);
 
   const finish = (result: SubmitResult, fromInput: boolean) => {
-    note.textContent = result === 'slow' ? 'Slow down' : '';
+    note.textContent = result === 'slow' ? 'Wait a moment' : result === 'invalid' ? 'Cannot send that' : '';
     if (result === 'sent' && fromInput) input.value = '';
     onResult(result, fromInput);
   };
+  input.addEventListener('input', () => (note.textContent = ''));
   const submitInput = () => finish(onSubmit(input.value), true);
   send.addEventListener('click', submitInput);
   input.addEventListener('keydown', (event) => {
@@ -195,6 +210,12 @@ const STYLE = `${CHAT_FORM_STYLE}
 #chat-panel { position: fixed; z-index: 15; top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); width: min(440px, calc(100vw - 150px)); box-sizing: border-box; display: grid; gap: 8px; padding: 10px; background: rgba(255, 255, 255, 0.95); border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3); color: #222; }
 #chat-panel[hidden], #chat-toasts[hidden] { display: none; }
 #chat-panel .chat-lines { max-height: 9em; }
+#chat-head { display: flex; align-items: center; justify-content: space-between; font: 600 14px system-ui, sans-serif; }
+#chat-close { min-height: 44px; min-width: 44px; padding: 8px 12px; font: inherit; color: #1d3b52; background: #e3eef6; border: 1px solid #b9cddc; border-radius: 6px; cursor: pointer; }
+@media (max-height: 500px) {
+  #chat-panel { gap: 4px; }
+  #chat-panel .chat-lines { max-height: 3.5em; order: 3; }
+}
 #chat-panel .chat-lines:empty { display: none; }
 #chat-toasts { position: fixed; z-index: 15; left: max(8px, env(safe-area-inset-left)); bottom: 30%; width: min(360px, 50vw); display: grid; gap: 4px; pointer-events: none; }
 .chat-toast { padding: 4px 8px; font: 14px/1.35 system-ui, sans-serif; color: #fff; background: rgba(0, 0, 0, 0.55); border-radius: 6px; overflow-wrap: anywhere; animation: chat-fade ${TOAST_SECONDS}s linear forwards; }
@@ -236,7 +257,15 @@ export function createChatPanel(doc: Document, handlers: ChatPanelHandlers): Cha
     // A line sent, or Enter on nothing, closes the panel; a blocked line keeps it open.
     if (result === 'sent' || (result === 'empty' && fromInput)) set(false);
   });
-  root.append(lines, form.element);
+  const head = doc.createElement('div');
+  head.id = 'chat-head';
+  const closeButton = doc.createElement('button');
+  closeButton.id = 'chat-close';
+  closeButton.type = 'button';
+  closeButton.textContent = 'Close';
+  closeButton.addEventListener('click', () => set(false));
+  head.append(doc.createTextNode('Chat'), closeButton);
+  root.append(head, lines, form.element);
   const toasts = doc.createElement('div');
   toasts.id = 'chat-toasts';
   toasts.setAttribute('aria-live', 'polite');

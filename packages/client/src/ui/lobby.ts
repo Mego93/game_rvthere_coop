@@ -129,7 +129,8 @@ const STYLE = `${CHAT_FORM_STYLE}
 #lobby-panel { grid-area: main; justify-self: center; display: grid; gap: 12px; width: min(440px, 100%); box-sizing: border-box; padding: 24px; background: rgba(255, 255, 255, 0.94); border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15); animation: lobby-rise 0.45s ease-out both; }
 #lobby-chat { grid-area: chat; justify-self: center; display: grid; gap: 10px; width: min(440px, 100%); min-width: 0; box-sizing: border-box; padding: 16px; background: rgba(255, 255, 255, 0.94); border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15); animation: lobby-rise 0.45s ease-out both; }
 #lobby-chat h2 { margin: 0; font-size: 18px; }
-#lobby-chat .chat-lines { height: 220px; align-content: end; padding: 6px 8px; background: #f1f6fa; border-radius: 6px; color: #222; }
+#lobby-chat .chat-lines { display: flex; flex-direction: column; height: 220px; padding: 6px 8px; background: #f1f6fa; border-radius: 6px; color: #222; }
+#lobby-chat .chat-line:first-child { margin-top: auto; }
 #lobby-chat .chat-lines:empty::before { content: 'No messages yet'; color: #6b7a86; }
 @media (min-width: 900px) {
   #lobby-layout { grid-template-columns: minmax(320px, 440px) minmax(320px, 440px); grid-template-areas: "main chat"; align-items: start; gap: 24px; }

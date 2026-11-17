@@ -1,6 +1,6 @@
 import { CHAT_BURST, CHAT_REFILL_SECONDS } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { CHAT_LIMIT, TOAST_COUNT, TOAST_SECONDS, createChatLog, createChatSender, isChatKey, submitChat } from './chat';
+import { CHAT_LIMIT, CLIENT_REFILL_SECONDS, TOAST_COUNT, TOAST_SECONDS, createChatLog, createChatSender, isChatKey, submitChat } from './chat';
 
 const line = (id: number, playerId = 'p1', text = `line ${id}`) => ({ id, playerId, name: `Name ${playerId}`, text, at: id * 10 });
 
@@ -93,12 +93,16 @@ test('the sender lets a burst of 4 through and blocks the 5th', () => {
   expect(sender.take(0)).toBe(false);
 });
 
-test('one token is back after 1.5 s, and a blocked try does not delay it', () => {
+test('the client refills slower than the server, so the server never drops what the client sent', () => {
+  expect(CLIENT_REFILL_SECONDS).toBeGreaterThan(CHAT_REFILL_SECONDS);
+});
+
+test('one token is back after the client refill time, and a blocked try does not delay it', () => {
   const sender = createChatSender();
   for (let count = 0; count < CHAT_BURST; count += 1) sender.take(0);
-  expect(sender.take(CHAT_REFILL_SECONDS - 0.01)).toBe(false);
-  expect(sender.take(CHAT_REFILL_SECONDS)).toBe(true);
-  expect(sender.take(CHAT_REFILL_SECONDS)).toBe(false);
+  expect(sender.take(CLIENT_REFILL_SECONDS - 0.01)).toBe(false);
+  expect(sender.take(CLIENT_REFILL_SECONDS)).toBe(true);
+  expect(sender.take(CLIENT_REFILL_SECONDS)).toBe(false);
 });
 
 test('the bucket never holds more than the burst however long it rests', () => {
@@ -116,15 +120,15 @@ test('reset fills the bucket again', () => {
   expect(sender.take(0)).toBe(true);
 });
 
-test('submitChat trims, counts code points and refuses empty or forbidden text without using a token', () => {
+test('submitChat trims, counts code points and refuses blank (empty) or forbidden (invalid) text without using a token', () => {
   const sender = createChatSender();
   const sent: string[] = [];
   const send = (text: string) => sent.push(text);
   expect(submitChat('  hello  ', sender, 0, send)).toBe('sent');
   expect(sent).toEqual(['hello']);
   expect(submitChat('   ', sender, 0, send)).toBe('empty');
-  expect(submitChat('a\nb', sender, 0, send)).toBe('empty');
-  expect(submitChat('x'.repeat(121), sender, 0, send)).toBe('empty');
+  expect(submitChat('a\nb', sender, 0, send)).toBe('invalid');
+  expect(submitChat('x'.repeat(121), sender, 0, send)).toBe('invalid');
   expect(submitChat('😀'.repeat(120), sender, 0, send)).toBe('sent');
   expect(sent).toHaveLength(2);
   // Two tokens used so far; the empty tries took none.
@@ -139,7 +143,7 @@ test('submitChat reports slow and sends nothing when blocked', () => {
   for (let count = 0; count < CHAT_BURST; count += 1) submitChat('hi', sender, 0, send);
   expect(submitChat('again', sender, 0, send)).toBe('slow');
   expect(sent).toHaveLength(CHAT_BURST);
-  expect(submitChat('later', sender, CHAT_REFILL_SECONDS, send)).toBe('sent');
+  expect(submitChat('later', sender, CLIENT_REFILL_SECONDS, send)).toBe('sent');
 });
 
 const plain = { code: 'KeyT', repeat: false, ctrlKey: false, metaKey: false, altKey: false };
@@ -153,4 +157,25 @@ test('T opens chat, except on repeat, with a modifier or while typing in a field
   expect(isChatKey({ ...plain, metaKey: true }, null)).toBe(false);
   expect(isChatKey({ ...plain, altKey: true }, null)).toBe(false);
   for (const tag of ['INPUT', 'input', 'SELECT', 'TEXTAREA']) expect(isChatKey(plain, tag)).toBe(false);
+});
+
+test('a replayed line is stored and deduped but gives no toast and no unread', () => {
+  const log = createChatLog();
+  log.add({ ...line(1, 'other'), replay: true }, 'me', 50);
+  log.add(line(2, 'other'), 'me', 50);
+  expect(log.lines().map((entry) => entry.id)).toEqual([1, 2]);
+  expect(log.unread()).toBe(1);
+  expect(log.recent(50).map((entry) => entry.id)).toEqual([2]);
+  expect(log.add(line(1, 'other'), 'me', 60)).toBe(false);
+});
+
+test('the version changes with every added line and every clear, not with a refused line', () => {
+  const log = createChatLog();
+  const start = log.version();
+  log.add(line(1), 'me', 0);
+  expect(log.version()).toBe(start + 1);
+  log.add(line(1), 'me', 0);
+  expect(log.version()).toBe(start + 1);
+  log.clear();
+  expect(log.version()).toBe(start + 2);
 });
