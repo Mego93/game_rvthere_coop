@@ -78,4 +78,19 @@ describe('mapScene (R11, A8)', () => {
     expect(scene.view.originZ).toBeCloseTo(0);
     expect(scene.items.map((i) => i.entity.kind)).toEqual(['finish']);
   });
+
+  it('28c I1 items inside the window are drawn in place, items outside it are hidden, never pinned', () => {
+    const plan = createMapPlan(longRoute, finish, SIZE, 8);
+    const item = (id: string, z: number): Entity => ({ id, kind: 'item', x: 0, z, itemKind: 'jerrycan' });
+    const ids = mapScene(plan, [vehicle(-5000), item('near', -5300), item('far', -5700)]).items.map((i) => i.entity.id);
+    expect(ids).toContain('near');
+    expect(ids).not.toContain('far');
+  });
+
+  it('28c I1 on a route of 3 km or less every item inside the circle is drawn, one beyond it is not pinned', () => {
+    const plan = createMapPlan(shortRoute, { x: 0, z: -2600 }, SIZE, 8);
+    const item = (id: string, x: number, z: number): Entity => ({ id, kind: 'item', x, z, itemKind: 'toolbox' });
+    const ids = mapScene(plan, [vehicle(-100), item('a', 0, -1300), item('b', 0, -2500), item('off', 3000, -1300)]).items.map((i) => i.entity.id);
+    expect(ids).toEqual(['vehicle', 'a', 'b']);
+  });
 });

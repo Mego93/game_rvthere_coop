@@ -28,10 +28,13 @@ export function createMapPlan(route: readonly [number, number][], finish: { x: n
 // A route over 3 km shows a moving window: only the finish is pinned to the edge, everything else outside the circle is hidden.
 export function mapScene(plan: MapPlan, entities: readonly HudEntity[]): MapScene {
   if (!plan.windowed) {
-    const items = entities.map((entity) => {
-      const p = clampToCircle(plan.staticView, toMap(plan.staticView, entity.x, entity.z));
-      return { entity, x: p.x, y: p.y };
-    });
+    const items: MapScene['items'] = [];
+    for (const entity of entities) {
+      const raw = toMap(plan.staticView, entity.x, entity.z);
+      const p = clampToCircle(plan.staticView, raw);
+      if (entity.kind === 'item' && (p.x !== raw.x || p.y !== raw.y)) continue;
+      items.push({ entity, x: p.x, y: p.y });
+    }
     return { view: plan.staticView, path: plan.staticPath, items };
   }
   const centre = entities.find((e) => e.kind === 'self') ?? entities.find((e) => e.kind === 'vehicle');
@@ -41,7 +44,9 @@ export function mapScene(plan: MapPlan, entities: readonly HudEntity[]): MapScen
   for (const entity of entities) {
     if (entity.kind === 'checkpoint') continue;
     if (Math.hypot(entity.x - origin.x, entity.z - origin.z) > WINDOW_RADIUS) continue;
-    const p = clampToCircle(view, toMap(view, entity.x, entity.z));
+    const raw = toMap(view, entity.x, entity.z);
+    const p = clampToCircle(view, raw);
+    if (entity.kind === 'item' && (p.x !== raw.x || p.y !== raw.y)) continue;
     items.push({ entity, x: p.x, y: p.y });
   }
   const pin = clampToCircle(view, toMap(view, plan.finish.x, plan.finish.z));

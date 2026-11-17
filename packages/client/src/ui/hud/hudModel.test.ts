@@ -263,3 +263,21 @@ describe('ownHealthFraction', () => {
     expect(ownHealthFraction(Number.NaN)).toBe(0);
   });
 });
+
+describe('item map entities (28c I1)', () => {
+  const prop = (id: string, kind: string, x: number, z: number) => ({ id, kind, pos: vec3(x, 0, z), rot: IDENTITY });
+  const items = (propPoses: ReturnType<typeof prop>[], over: Partial<OverlayData> = {}) =>
+    build({ propPoses, ...over }).mapEntities.filter((entity) => entity.kind === 'item');
+  test('course pickups and drops with an item kind become item entities with their kind', () => {
+    expect(items([prop('pickup-1', 'jerrycan', 3, 4), prop('item-2', 'healthKit', 5, 6), prop('crate-1', 'crate', 1, 1)])).toEqual([
+      { id: 'pickup-1', kind: 'item', x: 3, z: 4, itemKind: 'jerrycan' },
+      { id: 'item-2', kind: 'item', x: 5, z: 6, itemKind: 'healthKit' },
+    ]);
+  });
+  test('an item in a player\'s hands is not shown', () => {
+    expect(items([prop('item-2', 'toolbox', 5, 6)], { players: [player('p1', 40, 40, { hands: 'item-2' }), player('p2', 50, 50)] })).toEqual([]);
+  });
+  test('no vehicle, no entities', () => {
+    expect(build({ vehicle: null, propPoses: [prop('item-2', 'toolbox', 5, 6)] }).mapEntities).toEqual([]);
+  });
+});
