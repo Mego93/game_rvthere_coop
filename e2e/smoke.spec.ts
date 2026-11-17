@@ -463,6 +463,12 @@ test('T14: a marrakech run drives forward for 5 s, the vehicle moves and the min
   await expect(page.locator('#hud-minimap')).toBeVisible();
   const route = await page.locator('#hud-minimap .route').getAttribute('d');
   expect(route ?? '').toMatch(/^M/);
+  // The route is a 22 km line; the 600 m window clips it, so every vertex lies inside the map circle.
+  const size = Number(await page.locator('#hud-minimap').getAttribute('width'));
+  const numbers = (route ?? '').match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/g)!.map(Number);
+  expect(numbers.length).toBeGreaterThanOrEqual(4);
+  expect(numbers.every(Number.isFinite)).toBe(true);
+  for (let k = 0; k + 1 < numbers.length; k += 2) expect(Math.hypot(numbers[k]! - size / 2, numbers[k + 1]! - size / 2)).toBeLessThanOrEqual(size / 2 + 1);
   await expect(page.locator('#hud-minimap .vehicle')).toBeAttached();
 });
 

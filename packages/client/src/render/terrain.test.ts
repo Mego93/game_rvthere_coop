@@ -147,3 +147,16 @@ describe('buildTerrainGrid', () => {
     expect(checked).toBeGreaterThan(500);
   });
 });
+
+describe('surfaceYAt with one huge ground box', () => {
+  const identity = { x: 0, y: 0, z: 0, w: 1 };
+  const small = { center: { x: 100, y: 0.5, z: 100 }, halfExtents: { x: 5, y: 0.5, z: 5 }, rot: identity };
+  const huge = { center: { x: 0, y: -2, z: 0 }, halfExtents: { x: 4000, y: 1, z: 4000 }, rot: identity };
+  const course = { route: [[0, 0], [1, 0]], ground: [small, huge] } as unknown as BuiltCourse;
+
+  test('the huge box counts everywhere it covers, the small one wins where it is higher', () => {
+    expect(surfaceYAt(course, 3000, -2500)).toBeCloseTo(-1, 9);
+    expect(surfaceYAt(course, 100, 100)).toBeCloseTo(1, 9);
+    expect(surfaceYAt(course, 5000, 0)).toBeNull();
+  });
+});

@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { PROP_KINDS, ROAD_MAX_PIECE_YAW, ROAD_PIECE_LENGTH, TICK_RATE } from '../constants';
+import { ROAD_MAX_PIECE_YAW, ROAD_PIECE_LENGTH, TICK_RATE } from '../constants';
+import { NEUTRAL_INPUT } from '../protocol';
 import { rotate, vec3 } from '../math';
 import type { SegmentDef } from '../segments';
 import { exitPoints } from '../seats';
@@ -21,10 +22,10 @@ beforeAll(async () => {
 
 const FULL = process.env.MARRAKECH_FULL === '1';
 const PLAYER = 'p1';
-// A9: a stop refills the tank, so every segment starts from a full one.
+// A9, and the owner ruling in the ROADMAP decisions log (2026-11-17, step 27 fuel): a stop refills the tank, so every segment starts from a full one; from 50 % the RV cannot meet the gaps.
 const START_FUEL = 1;
-// The allowed time per segment: twice its length at 6 m/s, plus 20 s.
-export const allowedSeconds = (length: number): number => (2 * length) / 6 + 20;
+// A9: twice the target time, shared out by the segment's share of the route, plus 20 s.
+export const allowedSeconds = (length: number, targetTime: number, routeLength: number): number => (2 * targetTime * length) / routeLength + 20;
 // A vehicle this far from the route, or standing this long, has failed the segment.
 const OFF_ROAD = 12;
 const STUCK_SECONDS = 6;
@@ -32,6 +33,7 @@ const STUCK_SECONDS = 6;
 const def = getCourseDef('marrakech')!;
 const course = getCourse('marrakech');
 const starts = segmentStarts(course);
+const routeLength = course.route.slice(1).reduce((sum, [x, z], i) => sum + Math.hypot(x - course.route[i]![0], z - course.route[i]![1]), 0);
 const segmentCount = def.segments.length;
 const ROADWORKS = new Set(def.segments.flatMap((s, i) => (s.type === 'roadworks' ? [i] : [])));
 // Spec: the RV fails the bank unaided (it has winch anchors).
@@ -44,19 +46,25 @@ const hazardOf = (i: number): string | undefined => {
   return s.type === 'road' ? s.hazards?.[0]?.kind : undefined;
 };
 
-// Segments of a sample: the first, the last, every inserted terrain segment, each hazard segment, a few curves incl. the sharpest and the most stretched.
-export function sampleSegments(): number[] {
+// The curves the sample must hold: the sharpest (most yaw per metre) and the most stretched (length beyond the 10 degrees per 10 m rule).
+export function curveExtremes(): { sharpest: number; stretched: number; curves: number[] } {
   const curves = def.segments.flatMap((s, i) => (s.type === 'road' && s.curve ? [{ i, s: s as RoadDef }] : []));
   const sharpest = curves.reduce((a, b) => (Math.abs(b.s.curve!) / b.s.length > Math.abs(a.s.curve!) / a.s.length ? b : a));
   const stretch = ({ s }: { s: RoadDef }) => s.length - (Math.abs(s.curve!) / ROAD_MAX_PIECE_YAW) * ROAD_PIECE_LENGTH;
   const stretched = curves.reduce((a, b) => (stretch(b) > stretch(a) ? b : a));
-  const spread = [0.25, 0.5, 0.75].map((f) => curves[Math.floor(f * curves.length)]!.i);
+  return { sharpest: sharpest.i, stretched: stretched.i, curves: curves.map((c) => c.i) };
+}
+
+// Segments of a sample: the first, the last, every inserted terrain segment, each hazard segment, a few curves incl. the sharpest and the most stretched.
+export function sampleSegments(): number[] {
+  const { sharpest, stretched, curves } = curveExtremes();
+  const spread = [0.25, 0.5, 0.75].map((f) => curves[Math.floor(f * curves.length)]!);
   const hazards = def.segments.flatMap((_, i) => (hazardOf(i) ? [i] : []));
-  const all = [0, segmentCount - 1, ...MARRAKECH_INSERTED, ...hazards, sharpest.i, stretched.i, ...spread];
+  const all = [0, segmentCount - 1, ...MARRAKECH_INSERTED, ...hazards, sharpest, stretched, ...spread];
   return [...new Set(all)].sort((a, b) => a - b);
 }
 
-type Failure = 'stuck' | 'flipped' | 'off road' | 'too slow';
+type Failure = 'stuck' | 'flipped' | 'off road' | 'out of fuel' | 'too slow';
 export interface SegmentOutcome {
   reached: boolean;
   failure?: Failure;
@@ -109,27 +117,22 @@ const rightOf = (id: string) => {
 // The driver brakes before a barrier row, gets out, pushes the middle barrier of each row forward then aside, and boards again.
 function openRows(world: World, rows: string[][]): void {
   const first = rows[0]![1]!;
-  driveWorld(world, PLAYER, alongOfProp(first) - 50, { timeoutTicks: 120 * TICK_RATE });
+  const approach = driveWorld(world, PLAYER, alongOfProp(first) - 50, { timeoutTicks: 120 * TICK_RATE });
+  if (!approach.reached) throw new Error(`the approach to the barrier rows stopped at ${approach.along.toFixed(0)} m`);
   exitVehicle(world, PLAYER);
   for (const row of rows) {
     const middle = row[1]!;
-    pushAside(world, PLAYER, middle, forwardOf(middle), rightOf(middle), 3, 3.5);
+    const end = pushAside(world, PLAYER, middle, forwardOf(middle), rightOf(middle), 3, 3.5);
+    const start = propDef(middle).pose.pos;
+    const right = rightOf(middle);
+    const pushed = (end.x - start.x) * right.x + (end.z - start.z) * right.z;
+    if (pushed < 2.5) throw new Error(`${middle} was pushed only ${pushed.toFixed(1)} m out of its row`);
   }
   if (!boardVehicle(world, PLAYER)) throw new Error('the driver cannot board after opening the rows');
 }
 
-// Scripted solo drive of one segment from its checkpoint spawn to the next one's start (the finish for the last).
-export function driveOne(vehicleId: string, segment: number): SegmentOutcome {
-  const world = soloAt(vehicleId, segment);
-  const length = segmentRouteLength(course, segment);
-  const allowed = allowedSeconds(length);
-  if (hazardOf(segment) === 'roadblock') openRows(world, [propsOf(segment, 'barrier')]);
-  else if (ROADWORKS.has(segment)) {
-    const barriers = propsOf(segment, 'barrier');
-    openRows(world, [barriers.slice(0, 3), barriers.slice(3, 6)].filter((row) => row.length === 3));
-  }
-  const last = segment === segmentCount - 1;
-  const until = last ? Infinity : alongOf(course, { leg: starts[segment + 1]!, t: 0 });
+// Watches a drive every 6 ticks and names the first failure.
+function monitor(world: World, segment: number) {
   let failure: Failure | undefined;
   let tick = 0;
   let standing = 0;
@@ -137,41 +140,87 @@ export function driveOne(vehicleId: string, segment: number): SegmentOutcome {
   const stop = (): boolean => {
     tick++;
     if (tick % 6 !== 0) return false;
-    const { pos, rot, linvel } = world.snapshot().vehicle;
+    const { pos, rot, linvel, fuel } = world.snapshot().vehicle;
     const up = rotate(rot, vec3(0, 1, 0));
     if (up.y < 0.1) failure = 'flipped';
     const gap = routeGap(pos.x, pos.z, starts[segment]!);
     worstGap = Math.max(worstGap, gap);
-    if (gap > OFF_ROAD && !last) failure = 'off road';
+    if (gap > OFF_ROAD) failure = 'off road';
+    if (fuel <= 0) failure = 'out of fuel';
     standing = Math.hypot(linvel.x, linvel.y, linvel.z) < 0.3 && tick > 4 * TICK_RATE ? standing + 6 / TICK_RATE : 0;
     if (standing > STUCK_SECONDS) failure = 'stuck';
     return failure !== undefined;
   };
-  const result = driveWorld(world, PLAYER, until, { timeoutTicks: Math.ceil(allowed * TICK_RATE), stop });
+  return { stop, failure: () => failure, worstGap: () => worstGap };
+}
+
+const untilOf = (segment: number): number => (segment === segmentCount - 1 ? Infinity : alongOf(course, { leg: starts[segment + 1]!, t: 0 }));
+const allowedFor = (segment: number): number => allowedSeconds(segmentRouteLength(course, segment), course.targetTime, routeLength);
+
+// Scripted solo drive of one segment from its checkpoint spawn to the next one's start (the finish for the last).
+export function driveOne(vehicleId: string, segment: number): SegmentOutcome {
+  const world = soloAt(vehicleId, segment);
+  const length = segmentRouteLength(course, segment);
+  const allowed = allowedFor(segment);
+  if (hazardOf(segment) === 'roadblock') openRows(world, [propsOf(segment, 'barrier')]);
+  else if (ROADWORKS.has(segment)) {
+    const barriers = propsOf(segment, 'barrier');
+    openRows(world, [barriers.slice(0, 3), barriers.slice(3, 6)].filter((row) => row.length === 3));
+  }
+  const watch = monitor(world, segment);
+  const result = driveWorld(world, PLAYER, untilOf(segment), { timeoutTicks: Math.ceil(allowed * TICK_RATE), stop: watch.stop });
   const elapsed = result.ticks / TICK_RATE;
   const fuel = world.snapshot().vehicle.fuel;
   world.dispose();
-  const detail = `${vehicleId} segment ${segment} (${def.segments[segment]!.type}${hazardOf(segment) ? ` ${hazardOf(segment)}` : ''}, ${length.toFixed(0)} m): ${elapsed.toFixed(1)} s of ${allowed.toFixed(1)} s, worst route gap ${worstGap.toFixed(1)} m, fuel ${(100 * fuel).toFixed(0)} %`;
+  const detail = `${vehicleId} segment ${segment} (${def.segments[segment]!.type}${hazardOf(segment) ? ` ${hazardOf(segment)}` : ''}, ${length.toFixed(0)} m): ${elapsed.toFixed(1)} s of ${allowed.toFixed(1)} s, worst route gap ${watch.worstGap().toFixed(1)} m, fuel ${(100 * fuel).toFixed(0)} %`;
+  if (result.reached && fuel <= 0) return { reached: false, failure: 'out of fuel', seconds: elapsed, allowed, detail };
   if (result.reached) return { reached: true, seconds: elapsed, allowed, detail };
-  return { reached: false, failure: failure ?? 'too slow', seconds: elapsed, allowed, detail };
+  return { reached: false, failure: watch.failure() ?? 'too slow', seconds: elapsed, allowed, detail };
 }
 
 describe('allowed time', () => {
-  test('is twice the length at 6 m/s plus 20 s', () => {
-    expect(allowedSeconds(0)).toBe(20);
-    expect(allowedSeconds(300)).toBe(120);
+  test('is twice the target time shared out by length, plus 20 s', () => {
+    expect(allowedSeconds(0, 1800, 20_000)).toBe(20);
+    expect(allowedSeconds(1000, 1800, 20_000)).toBe(200);
+    expect(allowedFor(0)).toBeCloseTo((2 * course.targetTime * segmentRouteLength(course, 0)) / routeLength + 20, 9);
   });
 });
 
 describe('the sample', () => {
-  test('holds the first and last segments, all inserted terrain and all hazards', () => {
+  test('holds the ends, all inserted terrain, the sharpest and most stretched curves and every hazard kind', () => {
     const sample = sampleSegments();
     expect(sample).toContain(0);
     expect(sample).toContain(segmentCount - 1);
     for (const i of MARRAKECH_INSERTED) expect(sample).toContain(i);
+    const { sharpest, stretched } = curveExtremes();
+    expect(sample).toContain(sharpest);
+    expect(sample).toContain(stretched);
+    for (const kind of ['crateWall', 'gates', 'roadblock']) {
+      const of = def.segments.flatMap((_, i) => (hazardOf(i) === kind ? [i] : []));
+      expect(of.length, kind).toBeGreaterThan(0);
+      expect(of.some((i) => sample.includes(i)), kind).toBe(true);
+    }
     expect(sample.length).toBeLessThan(40);
-    expect(PROP_KINDS.barrier).toBeDefined();
   });
+});
+
+describe('the failure classes fire', () => {
+  test('a drive with no steering on the sharpest curve is reported as off road, stuck or too slow', () => {
+    const segment = curveExtremes().sharpest;
+    const world = soloAt('lodgy', segment);
+    const watch = monitor(world, segment);
+    const until = untilOf(segment);
+    let along = 0;
+    for (let tick = 0; tick < Math.ceil(allowedFor(segment) * TICK_RATE); tick++) {
+      world.step(new Map([[PLAYER, { ...NEUTRAL_INPUT, moveY: 1 }]]));
+      const { pos } = world.snapshot().vehicle;
+      along = alongOfPoint(course, pos.x, pos.z);
+      if (watch.stop() || along >= until) break;
+    }
+    world.dispose();
+    const reached = along >= until && watch.failure() === undefined;
+    expect(reached, `along ${along.toFixed(0)} of ${until.toFixed(0)}, failure ${watch.failure()}`).toBe(false);
+  }, 120_000);
 });
 
 const picked = FULL ? Array.from({ length: segmentCount }, (_, i) => i) : sampleSegments();

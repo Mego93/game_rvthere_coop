@@ -21,28 +21,40 @@ const q = new THREE.Quaternion();
 const o = new THREE.Vector3();
 const d = new THREE.Vector3();
 const GROUND_CELL = 64;
-const groundGrids = new WeakMap<readonly Box[], Map<string, Box[]>>();
+interface GroundIndex {
+  grid: Map<string, Box[]>;
+  // Boxes too large to register in every cell they cover; they are tested for every point.
+  big: Box[];
+}
+const groundGrids = new WeakMap<readonly Box[], GroundIndex>();
+const BIG_REACH = 1000;
 
 // The ground boxes whose bounding square can reach the point's grid cell.
 function groundNear(course: BuiltCourse, x: number, z: number): readonly Box[] {
-  let grid = groundGrids.get(course.ground);
-  if (!grid) {
-    grid = new Map();
+  let index = groundGrids.get(course.ground);
+  if (!index) {
+    index = { grid: new Map(), big: [] };
     for (const box of course.ground) {
       const h = box.halfExtents;
       const reach = Math.hypot(h.x, h.y, h.z);
+      if (reach > BIG_REACH) {
+        index.big.push(box);
+        continue;
+      }
       for (let i = Math.floor((box.center.x - reach) / GROUND_CELL); i <= Math.floor((box.center.x + reach) / GROUND_CELL); i++) {
         for (let j = Math.floor((box.center.z - reach) / GROUND_CELL); j <= Math.floor((box.center.z + reach) / GROUND_CELL); j++) {
           const key = `${i},${j}`;
-          const list = grid.get(key);
+          const list = index.grid.get(key);
           if (list) list.push(box);
-          else grid.set(key, [box]);
+          else index.grid.set(key, [box]);
         }
       }
     }
-    groundGrids.set(course.ground, grid);
+    groundGrids.set(course.ground, index);
   }
-  return grid.get(`${Math.floor(x / GROUND_CELL)},${Math.floor(z / GROUND_CELL)}`) ?? [];
+  const near = index.grid.get(`${Math.floor(x / GROUND_CELL)},${Math.floor(z / GROUND_CELL)}`);
+  if (index.big.length === 0) return near ?? [];
+  return near ? [...near, ...index.big] : index.big;
 }
 
 // Height of the top of the highest ground box under (x, z), or null off the ground.
