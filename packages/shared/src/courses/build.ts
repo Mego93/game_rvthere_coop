@@ -1,12 +1,15 @@
-import { CHECKPOINT_TRIGGER, FINISH_PAD, FINISH_TRIGGER, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET } from '../constants';
+import { AMBIENT_ENDS, AMBIENT_MARGIN, CHECKPOINT_TRIGGER, FINISH_PAD, FINISH_TRIGGER, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET } from '../constants';
 import type { Box, BuiltCourse, Checkpoint, GroundBox, Placed } from '../course';
 import { add, deepFreeze, quatMul, rotate, vec3, type Pose, type Vec3 } from '../math';
-import { buildSegment, yawPitchQuat, yawQuat, type LocalSegment, type SegmentDef } from '../segments';
+import { createRouteIndex } from '../routeAlong';
+import { buildSegment, hazardSpan, yawPitchQuat, yawQuat, type LocalSegment, type SegmentDef } from '../segments';
 
 export interface CourseDef {
   id: string;
   segments: SegmentDef[];
   targetTime: number;
+  // Switches on ambient animals; the built course then carries `ambient` spans.
+  ambient?: boolean;
 }
 
 interface Frame {
@@ -52,6 +55,8 @@ export function buildCourse(def: CourseDef): BuiltCourse {
     targetTime: def.targetTime,
   };
 
+  const raw: { from: number; to: number }[] = [];
+  let routeAt = 0;
   let frame: Frame = { pos: vec3(0, 0, 0), yaw: 0 };
   const addRoute = (local: LocalSegment, at: ReturnType<typeof placer>, first: boolean) => {
     const points = local.route.map(([x, z]) => at.point(vec3(x, 0, z)));
@@ -91,6 +96,17 @@ export function buildCourse(def: CourseDef): BuiltCourse {
     };
     course.checkpoints.push(checkpoint);
     addRoute(local, at, index === 0);
+    if (def.ambient) {
+      const from = routeAt;
+      for (let i = 1; i < local.route.length; i++) routeAt += Math.hypot(local.route[i]![0] - local.route[i - 1]![0], local.route[i]![1] - local.route[i - 1]![1]);
+      const terrain = segmentDef.type !== 'road' || Boolean(segmentDef.slope);
+      if (terrain) raw.push({ from: from - AMBIENT_MARGIN, to: routeAt + AMBIENT_MARGIN });
+      const marks: [number, number][] = [];
+      if (segmentDef.stop) marks.push([segmentDef.stop.along, segmentDef.stop.along]);
+      if (segmentDef.type === 'road') for (const h of segmentDef.hazards ?? []) marks.push(hazardSpan(h));
+      for (const d of local.debrisAlong ?? []) marks.push([d, d]);
+      for (const [a, b] of marks) raw.push({ from: from + a - AMBIENT_MARGIN, to: from + b + AMBIENT_MARGIN });
+    }
     frame = { pos: at.point(local.exit.pos), yaw: frame.yaw + local.exit.yaw };
   });
 
@@ -103,6 +119,18 @@ export function buildCourse(def: CourseDef): BuiltCourse {
     halfExtents: FINISH_TRIGGER,
     rot: at.q,
   };
+
+  if (def.ambient) {
+    const total = createRouteIndex(course.route).length;
+    raw.push({ from: -1, to: AMBIENT_ENDS }, { from: total - AMBIENT_ENDS, to: total + 1 });
+    const blocked: { from: number; to: number }[] = [];
+    for (const span of raw.map((r) => ({ from: Math.max(0, r.from), to: Math.min(total, r.to) })).sort((a, b) => a.from - b.from || a.to - b.to)) {
+      const last = blocked[blocked.length - 1];
+      if (last && span.from <= last.to) last.to = Math.max(last.to, span.to);
+      else blocked.push(span);
+    }
+    course.ambient = { blocked };
+  }
 
   let lowest = Infinity;
   for (const b of ground) {

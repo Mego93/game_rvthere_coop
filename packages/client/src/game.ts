@@ -39,6 +39,7 @@ import { createReconciler } from './prediction/reconciler';
 import { updateFollowCamera } from './render/followCamera';
 import { createPlayerMesh, disposePlayerMesh, LABEL_RANGE, placePlayerMesh, setNameVisible } from './render/playerMesh';
 import { createCoinMeshes } from './render/coinMesh';
+import { createAnimalMeshes } from './render/animalMeshes';
 import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMesh';
 import { applyConditions, conditionsLook, configureRenderer } from './render/conditions';
 import { applySky, hasSky } from './render/environment';
@@ -50,6 +51,7 @@ import { FIRST_PERSON_FOV, onFootPose, seatedPose } from './render/firstPersonCa
 import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createSeatRing, createVehicleMesh, disposeSeatRing, placeSeatRing, placeVehicleMesh } from './render/vehicleMesh';
+import { createEventToast } from './ui/hud/eventToast';
 import { createSeatAnnouncer } from './ui/hud/seatToast';
 import { interactAction, overlayText, type OverlayData } from './ui/overlay';
 import { createHud } from './ui/hud/hud';
@@ -147,10 +149,12 @@ export function createGame(
   scene.add(vehicleMesh);
   const seatRing = createSeatRing();
   const seatAnnouncer = createSeatAnnouncer();
+  const eventToast = createEventToast();
   const winchMesh = createWinchMesh();
   winchMesh.visible = false;
   scene.add(winchMesh);
   const coinMeshes = createCoinMeshes(scene, course.coins);
+  const animalMeshes = createAnimalMeshes(scene);
   const firstPerson = view.firstPerson === true;
   const camera = new THREE.PerspectiveCamera(firstPerson ? FIRST_PERSON_FOV : 60, 1, 0.1, 1000);
   camera.position.set(0, 6, 14);
@@ -439,6 +443,7 @@ export function createGame(
       placeWinchMesh(winchMesh, mount, hook, cable.state !== 'stowed');
     }
     syncPropMeshes(sampled?.props ?? [], players);
+    animalMeshes.update(sampled?.animals ?? []);
 
     const local = players.find((player) => player.playerId === playerId);
     const onFoot = local !== undefined && local.seat === null;
@@ -490,7 +495,7 @@ export function createGame(
       const projected = projectMarker(project, cameraSpaceZ, other.pos, window.innerWidth, window.innerHeight);
       return { id: other.id, name: other.name, seconds: other.seconds, ...projected };
     });
-    hud.update(hudModel, markers, announced.toast);
+    hud.update(hudModel, markers, announced.toast ?? eventToast.current(now / 1000));
     hud.setVisible(lobby.phase === 'playing' && !anyOpen());
     if (view.touchUi) {
       view.touchUi.update(touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable }));
@@ -548,7 +553,8 @@ export function createGame(
     },
     onEvent(message) {
       const sound = soundFor(message, playerId);
-      if (sound) audio.play(sound.kind, sound.positional ? { at: message.pos } : undefined);
+      if (sound) audio.play(sound.kind, { ...(sound.positional ? { at: message.pos } : {}), ...(sound.volume === undefined ? {} : { volume: sound.volume }) });
+      eventToast.show(message.kind, performance.now() / 1000);
     },
     setControlsOpen(open) {
       controlsOpen = open;
@@ -571,6 +577,7 @@ export function createGame(
       hud.dispose();
       disposeSeatRing(seatRing);
       coinMeshes.dispose();
+      animalMeshes.dispose();
       input.dispose();
       predictor.dispose();
       if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();

@@ -1,4 +1,6 @@
 export * from './constants';
+export * from './ambient';
+export * from './animals';
 export * from './checkpoints';
 export * from './coins';
 export * from './course';
@@ -15,6 +17,7 @@ export * from './predictor';
 export * from './props';
 export * from './protocol';
 export * from './rapier';
+export * from './routeAlong';
 export * from './rules';
 export * from './seats';
 export * from './segments';

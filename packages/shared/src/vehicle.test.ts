@@ -324,3 +324,41 @@ describe('W1: gripScale', () => {
     for (const slip of slips(surface)) expect(slip).toBeCloseTo(config.grip * SURFACES[surface].grip, 6);
   });
 });
+
+describe('T6: vehicle.damage(amount, floor)', () => {
+  const fresh = () => createRig(RAPIER, 'lodgy', ORIGIN).vehicle;
+
+  test('takes the amount', () => {
+    const vehicle = fresh();
+    vehicle.damage(0.03, 0.02);
+    expect(vehicle.health()).toBeCloseTo(0.97, 10);
+    expect(vehicle.state().health).toBeCloseTo(0.97, 10);
+  });
+
+  test('stops at the floor', () => {
+    const vehicle = fresh();
+    vehicle.damage(5, 0.02);
+    expect(vehicle.health()).toBe(0.02);
+    vehicle.damage(0.03, 0.02);
+    expect(vehicle.health()).toBe(0.02);
+  });
+
+  test('never raises health that is already below the floor', () => {
+    const vehicle = fresh();
+    vehicle.repair(-1);
+    vehicle.repair(0.01);
+    vehicle.damage(0.03, 0.02);
+    expect(vehicle.health()).toBe(0.01);
+  });
+
+  test('leaves repair, the clamp and the impact paths as they were', () => {
+    const vehicle = fresh();
+    vehicle.damage(0.5, 0.02);
+    vehicle.repair(0.2);
+    expect(vehicle.health()).toBeCloseTo(0.7, 10);
+    vehicle.repair(5);
+    expect(vehicle.health()).toBe(1);
+    vehicle.repair(-5);
+    expect(vehicle.health()).toBe(0);
+  });
+});

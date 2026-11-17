@@ -5,6 +5,7 @@ import {
   TICK_DT,
   lerp,
   nlerp,
+  type AnimalSnapshot,
   type CableSnapshot,
   type PlayerSnapshot,
   type PropSnapshot,
@@ -17,7 +18,7 @@ export interface SnapshotBuffer {
   // Stores a snapshot received at local time `receivedAt` (seconds). Snapshots older than the newest are ignored.
   push(snapshot: SnapshotMessage, receivedAt: number): void;
   // The world as it was INTERPOLATION_DELAY before local time `now`, or null before any snapshot.
-  sample(now: number): { vehicle: VehicleState; players: PlayerSnapshot[]; props: PropSnapshot[]; cable: CableSnapshot } | null;
+  sample(now: number): { vehicle: VehicleState; players: PlayerSnapshot[]; props: PropSnapshot[]; animals: AnimalSnapshot[]; cable: CableSnapshot } | null;
   // The tick of the newest snapshot, or 0 before any.
   latestTick(): number;
   // Every prop as of the newest snapshot, partial snapshots merged in.
@@ -86,6 +87,23 @@ function copyVehicle(v: VehicleState): VehicleState {
 
 const copyProp = (p: PropSnapshot): PropSnapshot => ({ id: p.id, kind: p.kind, pos: copyVec(p.pos), rot: { ...p.rot } });
 
+const copyAnimal = (a: AnimalSnapshot): AnimalSnapshot => ({ id: a.id, kind: a.kind, x: a.x, y: a.y, z: a.z, yaw: a.yaw, ...(a.hit ? { hit: true as const } : {}) });
+
+// The shorter way round, so a turn across +-pi does not spin the long way.
+function blendYaw(from: number, to: number, t: number): number {
+  const yaw = from + Math.atan2(Math.sin(to - from), Math.cos(to - from)) * t;
+  return yaw > Math.PI ? yaw - 2 * Math.PI : yaw <= -Math.PI ? yaw + 2 * Math.PI : yaw;
+}
+
+function blendAnimals(from: readonly AnimalSnapshot[] | undefined, to: readonly AnimalSnapshot[] | undefined, t: number): AnimalSnapshot[] {
+  const before = new Map((from ?? []).map((a) => [a.id, a]));
+  return (to ?? []).map((a) => {
+    const prev = before.get(a.id);
+    if (!prev) return copyAnimal(a);
+    return { ...copyAnimal(a), x: prev.x + (a.x - prev.x) * t, y: prev.y + (a.y - prev.y) * t, z: prev.z + (a.z - prev.z) * t, yaw: blendYaw(prev.yaw, a.yaw, t) };
+  });
+}
+
 const copyCable = (c: CableSnapshot): CableSnapshot => ({
   state: c.state,
   holderId: c.holderId,
@@ -105,6 +123,7 @@ const copyWorld = (w: WorldSnapshot) => ({
   vehicle: copyVehicle(w.vehicle),
   players: w.players.map(copyPlayer),
   props: w.props.map(copyProp),
+  animals: (w.animals ?? []).map(copyAnimal),
   cable: copyCable(w.cable),
 });
 
@@ -118,11 +137,7 @@ function blendProps(from: readonly PropSnapshot[], to: readonly PropSnapshot[], 
 
 function blendPlayer(a: PlayerSnapshot | undefined, b: PlayerSnapshot, t: number): PlayerSnapshot {
   if (!a) return copyPlayer(b);
-  // The shorter way round, so a turn across +-pi does not spin the long way.
-  const turn = Math.atan2(Math.sin(b.yaw - a.yaw), Math.cos(b.yaw - a.yaw));
-  const yaw = a.yaw + turn * t;
-  const wrapped = yaw > Math.PI ? yaw - 2 * Math.PI : yaw <= -Math.PI ? yaw + 2 * Math.PI : yaw;
-  return { ...copyPlayer(b), pos: lerp(a.pos, b.pos, t), yaw: wrapped };
+  return { ...copyPlayer(b), pos: lerp(a.pos, b.pos, t), yaw: blendYaw(a.yaw, b.yaw, t) };
 }
 
 export function createSnapshotBuffer(): SnapshotBuffer {
@@ -165,6 +180,7 @@ export function createSnapshotBuffer(): SnapshotBuffer {
         vehicle: blend(from.snapshot.vehicle, to.snapshot.vehicle, t),
         players: to.snapshot.players.map((p) => blendPlayer(before.get(p.playerId), p, t)),
         props: blendProps(from.snapshot.props, to.snapshot.props, t),
+        animals: blendAnimals(from.snapshot.animals, to.snapshot.animals, t),
         cable: blendCable(from.snapshot.cable, to.snapshot.cable, t),
       };
     },

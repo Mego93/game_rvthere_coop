@@ -151,7 +151,7 @@ export interface PlayerSnapshot {
   slide?: { ticks: number; cooldown: number; air: number; dirX: number; dirZ: number; launch?: number };
 }
 
-export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn'] as const;
+export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit'] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
 export interface EventMessage {
@@ -361,6 +361,17 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
       (value.slide.launch === undefined || (finite(value.slide.launch) && value.slide.launch >= 0))));
 const isPropSnapshot = (value: unknown): value is PropSnapshot =>
   isRecord(value) && isText(value.id) && isText(value.kind) && isVec3(value.pos) && isQuat(value.rot);
+// Far above the most the director keeps alive (9).
+const MAX_ANIMALS = 32;
+const isAnimalSnapshot = (value: unknown): boolean =>
+  isRecord(value) &&
+  isCount(value.id) &&
+  (value.kind === 'goat' || value.kind === 'scooter') &&
+  finite(value.x) &&
+  finite(value.y) &&
+  finite(value.z) &&
+  finite(value.yaw) &&
+  (value.hit === undefined || value.hit === true);
 const isCableSnapshot = (value: unknown): value is CableSnapshot =>
   isRecord(value) &&
   (value.state === 'stowed' || value.state === 'held' || value.state === 'ground' || value.state === 'attached') &&
@@ -435,6 +446,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         data.players.every(isPlayerSnapshot) &&
         Array.isArray(data.props) &&
         data.props.every(isPropSnapshot) &&
+        (data.animals === undefined || (Array.isArray(data.animals) && data.animals.length <= MAX_ANIMALS && data.animals.every(isAnimalSnapshot))) &&
         isCableSnapshot(data.cable)
         ? message
         : null;
