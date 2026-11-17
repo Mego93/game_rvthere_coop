@@ -90,22 +90,29 @@ describe('T1 planItemDrops on marrakech', () => {
 
 describe('T1 fuel balance on marrakech', () => {
   const stopAlongs = marrakech.stops.filter((s) => s.kind === 'fuel').map((s) => alongOf({ x: s.zone.center.x, z: s.zone.center.z })).sort((a, b) => a - b);
+  const edges = [0, ...stopAlongs, routeLength];
+  const jerrysPerGap = (p: readonly ItemDropEvent[]) => edges.slice(1).map((edge, i) => p.filter((e) => e.kind === 'jerrycan' && e.along >= edges[i]! && e.along < edge).length);
   it('finds fuel stops', () => {
     expect(stopAlongs.length).toBeGreaterThan(0);
   });
-  it('expects at most 0.25 jerrycans per route km', () => {
-    const jerry = plan.filter((e) => e.kind === 'jerrycan').length;
-    const expected = (eligible / ITEM_DROP_SPACING) * ITEM_DROP_MIX.jerrycan;
-    expect(expected / (routeLength / 1000)).toBeLessThanOrEqual(0.25);
-    expect(jerry / (routeLength / 1000)).toBeLessThanOrEqual(0.25 * 2);
+  it('run 1 holds at most one drop jerrycan between two consecutive fuel stops', () => {
+    expect(Math.max(...jerrysPerGap(plan))).toBeLessThanOrEqual(1);
   });
-  // A property of the run 1 layout (3 jerrycans in 22 drops), not of every seed: fuel stops are about 1 km apart.
-  it('holds at most one drop jerrycan between two consecutive fuel stops', () => {
-    const edges = [0, ...stopAlongs, routeLength];
-    for (let i = 1; i < edges.length; i++) {
-      const n = plan.filter((e) => e.kind === 'jerrycan' && e.along >= edges[i - 1]! && e.along < edges[i]!).length;
-      expect(n).toBeLessThanOrEqual(1);
+  // Seed sweep over runs 1 to 200; the figures are logged for the ROADMAP.
+  it('over runs 1 to 200 the mean is at most 0.25 jerrycans per km and the worst run at most 0.45', () => {
+    const perKm: number[] = [];
+    let doubles = 0;
+    for (let run = 1; run <= 200; run++) {
+      const p = planItemDrops(mixSeed(hashSeed('marrakech'), run), routeLength, blocked, pickupAlongs);
+      perKm.push(p.filter((e) => e.kind === 'jerrycan').length / (routeLength / 1000));
+      if (Math.max(...jerrysPerGap(p)) > 1) doubles++;
     }
+    const mean = perKm.reduce((a, b) => a + b, 0) / perKm.length;
+    const worst = Math.max(...perKm);
+    // eslint-disable-next-line no-console
+    (globalThis as { console?: { info(...a: unknown[]): void } }).console?.info(`fuel sweep: mean ${mean.toFixed(3)} per km, worst ${worst.toFixed(3)}, ${((doubles / 200) * 100).toFixed(0)} % of runs with a double-jerrycan gap`);
+    expect(mean).toBeLessThanOrEqual(0.25);
+    expect(worst).toBeLessThanOrEqual(0.45);
   });
 });
 

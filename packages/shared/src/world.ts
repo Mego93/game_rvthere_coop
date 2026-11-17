@@ -181,6 +181,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
               course.pickups.map((placed) => routeIndex!.project(placed.pose.pos.x, placed.pose.pos.z).along),
             )
           : undefined));
+  if (dropPlan?.some((e, i) => i > 0 && e.along < dropPlan[i - 1]!.along)) throw new Error('The item drop plan must be sorted by along');
   const dropDirector = dropPlan ? createItemDirector(dropPlan) : null;
   let dropHint: number | undefined;
   const previous = new Map<string, InputFields>();

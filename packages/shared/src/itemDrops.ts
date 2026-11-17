@@ -70,6 +70,7 @@ export interface ItemDirectorInput {
   existing: ReadonlySet<string>;
 }
 
+// The plan must be sorted by `along`: the scan stops at the first event beyond the window.
 export function stepItemDirector(state: ItemDirectorState, input: ItemDirectorInput): { drop: ItemDropEvent[]; take: string[] } {
   const { vehicleAlong, existing } = input;
   const take: string[] = [];

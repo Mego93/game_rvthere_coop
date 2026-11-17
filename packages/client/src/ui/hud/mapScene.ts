@@ -44,9 +44,8 @@ export function mapScene(plan: MapPlan, entities: readonly HudEntity[]): MapScen
   for (const entity of entities) {
     if (entity.kind === 'checkpoint') continue;
     if (Math.hypot(entity.x - origin.x, entity.z - origin.z) > WINDOW_RADIUS) continue;
-    const raw = toMap(view, entity.x, entity.z);
-    const p = clampToCircle(view, raw);
-    if (entity.kind === 'item' && (p.x !== raw.x || p.y !== raw.y)) continue;
+    // Inside WINDOW_RADIUS means inside the circle, so an item is never pinned here.
+    const p = clampToCircle(view, toMap(view, entity.x, entity.z));
     items.push({ entity, x: p.x, y: p.y });
   }
   const pin = clampToCircle(view, toMap(view, plan.finish.x, plan.finish.z));

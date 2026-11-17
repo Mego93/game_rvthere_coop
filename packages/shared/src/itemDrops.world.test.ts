@@ -117,11 +117,20 @@ describe('T3: a drop in the world', () => {
     expect(drop!.pos.y).toBeLessThan(ground + 0.5);
   });
 
-  test('where the ray finds no ground the drop waits and never uses a fallback height', () => {
-    const off: ItemDropEvent = { id: 0, along: 100, side: 1, lateral: 500, kind: 'jerrycan' };
-    const world = make([off]);
-    run(world, 30);
+  test('where the ray finds no ground the drop waits, then appears once the vehicle is back near the ground', () => {
+    const world = make([event(0, 100)]);
+    place(world, 0, 1000, -8);
+    run(world, 5);
     expect(dropsOf(world)).toEqual([]);
+    run(world, 5);
+    expect(dropsOf(world)).toEqual([]);
+    placeAlong(world, 8);
+    run(world, 3);
+    expect(dropsOf(world)).toHaveLength(1);
+  });
+
+  test('a plan not sorted by along is refused', () => {
+    expect(() => make([event(0, 200), event(1, 100)])).toThrow(/sorted/);
   });
 
   test('two worlds with the same plan give equal snapshots for 20 s', () => {
