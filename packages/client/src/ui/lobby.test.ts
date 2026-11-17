@@ -1,6 +1,6 @@
 import type { LobbyMessage, LobbyPlayer } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { lobbyView, VEHICLE_LABELS } from './lobby';
+import { lobbyView, OSM_ATTRIBUTION, VEHICLE_LABELS } from './lobby';
 
 const player = (playerId: string, name: string, changes: Partial<LobbyPlayer> = {}): LobbyPlayer => ({
   playerId,
@@ -73,4 +73,12 @@ test('L17: the settings are carried over, and the vehicle labels are Lodgy and R
   const view = lobbyView(message(trio, { courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'rain' }), 'p1');
   expect(view.settings).toEqual({ courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'rain' });
   expect(VEHICLE_LABELS).toEqual({ lodgy: 'Lodgy', rv: 'RV' });
+});
+
+test('T13 the lobby view carries a one-line OpenStreetMap credit with a link', () => {
+  const view = lobbyView(message([player('p1', 'Amal')]), 'p1');
+  expect(view.attribution).toBe(OSM_ATTRIBUTION);
+  expect(OSM_ATTRIBUTION.text).toBe('Route data © OpenStreetMap contributors (ODbL)');
+  expect(OSM_ATTRIBUTION.href).toBe('https://www.openstreetmap.org/copyright');
+  expect(OSM_ATTRIBUTION.text).not.toContain('\n');
 });

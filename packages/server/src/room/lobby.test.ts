@@ -296,6 +296,13 @@ test('L7: the room defaults to the first campaign course, the Lodgy, midday and 
   expect(host().client.last('lobby')).toMatchObject({ courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'clear' });
 });
 
+test('T11: a room made with no campaign starts the marrakech course', () => {
+  const server = createRoomServer(createFakeDeps(RAPIER).deps);
+  const client = connectFakeClient(server);
+  client.send({ type: 'create', name: 'Amal', token: token(1) });
+  expect(client.last('lobby').courseId).toBe('marrakech');
+});
+
 // --- L11: joining by phase ---
 
 test('L11: a joiner in the lobby gets no snapshot and no character', () => {

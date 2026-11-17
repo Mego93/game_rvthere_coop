@@ -58,7 +58,7 @@ test('L18: Next only for the admin and a course that is not the last; Back to lo
   expect(resultsView(message({ courseId: 'segment-demo' }), true, TWO)).toMatchObject({ showNext: false, showLobby: true });
   expect(resultsView(message({ courseId: 'elsewhere' }), true, TWO)).toMatchObject({ showNext: false, showLobby: true });
   expect(resultsView(message({ courseId: 'test' }), false, TWO)).toMatchObject({ showNext: false, showLobby: false });
-  expect(resultsView(message({ courseId: 'airport' }), true)).toMatchObject({ showNext: false, showLobby: true });
+  expect(resultsView(message({ courseId: 'marrakech' }), true)).toMatchObject({ showNext: false, showLobby: true });
 });
 
 const server = { courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'clear' } as const;

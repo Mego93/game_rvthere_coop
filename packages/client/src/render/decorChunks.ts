@@ -1,4 +1,5 @@
 import type { DecorPlacement } from './decorScatter';
+import { nearestSegment } from './routeIndex';
 
 export const CELL_LENGTH = 100;
 
@@ -21,24 +22,32 @@ export interface DecorCell {
   placements: DecorPlacement[];
 }
 
+const walks = new WeakMap<object, number[]>();
+
+// Route length before segment i, summed in order so it matches a running total.
+function walkedTo(route: readonly (readonly [number, number])[], i: number): number {
+  let walked = walks.get(route);
+  if (!walked) {
+    walked = [0];
+    for (let k = 0; k < route.length - 1; k++) walked.push(walked[k]! + Math.hypot(route[k + 1]![0] - route[k]![0], route[k + 1]![1] - route[k]![1]));
+    walks.set(route, walked);
+  }
+  return walked[i]!;
+}
+
 // Distance along the route of the point nearest to (x, z).
 function alongRoute(route: readonly (readonly [number, number])[], x: number, z: number): number {
-  let best = Infinity;
-  let along = 0;
-  let walked = 0;
-  for (let i = 0; i < route.length - 1; i++) {
+  const nearest = (i: number) => {
     const [x0, z0] = route[i]!;
     const [x1, z1] = route[i + 1]!;
     const length = Math.hypot(x1 - x0, z1 - z0);
     const t = length === 0 ? 0 : Math.min(1, Math.max(0, ((x - x0) * (x1 - x0) + (z - z0) * (z1 - z0)) / (length * length)));
-    const d = Math.hypot(x - (x0 + (x1 - x0) * t), z - (z0 + (z1 - z0) * t));
-    if (d < best) {
-      best = d;
-      along = walked + t * length;
-    }
-    walked += length;
-  }
-  return along;
+    return { d: Math.hypot(x - (x0 + (x1 - x0) * t), z - (z0 + (z1 - z0) * t)), t, length };
+  };
+  const i = nearestSegment(route, x, z, (k) => nearest(k).d, false);
+  if (i < 0) return 0;
+  const hit = nearest(i);
+  return walkedTo(route, i) + hit.t * hit.length;
 }
 
 // Groups placements into cells of 100 m of route, ordered by their place along it.

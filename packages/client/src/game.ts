@@ -230,7 +230,7 @@ export function createGame(
   runMenu.setMuted(view.muted);
   const hudRoot = document.createElement('div');
   document.body.append(hudRoot);
-  const hud = createHud(hudRoot, { touch: view.touchUi !== null, route: course.route });
+  const hud = createHud(hudRoot, { touch: view.touchUi !== null, route: course.route, finish: { x: course.finish.center.x, z: course.finish.center.z } });
   const markerPoint = new THREE.Vector3();
   const project = (point: Vec3) => markerPoint.set(point.x, point.y, point.z).project(camera);
   const cameraSpaceZ = (point: Vec3) => markerPoint.set(point.x, point.y, point.z).applyMatrix4(camera.matrixWorldInverse).z;

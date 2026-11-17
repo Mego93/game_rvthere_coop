@@ -44,7 +44,8 @@ beforeEach(() => {
 function setup() {
   const fake = createFakeDeps(RAPIER);
   const errors: unknown[] = [];
-  const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) });
+  // The 22 km default world costs about 4 to 5 times more per tick (about 1.5 ms vs 0.3 ms for two rooms), so the 60 s disposal wait would time out.
+  const server = createRoomServer({ ...fake.deps, onError: (error) => errors.push(error) }, { campaign: ['airport'] });
   const host = (name: string, n: number) => {
     const client = connectFakeClient(server);
     client.send({ type: 'create', name, token: `token-${n}-abcdefghij` });

@@ -14,6 +14,8 @@ export interface LobbyPlayerView {
   canKick: boolean;
 }
 
+export const OSM_ATTRIBUTION = { text: 'Route data © OpenStreetMap contributors (ODbL)', href: 'https://www.openstreetmap.org/copyright' } as const;
+
 export interface LobbyView {
   isAdmin: boolean;
   settingsEditable: boolean;
@@ -23,6 +25,7 @@ export interface LobbyView {
   localReady: boolean;
   showStart: boolean;
   startEnabled: boolean;
+  attribution: { text: string; href: string };
 }
 
 export function lobbyView(message: LobbyMessage, localId: string): LobbyView {
@@ -50,6 +53,7 @@ export function lobbyView(message: LobbyMessage, localId: string): LobbyView {
     localReady: message.players.find((entry) => entry.playerId === localId)?.ready ?? false,
     showStart: isAdmin,
     startEnabled: isAdmin && others.every((entry) => entry.ready),
+    attribution: OSM_ATTRIBUTION,
   };
 }
 
@@ -95,6 +99,7 @@ const STYLE = `
 .lobby-swatch { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 .lobby-name { flex: 1; }
 #lobby-credits { justify-self: center; font-size: 14px; color: #2f6f9f; }
+#lobby-osm { justify-self: center; font-size: 12px; color: #4a5a66; }
 #lobby-error { margin: 0; min-height: 1.4em; color: #b3261e; font-size: 14px; }
 `;
 
@@ -136,9 +141,13 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   credits.href = '/CREDITS.md';
   credits.target = '_blank';
   credits.rel = 'noopener';
+  const osm = el('a', 'lobby-osm', OSM_ATTRIBUTION.text);
+  osm.href = OSM_ATTRIBUTION.href;
+  osm.target = '_blank';
+  osm.rel = 'noopener';
   const tutorial = el('button', 'lobby-tutorial', 'Tutorial');
   tutorial.type = 'button';
-  panel.append(title, linkRow, settingsBox, players, ready, start, error, tutorial, credits);
+  panel.append(title, linkRow, settingsBox, players, ready, start, error, tutorial, credits, osm);
   root.append(style, panel);
   doc.body.append(root);
 

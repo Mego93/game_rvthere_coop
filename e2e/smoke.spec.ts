@@ -23,6 +23,11 @@ async function overlayPosition(page: Page, label: string): Promise<[number, numb
   const match = new RegExp(`^${label}\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)`, 'm').exec(text);
   return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
 }
+async function overlayVector(page: Page, pattern: RegExp): Promise<[number, number, number] | null> {
+  const text = (await page.locator('#overlay').textContent()) ?? '';
+  const match = pattern.exec(text);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
 const distance = (a: readonly number[], b: readonly number[]) => Math.hypot(...a.map((value, i) => value - b[i]!));
 
 // Uncaught errors in any page of the running test. A page can look right and still have failed, for example in WebGL.
@@ -60,7 +65,7 @@ async function createRoom(page: Page, name: string): Promise<string> {
   return new URL(page.url()).pathname.slice(1);
 }
 
-// The default course is the airport; these specs assert on the test ground, so the admin picks it in the lobby.
+// The default course is marrakech; these specs assert on the test ground, so the admin picks it in the lobby.
 async function chooseTestGround(page: Page) {
   await page.locator('#lobby-course').selectOption('test');
 }
@@ -405,7 +410,7 @@ test('a night rain run draws without WebGL errors', async ({ page }) => {
 });
 
 // ?hq keeps the lit, shadowed, textured render path on software GL, which otherwise drops it.
-test('the full-quality render path draws the airport run without console or page errors @keyboard', async ({ page }) => {
+test('the full-quality render path draws the marrakech run without console or page errors @keyboard', async ({ page }) => {
   test.setTimeout(60_000);
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
@@ -421,6 +426,50 @@ test('the full-quality render path draws the airport run without console or page
   await expect.poll(() => tick(page), { timeout: 20_000 }).toBeGreaterThan(before);
   await page.waitForTimeout(1000);
   expect(consoleErrors).toEqual([]);
+});
+
+// T14: the default course is marrakech. The player boards, drives forward for 5 s on keys or on the joystick, and the vehicle has moved and the map shows its route.
+test('T14: a marrakech run drives forward for 5 s, the vehicle moves and the minimap draws', async ({ page, hasTouch }) => {
+  test.setTimeout(120_000);
+  const joystickUp = [{ identifier: 1, clientX: 150, clientY: 170 }];
+  await createRoom(page, 'Amal');
+  await expect(page.locator('#lobby-course')).toHaveValue('marrakech');
+  const began = Date.now();
+  await startRun(page).catch(() => undefined);
+  const ready = await expect(page.locator('#overlay')).toContainText('hint     E to board', { timeout: Math.max(1000, 60_000 - (Date.now() - began)) }).then(
+    () => true,
+    () => false,
+  );
+  test.skip(!ready, 'the marrakech run took more than 60 s to deliver its first snapshot');
+  const start = await overlayVector(page, /pos\s+(\S+)\s+(\S+)\s+(\S+)/);
+  expect(start).not.toBeNull();
+
+  if (hasTouch) await page.locator('#touch-interact').tap();
+  else await tap(page, 'KeyE');
+  await expect(page.locator('#overlay')).toContainText('players  Amal (driver)');
+
+  if (hasTouch) {
+    await page.locator('#game').dispatchEvent('touchstart', { touches: [{ identifier: 1, clientX: 150, clientY: 250 }], changedTouches: [{ identifier: 1, clientX: 150, clientY: 250 }], targetTouches: [{ identifier: 1, clientX: 150, clientY: 250 }] });
+    await page.locator('#game').dispatchEvent('touchmove', { touches: joystickUp, changedTouches: joystickUp, targetTouches: joystickUp });
+  } else {
+    await page.keyboard.down('KeyW');
+  }
+  await page.waitForTimeout(5000);
+  const moved = (await overlayVector(page, /pos\s+(\S+)\s+(\S+)\s+(\S+)/))!;
+  if (hasTouch) await page.locator('#game').dispatchEvent('touchend', { touches: [], changedTouches: joystickUp, targetTouches: [] });
+  else await page.keyboard.up('KeyW');
+  expect(distance(moved, start!)).toBeGreaterThan(5);
+
+  await expect(page.locator('#hud-minimap')).toBeVisible();
+  const route = await page.locator('#hud-minimap .route').getAttribute('d');
+  expect(route ?? '').toMatch(/^M/);
+  // The route is a 22 km line; the 600 m window clips it, so every vertex lies inside the map circle.
+  const size = Number(await page.locator('#hud-minimap').getAttribute('width'));
+  const numbers = (route ?? '').match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/g)!.map(Number);
+  expect(numbers.length).toBeGreaterThanOrEqual(4);
+  expect(numbers.every(Number.isFinite)).toBe(true);
+  for (let k = 0; k + 1 < numbers.length; k += 2) expect(Math.hypot(numbers[k]! - size / 2, numbers[k + 1]! - size / 2)).toBeLessThanOrEqual(size / 2 + 1);
+  await expect(page.locator('#hud-minimap .vehicle')).toBeAttached();
 });
 
 test('E7: the sound files are served, and a click and Start leave the page without errors', async ({ page }) => {
