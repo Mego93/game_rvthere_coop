@@ -1,4 +1,4 @@
-import { ITEM_KINDS, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, TIMES_OF_DAY, WEATHERS, type ItemKind, type TimeOfDay, type Weather } from './constants';
+import { CHAT_MAX_LENGTH, ITEM_KINDS, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, TIMES_OF_DAY, WEATHERS, type ItemKind, type TimeOfDay, type Weather } from './constants';
 import { courseIds } from './courses/index';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
 import type { PropSnapshot } from './props';
@@ -63,7 +63,8 @@ export type ClientMessage =
   | { type: 'restartCourse' }
   | { type: 'adminTool'; tool: AdminTool }
   | { type: 'toLobby' }
-  | { type: 'next' };
+  | { type: 'next' }
+  | { type: 'chat'; text: string };
 
 export const ADMIN_TOOLS = ['skipCheckpoint', 'refill'] as const;
 export type AdminTool = (typeof ADMIN_TOOLS)[number];
@@ -178,7 +179,18 @@ export type ServerMessage =
   | EventMessage
   | ResultsMessage
   | { type: 'error'; reason: ErrorReason }
+  | ChatMessage
   | { type: 'ping' };
+
+// `id` counts a room's chat lines from 1; `at` is the server clock in whole seconds, opaque to clients.
+export interface ChatMessage {
+  type: 'chat';
+  id: number;
+  playerId: string;
+  name: string;
+  text: string;
+  at: number;
+}
 
 const ROOM_PATTERN = /^[a-z0-9]{1,24}$/;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
@@ -194,6 +206,15 @@ export function cleanName(value: unknown): string | null {
   const name = value.trim();
   if (name.length < 1 || name.length > NAME_MAX_LENGTH) return null;
   return hasForbiddenNameCharacter(name) ? null : name;
+}
+
+// A trimmed chat line of 1 to CHAT_MAX_LENGTH code points with no forbidden character, or null.
+export function cleanChat(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (text.length === 0 || text.length > CHAT_MAX_LENGTH * 2) return null;
+  if ([...text].length > CHAT_MAX_LENGTH) return null;
+  return hasForbiddenNameCharacter(text) ? null : text;
 }
 
 // A room noun in lower case, or null if it is not a valid one.
@@ -301,6 +322,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     case 'toLobby':
     case 'next':
       return { type: fields.type };
+    case 'chat': {
+      const text = cleanChat(fields.text);
+      return text ? { type: 'chat', text } : null;
+    }
     case 'adminTool':
       return typeof fields.tool === 'string' && (ADMIN_TOOLS as readonly string[]).includes(fields.tool)
         ? { type: 'adminTool', tool: fields.tool as AdminTool }
@@ -410,6 +435,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       if (!isText(data.reason)) return null;
       // A reason this version does not know is shown as a general refusal.
       return (ERROR_REASONS as readonly string[]).includes(data.reason) ? message : { type: 'error', reason: 'bad_message' };
+    case 'chat':
+      return isCount(data.id) && isText(data.playerId) && isText(data.name) && isText(data.text) && isCount(data.at) ? message : null;
     case 'lobby':
       return isText(data.room) &&
         (data.phase === 'lobby' || data.phase === 'playing' || data.phase === 'results') &&
