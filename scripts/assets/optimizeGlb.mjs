@@ -1,7 +1,7 @@
 // Dev only: resizes the embedded textures of a GLB and writes it out. Usage:
 //   node scripts/assets/optimizeGlb.mjs <in.glb> <out.glb> [--max 512]
 //   node scripts/assets/optimizeGlb.mjs --batch <sourceRoot> [--out packages/client/public/models/sketchfab]
-// The batch reads scripts/assets/sketchfabModels.json: { name, from (relative to sourceRoot), max }.
+// The batch reads scripts/assets/sketchfabModels.json: { name, uid, viewer (the Sketchfab page to download from again), from (relative to sourceRoot), max, drop? (node names removed with their children before pruning) }.
 import { readFileSync, mkdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,9 +21,15 @@ async function hasTransparency(buffer) {
   return channels[channels.length - 1].min < 255;
 }
 
-export async function optimizeGlb(input, output, { maxSize = 512 } = {}) {
+function removeNode(node) {
+  for (const child of node.listChildren()) removeNode(child);
+  node.dispose();
+}
+
+export async function optimizeGlb(input, output, { maxSize = 512, drop = [] } = {}) {
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
   const doc = await io.read(input);
+  for (const node of doc.getRoot().listNodes()) if (drop.includes(node.getName())) removeNode(node);
   for (const texture of doc.getRoot().listTextures()) {
     const source = Buffer.from(texture.getImage());
     const { width, height } = await sharp(source).metadata();
@@ -48,8 +54,8 @@ async function main(args) {
     const out = resolve(flag('--out', join(here, '../../packages/client/public/models/sketchfab')));
     const list = JSON.parse(readFileSync(join(here, 'sketchfabModels.json'), 'utf8'));
     let total = 0;
-    for (const { name, from, max } of list) {
-      const { before, after } = await optimizeGlb(join(root, from), join(out, `${name}.glb`), { maxSize: max });
+    for (const { name, from, max, drop } of list) {
+      const { before, after } = await optimizeGlb(join(root, from), join(out, `${name}.glb`), { maxSize: max, drop });
       total += after;
       console.log(`${name.padEnd(10)} ${(before / 1024).toFixed(0).padStart(6)} KB -> ${(after / 1024).toFixed(0).padStart(6)} KB`);
     }

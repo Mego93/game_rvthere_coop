@@ -52,6 +52,25 @@ describe('optimizeGlb', () => {
     expect(png.getMimeType()).toBe('image/png');
   });
 
+  it('drops the named nodes with their children and the meshes only they used', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'optglb-'));
+    const input = await sample(dir, 'in.glb', 64, 3);
+    const doc = await io.read(input);
+    const root = doc.getRoot();
+    const parent = doc.createNode('extra').setMesh(root.listMeshes()[0]);
+    const child = doc.createNode('extra-child').setMesh(doc.createMesh('other').addPrimitive(root.listMeshes()[0].listPrimitives()[0]));
+    parent.addChild(child);
+    root.listScenes()[0].addChild(parent);
+    const withExtra = join(dir, 'extra.glb');
+    writeFileSync(withExtra, await io.writeBinary(doc));
+    await optimizeGlb(withExtra, join(dir, 'kept.glb'), { maxSize: 64 });
+    await optimizeGlb(withExtra, join(dir, 'dropped.glb'), { maxSize: 64, drop: ['extra'] });
+    const names = async (file) => (await io.read(file)).getRoot().listNodes().map((node) => node.getName()).sort();
+    expect(await names(join(dir, 'kept.glb'))).toEqual(['extra', 'extra-child', 'n']);
+    expect(await names(join(dir, 'dropped.glb'))).toEqual(['n']);
+    expect((await io.read(join(dir, 'dropped.glb'))).getRoot().listMeshes()).toHaveLength(1);
+  });
+
   it('is reproducible: the same input gives the same bytes', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'optglb-'));
     const input = await sample(dir, 'in.glb', 512, 3);
