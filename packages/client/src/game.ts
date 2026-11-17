@@ -180,7 +180,7 @@ export function createGame(
 
   const buffer = createSnapshotBuffer();
   const input = view.input();
-  const playerMeshes = new Map<string, { mesh: THREE.Group; name: string; colour: string }>();
+  const playerMeshes = new Map<string, { mesh: THREE.Group; name: string; colour: string; look: string }>();
   const propMeshes = new Map<string, { mesh: THREE.Object3D; kind: string }>();
   // The local player's entry in the newest snapshot, not interpolated.
   let latestLocal: PlayerSnapshot | null = null;
@@ -363,21 +363,23 @@ export function createGame(
     }
   });
 
-  // Seated players are hidden, not removed; meshes are remade when a player's name or colour changes, and dropped when they leave.
+  // Seated players are hidden, not removed; meshes are remade when a player's name, colour or look changes, and dropped when they leave.
   const syncPlayerMeshes = (players: PlayerSnapshot[], seconds: number) => {
     const present = new Set<string>();
     for (const player of players) {
       const info = lobby.players.find((candidate) => candidate.playerId === player.playerId);
       if (!info) continue;
       present.add(player.playerId);
+      const { characterId, glasses, top, hat, skin, eyes, smile } = info.appearance;
+      const look = `${characterId}|${glasses}|${top}|${hat}|${skin}|${eyes}|${smile}`;
       let entry = playerMeshes.get(player.playerId);
-      if (entry && (entry.name !== info.name || entry.colour !== info.colour)) {
+      if (entry && (entry.name !== info.name || entry.colour !== info.colour || entry.look !== look)) {
         scene.remove(entry.mesh);
         disposePlayerMesh(entry.mesh);
         entry = undefined;
       }
       if (!entry) {
-        entry = { mesh: createPlayerMesh(info.name, info.colour), name: info.name, colour: info.colour };
+        entry = { mesh: createPlayerMesh(info.name, info.colour, info.appearance), name: info.name, colour: info.colour, look };
         playerMeshes.set(player.playerId, entry);
         scene.add(entry.mesh);
       }

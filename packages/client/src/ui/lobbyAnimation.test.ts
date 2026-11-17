@@ -5,6 +5,7 @@ const card = (playerId: string, changes: Partial<LobbyPlayerView> = {}): LobbyPl
   playerId,
   name: playerId,
   colour: '#e4572e',
+  character: 'Sounile',
   isAdmin: false,
   connected: true,
   status: 'not ready',

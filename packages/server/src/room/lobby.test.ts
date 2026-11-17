@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { HELD_SLOT_TIMEOUT, RAIN_GRIP, VEHICLES, WORLD_REBUILD_COOLDOWN, IDENTITY, NEUTRAL_INPUT, PLAYER_COLOURS, PLAYER_REVIVE_HEALTH, TICK_RATE, getCourse, vec3, type BuiltCourse, type ClientMessage, type ServerMessage } from '@lodgy/shared';
+import { HELD_SLOT_TIMEOUT, RAIN_GRIP, VEHICLES, WORLD_REBUILD_COOLDOWN, IDENTITY, NEUTRAL_INPUT, defaultAppearance, PLAYER_COLOURS, PLAYER_REVIVE_HEALTH, TICK_RATE, getCourse, vec3, type BuiltCourse, type ClientMessage, type ServerMessage } from '@lodgy/shared';
 import { beforeAll, expect, test } from 'vitest';
 import { createRoom } from './room';
 import { createRoomServer } from './server';
@@ -399,8 +399,8 @@ test('colours and names in the lobby message are unchanged by the phase', () => 
   const { client, room } = host('Amal');
   guest(room, 2, 'Badr');
   expect(client.last('lobby').players).toEqual([
-    { playerId: 'p1', name: 'Amal', colour: PLAYER_COLOURS[0], ready: false, connected: true },
-    { playerId: 'p2', name: 'Badr', colour: PLAYER_COLOURS[1], ready: false, connected: true },
+    { playerId: 'p1', name: 'Amal', colour: PLAYER_COLOURS[0], ready: false, connected: true, appearance: defaultAppearance('sounile') },
+    { playerId: 'p2', name: 'Badr', colour: PLAYER_COLOURS[1], ready: false, connected: true, appearance: defaultAppearance('rafael') },
   ]);
 });
 

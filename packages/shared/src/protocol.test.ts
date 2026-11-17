@@ -209,7 +209,7 @@ const lobby = {
   type: 'lobby',
   room: 'camel',
   phase: 'playing',
-  players: [{ playerId: 'p1', name: 'Amal', colour: '#e4572e', ready: false, connected: true }],
+  players: [{ playerId: 'p1', name: 'Amal', colour: '#e4572e', ready: false, connected: true, appearance: { characterId: 'sounile', glasses: 'default', top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' } }],
   adminId: 'p1',
   courseId: 'test',
   vehicleId: 'lodgy',
@@ -463,6 +463,18 @@ test.each([
   ['colour', 5],
   ['ready', 'yes'],
   ['connected', 1],
+  ['appearance', undefined],
+  ['appearance', null],
+  ['appearance', 'sounile'],
+  ['appearance', { characterId: 'bob', glasses: 'default', top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' }],
+  ['appearance', { characterId: 'luiz', glasses: 'square', top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' }],
+  ['appearance', { characterId: 'luiz', glasses: 'default', top: 'cape', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' }],
+  ['appearance', { characterId: 'luiz', glasses: 'default', top: 'default', hat: 'crown', skin: 'default', eyes: 'default', smile: 'default' }],
+  ['appearance', { characterId: 'luiz', glasses: 'default', top: 'default', hat: 'none', skin: 'pink', eyes: 'default', smile: 'default' }],
+  ['appearance', { characterId: 'luiz', glasses: 'default', top: 'default', hat: 'none', skin: 'default', eyes: 'closed', smile: 'default' }],
+  ['appearance', { characterId: 'luiz', glasses: 'default', top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'frown' }],
+  ['appearance', { characterId: 'luiz', glasses: 'default', top: 'default', hat: 'none' }],
+  ['appearance', { characterId: 'luiz', glasses: 'default', top: 'default' }],
   ['playerId', null],
   ['name', null],
   ['ready', null],
@@ -619,6 +631,8 @@ describe('L16: lobby messages', () => {
   test.each<unknown>([
     { type: 'ready', ready: true },
     { type: 'ready', ready: false },
+    { type: 'appearance', characterId: 'huu', glasses: 'round', top: 'suit', hat: 'fez', skin: 'default', eyes: 'default', smile: 'default' },
+    { type: 'appearance', characterId: 'sounile', glasses: 'default', top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' },
     configure,
     { type: 'kick', playerId: 'p2' },
     { type: 'start' },
@@ -632,9 +646,39 @@ describe('L16: lobby messages', () => {
     expect(parse(message)).toEqual(message);
   });
 
+  test('parseClientMessage keeps only the seven appearance fields', () => {
+    expect(parse({ type: 'appearance', characterId: 'luiz', glasses: 'none', top: 'suit', hat: 'cap', skin: 'tan', eyes: 'wide', smile: 'grin', extra: 1, playerId: 'p9' })).toEqual({
+      type: 'appearance',
+      characterId: 'luiz',
+      glasses: 'none',
+      top: 'suit',
+      hat: 'cap',
+      skin: 'tan',
+      eyes: 'wide',
+      smile: 'grin',
+    });
+  });
+
+  test('character_taken is an error reason the page can receive', () => {
+    expect(ERROR_REASONS).toContain('character_taken');
+    expect(parseServerMessage('{"type":"error","reason":"character_taken"}')).toEqual({ type: 'error', reason: 'character_taken' });
+  });
+
   test.each<unknown>([
     { type: 'ready' },
     { type: 'ready', ready: 'yes' },
+    { type: 'appearance' },
+    { type: 'appearance', characterId: 'bob', glasses: 'none', top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' },
+    { type: 'appearance', characterId: 'huu', glasses: 'square', top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' },
+    { type: 'appearance', characterId: 'huu', glasses: 'none', top: 'cape', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' },
+    { type: 'appearance', characterId: 'huu', glasses: 'none', top: 'default', hat: 'crown', skin: 'default', eyes: 'default', smile: 'default' },
+    { type: 'appearance', characterId: 'huu', glasses: 'none', top: 'default', hat: 'none', skin: 'pink', eyes: 'default', smile: 'default' },
+    { type: 'appearance', characterId: 'huu', glasses: 'none', top: 'default', hat: 'none', skin: 'default', eyes: 3, smile: 'default' },
+    { type: 'appearance', characterId: 'huu', glasses: 'none', top: 'default', hat: 'none', skin: 'default', eyes: 'default' },
+    { type: 'appearance', characterId: 'huu', glasses: 'none', top: 'default' },
+    { type: 'appearance', characterId: 5, glasses: 'none', top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' },
+    { type: 'appearance', characterId: 'huu', glasses: 1, top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' },
+    { type: 'appearance', characterId: 'constructor', glasses: 'none', top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' },
     { ...configure, courseId: 'nowhere' },
     { ...configure, courseId: 5 },
     { ...configure, vehicleId: 'tank' },

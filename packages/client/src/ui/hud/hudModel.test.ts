@@ -1,4 +1,4 @@
-import { IDENTITY, getVehicleConfig, quatFromAxisAngle, AXIS_Y, vec3, type Box, type CableSnapshot, type Checkpoint, type LobbyMessage, type PlayerSnapshot, type ServiceStop, type Vec3, type VehicleState } from '@lodgy/shared';
+import { IDENTITY, defaultAppearance, getVehicleConfig, quatFromAxisAngle, AXIS_Y, vec3, type Box, type CableSnapshot, type Checkpoint, type LobbyMessage, type PlayerSnapshot, type ServiceStop, type Vec3, type VehicleState } from '@lodgy/shared';
 import { describe, expect, test } from 'vitest';
 import type { RunStatus } from '../../net/snapshotBuffer';
 import type { OverlayData } from '../overlay';
@@ -10,8 +10,8 @@ const lobby: LobbyMessage = {
   room: 'camel',
   phase: 'playing',
   players: [
-    { playerId: 'p1', name: 'Amal', colour: '#e4572e', ready: false, connected: true },
-    { playerId: 'p2', name: 'Badr', colour: '#17bebb', ready: false, connected: true },
+    { playerId: 'p1', name: 'Amal', colour: '#e4572e', ready: false, connected: true, appearance: defaultAppearance('sounile') },
+    { playerId: 'p2', name: 'Badr', colour: '#17bebb', ready: false, connected: true, appearance: defaultAppearance('rafael') },
   ],
   adminId: 'p1',
   courseId: 'test',

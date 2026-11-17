@@ -1,4 +1,4 @@
-import type { LobbyMessage, LobbyPlayer } from '@lodgy/shared';
+import { defaultAppearance, type LobbyMessage, type LobbyPlayer } from '@lodgy/shared';
 import { expect, test } from 'vitest';
 import { lobbyView, OSM_ATTRIBUTION, VEHICLE_LABELS } from './lobby';
 
@@ -8,6 +8,7 @@ const player = (playerId: string, name: string, changes: Partial<LobbyPlayer> = 
   colour: '#e4572e',
   ready: false,
   connected: true,
+  appearance: defaultAppearance('sounile'),
   ...changes,
 });
 
@@ -62,6 +63,11 @@ test('L17: a held player is shown as disconnected and does not block Start', () 
   expect(view.players[1]!.status).toBe('not ready (disconnected)');
   expect(view.players[1]!.connected).toBe(false);
   expect(view.startEnabled).toBe(true);
+});
+
+test('P9: the lobby view carries the character name of every player', () => {
+  const view = lobbyView(message([player('p1', 'Amal'), player('p2', 'Badr', { appearance: defaultAppearance('huu') })]), 'p1');
+  expect(view.players.map((entry) => entry.character)).toEqual(['Sounile', 'Huu']);
 });
 
 test('L17: the status of the admin and of a ready player', () => {

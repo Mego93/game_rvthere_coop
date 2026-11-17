@@ -181,6 +181,10 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
         return join(session, message);
       case 'ready':
         return command(session, (room, player) => room.setReady(player, message.ready));
+      case 'appearance': {
+        const { type: _type, ...appearance } = message;
+        return command(session, (room, player) => room.setAppearance(player, appearance));
+      }
       case 'configure': {
         const { type: _type, ...settings } = message;
         return command(session, (room, player) => room.configure(player, settings));

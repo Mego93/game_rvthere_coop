@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import {
   CREATE_PER_MINUTE,
+  defaultAppearance,
   EMPTY_ROOM_TIMEOUT,
   HELD_SLOT_TIMEOUT,
   MAX_PLAYERS,
@@ -96,7 +97,7 @@ test('create makes a room and welcomes its creator, then announces the lobby', (
     type: 'lobby',
     room,
     phase: 'lobby',
-    players: [{ playerId: 'p1', name: 'Amal', colour: PLAYER_COLOURS[0], ready: false, connected: true }],
+    players: [{ playerId: 'p1', name: 'Amal', colour: PLAYER_COLOURS[0], ready: false, connected: true, appearance: defaultAppearance('sounile') }],
     adminId: 'p1',
     courseId: 'test',
     vehicleId: 'lodgy',
