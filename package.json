@@ -26,7 +26,11 @@
     "deploy:cf": "npm run build:worker && cd packages/worker && wrangler deploy"
   },
   "devDependencies": {
+    "@gltf-transform/core": "4.5.1",
+    "@gltf-transform/extensions": "4.5.1",
+    "@gltf-transform/functions": "4.5.1",
     "@playwright/test": "1.65.0",
+    "sharp": "0.35.5",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vitest": "5.1.0"
