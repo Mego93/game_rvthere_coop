@@ -44,6 +44,12 @@ describe('server chat', () => {
     expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
   });
 
+  test('accepts the optional replay flag, and rejects a non-boolean one', () => {
+    const message = { type: 'chat', id: 1, playerId: 'p1', name: 'Amal', text: 'hi', at: 12 };
+    expect(parseServerMessage(JSON.stringify({ ...message, replay: true }))).toEqual({ ...message, replay: true });
+    expect(parseServerMessage(JSON.stringify({ ...message, replay: 'yes' }))).toBeNull();
+  });
+
   test.each([
     ['no id', { id: undefined }],
     ['a negative id', { id: -1 }],

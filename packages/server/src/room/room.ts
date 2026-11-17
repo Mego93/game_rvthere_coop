@@ -362,7 +362,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     announce: broadcastLobby,
     catchUp(player) {
       if (phase === 'results' && lastResults) player.connection.send(JSON.stringify(lastResults));
-      for (const line of chatHistory) player.connection.send(JSON.stringify(line));
+      for (const line of chatHistory) player.connection.send(JSON.stringify({ ...line, replay: true }));
     },
     setReady(player, ready) {
       if (phase !== 'lobby') return 'bad_phase';

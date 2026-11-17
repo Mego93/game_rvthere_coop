@@ -190,6 +190,8 @@ export interface ChatMessage {
   name: string;
   text: string;
   at: number;
+  // Set only on the history sent to a joiner, so a client does not treat old lines as new.
+  replay?: true;
 }
 
 const ROOM_PATTERN = /^[a-z0-9]{1,24}$/;
@@ -436,7 +438,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       // A reason this version does not know is shown as a general refusal.
       return (ERROR_REASONS as readonly string[]).includes(data.reason) ? message : { type: 'error', reason: 'bad_message' };
     case 'chat':
-      return isCount(data.id) && isText(data.playerId) && isText(data.name) && isText(data.text) && isCount(data.at) ? message : null;
+      return isCount(data.id) && isText(data.playerId) && isText(data.name) && isText(data.text) && isCount(data.at) && (data.replay === undefined || data.replay === true) ? message : null;
     case 'lobby':
       return isText(data.room) &&
         (data.phase === 'lobby' || data.phase === 'playing' || data.phase === 'results') &&

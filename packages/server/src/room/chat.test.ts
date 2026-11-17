@@ -192,6 +192,16 @@ test('the history keeps the last 30 lines in order and goes to a joiner after we
   expect(client.ofType('chat')).toHaveLength(CHAT_HISTORY + 1);
 });
 
+test('only the history carries the replay flag; a live line does not', () => {
+  const { host, guest } = setup();
+  const { client, room } = host();
+  say(client, 'old');
+  const badr = guest(room, 2);
+  say(client, 'new');
+  expect(badr.ofType('chat').map((line) => [line.text, line.replay])).toEqual([['old', true], ['new', undefined]]);
+  expect(client.ofType('chat').map((line) => line.replay)).toEqual([undefined, undefined]);
+});
+
 test('a joiner in the results gets welcome, lobby, results, then the history', () => {
   const { host, guest, advance } = setup(true);
   const { client, room } = host();
