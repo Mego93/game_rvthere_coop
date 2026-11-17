@@ -3,6 +3,7 @@ import {
   CHAT_BURST,
   CHAT_HISTORY,
   CHAT_REFILL_SECONDS,
+  EMOTE_COOLDOWN,
   HELD_SLOT_TIMEOUT,
   WORLD_REBUILD_COOLDOWN,
   DEFAULT_TIME_OF_DAY,
@@ -25,9 +26,10 @@ import {
   type Appearance,
   type BuiltCourse,
   type ChatMessage,
+  type Emote,
   type ErrorReason,
   type InputFields,
-  type ItemKind,
+  type ShopItem,
   type EventMessage,
   type LobbyMessage,
   type Phase,
@@ -63,6 +65,8 @@ export interface RoomPlayer {
   // The chat token bucket: tokens left (fractional) at room-clock time chatAt; kept across reconnects.
   chatTokens: number;
   chatAt: number;
+  // Room-clock time of the last emote sent on; kept across reconnects.
+  emoteAt: number;
 }
 
 export interface Room {
@@ -103,7 +107,9 @@ export interface Room {
   chat(player: RoomPlayer, text: string, now: number): void;
   pushInput(player: RoomPlayer, input: PlayerInput): void;
   // Spends the crew's coins on an item at a fuel station's counter; applies at once.
-  buy(player: RoomPlayer, item: ItemKind): 'ok' | 'cannot_buy';
+  // Relays an emote to every connected player when the player is on foot in a run and the cooldown has passed; otherwise ignored silently.
+  emote(player: RoomPlayer, emote: Emote, now: number): void;
+  buy(player: RoomPlayer, item: ShopItem): 'ok' | 'cannot_buy';
   // Runs the simulation ticks that are due at `now` and broadcasts snapshots.
   update(now: number): void;
   // When the last player left, or null while anyone is connected.
@@ -314,6 +320,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
         heldSince: null,
         chatTokens: CHAT_BURST,
         chatAt: now,
+        emoteAt: Number.NEGATIVE_INFINITY,
       };
       nextPlayerNumber += 1;
       creatorToken ??= token;
@@ -477,6 +484,14 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       chatHistory.push(line);
       if (chatHistory.length > CHAT_HISTORY) chatHistory.shift();
       broadcast(line);
+    },
+    emote(player, emote, now) {
+      if (phase !== 'playing' || !world || !player.connected || !players.includes(player)) return;
+      if (!world.canEmote(player.playerId)) return;
+      // The same 1e-6 allowance as the chat bucket.
+      if (now - player.emoteAt < EMOTE_COOLDOWN - 1e-6) return;
+      player.emoteAt = now;
+      broadcast({ type: 'emote', playerId: player.playerId, emote });
     },
     pushInput(player, input) {
       if (phase === 'playing') player.queue.push(input);

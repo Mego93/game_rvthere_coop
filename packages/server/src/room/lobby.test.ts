@@ -1050,6 +1050,33 @@ test('W3: a rain room builds its world with rain grip, at start and after restar
   for (const slip of wet()) expect(slip).toBeCloseTo(clear * RAIN_GRIP, 6);
 });
 
+test('W4: a random room keeps the setting in the lobby and results messages, builds a world that follows the schedule, and restartCourse replays it', () => {
+  const { host, advance, server } = setup();
+  const { client, room } = host();
+  client.send({ type: 'configure', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'random' });
+  expect(client.last('lobby').weather).toBe('random');
+  startRun(client);
+  advance(0.1);
+  expect(client.last('lobby').weather).toBe('random');
+  const first = client.last('snapshot').weather;
+  expect(['clear', 'rain', 'sandstorm']).toContain(first);
+  const slip = () => server.debugWorld(room)!.debug().wheelFrictionSlips[0]!;
+  expect(slip()).toBeCloseTo(VEHICLES.lodgy.grip * (first === 'rain' ? RAIN_GRIP : 1), 6);
+
+  advance(WORLD_REBUILD_COOLDOWN + 0.1);
+  client.send({ type: 'restartCourse' });
+  advance(0.1);
+  expect(client.last('snapshot').weather).toBe(first);
+});
+
+test('W4: a fixed room sends no weather field in its snapshots', () => {
+  const { host, advance } = setup();
+  const { client } = host();
+  startRun(client);
+  advance(0.2);
+  expect('weather' in client.last('snapshot')).toBe(false);
+});
+
 test('C9: a one-course campaign: finishing gives campaignTotal equal to the final time, next is bad_phase, and the room starts on it', () => {
   const fake = createFakeDeps(RAPIER);
   const server = createRoomServer(fake.deps, { campaign: ['test'], courses: { test: finishAtStart('test') } });
