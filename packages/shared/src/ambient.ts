@@ -7,6 +7,7 @@ import {
   AMBIENT_JITTER,
   AMBIENT_MAX_GOATS,
   AMBIENT_MAX_SCOOTERS,
+  AMBIENT_REARM_CLEAR,
   AMBIENT_SCOOTER_LEAVE,
   AMBIENT_SCOOTER_SPEED,
   AMBIENT_SPACING,
@@ -23,6 +24,16 @@ export interface AmbientEvent {
   along: number;
   side: -1 | 1;
   kind: AnimalKind;
+}
+
+export interface AnimalSnapshot {
+  id: number;
+  kind: AnimalKind;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  hit?: true;
 }
 
 export interface Span {
@@ -188,10 +199,10 @@ export function markHit(state: DirectorState, id: number): void {
   a.hitAge = 0;
 }
 
-// Removes every live animal and returns their ids; events ahead of the spawn window fire again, events behind stay fired.
+// Removes every live animal and returns their ids. Events behind and within AMBIENT_REARM_CLEAR ahead stay fired, so a restart never puts an animal on the spot; the rest fire again.
 export function rearm(state: DirectorState, vehicleAlong: number): number[] {
   const ids = state.animals.map((a) => a.id);
   state.animals = [];
-  for (const e of state.events) state.fired[e.id] = e.along <= vehicleAlong + AMBIENT_SPAWN_AHEAD;
+  for (const e of state.events) state.fired[e.id] = e.along <= vehicleAlong + AMBIENT_REARM_CLEAR;
   return ids;
 }

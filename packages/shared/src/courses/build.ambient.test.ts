@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { AMBIENT_ENDS, AMBIENT_MARGIN, FINISH_PAD } from '../constants';
-import type { SegmentDef } from '../segments';
+import { AMBIENT_ENDS, AMBIENT_MARGIN, FINISH_PAD, GATES_SPACING } from '../constants';
+import { createRouteIndex } from '../routeAlong';
+import { hazardSpan, type SegmentDef } from '../segments';
 import { buildCourse, type CourseDef } from './build';
 import { getCourse, getCourseDef, segmentRanges } from './index';
 
@@ -17,6 +18,8 @@ const segments: SegmentDef[] = [
   road(400),
   road(400, { hazards: [{ kind: 'roadblock', along: 200 }] }),
   road(400),
+  road(500, { hazards: [{ kind: 'gates', along: 100, count: 5 }] }),
+  road(500, { debris: 3 }),
 ];
 
 function covers(blocked: { from: number; to: number }[], a: number, b: number): boolean {
@@ -50,9 +53,43 @@ describe('ambient spans (R2)', () => {
     expect(covers(blocked, r[5]!.from - AMBIENT_MARGIN, r[5]!.to + AMBIENT_MARGIN)).toBe(true);
     const hazardAt = r[7]!.from + 200;
     expect(covers(blocked, hazardAt - AMBIENT_MARGIN, hazardAt + AMBIENT_MARGIN)).toBe(true);
+    const gatesAt = r[9]!.from + 100;
+    expect(covers(blocked, gatesAt - AMBIENT_MARGIN, gatesAt + 4 * GATES_SPACING + AMBIENT_MARGIN)).toBe(true);
+    for (const p of built.props) {
+      const along = createRouteIndex(built.route).project(p.pose.pos.x, p.pose.pos.z).along;
+      expect(covers(blocked, along, along)).toBe(true);
+    }
     // Open road stays open.
     expect(covers(blocked, r[2]!.from + 150, r[2]!.from + 150)).toBe(false);
     expect(covers(blocked, r[8]!.from + 100, r[8]!.from + 100)).toBe(false);
+  });
+
+  it('exports the hazard extent including prop depth', () => {
+    const [a, b] = hazardSpan({ kind: 'gates', along: 100, count: 3 });
+    expect(a).toBeLessThan(100);
+    expect(b).toBeGreaterThan(100 + 2 * GATES_SPACING);
+  });
+
+  it('blocks every prop of marrakech and the whole extent of every hazard', () => {
+    const marrakech = getCourse('marrakech');
+    const d = getCourseDef('marrakech')!;
+    const blocked = marrakech.ambient!.blocked;
+    const r = segmentRanges(d);
+    let gates = 0;
+    d.segments.forEach((s, i) => {
+      if (s.type !== 'road') return;
+      for (const h of s.hazards ?? []) {
+        if (h.kind === 'gates') gates++;
+        const [a, b] = hazardSpan(h);
+        expect(covers(blocked, r[i]!.from + a - AMBIENT_MARGIN, r[i]!.from + b + AMBIENT_MARGIN)).toBe(true);
+      }
+    });
+    expect(gates).toBeGreaterThan(0);
+    const index = createRouteIndex(marrakech.route);
+    for (const p of marrakech.props) {
+      const along = index.project(p.pose.pos.x, p.pose.pos.z).along;
+      expect(covers(blocked, along, along)).toBe(true);
+    }
   });
 
   it('is set on marrakech, covers every inserted segment and every stop, and leaves most of the route open', () => {

@@ -1,7 +1,7 @@
 import { AMBIENT_ENDS, AMBIENT_MARGIN, CHECKPOINT_TRIGGER, FINISH_PAD, FINISH_TRIGGER, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET } from '../constants';
 import type { Box, BuiltCourse, Checkpoint, GroundBox, Placed } from '../course';
 import { add, deepFreeze, quatMul, rotate, vec3, type Pose, type Vec3 } from '../math';
-import { buildSegment, yawPitchQuat, yawQuat, type LocalSegment, type SegmentDef } from '../segments';
+import { buildSegment, hazardSpan, yawPitchQuat, yawQuat, type LocalSegment, type SegmentDef } from '../segments';
 
 export interface CourseDef {
   id: string;
@@ -100,8 +100,11 @@ export function buildCourse(def: CourseDef): BuiltCourse {
       for (let i = 1; i < local.route.length; i++) routeAt += Math.hypot(local.route[i]![0] - local.route[i - 1]![0], local.route[i]![1] - local.route[i - 1]![1]);
       const terrain = segmentDef.type !== 'road' || Boolean(segmentDef.slope);
       if (terrain) raw.push({ from: from - AMBIENT_MARGIN, to: routeAt + AMBIENT_MARGIN });
-      const marks = [segmentDef.stop?.along, ...(segmentDef.type === 'road' ? (segmentDef.hazards ?? []).map((h) => h.along) : [])];
-      for (const along of marks) if (along !== undefined) raw.push({ from: from + along - AMBIENT_MARGIN, to: from + along + AMBIENT_MARGIN });
+      const marks: [number, number][] = [];
+      if (segmentDef.stop) marks.push([segmentDef.stop.along, segmentDef.stop.along]);
+      if (segmentDef.type === 'road') for (const h of segmentDef.hazards ?? []) marks.push(hazardSpan(h));
+      for (const d of local.debrisAlong ?? []) marks.push([d, d]);
+      for (const [a, b] of marks) raw.push({ from: from + a - AMBIENT_MARGIN, to: from + b + AMBIENT_MARGIN });
     }
     frame = { pos: at.point(local.exit.pos), yaw: frame.yaw + local.exit.yaw };
   });

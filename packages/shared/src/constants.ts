@@ -441,7 +441,7 @@ export const ROADBLOCK_LATERAL = 3;
 export const AMBIENT_SPACING = 120;
 // m, jitter either side of an event's slot centre; keeps events at least AMBIENT_MIN_GAP apart.
 export const AMBIENT_JITTER = 30;
-// m, least distance between two events along the route.
+// m, least distance between two events along the route; planAmbient keeps AMBIENT_SPACING - 2 * AMBIENT_JITTER >= this.
 export const AMBIENT_MIN_GAP = 60;
 // m of route at the start and the end with no events.
 export const AMBIENT_ENDS = 150;
@@ -451,6 +451,8 @@ export const AMBIENT_MARGIN = 60;
 export const AMBIENT_GOAT_SHARE = 0.7;
 // m, how far ahead of the vehicle an animal appears.
 export const AMBIENT_SPAWN_AHEAD = 120;
+// m ahead of the vehicle left animal-free by a rearm (restart, respawn, skip); events beyond it fire again.
+export const AMBIENT_REARM_CLEAR = 60;
 // m, how far ahead of the vehicle an animal starts to cross.
 export const AMBIENT_TRIGGER = 45;
 // m, how far a spent animal may fall behind the vehicle before it is removed.
@@ -474,3 +476,11 @@ export const ANIMAL_HEALTH_FLOOR = 0.02;
 export const ANIMAL_HIT_SPEED = 2.0;
 // s a hit animal stays before it is removed.
 export const ANIMAL_HIT_LINGER = 1.5;
+// m, half extents of an animal's hit box (goat: x across, z along its body); a scooter is a scooter prop.
+export const ANIMAL_HALF_GOAT = vec3(0.25 * CHARACTER_SCALE, 0.4 * CHARACTER_SCALE, 0.6 * CHARACTER_SCALE);
+export const ANIMAL_HALF_SCOOTER = PROP_KINDS.scooter.halfExtents;
+// m the chassis box is inflated by in the hit check.
+export const ANIMAL_HIT_MARGIN = 0.1;
+// m above the ground the director's animals are probed from, and the probe length.
+export const ANIMAL_PROBE_UP = 20;
+export const ANIMAL_PROBE_LENGTH = 60;

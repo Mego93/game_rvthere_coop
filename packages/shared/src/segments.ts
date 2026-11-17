@@ -106,6 +106,8 @@ export interface LocalSegment {
   exit: { pos: Vec3; yaw: number };
   // The surface `along` metres (horizontal, along the route) from the entry, on the centre line.
   surfaceAt(along: number): SurfacePoint;
+  // Road only: the along position of each debris crate.
+  debrisAlong?: number[];
 }
 
 export const yawQuat = (yaw: number): Quat => quatFromAxisAngle(AXIS_Y, yaw);
@@ -270,7 +272,7 @@ function addExtras(
 }
 
 // Where a hazard's props start and end along the road, in m, counting the prop depth.
-function hazardSpan(h: Hazard): [start: number, end: number] {
+export function hazardSpan(h: Hazard): [start: number, end: number] {
   const barrierZ = PROP_KINDS.barrier.halfExtents.z;
   if (h.kind === 'crateWall') return [h.along - PROP_KINDS.crate.halfExtents.z, h.along + PROP_KINDS.crate.halfExtents.z];
   if (h.kind === 'roadblock') return [h.along - barrierZ, h.along + barrierZ];
@@ -379,6 +381,7 @@ function buildRoad(def: Extract<SegmentDef, { type: 'road' }>): LocalSegment {
     route: [[0, 0], ...pieces.map((p) => [endOf(p).x, endOf(p).z] as [number, number])],
     exit: { pos: endOf(last), yaw: curve },
     surfaceAt,
+    debrisAlong: debrisSlots.map((slot) => from + slot.along),
   };
   addExtras(def, curve === 0 && slope === 0, surfaceAt, routeLength, id, seg);
   return seg;

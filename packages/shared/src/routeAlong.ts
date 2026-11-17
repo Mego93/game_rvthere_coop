@@ -13,7 +13,9 @@ export interface RoutePoint {
 
 export interface RouteIndex {
   length: number;
+  // `segment` indexes the kept (nonzero-length) segments, not route vertices. Throws RangeError on a non-finite x or z; a non-finite hint is ignored.
   project(x: number, z: number, hint?: number): RouteProjection;
+  // Clamps to the route ends (Infinity included); throws RangeError on NaN.
   pointAt(along: number): RoutePoint;
 }
 
@@ -75,9 +77,10 @@ export function createRouteIndex(route: readonly (readonly [number, number])[]):
   };
 
   const project = (x: number, z: number, hint?: number): RouteProjection => {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) throw new RangeError('project needs a finite point');
     bestD = Infinity;
     bestI = count;
-    const h = hint === undefined ? -1 : Math.min(count - 1, Math.max(0, Math.floor(hint)));
+    const h = hint === undefined || !Number.isFinite(hint) ? -1 : Math.min(count - 1, Math.max(0, Math.floor(hint)));
     if (h >= 0) for (let i = Math.max(0, h - WINDOW); i <= Math.min(count - 1, h + WINDOW); i++) consider(i, x, z);
     // Exact full search; blocks whose box is farther than the best so far cannot hold a nearer or equal segment.
     for (let b = 0; b < blocks; b++) {
@@ -96,6 +99,7 @@ export function createRouteIndex(route: readonly (readonly [number, number])[]):
   };
 
   const pointAt = (along: number): RoutePoint => {
+    if (Number.isNaN(along)) throw new RangeError('pointAt needs a number');
     const a = Math.min(total, Math.max(0, along));
     let lo = 0;
     let hi = count - 1;

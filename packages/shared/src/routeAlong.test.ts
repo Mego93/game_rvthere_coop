@@ -97,4 +97,40 @@ describe('createRouteIndex (T1)', () => {
     expect(index.pointAt(-5)).toEqual({ x: 0, z: 0, tx: 0, tz: -1 });
     expect(index.pointAt(500)).toEqual({ x: 0, z: -100, tx: 0, tz: -1 });
   });
+
+  it('indexes kept segments: a duplicate vertex does not shift or break anything', () => {
+    const dup: Route = [[0, 0], [0, -10], [0, -10], [0, -20]];
+    const index = createRouteIndex(dup);
+    expect(index.length).toBeCloseTo(20, 9);
+    expect(index.project(2, -15)).toEqual({ along: 15, lateral: 2, segment: 1 });
+    expect(index.pointAt(10)).toEqual({ x: 0, z: -10, tx: 0, tz: -1 });
+  });
+
+  it('pointAt at a vertex returns the vertex with the later segment tangent', () => {
+    const index = createRouteIndex([[0, 0], [0, -10], [10, -10]]);
+    expect(index.pointAt(10)).toEqual({ x: 0, z: -10, tx: 1, tz: 0 });
+    expect(index.pointAt(0)).toEqual({ x: 0, z: 0, tx: 0, tz: -1 });
+  });
+
+  it('pointAt past either end keeps the end segment tangent on a multi-segment route', () => {
+    const index = createRouteIndex([[0, 0], [0, -10], [10, -10]]);
+    expect(index.pointAt(-3)).toEqual({ x: 0, z: 0, tx: 0, tz: -1 });
+    expect(index.pointAt(99)).toEqual({ x: 10, z: -10, tx: 1, tz: 0 });
+  });
+
+  it('gives the same result when the hint is the right segment', () => {
+    const index = createRouteIndex(doubling);
+    for (const [x, z] of samples(doubling, 50)) {
+      const plain = index.project(x, z);
+      expect(index.project(x, z, plain.segment)).toEqual(plain);
+    }
+  });
+
+  it('throws on a non-finite point or distance and ignores a non-finite hint', () => {
+    const index = createRouteIndex(straight);
+    expect(() => index.project(NaN, 0)).toThrow(RangeError);
+    expect(() => index.project(0, Infinity)).toThrow(RangeError);
+    expect(() => index.pointAt(NaN)).toThrow(RangeError);
+    expect(index.project(1, -5, NaN)).toEqual(index.project(1, -5));
+  });
 });

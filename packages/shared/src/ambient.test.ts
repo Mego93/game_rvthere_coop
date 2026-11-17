@@ -6,7 +6,9 @@ import {
   AMBIENT_GOAT_SPEED,
   AMBIENT_MAX_GOATS,
   AMBIENT_MAX_SCOOTERS,
+  AMBIENT_JITTER,
   AMBIENT_MIN_GAP,
+  AMBIENT_REARM_CLEAR,
   AMBIENT_SCOOTER_SPEED,
   AMBIENT_SPACING,
   AMBIENT_SPAWN_AHEAD,
@@ -27,7 +29,7 @@ const blocked = marrakech.ambient!.blocked;
 const seed = hashSeed('marrakech');
 const plan = planAmbient(seed, routeLength, blocked);
 // Measured on the real course: route length minus the blocked spans.
-const ELIGIBLE_LENGTH = 15626.3;
+const ELIGIBLE_LENGTH = 15581.4;
 
 describe('hashSeed and the PRNG', () => {
   it('is stable and differs by id', () => {
@@ -51,6 +53,10 @@ describe('hashSeed and the PRNG', () => {
 });
 
 describe('planAmbient (T2)', () => {
+  it('derives the least event gap from the spacing and jitter', () => {
+    expect(AMBIENT_SPACING - 2 * AMBIENT_JITTER).toBeGreaterThanOrEqual(AMBIENT_MIN_GAP);
+  });
+
   const eligible = routeLength - blocked.reduce((sum, s) => sum + s.to - s.from, 0);
 
   it('measures the eligible length of marrakech', () => {
@@ -196,15 +202,15 @@ describe('director (T3)', () => {
     expect(stepDirector(d, at(460, 0.02)).despawn).toEqual([1]);
   });
 
-  it('rearms: removes everyone, re-arms only events ahead, never reuses ids', () => {
-    const d = createDirector([ev(0, 400, 1, 'goat'), ev(1, 500, 1, 'goat'), ev(2, 900, -1, 'scooter')]);
+  it('rearms: removes everyone, clears only the near stretch ahead, re-arms the rest, never reuses ids', () => {
+    const d = createDirector([ev(0, 400, 1, 'goat'), ev(1, 500, 1, 'goat'), ev(2, 450 + AMBIENT_REARM_CLEAR, -1, 'scooter'), ev(3, 450 + AMBIENT_REARM_CLEAR + 1, 1, 'goat')]);
     stepDirector(d, at(380));
     expect(d.animals).toHaveLength(2);
     expect(rearm(d, 450)).toEqual([1, 2]);
     expect(d.animals).toHaveLength(0);
-    expect(stepDirector(d, at(450)).spawn).toEqual([]);
-    const { spawn } = stepDirector(d, at(800));
-    expect(spawn).toEqual([{ id: 3, eventId: 2, kind: 'scooter', along: 900, lateral: -(HALF + AMBIENT_EDGE_OFFSET) }]);
+    // Events behind and within the clear stretch stay fired; the one just beyond it comes back at once.
+    const { spawn } = stepDirector(d, at(450));
+    expect(spawn).toEqual([{ id: 3, eventId: 3, kind: 'goat', along: 450 + AMBIENT_REARM_CLEAR + 1, lateral: HALF + AMBIENT_EDGE_OFFSET }]);
   });
 
   it('is deterministic for equal inputs', () => {
