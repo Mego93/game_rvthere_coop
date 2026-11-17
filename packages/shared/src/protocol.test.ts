@@ -880,6 +880,8 @@ describe('step 34: emotes, random weather, the tajine and the eat event', () => 
   test('a player tajine is optional, finite and above 0', () => {
     expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: 12.3 }] })).toEqual({ ...snapshot, players: [{ ...onFoot, tajine: 12.3 }] });
     expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: 0 }] })).toBeNull();
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: 15 }] })).not.toBeNull();
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: 15.1 }] })).toBeNull();
     expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: -1 }] })).toBeNull();
     expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: '5' }] })).toBeNull();
     expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: null }] })).toBeNull();

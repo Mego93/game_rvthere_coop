@@ -1,4 +1,4 @@
-import { CHAT_MAX_LENGTH, EMOTES, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, SHOP_ITEMS, TIMES_OF_DAY, WEATHERS, WEATHER_SETTINGS, type Emote, type ItemKind, type ShopItem, type TimeOfDay, type Weather, type WeatherSetting } from './constants';
+import { CHAT_MAX_LENGTH, EMOTES, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, SHOP_ITEMS, TAJINE_SECONDS, TIMES_OF_DAY, WEATHERS, WEATHER_SETTINGS, type Emote, type ItemKind, type ShopItem, type TimeOfDay, type Weather, type WeatherSetting } from './constants';
 import { isAppearance, type Appearance } from './characters';
 import { courseIds } from './courses/index';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
@@ -150,7 +150,7 @@ export interface PlayerSnapshot {
   health: number;
   // Seconds left before respawn while downed.
   downed: number | null;
-  // Seconds of the tajine left, rounded to 0.1; absent at 0.
+  // Seconds of the tajine left, rounded up to 0.1; absent at 0.
   tajine?: number;
   // Absent means standing; a stance this version does not know is read as standing.
   stance?: 'crouch' | 'slide';
@@ -390,7 +390,7 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   value.health <= 100 &&
   (value.downed === null || (finite(value.downed) && value.downed >= 0)) &&
   (value.hold === null || (isRecord(value.hold) && isText(value.hold.action) && isText(value.hold.targetId) && finite(value.hold.progress))) &&
-  (value.tajine === undefined || (finite(value.tajine) && value.tajine > 0)) &&
+  (value.tajine === undefined || (finite(value.tajine) && value.tajine > 0 && value.tajine <= TAJINE_SECONDS)) &&
   (value.stance === undefined || isText(value.stance)) &&
   (value.slide === undefined ||
     (isRecord(value.slide) &&

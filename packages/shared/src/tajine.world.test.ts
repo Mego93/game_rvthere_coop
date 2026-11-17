@@ -158,6 +158,40 @@ describe('eating a tajine', () => {
     world.dispose();
   });
 
+  test('while the kill-plane respawn runs nothing is eaten and a running timer is already cleared', () => {
+    const world = fresh();
+    world.teleportPlayer('p', vec3(START.x, world.course.killPlaneY - 5, START.z));
+    for (let i = 0; i < 3; i++) world.step(new Map([['p', input({ use: true })]]));
+    expect(me(world).pos.y).toBeLessThan(world.course.killPlaneY);
+    expect(world.canEmote('p')).toBe(false);
+    for (let i = 0; i < 5; i++) world.step(new Map([['p', input({ use: true })]]));
+    expect(me(world).inventory[0]).toBe('tajine');
+    expect(me(world).hold).toBeNull();
+    world.dispose();
+  });
+
+  test('the timer is cleared on the tick the fall begins, not at the respawn', () => {
+    const world = fresh();
+    eat(world);
+    world.teleportPlayer('p', vec3(START.x, world.course.killPlaneY - 5, START.z));
+    world.step(new Map());
+    world.step(new Map());
+    expect(me(world).tajine).toBeUndefined();
+    world.dispose();
+  });
+
+  test('the snapshot rounds the timer up to 0.1 and never above 15', () => {
+    const world = fresh();
+    eat(world);
+    for (let i = 0; i < 100; i++) {
+      world.step(new Map());
+      const t = me(world).tajine!;
+      expect(t).toBeLessThanOrEqual(TAJINE_SECONDS);
+      expect(Math.abs(t * 10 - Math.round(t * 10))).toBeLessThan(1e-6);
+    }
+    world.dispose();
+  });
+
   test('a teleport (the out-of-bounds move) keeps it', () => {
     const world = fresh();
     eat(world);

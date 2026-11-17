@@ -410,7 +410,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       // The aim is this tick's input, as for interact (R6).
       const { origin, dir } = aimRay(player.pos, fields?.yaw ?? player.yaw, fields?.pitch ?? player.pitch, player.crouched);
       const ctx: UseContext = {
-        self: { id: player.id, feet: player.pos, eye: origin, aim: dir, health: player.health, onFoot: !seated && player.downed === null },
+        self: { id: player.id, feet: player.pos, eye: origin, aim: dir, health: player.health, onFoot: !seated && player.downed === null && player.respawnIn === null },
         vehicle: vehicleView,
         players: players
           .all()
@@ -627,7 +627,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     for (const player of players.all()) {
       if (player.seat !== null) continue;
       if (player.respawnIn === null) {
-        if (player.pos.y < course.killPlaneY) player.respawnIn = PLAYER_KILL_RESPAWN_DELAY;
+        if (player.pos.y < course.killPlaneY) {
+          player.respawnIn = PLAYER_KILL_RESPAWN_DELAY;
+          player.tajine = 0;
+        }
         continue;
       }
       player.respawnIn -= TICK_DT;
@@ -867,7 +870,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         slot: player.slot,
         health: Math.floor(player.health),
         downed: player.downed,
-        ...(Math.round(player.tajine * 10) > 0 ? { tajine: Math.round(player.tajine * 10) / 10 } : {}),
+        ...(player.tajine > 1e-9 ? { tajine: Math.min(TAJINE_SECONDS, Math.ceil(player.tajine * 10 - 1e-9) / 10) } : {}),
         ...(player.slideTicks > 0 ? { stance: 'slide' as const } : player.crouched ? { stance: 'crouch' as const } : {}),
         ...(player.slideTicks > 0 || player.slideCooldown > 0 || player.launch > 0
           ? {

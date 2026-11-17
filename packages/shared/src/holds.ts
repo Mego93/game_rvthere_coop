@@ -33,7 +33,7 @@ export interface HoldVehicle {
 }
 
 export interface UseContext {
-  // onFoot: not seated and not downed.
+  // onFoot: not seated, not downed and not waiting to respawn.
   self: { id: string; feet: Vec3; eye: Vec3; aim: Vec3; health: number; onFoot: boolean };
   vehicle: HoldVehicle;
   // Every other player, in join order.

@@ -106,9 +106,9 @@ export interface Room {
   // Relays a valid chat line to every connected player and keeps it in the history; a player with no token left is ignored silently.
   chat(player: RoomPlayer, text: string, now: number): void;
   pushInput(player: RoomPlayer, input: PlayerInput): void;
-  // Spends the crew's coins on an item at a fuel station's counter; applies at once.
   // Relays an emote to every connected player when the player is on foot in a run and the cooldown has passed; otherwise ignored silently.
   emote(player: RoomPlayer, emote: Emote, now: number): void;
+  // Spends the crew's coins on an item at a fuel station's counter; applies at once.
   buy(player: RoomPlayer, item: ShopItem): 'ok' | 'cannot_buy';
   // Runs the simulation ticks that are due at `now` and broadcasts snapshots.
   update(now: number): void;

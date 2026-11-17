@@ -4,6 +4,8 @@ import { RAIN_GRIP, WEATHER_SEED_SALT } from './constants';
 import { hashSeed } from './ambient';
 import { mixSeed } from './itemDrops';
 import { weatherSchedule } from './weather';
+import { getCourse } from './courses/index';
+import { IDENTITY, vec3 } from './math';
 import { createWorld } from './world';
 
 beforeAll(async () => {
@@ -83,6 +85,39 @@ describe('random weather in the world', () => {
     world.restartCheckpoint();
     world.step(new Map());
     expect(world.snapshot().weather).toBe(before);
+    world.dispose();
+  });
+
+  const changingSeed = () => {
+    let seed = 1;
+    for (;;) {
+      const list = scheduleOf(seed);
+      if ((list[0]!.weather === 'rain') !== (list[1]!.weather === 'rain')) return { seed, list };
+      seed += 1;
+    }
+  };
+
+  test('after the win the weather and the wheel friction stay put past a scheduled change', () => {
+    const { seed, list } = changingSeed();
+    const base = getCourse('test');
+    const course = { ...base, finish: { center: base.checkpoints[0]!.spawn.pos, halfExtents: vec3(20, 20, 20), rot: IDENTITY } };
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy', weather: 'random', itemSeed: seed }, course);
+    for (let i = 0; i < 5; i++) world.step(new Map());
+    expect(world.status().state).toBe('won');
+    const weather = world.snapshot().weather;
+    const slip = world.debug().wheelFrictionSlips[0]!;
+    for (let i = 0; i < list[1]!.tick + 60; i++) world.step(new Map());
+    expect(world.snapshot().weather).toBe(weather);
+    expect(world.debug().wheelFrictionSlips[0]).toBeCloseTo(slip, 9);
+    world.dispose();
+  });
+
+  test('not stepping keeps the weather', () => {
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy', weather: 'random', itemSeed: 3 });
+    world.step(new Map());
+    const before = world.snapshot().weather;
+    expect(world.snapshot().weather).toBe(before);
+    expect(world.snapshot().tick).toBe(1);
     world.dispose();
   });
 });
