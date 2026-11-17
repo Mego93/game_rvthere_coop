@@ -1,5 +1,7 @@
 export * from './constants';
 export * from './ambient';
+export { createItemDirector, markDropped, mixSeed, planItemDrops, rearmItems, stepItemDirector, unfireItem } from './itemDrops';
+export type { ItemDirectorInput, ItemDirectorState, ItemDropEvent, OwnedDrop } from './itemDrops';
 export * from './animals';
 export * from './checkpoints';
 export * from './coins';

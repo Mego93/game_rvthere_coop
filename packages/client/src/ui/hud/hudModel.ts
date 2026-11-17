@@ -1,4 +1,4 @@
-import { FINAL_RESTART_PENALTY, PLAYER_MAX_HEALTH, clamp, yawOf, type Box, type Checkpoint, type Vec3 } from '@lodgy/shared';
+import { FINAL_RESTART_PENALTY, ITEM_KINDS, PLAYER_MAX_HEALTH, clamp, yawOf, type Box, type Checkpoint, type Vec3 } from '@lodgy/shared';
 import { clock, interactHint, useHint, type OverlayData } from '../overlay';
 import { bearingTo, compassLabel, compassTarget, edgeSide, headingOffset, markerPosition } from './compass';
 import { LOW_FRACTION, MARKER_HEIGHT } from './constants';
@@ -22,11 +22,12 @@ export interface HudModel {
   downedOthers: { id: string; name: string; pos: Vec3; seconds: number }[];
   mapEntities: {
     id: string;
-    kind: 'vehicle' | 'self' | 'player' | 'stop' | 'checkpoint';
+    kind: 'vehicle' | 'self' | 'player' | 'stop' | 'checkpoint' | 'item';
     x: number;
     z: number;
     reached?: boolean;
     stopKind?: 'fuel' | 'garage';
+    itemKind?: string;
     yaw?: number;
   }[];
 }
@@ -76,6 +77,11 @@ export function buildHudModel(data: OverlayData, course: { checkpoints: readonly
       if (player.playerId !== localId) mapEntities.push({ id: player.playerId, kind: 'player', x: player.pos.x, z: player.pos.z });
     }
     for (const stop of stops) mapEntities.push({ id: stop.id, kind: 'stop', x: stop.operatePoint.x, z: stop.operatePoint.z, stopKind: stop.kind });
+    // Items are props whose kind is an item kind; one in a player's hands is not on the ground.
+    const handled = new Set(players.map((player) => player.hands));
+    for (const prop of propPoses) {
+      if (Object.hasOwn(ITEM_KINDS, prop.kind) && !handled.has(prop.id)) mapEntities.push({ id: prop.id, kind: 'item', x: prop.pos.x, z: prop.pos.z, itemKind: prop.kind });
+    }
     course.checkpoints.forEach((checkpoint, index) => {
       const { center } = checkpoint.trigger;
       mapEntities.push({ id: checkpoint.id, kind: 'checkpoint', x: center.x, z: center.z, reached: !!status && index <= status.checkpoint });

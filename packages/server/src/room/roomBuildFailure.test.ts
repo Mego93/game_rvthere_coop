@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { World } from '@lodgy/shared';
+import { buildCourse, type World } from '@lodgy/shared';
 import { beforeAll, expect, test, vi } from 'vitest';
 
 // Every world the room builds, so that a test can see which were disposed; the next built world fails when `failNext` is set.
@@ -75,5 +75,33 @@ test('a restartCourse whose world fails to build disposes the half-built world a
   expect(room.restartCourse(admin)).toBeNull();
   expect(built[0]!.dispose).toHaveBeenCalledTimes(1);
   expect(room.debugWorld()).toBe(built[2]!.world);
+  room.dispose();
+});
+
+test('a failed start does not use up a run number: the next start has run 1\'s item layout', () => {
+  const course = buildCourse({ id: 'drops', segments: Array.from({ length: 6 }, () => ({ type: 'road' as const, length: 300 })), targetTime: 400, ambient: true });
+  const layoutOf = (room: ReturnType<typeof createRoom>) => {
+    const world = room.debugWorld()!;
+    const body = world.debugBody('vehicle')!;
+    const seen = new Set<string>();
+    for (let along = 20; along < 1700; along += 100) {
+      body.setTranslation({ x: 0, y: 1, z: -along }, true);
+      for (let i = 0; i < 2; i++) world.step(new Map());
+      for (const prop of world.snapshot().props) if (/^item-\d+$/.test(prop.id)) seen.add(`${prop.kind}@${Math.round(prop.pos.z)}`);
+    }
+    return [...seen].sort();
+  };
+  const first = createRoom(RAPIER, { noun: 'a', campaign: ['drops', 'segment-demo'], courses: { drops: course } }, 0);
+  expect(first.start(first.add('Amal', token, connection))).toBeNull();
+  const expected = layoutOf(first);
+  expect(expected.length).toBeGreaterThan(0);
+  first.dispose();
+
+  const room = createRoom(RAPIER, { noun: 'b', campaign: ['drops', 'segment-demo'], courses: { drops: course } }, 0);
+  const admin = room.add('Amal', token, connection);
+  control.failNext = true;
+  expect(() => room.start(admin)).toThrow('recordStart failed');
+  expect(room.start(admin)).toBeNull();
+  expect(layoutOf(room)).toEqual(expected);
   room.dispose();
 });

@@ -469,6 +469,25 @@ export const AMBIENT_SCOOTER_SPEED = 4.5;
 export const AMBIENT_GOAT_STOP_BEYOND = 2;
 // m beyond the road edge where a scooter is removed.
 export const AMBIENT_SCOOTER_LEAVE = 15;
+// m of eligible route per item drop, on average.
+export const ITEM_DROP_SPACING = 600;
+// m, jitter either side of a drop's slot centre.
+export const ITEM_DROP_JITTER = 80;
+// m either side of a course pickup with no drops.
+export const ITEM_DROP_PICKUP_CLEAR = 40;
+// m, how far ahead of the vehicle a drop appears.
+export const ITEM_DROP_AHEAD = 150;
+// m, how far behind the vehicle an unclaimed drop is removed.
+export const ITEM_DROP_BEHIND = 100;
+// m beyond the road edge where a drop lies.
+export const ITEM_DROP_EDGE_OFFSET = 1.5;
+// m above the ground where a drop is released.
+export const ITEM_DROP_LIFT = 0.05;
+// m above the higher of the vehicle and the last checkpoint where the ground ray for a drop starts, and its length.
+export const ITEM_DROP_PROBE_UP = 120;
+export const ITEM_DROP_PROBE_LENGTH = 400;
+// Probability of each kind; sums to 1.
+export const ITEM_DROP_MIX = deepFreeze({ jerrycan: 0.2, toolbox: 0.35, healthKit: 0.45 } satisfies Record<ItemKind, number>);
 // Fraction of full health lost to one animal hit; health never falls below ANIMAL_HEALTH_FLOOR.
 export const ANIMAL_HIT_DAMAGE = 0.03;
 export const ANIMAL_HEALTH_FLOOR = 0.02;

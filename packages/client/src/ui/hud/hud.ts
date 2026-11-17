@@ -40,6 +40,10 @@ const STYLE = `
 #hud-minimap .player { fill: #fff; }
 #hud-minimap .stop-fuel { fill: #ff8a3d; }
 #hud-minimap .stop-garage { fill: var(--hud-good); }
+#hud-minimap .item { stroke: rgba(0, 0, 0, 0.6); stroke-width: 1; }
+#hud-minimap .item.jerrycan { fill: #d9a21b; }
+#hud-minimap .item.toolbox { fill: #4a90d9; }
+#hud-minimap .item.healthKit { fill: #d94a4a; }
 #hud-minimap .finish { fill: #fff; stroke: #111; stroke-width: 1.5; }
 #hud-minimap .checkpoint { fill: none; stroke: #fff; stroke-width: 2; }
 #hud-minimap .checkpoint.reached { opacity: 0.3; }
@@ -220,7 +224,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
     for (const { entity: e, x: px, y: py } of scene.items) {
       const p = { x: px, y: py };
       seen.add(e.id);
-      const shape = e.kind === 'checkpoint' || e.kind === 'self' || e.kind === 'player' ? 'circle' : 'rect';
+      const shape = e.kind === 'checkpoint' || e.kind === 'self' || e.kind === 'player' || e.kind === 'item' ? 'circle' : 'rect';
       let entry = dotNodes.get(e.id);
       if (entry && entry.kind !== e.kind) {
         entry.node.remove();
@@ -235,6 +239,9 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       if (e.kind === 'checkpoint') {
         setAttr(node, 'class', e.reached ? 'checkpoint reached' : 'checkpoint');
         setAttr(node, 'r', 5);
+      } else if (e.kind === 'item') {
+        setAttr(node, 'class', `item ${e.itemKind ?? ''}`.trim());
+        setAttr(node, 'r', 2.5);
       } else if (e.kind === 'finish') {
         setAttr(node, 'class', 'finish');
         setAttr(node, 'width', 9);

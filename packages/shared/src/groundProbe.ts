@@ -1,6 +1,8 @@
 import type { Surface } from './constants';
 import type { GroundBox } from './course';
+import { GROUP_GROUND, GROUP_WORLD, groups } from './groups';
 import { rotate, vec3 } from './math';
+import type { Rapier, RapierWorld } from './rapier';
 
 const EPS = 1e-9;
 const FROM_Y = 10000;
@@ -43,4 +45,10 @@ function topHit(ground: readonly GroundBox[], x: number, z: number): { y: number
     }
   }
   return best;
+}
+
+// The ground height under (x, z) by one ray cast straight down from `fromY` over `length` m; null where it hits none.
+export function groundHeightBelow(rapier: Rapier, physics: RapierWorld, x: number, z: number, fromY: number, length: number): number | null {
+  const hit = physics.castRay(new rapier.Ray({ x, y: fromY, z }, { x: 0, y: -1, z: 0 }), length, true, undefined, groups(GROUP_WORLD, GROUP_GROUND));
+  return hit ? fromY - hit.timeOfImpact : null;
 }

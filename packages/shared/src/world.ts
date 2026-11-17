@@ -1,9 +1,11 @@
-import { createRouteIndex } from './routeAlong';
+import { createRouteIndex, type RouteIndex } from './routeAlong';
+import { groundHeightBelow } from './groundProbe';
+import { createItemDirector, markDropped, mixSeed, planItemDrops, rearmItems, stepItemDirector, unfireItem, type ItemDropEvent } from './itemDrops';
 import { createAnimals, type Animals } from './animals';
 import { hashSeed, planAmbient, type AmbientEvent, type AnimalSnapshot } from './ambient';
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DEFAULT_WEATHER, ANIMAL_HEALTH_FLOOR, ANIMAL_HIT_DAMAGE, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather } from './constants';
+import { DEFAULT_WEATHER, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
@@ -34,6 +36,12 @@ export interface WorldOptions {
   ambient?: boolean;
   // Tests only: replaces the plan the director follows.
   ambientPlan?: readonly AmbientEvent[];
+  // Bonus item drops beside the road ahead of the vehicle, on a course that has `ambient` spans; off by default.
+  itemDrops?: boolean;
+  // Seed of the drop plan; defaults to the course's first-run seed.
+  itemSeed?: number;
+  // Tests only: replaces the drop plan, whatever the course.
+  itemPlan?: readonly ItemDropEvent[];
 }
 
 export interface WorldEvent {
@@ -154,12 +162,28 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const items = createItems(rapier, physics, course);
   const players = createPlayers(rapier, physics, vehicle, props, course);
   const winch = createWinch(rapier, physics, vehicle, props, course);
-  const ambientPlan = options.ambient === true ? (options.ambientPlan ?? (course.ambient ? planAmbient(hashSeed(course.id), createRouteIndex(course.route).length, course.ambient.blocked) : undefined)) : undefined;
+  const routeIndex: RouteIndex | null = options.ambient === true || options.itemDrops === true ? createRouteIndex(course.route) : null;
+  const ambientPlan = options.ambient === true ? (options.ambientPlan ?? (course.ambient ? planAmbient(hashSeed(course.id), routeIndex!.length, course.ambient.blocked) : undefined)) : undefined;
   const animals: Animals | null = ambientPlan ? createAnimals(rapier, physics, course.route, ambientPlan) : null;
   const animalField = (): { animals?: AnimalSnapshot[] } => {
     const list = animals?.snapshot();
     return list ? { animals: list } : {};
   };
+  const dropPlan: readonly ItemDropEvent[] | undefined =
+    options.itemDrops !== true
+      ? undefined
+      : (options.itemPlan ??
+        (course.ambient
+          ? planItemDrops(
+              options.itemSeed ?? mixSeed(hashSeed(course.id), 1),
+              routeIndex!.length,
+              course.ambient.blocked,
+              course.pickups.map((placed) => routeIndex!.project(placed.pose.pos.x, placed.pose.pos.z).along),
+            )
+          : undefined));
+  if (dropPlan?.some((e, i) => i > 0 && e.along < dropPlan[i - 1]!.along)) throw new Error('The item drop plan must be sorted by along');
+  const dropDirector = dropPlan ? createItemDirector(dropPlan) : null;
+  let dropHint: number | undefined;
   const previous = new Map<string, InputFields>();
   const usePressed = new Set<string>();
   // Players whose interact press this tick resolved to operate, with the stop.
@@ -203,7 +227,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       props: props.snapshot(),
       heldIds,
       courseProps: course.props,
-      items: items.snapshot(),
+      // A director's drop is made again by the director, so it is not recorded.
+      items: dropDirector ? items.snapshot().filter((item) => !dropDirector.owned.some((owned) => owned.itemId === item.id)) : items.snapshot(),
       players: players.all().map((player) => ({ id: player.id, inventory: player.inventory, health: player.health })),
     });
     players.setFallbackSpawn(checkpoint.spawn.pos);
@@ -682,6 +707,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       }
     }
     animals?.rearm(vehicle.body.translation());
+    rearmDrops();
     restarts += 1;
     historyNext = 0;
     historyCount = 0;
@@ -689,6 +715,36 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     // A hold in progress starts over; a hold that already fired still needs a fresh press.
     for (const state of resetHolds.values()) state.ticks = 0;
     events.push({ kind: 'vehicleLost', tick });
+  };
+
+  const stepDrops = () => {
+    if (!dropDirector || !routeIndex) return;
+    const pos = vehicle.body.translation();
+    const projected = routeIndex.project(pos.x, pos.z, dropHint);
+    dropHint = projected.segment;
+    const existing = new Set<string>();
+    for (const owned of dropDirector.owned) if (items.get(owned.itemId)) existing.add(owned.itemId);
+    const { drop, take } = stepItemDirector(dropDirector, { vehicleAlong: projected.along, existing });
+    for (const id of take) items.take(id);
+    for (const e of drop) {
+      const at = routeIndex.pointAt(e.along);
+      // The right of the travel direction is (-tz, tx).
+      const x = at.x - at.tz * e.lateral;
+      const z = at.z + at.tx * e.lateral;
+      const ground = groundHeightBelow(rapier, physics, x, z, Math.max(pos.y, course.checkpoints[record.index]!.spawn.pos.y) + ITEM_DROP_PROBE_UP, ITEM_DROP_PROBE_LENGTH);
+      if (ground === null) {
+        unfireItem(dropDirector, e.id);
+        continue;
+      }
+      markDropped(dropDirector, e.id, items.drop(e.kind, vec3(x, ground + ITEM_DROP_LIFT, z)));
+    }
+  };
+
+  // Takes every drop the director placed and lets the events ahead fire again.
+  const rearmDrops = () => {
+    if (!dropDirector || !routeIndex) return;
+    dropHint = undefined;
+    for (const id of rearmItems(dropDirector, routeIndex.project(vehicle.body.translation().x, vehicle.body.translation().z).along)) items.take(id);
   };
 
   // Rule I11: at the first valid spawn slot, stacked upward.
@@ -727,6 +783,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       const controls = driver ? onFoot.get(driver.id)?.fields : undefined;
       stepReset(onFoot, controls?.moveY ?? 0);
       animals?.step(vehicle.body.translation());
+      stepDrops();
       const velocityBefore = animals ? { ...vehicle.body.linvel() } : null;
       vehicle.step({
         throttle: controls?.moveY ?? 0,
@@ -880,6 +937,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         }
       });
       animals?.rearm(vehicle.body.translation());
+      rearmDrops();
       recordCheckpoint(next);
       const centre = vehicle.body.translation();
       queuedEvents.push({ kind: 'checkpoint', tick: tick + 1, pos: vec3(centre.x, centre.y, centre.z) });
