@@ -37,6 +37,8 @@ const SOUND_OF_EVENT: Record<EventMessage['kind'], SoundName | null> = {
   downed: 'downed',
   revive: 'revive',
   respawn: null,
+  goatHit: null,
+  scooterHit: null,
 };
 
 const ALWAYS_FLAT: ReadonlySet<SoundName> = new Set(['coin', 'purchase', 'click', 'win']);

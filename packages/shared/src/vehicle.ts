@@ -54,6 +54,8 @@ export interface Vehicle {
   health(): number;
   addFuel(amount: number): void;
   repair(amount: number): void;
+  // Takes `amount` of health but never lowers it below `floor` (nor raises it to the floor).
+  damage(amount: number, floor: number): void;
   // Placed on the ground pose (raised by the ride height) with zero velocities; impact tracking restarts.
   resetTo(pose: Pose, fuel: number, health: number): void;
   // Impact and upside-down damage. Call once per tick, after the physics world steps.
@@ -180,6 +182,9 @@ export function createVehicle(
     },
     repair(amount) {
       health = clamp(health + amount, 0, 1);
+    },
+    damage(amount, floor) {
+      health = Math.min(health, clamp(health - amount, floor, 1));
     },
     resetTo(pose, newFuel, newHealth) {
       const at = add(pose.pos, rotate(pose.rot, scale(AXIS_Y, config.rideHeight)));

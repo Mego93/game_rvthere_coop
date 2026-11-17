@@ -1,6 +1,8 @@
+import { createAnimals, type Animals } from './animals';
+import { hashSeed, planAmbient, type AmbientEvent, type AnimalSnapshot } from './ambient';
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DEFAULT_WEATHER, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather } from './constants';
+import { DEFAULT_WEATHER, ANIMAL_HEALTH_FLOOR, ANIMAL_HIT_DAMAGE, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather } from './constants';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
@@ -27,6 +29,10 @@ export interface WorldOptions {
   vehicleId: string;
   // Defaults to clear.
   weather?: Weather;
+  // Ambient animals on a course that has `ambient` spans; off by default.
+  ambient?: boolean;
+  // Tests only: replaces the plan the director follows.
+  ambientPlan?: readonly AmbientEvent[];
 }
 
 export interface WorldEvent {
@@ -59,6 +65,8 @@ export interface WorldSnapshot {
   coinsTotal: number;
   // True once an admin tool has been used in this run.
   assisted: boolean;
+  // Ambient animals alive; absent when there are none.
+  animals?: AnimalSnapshot[];
 }
 
 export interface WorldStatus {
@@ -120,6 +128,12 @@ export interface World {
   dispose(): void;
 }
 
+const routeLength = (route: readonly (readonly [number, number])[]): number => {
+  let total = 0;
+  for (let i = 1; i < route.length; i++) total += Math.hypot(route[i]![0] - route[i - 1]![0], route[i]![1] - route[i - 1]![1]);
+  return total;
+};
+
 // One non-finite number would stay in the physics state for good, so it is treated as no input.
 const finite = (value: number | undefined): number => (value !== undefined && Number.isFinite(value) ? value : 0);
 
@@ -145,6 +159,12 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const items = createItems(rapier, physics, course);
   const players = createPlayers(rapier, physics, vehicle, props, course);
   const winch = createWinch(rapier, physics, vehicle, props, course);
+  const ambientPlan = options.ambient === true ? (options.ambientPlan ?? (course.ambient ? planAmbient(hashSeed(course.id), routeLength(course.route), course.ambient.blocked) : undefined)) : undefined;
+  const animals: Animals | null = ambientPlan ? createAnimals(rapier, physics, course.route, ambientPlan) : null;
+  const animalField = (): { animals?: AnimalSnapshot[] } => {
+    const list = animals?.snapshot();
+    return list ? { animals: list } : {};
+  };
   const previous = new Map<string, InputFields>();
   const usePressed = new Set<string>();
   // Players whose interact press this tick resolved to operate, with the stop.
@@ -666,6 +686,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         level += 1;
       }
     }
+    animals?.rearm(vehicle.body.translation());
     restarts += 1;
     historyNext = 0;
     historyCount = 0;
@@ -710,6 +731,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       const driver = players.all().find((player) => player.seat === 'driver');
       const controls = driver ? onFoot.get(driver.id)?.fields : undefined;
       stepReset(onFoot, controls?.moveY ?? 0);
+      animals?.step(vehicle.body.translation());
+      const velocityBefore = animals ? { ...vehicle.body.linvel() } : null;
       vehicle.step({
         throttle: controls?.moveY ?? 0,
         steer: controls?.moveX ?? 0,
@@ -720,6 +743,12 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       players.stepOnFoot(onFoot);
       const impactSpeed = vehicle.afterPhysics();
       if (impactSpeed > 0) events.push({ kind: 'impact', tick, pos: { ...vehicle.body.translation() } });
+      if (animals && velocityBefore) {
+        for (const hit of animals.hits({ pos: vehicle.body.translation(), rot: vehicle.body.rotation(), half: vehicleConfig.halfExtents }, velocityBefore)) {
+          vehicle.damage(ANIMAL_HIT_DAMAGE, ANIMAL_HEALTH_FLOOR);
+          events.push({ kind: hit.kind === 'goat' ? 'goatHit' : 'scooterHit', tick, pos: hit.pos });
+        }
+      }
       const pulled = winch.afterCharacters((id) => players.holdPose(id));
       if (pulled !== null) players.setHands(pulled, null);
       stepCoins(events);
@@ -790,6 +819,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       coinsCollected,
       coinsTotal: course.coins.length,
       assisted,
+      ...animalField(),
     }),
     restartCheckpoint() {
       if (!won) restartPending = true;
@@ -854,6 +884,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
           if (prop.heldBy !== null || boxesOverlap(box, vehicleBox)) props.resetToSpawn(prop.id);
         }
       });
+      animals?.rearm(vehicle.body.translation());
       recordCheckpoint(next);
       const centre = vehicle.body.translation();
       queuedEvents.push({ kind: 'checkpoint', tick: tick + 1, pos: vec3(centre.x, centre.y, centre.z) });

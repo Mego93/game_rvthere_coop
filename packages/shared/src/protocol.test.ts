@@ -232,6 +232,10 @@ test.each<ServerMessage>([
   { ...snapshot, players: [{ ...onFoot, stance: 'roll' }] } as ServerMessage,
   { ...snapshot, vehicle: { ...vehicle, resetReady: true } } as ServerMessage,
   { ...snapshot, elapsed: 61.5, checkpoint: 1, restarts: 2, respawns: 3, won: true } as ServerMessage,
+  { ...snapshot, animals: [{ id: 3, kind: 'goat', x: 1, y: 0.4, z: -80, yaw: 1.5 }, { id: 4, kind: 'scooter', x: -2, y: 0.5, z: -90, yaw: -1.5, hit: true }] } as ServerMessage,
+  { ...snapshot, animals: [] } as ServerMessage,
+  { type: 'event', kind: 'goatHit', tick: 4, pos: { x: 1, y: 2, z: 3 } } as ServerMessage,
+  { type: 'event', kind: 'scooterHit', tick: 4, pos: { x: 1, y: 2, z: 3 } } as ServerMessage,
 ])('parseServerMessage accepts %j', (message) => {
   expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
 });
@@ -257,6 +261,11 @@ test.each([
   ['a snapshot whose tick is negative', JSON.stringify({ ...snapshot, tick: -1 })],
   ['a snapshot whose tick is not whole', JSON.stringify({ ...snapshot, tick: 1.5 })],
   ['a snapshot whose tick is too large to be finite', JSON.stringify(snapshot).replace('"tick":30', '"tick":1e999')],
+  ['an animal of an unknown kind', JSON.stringify({ ...snapshot, animals: [{ id: 1, kind: 'camel', x: 0, y: 0, z: 0, yaw: 0 }] })],
+  ['an animal without a position', JSON.stringify({ ...snapshot, animals: [{ id: 1, kind: 'goat', x: 0, y: 0, yaw: 0 }] })],
+  ['an animal whose id is negative', JSON.stringify({ ...snapshot, animals: [{ id: -1, kind: 'goat', x: 0, y: 0, z: 0, yaw: 0 }] })],
+  ['an animal whose hit is false', JSON.stringify({ ...snapshot, animals: [{ id: 1, kind: 'goat', x: 0, y: 0, z: 0, yaw: 0, hit: false }] })],
+  ['animals that are not a list', JSON.stringify({ ...snapshot, animals: 'goat' })],
   ['a snapshot without a cable', JSON.stringify({ ...snapshot, cable: undefined })],
   ['a snapshot whose cable is null', JSON.stringify({ ...snapshot, cable: null })],
   ['a cable with an unknown state', JSON.stringify({ ...snapshot, cable: { ...cable, state: 'tangled' } })],
@@ -738,5 +747,24 @@ describe('E1: the event message', () => {
     ['a playerId that is a number', { type: 'event', kind: 'hurt', tick: 1, playerId: 7 }],
   ])('rejects %s', (_label, message) => {
     expect(parse(message)).toBeNull();
+  });
+});
+
+describe('animals on the wire (T7)', () => {
+  test('a snapshot without animals parses with the field absent', () => {
+    const parsed = parseServerMessage(JSON.stringify(snapshot)) as Record<string, unknown>;
+    expect('animals' in parsed).toBe(false);
+  });
+
+  test('an old parser, which knows the event kinds without the animal ones, drops the new kinds without throwing', () => {
+    const oldKinds = EVENT_KINDS.filter((kind) => kind !== 'goatHit' && kind !== 'scooterHit') as readonly string[];
+    const oldParse = (raw: string) => {
+      const data = JSON.parse(raw) as { type: string; kind: string };
+      return data.type === 'event' && oldKinds.includes(data.kind) ? data : null;
+    };
+    expect(() => oldParse(JSON.stringify({ type: 'event', kind: 'goatHit', tick: 1 }))).not.toThrow();
+    expect(oldParse(JSON.stringify({ type: 'event', kind: 'goatHit', tick: 1 }))).toBeNull();
+    expect(oldParse(JSON.stringify({ type: 'event', kind: 'scooterHit', tick: 1 }))).toBeNull();
+    expect(oldParse(JSON.stringify({ type: 'event', kind: 'impact', tick: 1 }))).not.toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 export * from './constants';
 export * from './ambient';
+export * from './animals';
 export * from './checkpoints';
 export * from './coins';
 export * from './course';
