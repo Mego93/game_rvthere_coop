@@ -7,8 +7,8 @@ export interface ControlEntry {
   action: string;
 }
 
-// Codes handled outside the keyboard source: F3 and Escape in game.ts, M in audio/soundMap.ts, H in main.ts.
-export const EXTRA_CODES = ['F3', 'Escape', 'KeyM', 'KeyH'];
+// Codes handled outside the keyboard source: F3, T and Escape in game.ts, M in audio/soundMap.ts, H in main.ts.
+export const EXTRA_CODES = ['F3', 'Escape', 'KeyM', 'KeyH', 'KeyT'];
 
 export const CONTROLS: readonly ControlEntry[] = [
   { group: 'On foot', keys: ['KeyW', 'KeyA', 'KeyS', 'KeyD'], action: 'Walk' },
@@ -27,7 +27,8 @@ export const CONTROLS: readonly ControlEntry[] = [
   { group: 'Vehicle', keys: ['KeyX'], action: `Hold to reset a stuck or upturned vehicle (${FINAL_RESTART_PENALTY} s penalty)` },
   { group: 'Game', keys: ['KeyH'], action: 'Show or hide this help' },
   { group: 'Game', keys: ['F3'], action: 'Show or hide the debug overlay' },
-  { group: 'Game', keys: ['Escape'], action: 'Menu, or close this help' },
+  { group: 'Game', keys: ['KeyT'], action: 'Open chat' },
+  { group: 'Game', keys: ['Escape'], action: 'Menu, or close this help or chat' },
   { group: 'Game', keys: ['KeyM'], action: 'Mute or unmute sound' },
 ];
 

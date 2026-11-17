@@ -11,6 +11,10 @@ export interface TouchUi {
   setVisible(visible: boolean): void;
   // The corner button that opens the run menu.
   onMenu(handler: () => void): void;
+  // The button that opens the chat panel.
+  onChat(handler: () => void): void;
+  // Shows a dot on the chat button while there are unread lines.
+  setChatUnread(unread: boolean): void;
 }
 
 const STYLE = `
@@ -22,6 +26,7 @@ const STYLE = `
 #touch-actions { position: absolute; right: calc(12px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(2, 64px); gap: 10px; }
 #touch-actions button { width: 64px; height: 64px; }
 #touch-menu { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); width: 56px; height: 36px; border-radius: 10px; font-size: 12px; }
+#touch-chat { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + 56px + 8px + env(safe-area-inset-right)); width: 56px; height: 44px; border-radius: 10px; font-size: 12px; }
 #touch-slots { position: absolute; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 8px; }
 #touch-slots button { width: 56px; height: 56px; border-radius: 10px; font-size: 11px; }
 #touch-slots button.selected { border-color: #ffd34e; box-shadow: 0 0 0 2px #ffd34e; }
@@ -39,6 +44,7 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
   let slotHandler: (slot: 0 | 1 | 2, down: boolean) => void = () => {};
   let cancelHandler: () => void = () => {};
   let menuHandler: () => void = () => {};
+  let chatHandler: () => void = () => {};
   const releases = new Set<() => void>();
   const releaseOf = new WeakMap<HTMLElement, () => void>();
 
@@ -135,6 +141,8 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
 
   const menu = make('touch-menu', 'Menu', (down) => down && menuHandler());
 
+  const chat = make('touch-chat', 'Chat', (down) => down && chatHandler());
+
   const slotBox = document.createElement('div');
   slotBox.id = 'touch-slots';
   const slotButtons = ([0, 1, 2] as const).map((index) => {
@@ -156,7 +164,7 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
   rotate.id = 'rotate-prompt';
   rotate.textContent = 'Rotate your phone to landscape';
 
-  root.append(style, ring, actions, slotBox, menu, rotate);
+  root.append(style, ring, actions, slotBox, menu, chat, rotate);
 
   let shown: TouchView | null = null;
   let joystickKey = '';
@@ -172,6 +180,8 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
     onCancel: (handler) => (cancelHandler = handler),
     releaseAll,
     onMenu: (handler) => (menuHandler = handler),
+    onChat: (handler) => (chatHandler = handler),
+    setChatUnread: (unread) => chat.classList.toggle('on', unread),
     update(view) {
       const changed = changedFields(shown, view);
       if (changed.size === 0) return;

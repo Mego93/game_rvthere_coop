@@ -1,3 +1,4 @@
+import { CHAT_LIMIT, CHAT_FORM_STYLE, createChatForm, renderChatLines, type ChatLine, type SubmitResult } from './chat';
 import { TIMES_OF_DAY, VEHICLE_IDS, WEATHERS, courseIds, type LobbyMessage, type RoomSettings } from '@lodgy/shared';
 
 export const VEHICLE_LABELS: Record<string, string> = { lodgy: 'Lodgy', rv: 'RV' };
@@ -99,6 +100,8 @@ export interface LobbyHandlers {
   onKick(playerId: string): void;
   onCredits(): void;
   onTutorial(): void;
+  // Sends a line typed or picked in the lobby chat; says whether it went.
+  onChat(text: string): SubmitResult;
 }
 
 export interface LobbyScreen {
@@ -106,13 +109,15 @@ export interface LobbyScreen {
   hide(): void;
   isShown(): boolean;
   setError(text: string): void;
+  // The chat log to show; called on every new line.
+  setChat(lines: readonly ChatLine[]): void;
 }
 
 const DUNES = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='120' viewBox='0 0 600 120'><path d='M0 120V70Q75 20 150 62T300 60T450 40T600 70V120Z' fill='%23d9b98a'/></svg>\")";
 const DUNES_FAR = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='120' viewBox='0 0 800 120'><path d='M0 120V80Q100 30 200 70T400 64T600 50T800 80V120Z' fill='%23ecd3ad'/></svg>\")";
 const SILHOUETTE = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='50' viewBox='0 0 120 50'><path d='M6 38L10 22Q12 14 22 14H70Q78 14 84 22L100 26Q112 28 114 36V42H6Z' fill='%2335566e'/><circle cx='28' cy='42' r='8' fill='%2335566e'/><circle cx='92' cy='42' r='8' fill='%2335566e'/><circle cx='28' cy='42' r='3' fill='%23cfe6f5'/><circle cx='92' cy='42' r='3' fill='%23cfe6f5'/></svg>\")";
 
-const STYLE = `
+const STYLE = `${CHAT_FORM_STYLE}
 #lobby { position: fixed; inset: 0; z-index: 20; display: grid; overflow-x: hidden; overflow-y: auto; background: linear-gradient(#8ec5ea, #cfe6f5 55%, #f6ead2); }
 #lobby[hidden] { display: none; }
 #lobby-bg { contain: strict; position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
@@ -122,11 +127,12 @@ const STYLE = `
 #lobby-vehicle-sil { will-change: transform; position: absolute; left: 0; bottom: 52px; width: 120px; height: 50px; background: ${SILHOUETTE} no-repeat center / contain; opacity: 0.6; animation: lobby-cross 28s linear infinite, lobby-bob 0.9s ease-in-out infinite alternate; }
 #lobby-layout { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "chat"; gap: 16px; justify-content: center; align-content: center; width: 100%; box-sizing: border-box; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
 #lobby-panel { grid-area: main; justify-self: center; display: grid; gap: 12px; width: min(440px, 100%); box-sizing: border-box; padding: 24px; background: rgba(255, 255, 255, 0.94); border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15); animation: lobby-rise 0.45s ease-out both; }
-#lobby-chat { grid-area: chat; justify-self: center; width: min(440px, 100%); min-width: 0; box-sizing: border-box; }
-#lobby-chat:empty { display: none; }
+#lobby-chat { grid-area: chat; justify-self: center; display: grid; gap: 10px; width: min(440px, 100%); min-width: 0; box-sizing: border-box; padding: 16px; background: rgba(255, 255, 255, 0.94); border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15); animation: lobby-rise 0.45s ease-out both; }
+#lobby-chat h2 { margin: 0; font-size: 18px; }
+#lobby-chat .chat-lines { height: 220px; align-content: end; padding: 6px 8px; background: #f1f6fa; border-radius: 6px; color: #222; }
+#lobby-chat .chat-lines:empty::before { content: 'No messages yet'; color: #6b7a86; }
 @media (min-width: 900px) {
   #lobby-layout { grid-template-columns: minmax(320px, 440px) minmax(320px, 440px); grid-template-areas: "main chat"; align-items: start; gap: 24px; }
-  #lobby-layout:has(#lobby-chat:empty) { grid-template-columns: minmax(320px, 440px); grid-template-areas: "main"; }
   #lobby-panel, #lobby-chat { justify-self: stretch; width: auto; }
 }
 #lobby-panel h1 { margin: 0; font-size: 22px; }
@@ -221,8 +227,15 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     background.append(layer);
   }
   background.append(el('div', 'lobby-vehicle-sil'));
-  // Another task fills this slot; it stays empty (and hidden by CSS) until then.
   const chat = el('section', 'lobby-chat');
+  const chatTitle = el('h2', undefined, 'Chat');
+  const chatLines = el('div', 'lobby-chat-lines');
+  chatLines.className = 'chat-lines';
+  const chatForm = createChatForm(doc, (text) => handlers.onChat(text));
+  chatForm.input.id = 'lobby-chat-input';
+  // The keyboard of a phone covers the lower page; bring the input up once it has opened.
+  chatForm.input.addEventListener('focus', () => setTimeout(() => chatForm.element.scrollIntoView?.({ block: 'nearest' }), 300));
+  chat.append(chatTitle, chatLines, chatForm.element);
   const layout = el('div', 'lobby-layout');
   layout.append(panel, chat);
   root.append(style, background, layout);
@@ -418,6 +431,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
       root.hidden = true;
     },
     isShown: () => !root.hidden,
+    setChat: (lines) => renderChatLines(doc, chatLines, lines.slice(-CHAT_LIMIT)),
     setError(text) {
       // A refusal may be of a change; drop the unconfirmed ones so the next echo restores the server's values.
       pending = {};
