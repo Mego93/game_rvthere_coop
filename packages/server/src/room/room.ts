@@ -383,9 +383,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     setAppearance(player, next) {
       if (phase !== 'lobby') return 'bad_phase';
       const current = player.appearance;
-      if (current.characterId === next.characterId && current.glasses === next.glasses && current.top === next.top && current.hat === next.hat) return null;
+      if (current.characterId === next.characterId && current.glasses === next.glasses && current.top === next.top && current.hat === next.hat && current.skin === next.skin && current.eyes === next.eyes && current.smile === next.smile) return null;
       if (players.some((other) => other !== player && other.appearance.characterId === next.characterId)) return 'character_taken';
-      player.appearance = { characterId: next.characterId, glasses: next.glasses, top: next.top, hat: next.hat };
+      player.appearance = { characterId: next.characterId, glasses: next.glasses, top: next.top, hat: next.hat, skin: next.skin, eyes: next.eyes, smile: next.smile };
       broadcastLobby();
       return null;
     },

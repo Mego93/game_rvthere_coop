@@ -370,8 +370,8 @@ export function createGame(
       const info = lobby.players.find((candidate) => candidate.playerId === player.playerId);
       if (!info) continue;
       present.add(player.playerId);
-      const { characterId, glasses, top, hat } = info.appearance;
-      const look = `${characterId}|${glasses}|${top}|${hat}`;
+      const { characterId, glasses, top, hat, skin, eyes, smile } = info.appearance;
+      const look = `${characterId}|${glasses}|${top}|${hat}|${skin}|${eyes}|${smile}`;
       let entry = playerMeshes.get(player.playerId);
       if (entry && (entry.name !== info.name || entry.colour !== info.colour || entry.look !== look)) {
         scene.remove(entry.mesh);

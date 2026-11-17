@@ -1,5 +1,5 @@
 import { CHAT_LIMIT, CHAT_FORM_STYLE, createChatForm, renderChatLines, type ChatLine, type SubmitResult } from './chat';
-import { CHARACTER_IDS, CHARACTER_NAMES, GLASSES_CHOICES, HAT_CHOICES, TIMES_OF_DAY, TOP_CHOICES, VEHICLE_IDS, WEATHERS, courseIds, type Appearance, type LobbyMessage, type RoomSettings } from '@lodgy/shared';
+import { CHARACTER_IDS, CHARACTER_NAMES, GLASSES_CHOICES, HAT_CHOICES, TIMES_OF_DAY, TOP_CHOICES, VEHICLE_IDS, WEATHERS, courseIds, defaultAppearance, type Appearance, type LobbyMessage, type RoomSettings } from '@lodgy/shared';
 import { CHARACTER_LOOKS } from '../render/characterLooks';
 import { createPickerState } from './characterPicker';
 
@@ -452,7 +452,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
       parts.button.setAttribute('aria-label', card.state === 'taken' ? `${card.name}, taken by ${card.holderName}${card.away ? ' (away)' : ''}` : card.name);
       parts.button.setAttribute('aria-pressed', String(own));
       parts.sub.textContent = own ? 'You' : card.state === 'taken' ? `${card.holderName}${card.away ? ' (away)' : ''}` : 'Free';
-      paintPortrait(parts.portrait, own ? shown.appearance : { characterId: card.characterId, glasses: 'default', top: 'default', hat: 'none' }, own);
+      paintPortrait(parts.portrait, own ? shown.appearance : defaultAppearance(card.characterId), own);
     }
     for (const { key, choices } of OPTION_ROWS) for (const choice of choices) pickSegments.get(`${key}:${choice}`)!.setAttribute('aria-pressed', String(shown.appearance[key] === choice));
   };

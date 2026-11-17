@@ -50,7 +50,7 @@ test('the lobby entry shows the chosen appearance, broadcast to everyone', () =>
   const { host, guest } = setup();
   const { client, room } = host();
   const badr = guest(room, 2);
-  const chosen: Appearance = { characterId: 'luiz', glasses: 'round', top: 'suit', hat: 'fez' };
+  const chosen: Appearance = { characterId: 'luiz', glasses: 'round', top: 'suit', hat: 'fez', skin: 'default', eyes: 'default', smile: 'default' };
   choose(badr, chosen);
   for (const watcher of [client, badr]) expect(looks(watcher)).toEqual([defaultAppearance('sounile'), chosen]);
   expect(reasons(badr)).toEqual([]);
@@ -89,10 +89,22 @@ test('character_taken also holds while the owner is disconnected but held', () =
 test('a player keeps their own character while changing the add-ons', () => {
   const { host } = setup();
   const { client } = host();
-  const next: Appearance = { characterId: 'sounile', glasses: 'none', top: 'sweatshirt', hat: 'cap' };
+  const next: Appearance = { characterId: 'sounile', glasses: 'none', top: 'sweatshirt', hat: 'cap', skin: 'default', eyes: 'default', smile: 'default' };
   choose(client, next);
   expect(reasons(client)).toEqual([]);
   expect(looks(client)).toEqual([next]);
+});
+
+test('a change of skin, eyes or smile alone is stored and broadcast', () => {
+  const { host } = setup();
+  const { client } = host();
+  const before = client.ofType('lobby').length;
+  const next: Appearance = { ...defaultAppearance('sounile'), skin: 'dark', eyes: 'sleepy', smile: 'grin' };
+  choose(client, next);
+  expect(client.ofType('lobby')).toHaveLength(before + 1);
+  expect(looks(client)).toEqual([next]);
+  choose(client, next);
+  expect(client.ofType('lobby')).toHaveLength(before + 1);
 });
 
 test('switching to a free character frees the old one for the next joiner', () => {
@@ -108,7 +120,7 @@ test('appearance is refused with bad_phase in playing and in results, and nothin
   const { client } = host();
   startRun(client);
   advance(0.1);
-  choose(client, { characterId: 'luiz', glasses: 'none', top: 'default', hat: 'none' });
+  choose(client, { characterId: 'luiz', glasses: 'none', top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' });
   expect(reasons(client)).toEqual(['bad_phase']);
   expect(looks(client)).toEqual([defaultAppearance('sounile')]);
 });
@@ -123,7 +135,7 @@ test('appearance is refused with bad_phase in results', () => {
   startRun(client);
   fake.advance(0.1);
   expect(client.last('lobby').phase).toBe('results');
-  choose(client, { characterId: 'luiz', glasses: 'none', top: 'default', hat: 'none' });
+  choose(client, { characterId: 'luiz', glasses: 'none', top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' });
   expect(reasons(client)).toEqual(['bad_phase']);
   expect(looks(client)).toEqual([defaultAppearance('sounile')]);
 });
@@ -141,7 +153,7 @@ test('a reconnecting player keeps the look, and a joiner in between takes anothe
   const { host, guest, server } = setup();
   const { client, room } = host();
   const badr = guest(room, 2);
-  const chosen: Appearance = { characterId: 'alexander', glasses: 'round', top: 'suit', hat: 'cap' };
+  const chosen: Appearance = { characterId: 'alexander', glasses: 'round', top: 'suit', hat: 'cap', skin: 'default', eyes: 'default', smile: 'default' };
   choose(badr, chosen);
   badr.close();
   const carol = guest(room, 3);
@@ -155,7 +167,7 @@ test('a reconnecting player keeps the look, and a joiner in between takes anothe
 test('a malformed appearance gets bad_message and changes nothing', () => {
   const { host } = setup();
   const { client } = host();
-  client.send({ type: 'appearance', characterId: 'bob', glasses: 'none', top: 'default', hat: 'none' } as never);
+  client.send({ type: 'appearance', characterId: 'bob', glasses: 'none', top: 'default', hat: 'none', skin: 'default', eyes: 'default', smile: 'default' } as never);
   client.send({ type: 'appearance', characterId: 'luiz' } as never);
   expect(reasons(client)).toEqual(['bad_message', 'bad_message']);
   expect(looks(client)).toEqual([defaultAppearance('sounile')]);

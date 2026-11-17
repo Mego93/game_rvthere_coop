@@ -16,7 +16,7 @@ export interface PickerView {
   pending: Appearance | null;
 }
 
-const same = (a: Appearance, b: Appearance) => a.characterId === b.characterId && a.glasses === b.glasses && a.top === b.top && a.hat === b.hat;
+const same = (a: Appearance, b: Appearance) => a.characterId === b.characterId && a.glasses === b.glasses && a.top === b.top && a.hat === b.hat && a.skin === b.skin && a.eyes === b.eyes && a.smile === b.smile;
 
 // A local choice stays until the server's entry equals it.
 export function mergeAppearance(server: Appearance, pending: Appearance | null): { appearance: Appearance; pending: Appearance | null } {

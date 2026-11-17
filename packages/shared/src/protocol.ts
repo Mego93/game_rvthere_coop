@@ -314,7 +314,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     case 'ready':
       return typeof fields.ready === 'boolean' ? { type: 'ready', ready: fields.ready } : null;
     case 'appearance':
-      return isAppearance(fields) ? { type: 'appearance', characterId: fields.characterId, glasses: fields.glasses, top: fields.top, hat: fields.hat } : null;
+      return isAppearance(fields) ? { type: 'appearance', characterId: fields.characterId, glasses: fields.glasses, top: fields.top, hat: fields.hat, skin: fields.skin, eyes: fields.eyes, smile: fields.smile } : null;
     case 'configure': {
       const { courseId, vehicleId, timeOfDay, weather } = fields;
       return isCourseId(courseId) && isVehicleId(vehicleId) && isTimeOfDay(timeOfDay) && isWeather(weather)

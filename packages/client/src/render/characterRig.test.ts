@@ -166,14 +166,14 @@ describe('applyLook', () => {
     const torso = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), textured);
     torso.name = 'torso';
     root.add(torso);
-    expect(() => applyLook(root, { ...defaultAppearance('rafael'), hat: 'fez' })).not.toThrow();
+    expect(() => applyLook(root, { ...defaultAppearance('rafael'), hat: 'fez', skin: 'default', eyes: 'default', smile: 'default' })).not.toThrow();
   });
 
   test('added meshes are bounded: defaults 4, any combination 8, across all six characters', () => {
     for (const id of CHARACTER_IDS) {
       expect(looks(built(defaultAppearance(id))).length).toBeLessThanOrEqual(4);
       for (const glasses of GLASSES_CHOICES) for (const top of TOP_CHOICES) for (const hat of HAT_CHOICES) {
-        expect(looks(built({ characterId: id, glasses, top, hat })).length).toBeLessThanOrEqual(8);
+        expect(looks(built({ characterId: id, glasses, top, hat, skin: 'default', eyes: 'default', smile: 'default' })).length).toBeLessThanOrEqual(8);
       }
     }
   });
@@ -196,7 +196,7 @@ describe('applyLook', () => {
   });
 
   test('small parts (glasses, facial hair) cast no shadow; hair and hats do', () => {
-    const model = built({ ...defaultAppearance('rafael'), hat: 'cap' });
+    const model = built({ ...defaultAppearance('rafael'), hat: 'cap', skin: 'default', eyes: 'default', smile: 'default' });
     expect((model.getObjectByName('look-glasses') as THREE.Mesh).castShadow).toBe(false);
     expect((model.getObjectByName('look-facial') as THREE.Mesh).castShadow).toBe(false);
     expect((model.getObjectByName('look-hat') as THREE.Mesh).castShadow).toBe(true);

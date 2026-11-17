@@ -144,8 +144,8 @@ test('S31: without an appearance nothing is added to the figure', () => {
 });
 
 test('S31: disposing one figure leaves the shared look materials and geometry of another live', () => {
-  const a = createPlayerMesh('A', '#e0a030', { ...defaultAppearance('rafael'), top: 'suit', hat: 'fez' });
-  const b = createPlayerMesh('B', '#30a0e0', { ...defaultAppearance('rafael'), top: 'suit', hat: 'fez' });
+  const a = createPlayerMesh('A', '#e0a030', { ...defaultAppearance('rafael'), top: 'suit', hat: 'fez', skin: 'default', eyes: 'default', smile: 'default' });
+  const b = createPlayerMesh('B', '#30a0e0', { ...defaultAppearance('rafael'), top: 'suit', hat: 'fez', skin: 'default', eyes: 'default', smile: 'default' });
   const spies: Array<ReturnType<typeof vi.spyOn>> = [];
   b.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
@@ -167,8 +167,8 @@ test('S31: every character with every add-on stays within the mesh cap (8 added,
   };
   for (const id of CHARACTER_IDS) {
     expect(added(createPlayerMesh('A', '#e0a030', defaultAppearance(id)))).toBeLessThanOrEqual(4);
-    expect(added(createPlayerMesh('A', '#e0a030', { characterId: id, glasses: 'round', top: 'suit', hat: 'fez' }))).toBeLessThanOrEqual(8);
-    expect(added(createPlayerMesh('A', '#e0a030', { characterId: id, glasses: 'round', top: 'default', hat: 'cap' }))).toBeLessThanOrEqual(8);
+    expect(added(createPlayerMesh('A', '#e0a030', { characterId: id, glasses: 'round', top: 'suit', hat: 'fez', skin: 'default', eyes: 'default', smile: 'default' }))).toBeLessThanOrEqual(8);
+    expect(added(createPlayerMesh('A', '#e0a030', { characterId: id, glasses: 'round', top: 'default', hat: 'cap', skin: 'default', eyes: 'default', smile: 'default' }))).toBeLessThanOrEqual(8);
   }
 });
 
