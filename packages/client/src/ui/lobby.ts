@@ -116,9 +116,9 @@ const STYLE = `
 #lobby { position: fixed; inset: 0; z-index: 20; display: grid; overflow-x: hidden; overflow-y: auto; background: linear-gradient(#8ec5ea, #cfe6f5 55%, #f6ead2); }
 #lobby[hidden] { display: none; }
 #lobby-bg { contain: strict; position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
-.lobby-dunes { will-change: transform; position: absolute; left: 0; bottom: 0; width: 200%; height: 120px; background-repeat: repeat-x; background-position: 0 100%; }
-#lobby-dunes-far { background-image: ${DUNES_FAR}; background-size: 800px 120px; height: 140px; opacity: 0.8; animation: lobby-drift-far 160s linear infinite; }
-#lobby-dunes-near { background-image: ${DUNES}; background-size: 600px 120px; animation: lobby-drift-near 80s linear infinite; }
+.lobby-dunes { will-change: transform; position: absolute; left: 0; bottom: 0; width: calc(100% + 600px); height: 120px; background-repeat: repeat-x; background-position: 0 100%; }
+#lobby-dunes-far { width: calc(100% + 800px); background-image: ${DUNES_FAR}; background-size: 800px 120px; height: 140px; opacity: 0.8; animation: lobby-drift-far 133s linear infinite; }
+#lobby-dunes-near { background-image: ${DUNES}; background-size: 600px 120px; animation: lobby-drift-near 67s linear infinite; }
 #lobby-vehicle-sil { will-change: transform; position: absolute; left: 0; bottom: 52px; width: 120px; height: 50px; background: ${SILHOUETTE} no-repeat center / contain; opacity: 0.6; animation: lobby-cross 28s linear infinite, lobby-bob 0.9s ease-in-out infinite alternate; }
 #lobby-layout { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "chat"; gap: 16px; justify-content: center; align-content: center; width: 100%; box-sizing: border-box; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
 #lobby-panel { grid-area: main; justify-self: center; display: grid; gap: 12px; width: min(440px, 100%); box-sizing: border-box; padding: 24px; background: rgba(255, 255, 255, 0.94); border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15); animation: lobby-rise 0.45s ease-out both; }
@@ -140,7 +140,7 @@ const STYLE = `
 #lobby-players li.away { opacity: 0.5; }
 #lobby-players li.joining { animation: lobby-join 0.4s ease-out both; }
 #lobby-players li.pulse { animation: lobby-pulse 0.5s ease-out; }
-#lobby-players li.leaving { animation: lobby-leave 0.25s ease-in forwards; }
+#lobby-players li.leaving { animation: lobby-leave 0.25s ease-in forwards; pointer-events: none; }
 .lobby-swatch { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 .lobby-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .lobby-badge { padding: 2px 8px; border-radius: 999px; color: #fff; background: #c07a14; font-size: 12px; font-weight: 600; text-transform: uppercase; }
@@ -151,10 +151,10 @@ const STYLE = `
 #lobby-credits { font-size: 14px; color: #2f6f9f; }
 #lobby-osm { font-size: 12px; color: #4a5a66; text-align: center; }
 #lobby-error { margin: 0; min-height: 1.4em; color: #b3261e; font-size: 14px; }
-@keyframes lobby-drift-near { to { transform: translateX(-50%); } }
-@keyframes lobby-drift-far { to { transform: translateX(-50%); } }
+@keyframes lobby-drift-near { to { transform: translateX(-600px); } }
+@keyframes lobby-drift-far { to { transform: translateX(-800px); } }
 @keyframes lobby-cross { from { transform: translateX(-160px); } to { transform: translateX(calc(100vw + 40px)); } }
-@keyframes lobby-bob { from { margin-bottom: 0; } to { margin-bottom: 3px; } }
+@keyframes lobby-bob { from { translate: 0 0; } to { translate: 0 -3px; } }
 @keyframes lobby-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes lobby-join { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
 @keyframes lobby-pulse { 0% { box-shadow: 0 0 0 0 rgba(47, 111, 159, 0.55); } 100% { box-shadow: 0 0 0 10px rgba(47, 111, 159, 0); } }
@@ -164,6 +164,7 @@ const STYLE = `
 @media (prefers-reduced-motion: reduce) {
   #lobby *, #lobby *::before, #lobby *::after { animation: none !important; transition: none !important; }
   #lobby-vehicle-sil { left: 12%; }
+  #lobby-players li.leaving { display: none; }
 }
 `;
 
@@ -241,13 +242,16 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
       if (element instanceof HTMLSelectElement) {
         if (overrideFocus || doc.activeElement !== element) element.value = value;
       } else element.textContent = options().find((option) => option.value === value)?.text ?? value;
+      if (element instanceof HTMLSelectElement && !overrideFocus && doc.activeElement === element) continue;
       if (element.dataset.value !== undefined && element.dataset.value !== value) animate(element.parentElement!, 'lobby-flash');
       element.dataset.value = value;
     }
   };
   let room = '';
 
+  const reducedMotion = () => doc.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const animate = (element: HTMLElement, name: string) => {
+    if (reducedMotion()) return;
     element.classList.remove(name);
     void element.offsetWidth;
     element.classList.add(name);
@@ -319,6 +323,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
         for (const option of options()) select.append(new Option(option.text, option.value));
         select.addEventListener('change', () => {
           error.textContent = '';
+          select.dataset.value = select.value;
           pending = { ...pending, [key]: select.value };
           handlers.onConfigure(current());
         });
@@ -398,7 +403,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
       ready.setAttribute('aria-pressed', String(view.localReady));
       start.hidden = !view.showStart;
       start.disabled = !view.startEnabled;
-      if (view.startEnabled && !previous?.startEnabled) animate(start, 'go');
+      if (view.startEnabled && previous && !previous.startEnabled) animate(start, 'go');
       else if (!view.startEnabled) start.classList.remove('go');
       previous = view;
       root.hidden = false;
@@ -406,6 +411,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     hide() {
       pending = {};
       previous = null;
+      for (const { id } of SETTINGS) delete doc.getElementById(id)?.dataset.value;
       players.textContent = '';
       cards.clear();
       error.textContent = '';
