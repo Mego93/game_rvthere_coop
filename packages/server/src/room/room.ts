@@ -7,6 +7,7 @@ import {
   WORLD_REBUILD_COOLDOWN,
   DEFAULT_TIME_OF_DAY,
   DEFAULT_WEATHER,
+  CHARACTER_IDS,
   PLAYER_COLOURS,
   SERVER_MAX_CATCHUP_STEPS,
   PROP_MOVED_EPSILON,
@@ -14,11 +15,14 @@ import {
   TICK_DT,
   TICK_RATE,
   createWorld,
+  defaultAppearance,
+  firstFreeCharacter,
   getCourse,
   hashSeed,
   mixSeed,
   resultsOf,
   type AdminTool,
+  type Appearance,
   type BuiltCourse,
   type ChatMessage,
   type ErrorReason,
@@ -43,6 +47,7 @@ export interface RoomPlayer {
   readonly playerId: string;
   readonly name: string;
   readonly colour: string;
+  appearance: Appearance;
   readonly token: string;
   connection: Connection;
   queue: InputQueue;
@@ -84,6 +89,8 @@ export interface Room {
   catchUp(player: RoomPlayer): void;
   // The lobby and run commands answer the reason they were refused, or null. The checks run in the order not_admin, bad_phase, not_ready.
   setReady(player: RoomPlayer, ready: boolean): ErrorReason | null;
+  // Lobby only; refused with bad_phase, then character_taken when another player, held ones included, has that character.
+  setAppearance(player: RoomPlayer, appearance: Appearance): ErrorReason | null;
   configure(by: RoomPlayer, settings: RoomSettings): ErrorReason | null;
   start(by: RoomPlayer): ErrorReason | null;
   restartCheckpoint(by: RoomPlayer): ErrorReason | null;
@@ -168,7 +175,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       type: 'lobby',
       room: config.noun,
       phase,
-      players: players.map(({ playerId, name, colour, ready, connected }) => ({ playerId, name, colour, ready, connected })),
+      players: players.map(({ playerId, name, colour, ready, connected, appearance }) => ({ playerId, name, colour, ready, connected, appearance: { ...appearance } })),
       adminId,
       ...settings,
     } satisfies LobbyMessage);
@@ -295,6 +302,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
         playerId: `p${nextPlayerNumber}`,
         name,
         colour: colour ?? PLAYER_COLOURS[0],
+        appearance: defaultAppearance(firstFreeCharacter(players.map((other) => other.appearance.characterId)) ?? CHARACTER_IDS[0]),
         token,
         connection,
         queue: createInputQueue(),
@@ -368,6 +376,15 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       if (phase !== 'lobby') return 'bad_phase';
       if (player.ready === ready) return null;
       player.ready = ready;
+      broadcastLobby();
+      return null;
+    },
+    setAppearance(player, next) {
+      if (phase !== 'lobby') return 'bad_phase';
+      const current = player.appearance;
+      if (current.characterId === next.characterId && current.glasses === next.glasses && current.top === next.top && current.hat === next.hat) return null;
+      if (players.some((other) => other !== player && other.appearance.characterId === next.characterId)) return 'character_taken';
+      player.appearance = { characterId: next.characterId, glasses: next.glasses, top: next.top, hat: next.hat };
       broadcastLobby();
       return null;
     },
