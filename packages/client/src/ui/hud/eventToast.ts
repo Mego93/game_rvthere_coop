@@ -1,7 +1,7 @@
 import type { EventMessage } from '@lodgy/shared';
-import { SOULEYMAN_GREETING } from '../../render/souleyman';
 
 export const EVENT_TOAST_SECONDS = 1.5;
+export const SOULEYMAN_GREETING = 'Souleyman: Saved. Bonne route!';
 
 const TEXT: Partial<Record<EventMessage['kind'], string>> = { checkpoint: SOULEYMAN_GREETING, goatHit: 'Goat!', scooterHit: 'Scooter!' };
 

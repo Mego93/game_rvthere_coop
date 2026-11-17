@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export const SOULEYMAN_LATERAL = ROAD_WIDTH / 2 + 1.5;
-export const SOULEYMAN_GREETING = 'Souleyman: Saved. Bonne route!';
 
 const ROBE = 0xd8c8a8;
 const HOOD = 0x8a6a45;
@@ -68,11 +67,11 @@ export function createSouleymanMeshes(placements: readonly { x: number; z: numbe
   });
   const place = new THREE.Matrix4();
   const meshes: THREE.Mesh[] = [];
-  for (const [material, parts] of byMaterial) {
+  for (const [material, pieces] of byMaterial) {
     const geometries: THREE.BufferGeometry[] = [];
     for (const spot of placements) {
       place.compose(new THREE.Vector3(spot.x, spot.y, spot.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), spot.yaw), new THREE.Vector3(1, 1, 1));
-      for (const part of parts) geometries.push(part.geometry.clone().applyMatrix4(place.clone().multiply(part.matrixWorld)));
+      for (const piece of pieces) geometries.push(piece.geometry.clone().applyMatrix4(place.clone().multiply(piece.matrixWorld)));
     }
     const merged = mergeGeometries(geometries)!;
     for (const geometry of geometries) geometry.dispose();
@@ -82,6 +81,6 @@ export function createSouleymanMeshes(placements: readonly { x: number; z: numbe
     mesh.receiveShadow = true;
     meshes.push(mesh);
   }
-  for (const parts of byMaterial.values()) for (const part of parts) part.geometry.dispose();
+  for (const pieces of byMaterial.values()) for (const piece of pieces) piece.geometry.dispose();
   return meshes;
 }

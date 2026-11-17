@@ -1,7 +1,8 @@
 import { CHARACTER_SCALE, quatFromAxisAngle, AXIS_Y, vec3, type Checkpoint } from '@lodgy/shared';
 import * as THREE from 'three';
 import { expect, test } from 'vitest';
-import { createSouleymanMesh, SOULEYMAN_GREETING, SOULEYMAN_LATERAL, souleymanPlacements } from './souleyman';
+import { SOULEYMAN_GREETING } from '../ui/hud/eventToast';
+import { createSouleymanMesh, createSouleymanMeshes, SOULEYMAN_LATERAL, souleymanPlacements } from './souleyman';
 
 const box = { center: vec3(0, 0, 0), halfExtents: vec3(1, 1, 1), rot: { x: 0, y: 0, z: 0, w: 1 } };
 const checkpoint = (id: string, x: number, y: number, z: number, yaw: number): Checkpoint => ({
@@ -56,4 +57,29 @@ test('T3: height is about 1.8 x CHARACTER_SCALE, everything casts shadows, hood,
 
 test('the greeting text', () => {
   expect(SOULEYMAN_GREETING).toBe('Souleyman: Saved. Bonne route!');
+});
+
+const footprint = (yaw: number) => {
+  const bounds = new THREE.Box3();
+  for (const mesh of createSouleymanMeshes([{ x: 10, y: 2, z: -5, yaw }])) bounds.union(new THREE.Box3().setFromObject(mesh));
+  return bounds;
+};
+
+test('merged meshes stand on y, are 1.8 x CHARACTER_SCALE tall and centred on x, z', () => {
+  const bounds = footprint(0);
+  const size = bounds.getSize(new THREE.Vector3());
+  const centre = bounds.getCenter(new THREE.Vector3());
+  expect(bounds.min.y).toBeCloseTo(2);
+  expect(size.y).toBeCloseTo(1.8 * CHARACTER_SCALE, 1);
+  expect(centre.x).toBeCloseTo(10, 1);
+  expect(centre.z).toBeCloseTo(-5, 1);
+  expect(size.x).toBeGreaterThan(size.z + 0.1);
+});
+
+test('a quarter turn swaps the footprint extents', () => {
+  const a = footprint(0).getSize(new THREE.Vector3());
+  const b = footprint(Math.PI / 2).getSize(new THREE.Vector3());
+  expect(b.x).toBeCloseTo(a.z, 2);
+  expect(b.z).toBeCloseTo(a.x, 2);
+  expect(b.x).toBeLessThan(b.z - 0.1);
 });

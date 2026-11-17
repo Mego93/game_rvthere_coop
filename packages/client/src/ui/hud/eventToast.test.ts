@@ -1,7 +1,6 @@
 import { EVENT_KINDS } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { SOULEYMAN_GREETING } from '../../render/souleyman';
-import { EVENT_TOAST_SECONDS, createEventToast, eventToastText } from './eventToast';
+import { EVENT_TOAST_SECONDS, SOULEYMAN_GREETING, createEventToast, eventToastText } from './eventToast';
 
 test('T9: the goat, scooter and checkpoint events have a toast, the others none', () => {
   expect(eventToastText('checkpoint')).toBe(SOULEYMAN_GREETING);
