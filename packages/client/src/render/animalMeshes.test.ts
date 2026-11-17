@@ -107,6 +107,11 @@ test('T4: the goat model fits ANIMAL_HALF_GOAT within 10 % on each axis, rests o
     expect(Math.abs(size[axis] - ANIMAL_HALF_GOAT[axis] * 2) / (ANIMAL_HALF_GOAT[axis] * 2), axis).toBeLessThanOrEqual(0.1);
   }
   expect(box.min.y).toBeCloseTo(-ANIMAL_HALF_GOAT.y, 5);
+  // The goat keeps its stretch (about 1.76x between axes, over the 1.6 limit of the props): the file is tall and narrow, the hit box long and low.
+  const scale = model.children[0]!.scale;
+  const native = (['x', 'y', 'z'] as const).map((axis) => (ANIMAL_HALF_GOAT[axis] * 2) / scale[axis]);
+  expect(native.indexOf(Math.max(...native))).toBe(2);
+  expect(Math.max(scale.x, scale.y, scale.z) / Math.min(scale.x, scale.y, scale.z)).toBeLessThan(2);
   // The horns are the only part of the file on its +y side of the head: the horn material's centre sits toward the head.
   let horn: THREE.Mesh | undefined;
   model.traverse((node) => {
