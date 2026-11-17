@@ -70,11 +70,10 @@ async function chooseTestGround(page: Page) {
   await page.locator('#lobby-course').selectOption('test');
 }
 
-// The admin presses Start in the lobby; the run begins and the lobby closes. The marrakech course takes about half a minute to build on software GL, so specs that are not about the course run on the test ground.
-async function startRun(page: Page, course: 'test' | 'marrakech' = 'test') {
-  if (course === 'test') await chooseTestGround(page);
+// The admin presses Start in the lobby; the run begins and the lobby closes.
+async function startRun(page: Page) {
   await page.locator('#lobby-start').click();
-  await expect(page.locator('#lobby')).toBeHidden({ timeout: course === 'marrakech' ? 60_000 : undefined });
+  await expect(page.locator('#lobby')).toBeHidden();
 }
 
 // Pressing a button once, held long enough for a tick to see it.
@@ -333,7 +332,6 @@ test('the lobby: two players ready up, the admin starts, and both receive snapsh
 
   await badr.locator('#lobby-ready').click();
   await expect(amal.locator('#lobby-start')).toBeEnabled();
-  await chooseTestGround(amal);
   await amal.locator('#lobby-start').click();
 
   for (const page of [amal, badr]) {
@@ -412,7 +410,7 @@ test('a night rain run draws without WebGL errors', async ({ page }) => {
 });
 
 // ?hq keeps the lit, shadowed, textured render path on software GL, which otherwise drops it.
-test('the full-quality render path draws a run without console or page errors @keyboard', async ({ page }) => {
+test('the full-quality render path draws the marrakech run without console or page errors @keyboard', async ({ page }) => {
   test.setTimeout(60_000);
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
@@ -437,7 +435,7 @@ test('T14: a marrakech run drives forward for 5 s, the vehicle moves and the min
   await createRoom(page, 'Amal');
   await expect(page.locator('#lobby-course')).toHaveValue('marrakech');
   const began = Date.now();
-  await startRun(page, 'marrakech').catch(() => undefined);
+  await startRun(page).catch(() => undefined);
   const ready = await expect(page.locator('#overlay')).toContainText('hint     E to board', { timeout: Math.max(1000, 60_000 - (Date.now() - began)) }).then(
     () => true,
     () => false,
