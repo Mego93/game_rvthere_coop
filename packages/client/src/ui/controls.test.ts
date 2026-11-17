@@ -19,6 +19,11 @@ test('T11: reset is X and help is H, and R stays reel out', () => {
   expect(action('KeyR')).toMatch(/reel out/i);
 });
 
+test('E1: B opens the emote wheel and is listed with the other extra codes', () => {
+  expect(EXTRA_CODES).toContain('KeyB');
+  expect(CONTROLS.find((entry) => entry.keys.includes('KeyB'))?.action).toBe('Emote wheel');
+});
+
 test('H opens the panel except while typing or with a modifier held', () => {
   expect(isHelpKey(plain, 'CANVAS')).toBe(true);
   expect(isHelpKey(plain, 'input')).toBe(false);

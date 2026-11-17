@@ -21,6 +21,7 @@ import { createTouchSource } from './input/touch';
 import { createChatLog, createChatPanel, createChatSender, submitChat } from './ui/chat';
 import { createCredits } from './ui/credits';
 import { createControlsPanel, isHelpKey } from './ui/controls';
+import { createEmoteWheel } from './ui/emoteWheel';
 import { createHome, errorText } from './ui/home';
 import { createLobby } from './ui/lobby';
 import { createResults } from './ui/results';
@@ -192,6 +193,11 @@ const chatPanel = createChatPanel(document, {
     game?.setChatOpen(open);
   },
 });
+// Created after the chat panel, so the wheel's Escape runs after theirs; one is open at a time.
+const emoteWheel = createEmoteWheel(document, {
+  onPick: (emote) => socket?.send({ type: 'emote', emote }),
+  onOpenChange: (open) => game?.setEmoteOpen(open),
+});
 let renderedChat = -1;
 // Redraws the lines only when the log changed.
 function renderChat() {
@@ -240,6 +246,7 @@ const SOMETHING_WRONG = 'Something went wrong.';
 // Stops the run's drawing and input; the lobby and the home page take over the screen.
 function stopGame() {
   chatPanel.close();
+  emoteWheel.close();
   game?.stop();
   game = null;
   touchUi?.setVisible(false);
@@ -262,7 +269,10 @@ function onLobby(message: LobbyMessage) {
   }
   lobby.hide();
   // No chat panel outside a run; the toasts still show in the results.
-  if (message.phase !== 'playing') chatPanel.close();
+  if (message.phase !== 'playing') {
+    chatPanel.close();
+    emoteWheel.close();
+  }
   if (message.phase === 'playing') {
     results.hide();
     if (game) game.setLobby(message);
@@ -315,6 +325,9 @@ function onMessage(message: ServerMessage) {
       if (chatPanel.isOpen() || lobby.isShown()) chatLog.markRead();
       renderChat();
       tickChat();
+      return;
+    case 'emote':
+      game?.onEmote(message);
       return;
     case 'snapshot':
       game?.pushSnapshot(message);
@@ -377,6 +390,7 @@ function startGame(lobby: LobbyMessage) {
     touchUi = createTouchUi(root);
     // Opened inside the touch itself, so iOS shows the keyboard.
     touchUi.onChat(() => game?.requestChat());
+    touchUi.onEmote(() => game?.requestEmote());
   }
   const controls = touchUi;
   const input = (): GameInput =>
@@ -384,7 +398,7 @@ function startGame(lobby: LobbyMessage) {
       ? createTouchSource({ surface: canvas, win: window, doc: document, width: () => window.innerWidth, controls })
       : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document, pointerGate));
   touchUi?.setVisible(true);
-  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, firstPerson, onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen(), chatOpen: chatPanel.isOpen(), onChat: () => chatPanel.open() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, firstPerson, onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen(), chatOpen: chatPanel.isOpen(), emoteOpen: emoteWheel.isOpen(), onChat: () => chatPanel.open(), onEmoteWheel: () => emoteWheel.open() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
 const clock = () => performance.now() / 1000;

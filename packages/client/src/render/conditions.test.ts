@@ -1,7 +1,8 @@
 import { MAX_PLAYERS, vec3, type PlayerSnapshot, type VehicleState } from '@lodgy/shared';
 import * as THREE from 'three';
 import { describe, expect, test } from 'vitest';
-import { applyConditions, conditionsLook, configureRenderer, ENVIRONMENT_INTENSITY, EXPOSURE, FOG, mixColour, RAIN_DROPS, RAIN_RADIUS, SANDSTORM_FOG, toneMappedColour, SHADOW_HALF_EXTENT, SHADOW_MAP_SIZE, type RendererLike } from './conditions';
+import { WEATHER_BLEND } from '@lodgy/shared';
+import { applyConditions, blendLook, conditionsLook, weatherBlend, configureRenderer, ENVIRONMENT_INTENSITY, EXPOSURE, FOG, mixColour, RAIN_DROPS, RAIN_RADIUS, SANDSTORM_FOG, toneMappedColour, SHADOW_HALF_EXTENT, SHADOW_MAP_SIZE, type RendererLike } from './conditions';
 
 const HALF = vec3(0.88, 0.55, 2.25);
 const near = (a: number, b: number) => expect(a).toBeCloseTo(b, 9);
@@ -234,5 +235,97 @@ describe('applyConditions', () => {
     const toFocus = new THREE.Vector3(focus.x, focus.y, focus.z).sub(sun.target.position);
     const across = toFocus.clone().addScaledVector(offset.clone().normalize(), -toFocus.dot(offset.clone().normalize()));
     expect(across.length()).toBeLessThan(0.1);
+  });
+});
+
+describe('weather blend', () => {
+  test('B1: the blend factor runs linearly over WEATHER_BLEND seconds and clamps', () => {
+    expect(WEATHER_BLEND).toBe(10);
+    expect(weatherBlend(-3)).toBe(0);
+    expect(weatherBlend(0)).toBe(0);
+    expect(weatherBlend(2.5)).toBeCloseTo(0.25, 9);
+    expect(weatherBlend(5)).toBeCloseTo(0.5, 9);
+    expect(weatherBlend(WEATHER_BLEND)).toBe(1);
+    expect(weatherBlend(99)).toBe(1);
+  });
+
+  test('B2: numeric fields lerp and the discrete ones switch at the midpoint', () => {
+    const clear = conditionsLook('midday', 'clear');
+    const sand = conditionsLook('midday', 'sandstorm');
+    expect(blendLook(clear, sand, 0)).toEqual(clear);
+    expect(blendLook(clear, sand, 1)).toEqual(sand);
+    const mid = blendLook(clear, sand, 0.5);
+    expect(mid.fog.near).toBeCloseTo((clear.fog.near + sand.fog.near) / 2, 9);
+    expect(mid.fog.far).toBeCloseTo((clear.fog.far + sand.fog.far) / 2, 9);
+    expect(mid.fog.colour).toBe(mixColour(clear.fog.colour, sand.fog.colour, 0.5));
+    expect(mid.sky).toBe(mixColour(clear.sky, sand.sky, 0.5));
+    expect(mid.sunIntensity).toBeCloseTo((clear.sunIntensity + sand.sunIntensity) / 2, 9);
+    expect(mid.backgroundIntensity).toBeCloseTo(clear.backgroundIntensity, 9);
+    expect(blendLook(clear, sand, 0.49).hdriBackground).toBe(true);
+    expect(blendLook(clear, sand, 0.5).hdriBackground).toBe(false);
+  });
+
+  test('B3: the exposure lerps between looks', () => {
+    const a = conditionsLook('midday', 'clear');
+    const b = { ...a, exposure: 0.5 };
+    expect(blendLook(a, b, 0.5).exposure).toBeCloseTo(0.75, 9);
+  });
+
+  test('B4: conditions always build the rain, invisible while it is clear', () => {
+    const scene = new THREE.Scene();
+    applyConditions(scene, conditionsLook('midday', 'clear'), true, HALF);
+    const points = scene.children.find((child) => (child as THREE.Points).isPoints) as THREE.Points;
+    expect(points).toBeDefined();
+    expect((points.material as THREE.PointsMaterial).opacity).toBe(0);
+    expect(points.visible).toBe(false);
+  });
+
+  test('B5: setLook fades the rain and moves the fog and the sun with the blend', () => {
+    const scene = new THREE.Scene();
+    const clear = conditionsLook('midday', 'clear');
+    const rain = conditionsLook('midday', 'rain');
+    const conditions = applyConditions(scene, clear, true, HALF);
+    const points = scene.children.find((child) => (child as THREE.Points).isPoints) as THREE.Points;
+    const sun = scene.children.find((child) => (child as THREE.DirectionalLight).isDirectionalLight) as THREE.DirectionalLight;
+    const shown = conditions.setLook(rain, 0.5);
+    expect((points.material as THREE.PointsMaterial).opacity).toBeCloseTo(0.3, 9);
+    expect(points.visible).toBe(true);
+    expect(sun.intensity).toBeCloseTo((clear.sunIntensity + rain.sunIntensity) / 2, 9);
+    expect((scene.fog as THREE.Fog).color.getHex()).toBe(mixColour(clear.fog.colour, rain.fog.colour, 0.5));
+    expect(shown.sunIntensity).toBeCloseTo(sun.intensity, 9);
+    conditions.setLook(rain, 1);
+    expect((points.material as THREE.PointsMaterial).opacity).toBeCloseTo(0.6, 9);
+    expect(sun.intensity).toBeCloseTo(rain.sunIntensity, 9);
+    conditions.setLook(clear, 1);
+    expect(points.visible).toBe(false);
+    expect((scene.fog as THREE.Fog).near).toBe(clear.fog.near);
+  });
+
+  test('B6: a new target mid-blend starts from what is shown, and the same target keeps its start', () => {
+    const scene = new THREE.Scene();
+    const clear = conditionsLook('midday', 'clear');
+    const sand = conditionsLook('midday', 'sandstorm');
+    const rain = conditionsLook('midday', 'rain');
+    const conditions = applyConditions(scene, clear, true, HALF);
+    conditions.setLook(sand, 0.5);
+    const middle = (scene.fog as THREE.Fog).far;
+    conditions.setLook(sand, 0.75);
+    expect((scene.fog as THREE.Fog).far).toBeCloseTo(clear.fog.far + (sand.fog.far - clear.fog.far) * 0.75, 6);
+    conditions.setLook(rain, 0);
+    expect((scene.fog as THREE.Fog).far).toBeCloseTo(clear.fog.far + (sand.fog.far - clear.fog.far) * 0.75, 6);
+    expect(middle).toBeLessThan(clear.fog.far);
+  });
+
+  test('B7: a flat background follows the blended sky colour, an HDRI background is left to applySky', () => {
+    const scene = new THREE.Scene();
+    const clear = conditionsLook('midday', 'clear');
+    const sand = conditionsLook('midday', 'sandstorm');
+    const conditions = applyConditions(scene, clear, true, HALF);
+    conditions.setLook(sand, 1);
+    expect((scene.background as THREE.Color).getHex()).toBe(toneMappedColour(sand.sky, sand.exposure).getHex());
+    const texture = new THREE.Texture();
+    scene.background = texture;
+    conditions.setLook(clear, 1);
+    expect(scene.background).toBe(texture);
   });
 });

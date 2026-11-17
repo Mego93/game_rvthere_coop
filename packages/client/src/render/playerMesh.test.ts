@@ -2,7 +2,7 @@ import { CHARACTER_IDS, CHARACTER_SCALE, PLAYER_HEIGHT, PLAYER_RADIUS, defaultAp
 import * as THREE from 'three';
 import { beforeAll, expect, test, vi } from 'vitest';
 import { CHARACTER_LOOKS } from './characterLooks';
-import { HEAD_RADIUS, NAME_TAG_OFFSET, createPlayerMesh, disposePlayerMesh, placePlayerMesh, setNameVisible } from './playerMesh';
+import { HEAD_RADIUS, NAME_TAG_OFFSET, createPlayerMesh, disposePlayerMesh, placePlayerMesh, playEmote, setNameVisible } from './playerMesh';
 
 const shared = { geometry: new THREE.BoxGeometry(1, 1, 1), material: new THREE.MeshStandardMaterial() };
 shared.geometry.userData.shared = true;
@@ -177,4 +177,58 @@ test('S31: the look goes on after shadowed, so glasses and facial hair keep cast
   expect((mesh.getObjectByName('look-glasses') as THREE.Mesh).castShadow).toBe(false);
   expect((mesh.getObjectByName('look-facial') as THREE.Mesh).castShadow).toBe(false);
   expect((mesh.getObjectByName('torso') as THREE.Mesh).castShadow).toBe(true);
+});
+
+const emoting = (x = 0, z = 0, extra: Record<string, unknown> = {}) => ({ pos: { x, y: 0, z }, yaw: 0, downed: null, seat: null, ...extra }) as unknown as PlayerSnapshot;
+const armAngle = (mesh: THREE.Group, name: string) => new THREE.Euler().setFromQuaternion(mesh.getObjectByName(name)!.quaternion);
+
+test('E1: an emote turns its nodes to the pose, ramping in over 0.2 s, and the mesh frame is restored afterwards', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  placePlayerMesh(mesh, emoting(), 0.016, 10);
+  playEmote(mesh, 'wave', 10);
+  placePlayerMesh(mesh, emoting(), 0.016, 10.1);
+  const half = Math.abs(armAngle(mesh, 'arm-right').z);
+  expect(half).toBeGreaterThan(0.5);
+  expect(half).toBeLessThan(2.6);
+  placePlayerMesh(mesh, emoting(), 0.016, 11);
+  expect(armAngle(mesh, 'arm-right').z).toBeCloseTo(-2.6, 3);
+  expect(armAngle(mesh, 'arm-left').z).toBeCloseTo(0, 6);
+  placePlayerMesh(mesh, emoting(), 0.016, 12.6);
+  expect(armAngle(mesh, 'arm-right').z).toBeCloseTo(0, 6);
+});
+
+test('E2: moving more than 1 m cancels the emote at once, and a smaller step does not', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  placePlayerMesh(mesh, emoting(), 0.016, 10);
+  playEmote(mesh, 'wave', 10);
+  placePlayerMesh(mesh, emoting(0.5, 0), 0.016, 11);
+  expect(Math.abs(armAngle(mesh, 'arm-right').z)).toBeGreaterThan(2);
+  placePlayerMesh(mesh, emoting(1.2, 0), 0.016, 11.1);
+  expect(armAngle(mesh, 'arm-right').z).toBeCloseTo(0, 6);
+  placePlayerMesh(mesh, emoting(1.2, 0), 0.016, 11.2);
+  expect(armAngle(mesh, 'arm-right').z).toBeCloseTo(0, 6);
+});
+
+test('E3: boarding or going down cancels the emote', () => {
+  for (const extra of [{ seat: 'driver' }, { downed: 5 }]) {
+    const mesh = createPlayerMesh('Amal', '#e0a030');
+    placePlayerMesh(mesh, emoting(), 0.016, 10);
+    playEmote(mesh, 'dab', 10);
+    placePlayerMesh(mesh, emoting(0, 0), 0.016, 11);
+    expect(Math.abs(armAngle(mesh, 'arm-right').z)).toBeGreaterThan(2);
+    placePlayerMesh(mesh, emoting(0, 0, extra), 0.016, 11.1);
+    expect(armAngle(mesh, 'arm-right').z).toBeCloseTo(0, 6);
+  }
+});
+
+test('E4: a second emote replaces the first and only its own nodes move', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  placePlayerMesh(mesh, emoting(), 0.016, 10);
+  playEmote(mesh, 'dab', 10);
+  placePlayerMesh(mesh, emoting(), 0.016, 11);
+  expect(Math.abs(armAngle(mesh, 'head').y)).toBeGreaterThan(0.3);
+  playEmote(mesh, 'wave', 11);
+  placePlayerMesh(mesh, emoting(), 0.016, 12);
+  expect(armAngle(mesh, 'head').y).toBeCloseTo(0, 6);
+  expect(armAngle(mesh, 'arm-left').x).toBeCloseTo(0, 6);
 });
