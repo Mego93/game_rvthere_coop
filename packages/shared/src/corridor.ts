@@ -68,8 +68,8 @@ export interface RouteFrame {
   s: Float64Array;
   // Nearest route point to (x, z) over the whole route.
   nearest(x: number, z: number): RouteHit;
-  // The same over the listed segments only.
-  nearestIn(x: number, z: number, segments: ArrayLike<number>): RouteHit;
+  // The same over the listed segments only; `hint` is a segment likely to be near, tried first.
+  nearestIn(x: number, z: number, segments: ArrayLike<number>, hint?: number): RouteHit;
   // Route height and smoothed height at a hit.
   heightAt(hit: Pick<RouteHit, 'i' | 't'>): number;
   smoothedAt(hit: Pick<RouteHit, 'i' | 't'>): number;
@@ -161,12 +161,11 @@ function buildFrame(course: BuiltCourse): RouteFrame {
     s[i] = hi > lo ? (integralAt(hi) - integralAt(lo)) / (hi - lo) : r[i]!;
   }
 
-  const nearestIn = (x: number, z: number, list: ArrayLike<number>): RouteHit => {
+  const nearestIn = (x: number, z: number, list: ArrayLike<number>, hint?: number): RouteHit => {
     let best = Infinity;
     let bi = 0;
     let bt = 0;
-    for (let k = 0; k < list.length; k++) {
-      const i = list[k]!;
+    const consider = (i: number) => {
       const l2 = len2[i]!;
       const ox = x - ax[i]!;
       const oz = z - az[i]!;
@@ -180,6 +179,15 @@ function buildFrame(course: BuiltCourse): RouteFrame {
         bi = i;
         bt = t;
       }
+    };
+    if (hint !== undefined && hint < segments) consider(hint);
+    for (let k = 0; k < list.length; k++) {
+      const i = list[k]!;
+      // A segment whose bounding box is already farther than the best cannot beat it.
+      const bx = Math.max(minX[i]! - x, x - maxX[i]!, 0);
+      const bz = Math.max(minZ[i]! - z, z - maxZ[i]!, 0);
+      if (bx * bx + bz * bz > best) continue;
+      consider(i);
     }
     if (segments === 0) return { i: 0, t: 0, d: Math.hypot(x - route[0]![0], z - route[0]![1]), px: route[0]![0], pz: route[0]![1], along: 0 };
     const px = ax[bi]! + dx[bi]! * bt;
@@ -240,13 +248,16 @@ function valueNoise(seed: number, x: number, z: number, spacing: number): number
   return a + (b - a) * u + (c - a) * v + (a - b - c + e) * u * v;
 }
 
+let seeds: { id: string; octaves: number[] } = { id: '', octaves: [] };
+
 // The relief at full amplitude, in m, within +-CORRIDOR_RELIEF (the noise scale keeps it under about half of that); before the ramp from the shoulder edge.
 export function corridorReliefAt(courseId: string, x: number, z: number): number {
-  const seed = hashSeed(courseId);
+  if (seeds.id !== courseId) {
+    const seed = hashSeed(courseId);
+    seeds = { id: courseId, octaves: CORRIDOR_NOISE.map((_, k) => (seed + Math.imul(k + 1, 0x9e3779b9)) | 0) };
+  }
   let sum = 0;
-  CORRIDOR_NOISE.forEach((octave, k) => {
-    sum += octave.weight * valueNoise((seed + Math.imul(k + 1, 0x9e3779b9)) | 0, x, z, octave.spacing);
-  });
+  for (let k = 0; k < CORRIDOR_NOISE.length; k++) sum += CORRIDOR_NOISE[k]!.weight * valueNoise(seeds.octaves[k]!, x, z, CORRIDOR_NOISE[k]!.spacing);
   return CORRIDOR_RELIEF * CORRIDOR_NOISE_SCALE * sum;
 }
 
@@ -310,6 +321,7 @@ export function corridorHeight(input: HeightInputs): number {
   return h;
 }
 
+const BLOCK = 8;
 const LOW_HALF = CORRIDOR_CELL * Math.SQRT2 + 1;
 const TILE_REACH = CORRIDOR_LAND_END + 8 + Math.SQRT2 * TILE_SIZE;
 
@@ -346,21 +358,37 @@ export function buildCorridor(course: BuiltCourse): Corridor {
     const candidates = wide.get(key)!;
     const heights = new Float32Array(vertices * vertices);
     let built = false;
-    for (let xi = 0; xi < vertices; xi++) {
-      for (let zi = 0; zi < vertices; zi++) {
-        const x = x0 + xi * CORRIDOR_CELL;
-        const z = z0 + zi * CORRIDOR_CELL;
-        const hit = frame.nearestIn(x, z, candidates);
-        if (hit.d <= CORRIDOR_LAND_END) built = true;
-        const near = hit.d < CORRIDOR_BLEND_END;
-        const h = corridorHeight({
-          d: hit.d,
-          relief: hit.d >= CORRIDOR_BLEND_START ? corridorReliefAt(course.id, x, z) : 0,
-          smooth: frame.smoothedAt(hit),
-          low: near ? frame.lowestAround(hit.along, LOW_HALF) : 0,
-          berm: near && obstacles.length > 0 ? bermWeight(obstacles, hit.along) : 0,
+    let hint: number | undefined;
+    // Blocks of BLOCK cells: the segments that can be nearest to a point in a block are those within its centre's nearest distance plus the block's half diagonal.
+    for (let bx = 0; bx < CORRIDOR_TILE_CELLS; bx += BLOCK) {
+      for (let bz = 0; bz < CORRIDOR_TILE_CELLS; bz += BLOCK) {
+        const x1 = x0 + bx * CORRIDOR_CELL;
+        const z1 = z0 + bz * CORRIDOR_CELL;
+        const x2 = x1 + BLOCK * CORRIDOR_CELL;
+        const z2 = z1 + BLOCK * CORRIDOR_CELL;
+        const reach = frame.nearestIn((x1 + x2) / 2, (z1 + z2) / 2, candidates, hint).d + (BLOCK * CORRIDOR_CELL * Math.SQRT2) / 2;
+        const local = candidates.filter((i) => {
+          const gx = Math.max(minX[i]! - x2, x1 - maxX[i]!, 0);
+          const gz = Math.max(minZ[i]! - z2, z1 - maxZ[i]!, 0);
+          return gx * gx + gz * gz <= reach * reach;
         });
-        heights[zi + xi * vertices] = h;
+        for (let xi = bx; xi <= bx + BLOCK; xi++) {
+          for (let zi = bz; zi <= bz + BLOCK; zi++) {
+            const x = x0 + xi * CORRIDOR_CELL;
+            const z = z0 + zi * CORRIDOR_CELL;
+            const hit = frame.nearestIn(x, z, local, hint);
+            hint = hit.i;
+            if (hit.d <= CORRIDOR_LAND_END) built = true;
+            const close = hit.d < CORRIDOR_BLEND_END;
+            heights[zi + xi * vertices] = corridorHeight({
+              d: hit.d,
+              relief: hit.d >= CORRIDOR_BLEND_START ? corridorReliefAt(course.id, x, z) : 0,
+              smooth: frame.smoothedAt(hit),
+              low: close ? frame.lowestAround(hit.along, LOW_HALF) : 0,
+              berm: close && obstacles.length > 0 ? bermWeight(obstacles, hit.along) : 0,
+            });
+          }
+        }
       }
     }
     if (!built) continue;
