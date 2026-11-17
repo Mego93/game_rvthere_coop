@@ -1,6 +1,7 @@
 import { createDirector, markHit, rearm, stepDirector, type AmbientEvent, type AnimalKind, type AnimalSnapshot, type DirectorAnimal, type DirectorState } from './ambient';
 import { ANIMAL_HALF_GOAT, ANIMAL_HALF_SCOOTER, ANIMAL_HIT_LINGER, ANIMAL_HIT_MARGIN, ANIMAL_HIT_SPEED, ANIMAL_KNOCK_HOP, ANIMAL_PROBE_LENGTH, ANIMAL_PROBE_UP, TICK_DT } from './constants';
-import { GROUP_ANIMAL, GROUP_GROUND, GROUP_WORLD, groups } from './groups';
+import { GROUP_ANIMAL, GROUP_WORLD, groups } from './groups';
+import { groundHeightBelow } from './groundProbe';
 import { AXIS_Y, quatFromAxisAngle, type Quat, type Vec3 } from './math';
 import type { Rapier, RapierWorld, RigidBody } from './rapier';
 import { createRouteIndex, type RouteIndex } from './routeAlong';
@@ -43,7 +44,6 @@ export function createAnimals(rapier: Rapier, physics: RapierWorld, route: reado
   const entries = new Map<number, Entry>();
   const byHandle = new Map<number, number>();
   const queryGroups = groups(GROUP_WORLD, GROUP_ANIMAL);
-  const groundGroups = groups(GROUP_WORLD, GROUP_GROUND);
   let hint: number | undefined;
   let probe: { half: Vec3; shape: InstanceType<Rapier['Cuboid']> } | null = null;
 
@@ -57,8 +57,7 @@ export function createAnimals(rapier: Rapier, physics: RapierWorld, route: reado
 
   // The ground below an animal is read by one ray; `fallback` is used where the ray finds none.
   const groundAt = (x: number, z: number, aroundY: number, fallback: number): number => {
-    const hit = physics.castRay(new rapier.Ray({ x, y: aroundY + ANIMAL_PROBE_UP, z }, { x: 0, y: -1, z: 0 }), ANIMAL_PROBE_LENGTH, true, undefined, groundGroups);
-    return hit ? aroundY + ANIMAL_PROBE_UP - hit.timeOfImpact : fallback;
+    return groundHeightBelow(rapier, physics, x, z, aroundY + ANIMAL_PROBE_UP, ANIMAL_PROBE_LENGTH) ?? fallback;
   };
 
   const place = (a: DirectorAnimal, entry: Entry | undefined, vehicleY: number): void => {

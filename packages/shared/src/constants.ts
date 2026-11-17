@@ -481,6 +481,11 @@ export const ITEM_DROP_AHEAD = 150;
 export const ITEM_DROP_BEHIND = 100;
 // m beyond the road edge where a drop lies.
 export const ITEM_DROP_EDGE_OFFSET = 1.5;
+// m above the ground where a drop is released.
+export const ITEM_DROP_LIFT = 0.05;
+// m above the higher of the vehicle and the last checkpoint where the ground ray for a drop starts, and its length.
+export const ITEM_DROP_PROBE_UP = 120;
+export const ITEM_DROP_PROBE_LENGTH = 400;
 // Probability of each kind; sums to 1.
 export const ITEM_DROP_MIX = deepFreeze({ jerrycan: 0.2, toolbox: 0.35, healthKit: 0.45 } satisfies Record<ItemKind, number>);
 // Fraction of full health lost to one animal hit; health never falls below ANIMAL_HEALTH_FLOOR.
