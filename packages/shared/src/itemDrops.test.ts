@@ -69,9 +69,9 @@ describe('T1 planItemDrops on marrakech', () => {
   });
   it('count follows the eligible length', () => {
     const expected = eligible / ITEM_DROP_SPACING;
-    // Measured: route 22458 m, eligible 13295 m (expected 22.2), 22 events for run 1; the tolerance is one drop plus 10 %.
-    expect(Math.round(eligible)).toBe(13295);
-    expect(plan.length).toBe(22);
+    // Measured: route 22458 m (28d), eligible 12506 m (expected 20.8), 21 events for run 1; the tolerance is one drop plus 10 %.
+    expect(Math.round(eligible)).toBe(12506);
+    expect(plan.length).toBe(21);
     expect(Math.abs(plan.length - expected)).toBeLessThanOrEqual(1 + 0.1 * expected);
     expect(plan.length).toBeGreaterThan(0);
   });

@@ -7,6 +7,7 @@ import { fitRoute } from './fit';
 import { TERRAIN_DEEP_CLEAR, TERRAIN_HAZARD_CLEAR } from './marrakech.extras';
 import { MARRAKECH_SEGMENTS } from './marrakech.generated';
 import { MARRAKECH_TERRAIN, MARRAKECH_TERRAIN_SHIFTS, MAX_TERRAIN_DISTANCE, planMarrakech } from './marrakech.plan';
+import { CREST_AND_PULL, PIT_GAUNTLET, RUBBLE_RUN } from './parkour';
 import { MARRAKECH_ROUTE } from './marrakech.route';
 import { DEEP_PIT, HILL_RUN, hillSegments, SHALLOW_PIT } from './terrain';
 
@@ -18,19 +19,33 @@ const start = advance.map((_, i) => advance.slice(0, i).reduce((a, b) => a + b, 
 const total = advance.reduce((a, b) => a + b, 0);
 
 interface Span {
-  kind: 'hill' | 'bigHill' | 'pit' | 'deepPit';
+  kind: 'hill' | 'bigHill' | 'pit' | 'deepPit' | 'parkour' | 'parkourPit';
   first: number;
   last: number;
 }
 
-// A hill is a climb, a flat crest and a descent between flats; the climb's slope tells the big hill.
-const spans: Span[] = [];
-segments.forEach((def, i) => {
-  if (def.type === 'pit') spans.push({ kind: def.gradientOut ? 'deepPit' : 'pit', first: i, last: i });
-  const next = segments[i + 2];
-  if (def.type === 'road' && def.slope && def.slope > 0 && next?.type === 'road' && next.slope === -def.slope) spans.push({ kind: def.slope === BIG_HILL_SLOPE ? 'bigHill' : 'hill', first: i - 1, last: i + 3 });
+// The parkour sections as spans; the hills and pits inside them are part of a section, not terrain of their own.
+const sections: Span[] = [
+  { kind: 'parkour', defs: RUBBLE_RUN },
+  { kind: 'parkour', defs: CREST_AND_PULL },
+  { kind: 'parkourPit', defs: PIT_GAUNTLET },
+].map(({ kind, defs }) => {
+  const first = segments.findIndex((_, i) => defs.every((d, k) => JSON.stringify(segments[i + k]) === JSON.stringify(d)));
+  return { kind: kind as Span['kind'], first, last: first + defs.length - 1 };
 });
-const of = (kind: Span['kind']): Span[] => spans.filter((s) => s.kind === kind);
+const inSection = (i: number): boolean => sections.some((s) => i >= s.first && i <= s.last);
+
+// A hill is a climb, a flat crest and a descent between flats; the climb's slope tells the big hill.
+const found: Span[] = [];
+segments.forEach((def, i) => {
+  if (def.type === 'pit') found.push({ kind: def.gradientOut ? 'deepPit' : 'pit', first: i, last: i });
+  const next = segments[i + 2];
+  if (def.type === 'road' && def.slope && def.slope > 0 && next?.type === 'road' && next.slope === -def.slope) found.push({ kind: def.slope === BIG_HILL_SLOPE ? 'bigHill' : 'hill', first: i - 1, last: i + 3 });
+});
+const own = found.filter((s) => !inSection(s.first));
+// Every terrain span: the standalone hills and pits, then the three sections.
+const spans: Span[] = [...own, ...sections];
+const of = (kind: Span['kind']): Span[] => own.filter((s) => s.kind === kind);
 const gap = (i: number, s: Span): number => Math.max(start[s.first]! - (start[i]! + advance[i]!), start[i]! - (start[s.last]! + advance[s.last]!), 0);
 
 describe('terrain definitions (R4, B4, B8)', () => {
@@ -59,7 +74,13 @@ describe('terrain definitions (R4, B4, B8)', () => {
 });
 
 describe('T7 the terrain in the generated course', () => {
-  it('has 3 hills, 1 big hill, 4 shallow pits and 2 deep pits, as the plan builds them', () => {
+  it('has 3 hills, 1 big hill, 4 shallow pits and 2 deep pits of its own and the three parkour sections, as the plan builds them', () => {
+    expect(sections.map((s) => s.kind)).toEqual(['parkour', 'parkour', 'parkourPit']);
+    expect(sections.every((s) => s.first > 0)).toBe(true);
+    // Counting the sections' own climbs and pits: 8 bigger or smaller hills and pits in all, 6 shallow-or-deep pits by type.
+    expect(found.filter((s) => s.kind === 'bigHill')).toHaveLength(2);
+    expect(found.filter((s) => s.kind === 'pit')).toHaveLength(5);
+    expect(found.filter((s) => s.kind === 'deepPit')).toHaveLength(3);
     expect(of('hill')).toHaveLength(3);
     expect(of('bigHill')).toHaveLength(1);
     expect(of('pit')).toHaveLength(4);
@@ -70,17 +91,16 @@ describe('T7 the terrain in the generated course', () => {
     for (const s of of('deepPit')) expect(segments[s.first]).toEqual(DEEP_PIT);
   });
 
-  it('puts each feature within 200 m of its target, the 0.55 hill within 1.3 km, and the shifts stay small', () => {
+  it('puts each feature within 200 m of its target, the exceptions within 1.3 km, and the shifts stay small', () => {
     const { placements } = planMarrakech();
     const terrain = placements.slice(-MARRAKECH_TERRAIN.length);
     expect(terrain.map((p) => p.name)).toEqual(MARRAKECH_TERRAIN.map((e) => e.name));
-    terrain.forEach((p, i) => {
-      // The 0.55 hill: the roadworks insert at 0.52 takes the nearest straight of 165 m (alone it would still be 585 m out), so it goes 1,085 m away.
-      const exception = MARRAKECH_TERRAIN[i]!.name === 'hill' && MARRAKECH_TERRAIN[i]!.fraction === 0.55;
-      expect(p.distance, `${p.name} ${MARRAKECH_TERRAIN[i]!.fraction}`).toBeLessThanOrEqual(exception ? MAX_TERRAIN_DISTANCE : 200);
-    });
+    // The 0.55 hill: the roadworks insert at 0.52 takes the nearest straight of 165 m (alone it would still be 585 m out), so it goes 1,085 m away.
+    // The 0.15 hill and the 0.27 deep pit, and the parkour sections, were moved by the 28d search (the fuel chain and the garages need room around the sections): up to MAX_TERRAIN_DISTANCE.
+    const far = (e: (typeof MARRAKECH_TERRAIN)[number]): boolean => e.name.startsWith('parkour') || (e.name === 'hill' && [0.15, 0.55].includes(e.fraction)) || (e.name === 'deepPit' && e.fraction === 0.27);
+    terrain.forEach((p, i) => expect(p.distance, `${p.name} ${MARRAKECH_TERRAIN[i]!.fraction}`).toBeLessThanOrEqual(far(MARRAKECH_TERRAIN[i]!) ? MAX_TERRAIN_DISTANCE : 200));
     expect(MARRAKECH_TERRAIN_SHIFTS).toHaveLength(MARRAKECH_TERRAIN.length);
-    for (const shift of MARRAKECH_TERRAIN_SHIFTS) expect(Math.abs(shift)).toBeLessThanOrEqual(200);
+    MARRAKECH_TERRAIN_SHIFTS.forEach((shift, i) => expect(Math.abs(shift), `shift ${i}`).toBeLessThanOrEqual(far(MARRAKECH_TERRAIN[i]!) ? MAX_TERRAIN_DISTANCE : 200));
   });
 
   it('keeps the new terrain 120 m from the sand, alley, roadworks and ford group', () => {
@@ -105,9 +125,11 @@ describe('T7 the terrain in the generated course', () => {
 
   it('keeps every stop and hazard 120 m (150 m of a deep pit) from a hill or pit, and terrain 120 m from other terrain', () => {
     segments.forEach((def, i) => {
-      if (def.type !== 'road' || !(def.stop || def.hazards)) return;
-      for (const s of spans) expect(gap(i, s), `segment ${i} to ${s.kind} at ${s.first}`).toBeGreaterThanOrEqual(s.kind === 'deepPit' ? TERRAIN_DEEP_CLEAR : TERRAIN_HAZARD_CLEAR);
+      // The sections' own hazards sit inside them.
+      if (def.type !== 'road' || !(def.stop || def.hazards) || inSection(i)) return;
+      for (const s of spans) expect(gap(i, s), `segment ${i} to ${s.kind} at ${s.first}`).toBeGreaterThanOrEqual(s.kind === 'deepPit' || s.kind === 'parkourPit' ? TERRAIN_DEEP_CLEAR : TERRAIN_HAZARD_CLEAR);
     });
+    // The gaps between the pits and hills inside a section are the section's own.
     for (const a of spans) {
       for (const b of spans) {
         if (a === b) continue;
@@ -125,8 +147,8 @@ describe('T7 the terrain in the generated course', () => {
   it('gives each added segment its own checkpoint', () => {
     const course = buildCourse({ id: 'marrakech-terrain', segments, targetTime: 1800 });
     expect(course.checkpoints).toHaveLength(segments.length);
-    // 33 inserted segments in 15 inserts, each split off a straight that leaves up to two remainders: 212 fitted segments grow to 260.
-    expect(course.checkpoints.length - fitRoute(MARRAKECH_ROUTE).segments.length).toBe(48);
+    // 52 inserted segments in 18 inserts (the parkour sections add 19 in 3), each split off a straight that leaves up to two remainders: 212 fitted segments grow to 281.
+    expect(course.checkpoints.length - fitRoute(MARRAKECH_ROUTE).segments.length).toBe(69);
   });
 });
 
