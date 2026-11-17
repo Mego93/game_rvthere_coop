@@ -35,7 +35,7 @@ describe('registration (T11)', () => {
 
 describe('stops (T7)', () => {
   it('has fuel stops every 1.5 km at most, from the start to the finish', () => {
-    expect(fuel.length).toBeGreaterThanOrEqual(17);
+    expect(fuel.length).toBeGreaterThanOrEqual(18);
     expect(fuel.length).toBeLessThanOrEqual(22);
     const gaps = [mid(fuel[0]!), ...fuel.slice(1).map((f, n) => mid(f) - mid(fuel[n]!)), finish - mid(fuel[fuel.length - 1]!)];
     for (const gap of gaps) expect(gap).toBeLessThanOrEqual(1500);

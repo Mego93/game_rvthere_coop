@@ -19,8 +19,8 @@ const dense: AmbientEvent[] = Array.from({ length: AMBIENT_MAX_GOATS + AMBIENT_M
   kind: i < AMBIENT_MAX_GOATS ? 'goat' : 'scooter',
 }));
 
-// Measured: 24789 bytes in all, 898 bytes of them animals.
-test('T7: the marrakech full snapshot with 6 players and the most animals is under 25 KB, animals add at most 1 KB', () => {
+// Measured: 28791 bytes in all, 898 bytes of them animals (24789 before the step 28d parkour props; limit raised per P2).
+test('T7: the marrakech full snapshot with 6 players and the most animals is under 30 KB, animals add at most 1 KB', () => {
   const world = createWorld(RAPIER, { courseId: 'marrakech', vehicleId: 'lodgy', ambient: true, ambientPlan: dense });
   for (let i = 1; i <= 6; i++) world.addPlayer(`player${i}`);
   for (let i = 0; i < 60; i++) world.step(new Map());
@@ -31,7 +31,7 @@ test('T7: the marrakech full snapshot with 6 players and the most animals is und
   const total = size(snapshot);
   const added = total - size(without);
   console.info(`T7 full snapshot: ${total} bytes with 9 animals, animals add ${added} bytes`);
-  expect(total).toBeLessThan(25_000);
+  expect(total).toBeLessThan(30_000);
   expect(added).toBeLessThanOrEqual(1000);
   world.dispose();
 });

@@ -96,11 +96,15 @@ describe('T7 the terrain in the generated course', () => {
     const terrain = placements.slice(-MARRAKECH_TERRAIN.length);
     expect(terrain.map((p) => p.name)).toEqual(MARRAKECH_TERRAIN.map((e) => e.name));
     // The 0.55 hill: the roadworks insert at 0.52 takes the nearest straight of 165 m (alone it would still be 585 m out), so it goes 1,085 m away.
-    // The 0.15 hill and the 0.27 deep pit, and the parkour sections, were moved by the 28d search (the fuel chain and the garages need room around the sections): up to MAX_TERRAIN_DISTANCE.
-    const far = (e: (typeof MARRAKECH_TERRAIN)[number]): boolean => e.name.startsWith('parkour') || (e.name === 'hill' && [0.15, 0.55].includes(e.fraction)) || (e.name === 'deepPit' && e.fraction === 0.27);
-    terrain.forEach((p, i) => expect(p.distance, `${p.name} ${MARRAKECH_TERRAIN[i]!.fraction}`).toBeLessThanOrEqual(far(MARRAKECH_TERRAIN[i]!) ? MAX_TERRAIN_DISTANCE : 200));
+    // Moved by the 28d search (the fuel chain and the garages need room around the sections): the 0.15 hill sits 319 m out (shift -200) and the 0.27 deep pit 550 m (shift +550); the 0.55 hill and the three parkour entries may go up to MAX_TERRAIN_DISTANCE.
+    const limit = (e: (typeof MARRAKECH_TERRAIN)[number]): number => {
+      if (e.name === 'hill' && e.fraction === 0.15) return 350;
+      if (e.name === 'deepPit' && e.fraction === 0.27) return 600;
+      return e.name.startsWith('parkour') || (e.name === 'hill' && e.fraction === 0.55) ? MAX_TERRAIN_DISTANCE : 200;
+    };
+    terrain.forEach((p, i) => expect(p.distance, `${p.name} ${MARRAKECH_TERRAIN[i]!.fraction}`).toBeLessThanOrEqual(limit(MARRAKECH_TERRAIN[i]!)));
     expect(MARRAKECH_TERRAIN_SHIFTS).toHaveLength(MARRAKECH_TERRAIN.length);
-    MARRAKECH_TERRAIN_SHIFTS.forEach((shift, i) => expect(Math.abs(shift), `shift ${i}`).toBeLessThanOrEqual(far(MARRAKECH_TERRAIN[i]!) ? MAX_TERRAIN_DISTANCE : 200));
+    MARRAKECH_TERRAIN_SHIFTS.forEach((shift, i) => expect(Math.abs(shift), `shift ${i}`).toBeLessThanOrEqual(limit(MARRAKECH_TERRAIN[i]!)));
   });
 
   it('keeps the new terrain 120 m from the sand, alley, roadworks and ford group', () => {

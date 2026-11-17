@@ -45,6 +45,7 @@ const groups: { kind: Kind; indexes: number[] }[] = [];
 const sectionIndexes = new Set<number>(
   [RUBBLE_RUN, CREST_AND_PULL, PIT_GAUNTLET].flatMap((defs) => {
     const first = def.segments.findIndex((_, i) => defs.every((d, k) => JSON.stringify(def.segments[i + k]) === JSON.stringify(d)));
+    if (first < 0) throw new Error('a parkour section is missing from the marrakech course');
     return defs.map((_, k) => first + k);
   }),
 );
