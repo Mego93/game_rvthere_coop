@@ -5,10 +5,6 @@ import {
   ALLEY_WIDTH,
   BANK_APPROACH,
   BANK_TOP,
-  PIT_ANCHOR_FIRST_ALONG,
-  PIT_ANCHOR_PAIR_SPACING,
-  PIT_APPROACH,
-  PIT_EXIT,
   BOULDER_EDGE_INSET,
   BOULDER_FIRST_ALONG,
   BOULDER_PAIR_SPACING,
@@ -25,6 +21,10 @@ import {
   HAZARD_END_CLEARANCE,
   HAZARD_MIN_GAP,
   PALM_OFFSET,
+  PIT_ANCHOR_FIRST_ALONG,
+  PIT_ANCHOR_PAIR_SPACING,
+  PIT_APPROACH,
+  PIT_EXIT,
   PROP_KINDS,
   ROADBLOCK_FENCE_HALF,
   ROADBLOCK_LATERAL,
@@ -534,6 +534,8 @@ function buildPit(def: Extract<SegmentDef, { type: 'pit' }>): LocalSegment {
   if (!(def.depth > 0)) throw new Error('A pit needs a positive depth');
   checkCount(def.anchors, 'Pit anchors');
   for (const g of [def.gradient, gradientOut]) if (!(g > 0 && g < 90)) throw new Error('A pit needs gradients between 0 and 90 degrees');
+  // The step limit of courses.test.ts breaks above about 33.7 degrees.
+  if (gradientOut > 33) throw new Error('A pit exit may be at most 33 degrees');
   // The RV's length plus margin.
   if (!(def.floor >= 4)) throw new Error('A pit floor must be at least 4 m');
   const approach = roadPieces(PIT_APPROACH, 0, 0);

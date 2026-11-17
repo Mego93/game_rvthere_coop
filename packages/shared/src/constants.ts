@@ -345,6 +345,10 @@ export const PIT_EXIT = 10;
 export const PIT_ANCHOR_FIRST_ALONG = BOULDER_FIRST_ALONG;
 // m between each further pair of a pit's boulders.
 export const PIT_ANCHOR_PAIR_SPACING = BOULDER_PAIR_SPACING;
+// degrees, the slope of a hill both vehicles climb (about 10 is the true limit).
+export const HILL_SLOPE = 8;
+// degrees, the slope of the big hill: the Lodgy climbs it in 20 to 23 s, the RV needs the winch.
+export const BIG_HILL_SLOPE = 14;
 // degrees, the climb out of the deep pit: the RV cannot climb it, the Lodgy can (no exit up to 33 traps both).
 export const PIT_DEEP_EXIT = 28;
 // m, half the thickness of the water decor.

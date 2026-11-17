@@ -13,11 +13,12 @@ import {
   GATES_SPACING,
   ROADBLOCK_FENCE_HALF,
   FORD_ROCK,
-  PLAYER_HEIGHT,
   PIT_ANCHOR_FIRST_ALONG,
   PIT_ANCHOR_PAIR_SPACING,
   PIT_APPROACH,
+  PIT_DEEP_EXIT,
   PIT_EXIT,
+  PLAYER_HEIGHT,
   PLAYER_OVERLAP_LIFT,
   PLAYER_RADIUS,
   PROP_KINDS,
@@ -674,8 +675,11 @@ describe('pit', () => {
     }
   });
 
-  test('every point from the end of the approach to the exit has a boulder within the winch length', () => {
-    const seg = buildSegment(pit(2, 15, 8, 2, 33));
+  test.each([
+    ['2 anchors, exit 33', pit(2, 15, 8, 2, 33)],
+    ['the deep pit, 6 anchors, PIT_DEEP_EXIT', pit(2, 15, 8, 6, PIT_DEEP_EXIT)],
+  ])('every point from the end of the approach to the exit has a boulder within the winch length (%s)', (_name, def) => {
+    const seg = buildSegment(def);
     const total = routeLength(seg);
     for (let along = PIT_APPROACH; along <= total + 1e-9; along += 0.5) {
       const p = seg.surfaceAt(Math.min(along, total)).pos;
@@ -695,12 +699,14 @@ describe('pit', () => {
     expect(() => buildSegment(pit(2, 90, 8, 0))).toThrow();
     expect(() => buildSegment(pit(2, 15, 8, 0, 0))).toThrow();
     expect(() => buildSegment(pit(2, 15, 8, 0, 90))).toThrow();
+    expect(() => buildSegment(pit(2, 15, 8, 0, 33.5))).toThrow(/33/);
+    expect(() => buildSegment(pit(2, 15, 8, 0, 33))).not.toThrow();
     expect(() => buildSegment(pit(2, 15, 3.9, 0))).toThrow(/floor/);
     expect(() => buildSegment(pit(2, 15, 4, 0))).not.toThrow();
   });
 
   test('a pit takes no stop', () => {
-    expect(() => buildSegment({ ...(pit(2, 15, 8, 0) as object), stop: { kind: 'fuel', side: 1, along: 30 } } as SegmentDef)).toThrow();
+    expect(() => buildSegment({ ...(pit(2, 15, 8, 0) as object), stop: { kind: 'fuel', side: 1, along: 30 } } as SegmentDef)).toThrow(/stop/);
   });
 
   test('the shoulders follow the road, so the pit is a trench the whole width of the ground', () => {

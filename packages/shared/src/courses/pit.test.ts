@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { PIT_APPROACH, PIT_DEEP_EXIT, PIT_EXIT, TICK_RATE } from '../constants';
+import { BIG_HILL_SLOPE, HILL_SLOPE, PIT_APPROACH, PIT_DEEP_EXIT, PIT_EXIT, SEGMENT_SPAWN_INSET, TICK_RATE } from '../constants';
 import type { BuiltCourse } from '../course';
 import { degToRad, rotate, vec3 } from '../math';
 import { NEUTRAL_INPUT } from '../protocol';
@@ -11,6 +11,7 @@ import { createWorld, type World } from '../world';
 import { buildCourse } from './build';
 import { alongOfPoint, driveRun, driveWorld } from './driveRig';
 import { boardVehicle } from './soloRig';
+import { DEEP_PIT as DEEP, hillSegments, SHALLOW_PIT as SHALLOW } from './terrain';
 
 // The shared package has no DOM or Node typings.
 declare const process: { env: Record<string, string | undefined> };
@@ -24,25 +25,18 @@ const FULL = process.env.PIT_FULL === '1';
 const PLAYER = 'p1';
 
 type Pit = Extract<SegmentDef, { type: 'pit' }>;
-// The terrain the generator will use (step 28a task 2); measured in the ROADMAP decision line.
-const SHALLOW: Pit = { type: 'pit', depth: 0.6, gradient: 10, floor: 6, anchors: 0 };
-// Six boulders (pairs 3, 5 and 7 m into the exit flat): with only the first pair the cable runs sideways by the crest and the RV hangs there.
-const DEEP: Pit = { type: 'pit', depth: 2, gradient: 15, gradientOut: PIT_DEEP_EXIT, floor: 8, anchors: 6 };
-const HILL = 8;
-const BIG_HILL = 14;
+const HILL = HILL_SLOPE;
+const BIG_HILL = BIG_HILL_SLOPE;
 // A long run-up is a flat of 150 m (its own checkpoint is the spawn); the short one is the 15 m flat before the terrain.
 const RUN_UPS = [15, 150] as const;
+// The Lodgy needs 20 to 23 s on the big hill, so the plan's 20 s cannot be used.
 const CLIMB_SECONDS = 40;
 
 const flat = (length: number): SegmentDef => ({ type: 'road', length });
 const horizontal = (def: Pit): number =>
   PIT_APPROACH + def.depth / Math.tan(degToRad(def.gradient)) + def.floor + def.depth / Math.tan(degToRad(def.gradientOut ?? def.gradient)) + PIT_EXIT;
 
-// A hill as the generator builds it: flat 15, climb 60 m (horizontal), crest 15, descent 60 m, flat 15.
-const hill = (slope: number): SegmentDef[] => {
-  const length = 60 / Math.cos(degToRad(slope));
-  return [flat(15), { type: 'road', length, slope }, flat(15), { type: 'road', length, slope: -slope }, flat(15)];
-};
+const hill = hillSegments;
 
 interface Terrain {
   course: BuiltCourse;
@@ -124,15 +118,20 @@ describe('T3 hills climbed by driving (a hill built from road segments)', () => 
     }
   });
 
-  test.each(RUN_UPS)('the Lodgy passes the BIG_HILL_SLOPE hill and the RV stands still on it, run-up %d m', (runUp) => {
+  test.each(RUN_UPS)('the Lodgy passes the BIG_HILL_SLOPE hill in under 30 s and the RV stands still on it, run-up %d m', (runUp) => {
     const t = hillCourse(BIG_HILL, runUp);
-    expect(drive('lodgy', t).reached, 'lodgy').toBe(true);
-    expect(drive('rv', t).reached, 'rv').toBe(false);
+    const lodgy = drive('lodgy', t);
+    expect(lodgy.reached, 'lodgy').toBe(true);
+    expect(lodgy.seconds, 'lodgy seconds').toBeLessThan(30);
+    const rv = drive('rv', t);
+    expect(rv.reached, 'rv').toBe(false);
+    // It is not still at 40 s: from a long run-up it rolls back down, so the end speed must not be forward.
+    expect(rv.endSpeed, 'rv end forward speed').toBeLessThan(0.5);
   });
 });
 
 describe('T4 the deep pit', () => {
-  // Spec fallback (step 28a B1): no exit up to the 33 degree cap traps the Lodgy, so only the RV is trapped. Entry is by the pursuit driver at full throttle: from the 8 m spawn (about 7 m run-up) and from 150 m (about 19 m/s at the lip).
+  // Only the RV is trapped (no exit up to 33 degrees traps the Lodgy); entry at full throttle from the spawn and from 150 m.
   test.each(RUN_UPS)('both reach the floor from a %d m run-up, the RV does not climb out, the Lodgy does; neither flips', (runUp) => {
     const t = pitCourse(DEEP, runUp);
     for (const vehicle of ['lodgy', 'rv']) {
@@ -150,32 +149,45 @@ describe('T4 the deep pit', () => {
 });
 
 describe('T5 the winch pulls a vehicle out of the deep pit', () => {
-  // The driver reels and holds full throttle, attached to the furthest boulder. The reel alone gets the RV only as far as the crest at this exit gradient.
-  test.each(['lodgy', 'rv'])('the %s, resting on the floor, is reeled out within 30 s', (vehicle) => {
+  // Reel and full throttle on the furthest boulder; the control has the same pose and throttle with no cable.
+  function climbOut(vehicle: string, winch: boolean): { seconds: number; attached: boolean; minUp: number } {
     const t = pitCourse(DEEP, 15);
     const entry = t.course.checkpoints[t.at]!.spawn;
     const descent = DEEP.depth / Math.tan(degToRad(DEEP.gradient));
-    const floorMid = entry.pos.z + 8 - (PIT_APPROACH + descent + DEEP.floor / 2);
+    const floorMid = entry.pos.z + SEGMENT_SPAWN_INSET - (PIT_APPROACH + descent + DEEP.floor / 2);
+    // The vehicle rests on the floor, which lies `depth` below the entry (y = 0).
     const pose = { pos: vec3(0, -DEEP.depth, floorMid), rot: entry.rot };
     const world = soloAt(t, vehicle, pose);
-    const anchor = t.course.anchors[t.course.anchors.length - 1]!.id;
-    world.debugWinch().take(PLAYER);
-    expect(world.debugWinch().attach(anchor)).toBe(true);
-    const climbTop = entry.pos.z + 8 - (PIT_APPROACH + descent + DEEP.floor + DEEP.depth / Math.tan(degToRad(PIT_DEEP_EXIT)));
+    if (winch) {
+      const anchor = t.course.anchors[t.course.anchors.length - 1]!.id;
+      world.debugWinch().take(PLAYER);
+      expect(world.debugWinch().attach(anchor)).toBe(true);
+    }
+    const climbTop = entry.pos.z + SEGMENT_SPAWN_INSET - (PIT_APPROACH + descent + DEEP.floor + DEEP.depth / Math.tan(degToRad(PIT_DEEP_EXIT)));
     const rear = VEHICLES[vehicle as 'lodgy' | 'rv'].halfExtents.z;
     const w = watch(world);
-    let seconds = -1;
+    let seconds = Infinity;
     for (let tick = 0; tick < 30 * TICK_RATE; tick++) {
-      world.step(new Map([[PLAYER, { ...NEUTRAL_INPUT, seq: tick, reel: 1, moveY: 1 }]]));
+      world.step(new Map([[PLAYER, { ...NEUTRAL_INPUT, seq: tick, reel: winch ? 1 : 0, moveY: 1 }]]));
       w.stop();
       if (world.snapshot().vehicle.pos.z + rear < climbTop) {
         seconds = tick / TICK_RATE;
         break;
       }
     }
-    expect(seconds, 'seconds to clear the pit').toBeGreaterThan(0);
-    expect(w.minUp()).toBeGreaterThan(0.5);
+    const attached = world.debugWinch().state().state === 'attached';
     world.dispose();
+    return { seconds, attached, minUp: w.minUp() };
+  }
+
+  test.each(['lodgy', 'rv'])('the %s, resting on the floor, is reeled out within 30 s, and the cable stays attached', (vehicle) => {
+    const control = climbOut(vehicle, false);
+    const winched = climbOut(vehicle, true);
+    expect(winched.seconds, 'seconds to clear the pit').toBeLessThan(30);
+    expect(winched.minUp).toBeGreaterThan(0.5);
+    expect(winched.attached, 'the cable is still attached').toBe(true);
+    if (vehicle === 'rv') expect(control.seconds, 'the RV does not clear the pit without the winch').toBe(Infinity);
+    else expect(winched.seconds, 'the winch is not slower than the control (0.5 s of cable drag allowed)').toBeLessThanOrEqual(control.seconds + 0.5);
   });
 });
 
