@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { fitted, hasModel, instantiate, shadowed, type FitSize } from './models';
 import { groupBySurface, mergeBoxes, toGeometry } from './groundMerge';
 import { groundTexture, SURFACE_TEXTURE, type SceneOptions } from './groundTextures';
-import { createSouleymanMesh, souleymanPlacements } from './souleyman';
+import { createSouleymanMeshes, souleymanPlacements } from './souleyman';
 import { createTerrainMesh } from './terrain';
 
 const SURFACE_COLOURS: Record<Surface, number> = {
@@ -95,13 +95,7 @@ export function createScene(course: BuiltCourse, options: SceneOptions = {}): TH
   const walls = mergedMesh(course.walls, solid(0xc98a5a), true);
   if (walls) scene.add(walls);
   scene.add(createTerrainMesh(course, options));
-  const souleymanProto = createSouleymanMesh();
-  for (const spot of souleymanPlacements(course.checkpoints)) {
-    const figure = souleymanProto.clone();
-    figure.position.set(spot.x, spot.y, spot.z);
-    figure.rotation.y = spot.yaw;
-    scene.add(figure);
-  }
+  scene.add(...createSouleymanMeshes(souleymanPlacements(course.checkpoints)));
   scene.add(boxMesh(course.finish, ghost(0x22c55e)));
 
   for (const water of course.decor) {

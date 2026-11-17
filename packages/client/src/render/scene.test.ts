@@ -16,14 +16,31 @@ test('T4: no blue checkpoint box, one Souleyman per checkpoint', () => {
     if (material?.transparent && material.color?.getHex() === OLD_CHECKPOINT_BLUE) blue.push(object);
   });
   expect(blue).toHaveLength(course.stops.filter((stop) => stop.kind !== 'fuel').length);
-  expect(scene.children.filter((child) => child.name === 'souleyman')).toHaveLength(course.checkpoints.length);
+});
+
+const souleymanMeshes = (scene: THREE.Scene) => {
+  const found: THREE.Mesh[] = [];
+  scene.traverse((object) => { if (object.name === 'souleyman' && (object as THREE.Mesh).isMesh) found.push(object as THREE.Mesh); });
+  return found;
+};
+
+test('T4: the Souleyman mesh count is a few and does not grow with the checkpoint count', () => {
+  const small = getCourse('segment-demo');
+  const large = getCourse('airport');
+  expect(large.checkpoints.length).not.toBe(small.checkpoints.length);
+  const a = souleymanMeshes(createScene(small, { flat: true }));
+  const b = souleymanMeshes(createScene(large, { flat: true }));
+  expect(a.length).toBeGreaterThan(0);
+  expect(a.length).toBeLessThanOrEqual(6);
+  expect(b.length).toBe(a.length);
+  const vertices = (meshes: THREE.Mesh[]) => meshes.reduce((sum, mesh) => sum + mesh.geometry.getAttribute('position').count, 0);
+  expect(vertices(b) / large.checkpoints.length).toBeCloseTo(vertices(a) / small.checkpoints.length);
 });
 
 test('T4: disposeScene frees his geometry and materials', () => {
   const scene = createScene(course, { flat: true });
-  const figures = scene.children.filter((child) => child.name === 'souleyman');
-  const meshes: THREE.Mesh[] = [];
-  figures[0]!.traverse((object) => { if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh); });
+  const meshes = souleymanMeshes(scene);
+  expect(meshes.length).toBeGreaterThan(0);
   const spies = meshes.flatMap((mesh) => [vi.spyOn(mesh.geometry, 'dispose'), vi.spyOn(mesh.material as THREE.Material, 'dispose')]);
   disposeScene(scene);
   for (const spy of spies) expect(spy).toHaveBeenCalled();
