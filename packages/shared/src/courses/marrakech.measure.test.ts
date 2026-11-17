@@ -1,6 +1,7 @@
 // Fuel measurements deviate from plan A1: START_FUEL is 1 because stops refill the tank. From 50 % the RV cannot keep 20 % over any gap above about 570 m (it burns about half a tank per km); owner decision pending.
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
+import { BIG_HILL_SLOPE } from '../constants';
 import { getVehicleConfig, VEHICLES, type VehicleId } from '../vehicles';
 import { createWorld } from '../world';
 import { buildCourse } from './build';
@@ -20,8 +21,14 @@ beforeAll(async () => {
 const def = getCourseDef('marrakech')!;
 const FULL = process.env.MARRAKECH_FULL === '1';
 const fuelIndexes = def.segments.flatMap((s, i) => (s.type === 'road' && s.stop?.kind === 'fuel' ? [i] : []));
-// The RV cannot climb the bank unaided and roadworks need a push: both are teleported over, as in the airport measurements.
-const skips = (vehicleId: string): Set<number> => new Set(def.segments.flatMap((s, i) => (s.type === 'roadworks' || (s.type === 'bank' && vehicleId === 'rv') ? [i] : [])));
+// The RV needs the winch on the bank, the big hill and the deep pits, and roadworks need a push: those are teleported over, as in the airport measurements.
+// A big hill is flat, climb, crest, descent, flat: all five are skipped.
+const bigHillSpan = new Set(def.segments.flatMap((s, i) => (s.type === 'road' && s.slope === BIG_HILL_SLOPE ? [i - 1, i, i + 1, i + 2, i + 3] : [])));
+const rvWinch = (i: number): boolean => {
+  const s = def.segments[i]!;
+  return s.type === 'bank' || (s.type === 'pit' && !!s.gradientOut) || bigHillSpan.has(i);
+};
+const skips = (vehicleId: string): Set<number> => new Set(def.segments.flatMap((s, i) => (s.type === 'roadworks' || (vehicleId === 'rv' && rvWinch(i)) ? [i] : [])));
 
 type Leg = [from: number, to: number];
 
@@ -66,8 +73,7 @@ const pairs = fuelIndexes.slice(0, -1).map((a, n) => [a, fuelIndexes[n + 1]!] as
 // The sampled gaps: the longest, the one holding the ford group, the first and the last.
 const sampled = new Set<number>();
 {
-  // 40 m stands in for a ford or bank, which have no length field.
-  const length = (n: number) => def.segments.slice(pairs[n]![0], pairs[n]![1] + 1).reduce((sum, s) => sum + ('length' in s ? s.length : 40), 0);
+  const length = (n: number) => ranges.slice(pairs[n]![0], pairs[n]![1] + 1).reduce((sum, r) => sum + r.to - r.from, 0);
   let longest = 0;
   pairs.forEach((_, n) => length(n) > length(longest) && (longest = n));
   sampled.add(longest);

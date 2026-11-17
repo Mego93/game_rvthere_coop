@@ -46,7 +46,7 @@ describe('MARRAKECH_SEGMENTS (T3 to T5)', () => {
     const course = buildCourse({ id: 'marrakech-fit', segments: MARRAKECH_SEGMENTS, targetTime: 1800 });
     expect(course.checkpoints.length).toBeGreaterThan(100);
     MARRAKECH_SEGMENTS.forEach((def) => {
-      if (def.type === 'bank' || def.type === 'ford') return;
+      if (def.type === 'bank' || def.type === 'ford' || def.type === 'pit') return;
       if (def.type === 'road' && def.slope) return;
       expect(def.type === 'road' || advance(def) > 0).toBe(true);
       const length = roadLength(def);
@@ -97,6 +97,7 @@ describe('MARRAKECH_SEGMENTS (T3 to T5)', () => {
       at += advance(def);
     }
     expect(MARRAKECH_SEGMENTS.filter((def) => def.type === 'bank')).toHaveLength(1);
+    expect(MARRAKECH_SEGMENTS.filter((def) => def.type === 'pit')).toHaveLength(6);
     expect(found.map(([type]) => type)).toEqual(want.map(([type]) => type));
     found.forEach(([, fraction], i) => expect(Math.abs(fraction - want[i]![1]) * total).toBeLessThanOrEqual(1300));
     // The ford is followed by its slope road and the bank, and the neighbours are plain flat roads or other terrain.
@@ -112,8 +113,11 @@ describe('MARRAKECH_SEGMENTS (T3 to T5)', () => {
   it('marks the inserted segments and nothing else', () => {
     const { segments, inserted } = planMarrakech();
     expect(MARRAKECH_INSERTED).toEqual(inserted);
-    segments.forEach((def, i) => expect(inserted.includes(i)).toBe(def.type !== 'road' || !!def.slope));
-    expect(inserted).toHaveLength(7);
+    // Sand, alley, two roadworks, the ford group of 3, 3 hills and the big hill of 5 each, 6 pits.
+    segments.forEach((def, i) => {
+      if (!inserted.includes(i)) expect(def.type === 'road' && !def.slope).toBe(true);
+    });
+    expect(inserted).toHaveLength(1 + 1 + 2 + 3 + 4 * 5 + 6);
   });
 
   it('winds: the built route is not a straight line', () => {

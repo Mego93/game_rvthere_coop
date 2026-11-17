@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { ROAD_MAX_PIECE_YAW, ROAD_PIECE_LENGTH, TICK_RATE } from '../constants';
+import { BIG_HILL_SLOPE, ROAD_MAX_PIECE_YAW, ROAD_PIECE_LENGTH, TICK_RATE } from '../constants';
 import { NEUTRAL_INPUT } from '../protocol';
 import { rotate, vec3 } from '../math';
 import type { SegmentDef } from '../segments';
@@ -36,9 +36,19 @@ const starts = segmentStarts(course);
 const routeLength = course.route.slice(1).reduce((sum, [x, z], i) => sum + Math.hypot(x - course.route[i]![0], z - course.route[i]![1]), 0);
 const segmentCount = def.segments.length;
 const ROADWORKS = new Set(def.segments.flatMap((s, i) => (s.type === 'roadworks' ? [i] : [])));
-// Spec: the RV fails the bank unaided (it has winch anchors).
+// The hills and pits as groups of segment indexes: a hill is flat, climb, crest, descent, flat.
+type Kind = 'hill' | 'bigHill' | 'pit' | 'deepPit';
+const groups: { kind: Kind; indexes: number[] }[] = [];
+def.segments.forEach((s, i) => {
+  if (s.type === 'pit') groups.push({ kind: s.gradientOut ? 'deepPit' : 'pit', indexes: [i] });
+  const next = def.segments[i + 2];
+  if (s.type === 'road' && s.slope && s.slope > 0 && next?.type === 'road' && next.slope === -s.slope) groups.push({ kind: s.slope === BIG_HILL_SLOPE ? 'bigHill' : 'hill', indexes: [i - 1, i, i + 1, i + 2, i + 3] });
+});
 const bank = def.segments.findIndex((s) => s.type === 'bank');
-const skipsFor = (vehicleId: string): Set<number> => new Set(vehicleId === 'rv' && bank >= 0 ? [bank] : []);
+// Spec: the RV needs the winch on the bank, the big hill and the deep pits (they have anchors), so its drive skips them; the Lodgy drives them (a deep pit is a jolt for it).
+export const RV_NEEDS_WINCH: ReadonlySet<string> = new Set(['bank', 'bigHill', 'deepPit']);
+const winchSegments = new Set<number>([...(bank >= 0 && RV_NEEDS_WINCH.has('bank') ? [bank] : []), ...groups.filter((g) => RV_NEEDS_WINCH.has(g.kind)).flatMap((g) => g.indexes)]);
+const skipsFor = (vehicleId: string): Set<number> => (vehicleId === 'rv' ? winchSegments : new Set());
 
 type RoadDef = Extract<SegmentDef, { type: 'road' }>;
 const hazardOf = (i: number): string | undefined => {
@@ -55,12 +65,16 @@ export function curveExtremes(): { sharpest: number; stretched: number; curves: 
   return { sharpest: sharpest.i, stretched: stretched.i, curves: curves.map((c) => c.i) };
 }
 
-// Segments of a sample: the first, the last, every inserted terrain segment, each hazard segment, a few curves incl. the sharpest and the most stretched.
+// One of each terrain kind: the second hill, the big hill, the second shallow pit and the first deep pit.
+const sampledTerrain = (): number[] => (['hill', 'bigHill', 'pit', 'deepPit'] as const).flatMap((kind) => groups.filter((g) => g.kind === kind)[kind === 'hill' || kind === 'pit' ? 1 : 0]!.indexes);
+const terrainIndexes = new Set(groups.flatMap((g) => g.indexes));
+
+// Segments of a sample: the first, the last, the sand, alley, roadworks and ford group, one hill, the big hill, one shallow and one deep pit, each hazard segment, a few curves incl. the sharpest and the most stretched.
 export function sampleSegments(): number[] {
   const { sharpest, stretched, curves } = curveExtremes();
   const spread = [0.25, 0.5, 0.75].map((f) => curves[Math.floor(f * curves.length)]!);
   const hazards = def.segments.flatMap((_, i) => (hazardOf(i) ? [i] : []));
-  const all = [0, segmentCount - 1, ...MARRAKECH_INSERTED, ...hazards, sharpest, stretched, ...spread];
+  const all = [0, segmentCount - 1, ...MARRAKECH_INSERTED.filter((i) => !terrainIndexes.has(i)), ...sampledTerrain(), ...hazards, sharpest, stretched, ...spread];
   return [...new Set(all)].sort((a, b) => a - b);
 }
 
@@ -187,11 +201,13 @@ describe('allowed time', () => {
 });
 
 describe('the sample', () => {
-  test('holds the ends, all inserted terrain, the sharpest and most stretched curves and every hazard kind', () => {
+  test('holds the ends, the old inserts, one of each hill and pit kind, the sharpest and most stretched curves and every hazard kind', () => {
     const sample = sampleSegments();
     expect(sample).toContain(0);
     expect(sample).toContain(segmentCount - 1);
-    for (const i of MARRAKECH_INSERTED) expect(sample).toContain(i);
+    for (const i of MARRAKECH_INSERTED.filter((j) => !terrainIndexes.has(j))) expect(sample).toContain(i);
+    for (const kind of ['hill', 'bigHill', 'pit', 'deepPit']) expect(groups.some((g) => g.kind === kind && g.indexes.every((i) => sample.includes(i))), kind).toBe(true);
+    expect(groups.map((g) => g.kind).sort()).toEqual(['bigHill', 'deepPit', 'deepPit', 'hill', 'hill', 'hill', 'pit', 'pit', 'pit', 'pit']);
     const { sharpest, stretched } = curveExtremes();
     expect(sample).toContain(sharpest);
     expect(sample).toContain(stretched);

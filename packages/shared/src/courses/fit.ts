@@ -245,6 +245,14 @@ export interface InsertSpec {
   // The straight run, in metres, that the built segments replace.
   length: number;
   segments: SegmentDef[];
+  // Metres kept clear of every insert placed before this one (default 0).
+  clearance?: number;
+}
+
+export interface InsertGroup {
+  name: string;
+  first: number;
+  last: number;
 }
 
 export interface InsertPlacement {
@@ -260,12 +268,14 @@ interface Item {
   length: number;
   free: boolean;
   inserted?: boolean;
+  name?: string;
 }
 
 const freeStraight = (def: SegmentDef): boolean => def.type === 'road' && !def.curve && !def.slope && !def.stop && !def.hazards;
 
 // Replaces a stretch of the straight nearest each target; each side that stays is 0 or at least 15 m. Net length is unchanged.
-export function planInserts(segments: readonly SegmentDef[], specs: readonly InsertSpec[]): { segments: SegmentDef[]; placements: InsertPlacement[]; inserted: number[] } {
+// A spec's length is the horizontal advance of its segments, so a group may hold sloped members (a hill).
+export function planInserts(segments: readonly SegmentDef[], specs: readonly InsertSpec[]): { segments: SegmentDef[]; placements: InsertPlacement[]; inserted: number[]; groups: InsertGroup[] } {
   let items: Item[] = segments.map((def) => ({ defs: [def], length: 'length' in def ? def.length : 0, free: freeStraight(def) }));
   const total = items.reduce((sum, item) => sum + item.length, 0);
   const placements: InsertPlacement[] = [];
@@ -273,6 +283,16 @@ export function planInserts(segments: readonly SegmentDef[], specs: readonly Ins
     const target = spec.fraction * total;
     let best: { index: number; a: number; distance: number; at: number } | undefined;
     let start = 0;
+    const clearance = spec.clearance ?? 0;
+    const spans: [number, number][] = [];
+    if (clearance > 0) {
+      let at = 0;
+      for (const item of items) {
+        if (item.inserted) spans.push([at, at + item.length]);
+        at += item.length;
+      }
+    }
+    const clear = (from: number): boolean => spans.every(([s0, s1]) => from - s1 >= clearance - 1e-6 || s0 - (from + spec.length) >= clearance - 1e-6);
     items.forEach((item, index) => {
       const begin = start;
       start += item.length;
@@ -284,9 +304,11 @@ export function planInserts(segments: readonly SegmentDef[], specs: readonly Ins
       // Interior offsets are rounded inward, so both sides stay at 15 m or more.
       const lo = Math.ceil(SEGMENT_MIN_LENGTH * 10) / 10;
       const hi = Math.floor((r - SEGMENT_MIN_LENGTH) * 10) / 10;
-      const choices = r < EPS ? [0] : r < SEGMENT_MIN_LENGTH ? [] : r < 2 * SEGMENT_MIN_LENGTH ? [0, r] : [0, r, Math.min(hi, Math.max(lo, round1(wanted)))];
+      const choices: number[] = r < EPS ? [0] : r < SEGMENT_MIN_LENGTH ? [] : r < 2 * SEGMENT_MIN_LENGTH ? [0, r] : [0, r, Math.min(hi, Math.max(lo, round1(wanted)))];
+      // Just clear of each earlier insert, where the target's own offset is not.
+      if (r >= 2 * SEGMENT_MIN_LENGTH) for (const [s0, s1] of spans) { choices.push(Math.min(hi, Math.max(lo, Math.ceil((s1 + clearance - begin) * 10) / 10))); choices.push(Math.min(hi, Math.max(lo, Math.floor((s0 - clearance - spec.length - begin) * 10) / 10))); }
       let a: number | undefined;
-      for (const choice of choices) if (sideOk(choice) && (a === undefined || Math.abs(choice - wanted) < Math.abs(a - wanted))) a = choice;
+      for (const choice of choices) if (sideOk(choice) && clear(begin + choice) && (a === undefined || Math.abs(choice - wanted) < Math.abs(a - wanted))) a = choice;
       if (a === undefined) return;
       const at = begin + a + spec.length / 2;
       const distance = Math.abs(at - target);
@@ -299,16 +321,20 @@ export function planInserts(segments: readonly SegmentDef[], specs: readonly Ins
     const road = (length: number): Item => ({ defs: [{ type: 'road', length: round1(length) }], length: round1(length), free: true });
     const replacement: Item[] = [];
     if (pre >= EPS) replacement.push(road(pre));
-    replacement.push({ defs: spec.segments, length: spec.length, free: false, inserted: true });
+    replacement.push({ defs: spec.segments, length: spec.length, free: false, inserted: true, name: spec.name });
     if (post >= EPS) replacement.push(road(post));
     items = [...items.slice(0, best.index), ...replacement, ...items.slice(best.index + 1)];
     placements.push({ name: spec.name, target, at: best.at, distance: best.distance });
   }
   const inserted: number[] = [];
+  const groups: InsertGroup[] = [];
   let count = 0;
   for (const item of items) {
-    if (item.inserted) for (let i = 0; i < item.defs.length; i++) inserted.push(count + i);
+    if (item.inserted) {
+      for (let i = 0; i < item.defs.length; i++) inserted.push(count + i);
+      groups.push({ name: item.name!, first: count, last: count + item.defs.length - 1 });
+    }
     count += item.defs.length;
   }
-  return { segments: items.flatMap((item) => item.defs), placements, inserted };
+  return { segments: items.flatMap((item) => item.defs), placements, inserted, groups };
 }
