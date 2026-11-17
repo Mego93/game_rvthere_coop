@@ -91,10 +91,10 @@ describe('Sketchfab models (step 33)', () => {
     }
   });
 
-  it('every Sketchfab file the manifest names is listed, and the palm is shipped without a key', () => {
+  it('every Sketchfab file in the folder is named by a manifest key', () => {
     const named = new Set(MODEL_KEYS.map((key) => MODEL_MANIFEST[key].file).filter((file) => file.startsWith('sketchfab/')));
     const files = readdirSync(join(PUBLIC, 'models/sketchfab')).filter((name) => name.endsWith('.glb'));
-    expect(files.filter((name) => !named.has(`sketchfab/${name}`))).toEqual(['palm.glb']);
+    expect(files.filter((name) => !named.has(`sketchfab/${name}`))).toEqual([]);
   });
 });
 

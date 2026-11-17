@@ -76,12 +76,6 @@ Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
 File: cone.glb
 Modified: textures resized to at most 256 px and re-encoded; unused data removed.
 
-Low-poly Cali Palm by Alice Ursu
-https://sketchfab.com/3d-models/low-poly-cali-palm-c3014726e47b4977b6097306224fdd94
-Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
-File: palm.glb
-Modified: textures resized to at most 512 px and re-encoded; unused data removed.
-
 Stylised Agave Plant by SunsetScorpion
 https://sketchfab.com/3d-models/stylised-agave-plant-705fed6ebab542f8acf6016c70edea35
 Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
