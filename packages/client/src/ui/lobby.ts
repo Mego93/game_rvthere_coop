@@ -134,12 +134,14 @@ const STYLE = `${CHAT_FORM_STYLE}
 #lobby-dunes-near { background-image: ${DUNES}; background-size: 600px 120px; animation: lobby-drift-near 67s linear infinite; }
 #lobby-vehicle-sil { will-change: transform; position: absolute; left: 0; bottom: 52px; width: 120px; height: 50px; background: ${SILHOUETTE} no-repeat center / contain; opacity: 0.6; animation: lobby-cross 28s linear infinite, lobby-bob 0.9s ease-in-out infinite alternate; }
 #lobby-layout { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "chat"; gap: 16px; justify-content: center; align-content: center; width: 100%; box-sizing: border-box; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-#lobby-panel { grid-area: main; justify-self: center; display: grid; gap: 12px; width: min(440px, 100%); box-sizing: border-box; padding: 24px; background: rgba(255, 255, 255, 0.94); border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15); animation: lobby-rise 0.45s ease-out both; }
-#lobby-chat { grid-area: chat; justify-self: center; display: grid; gap: 10px; width: min(440px, 100%); min-width: 0; box-sizing: border-box; padding: 16px; background: rgba(255, 255, 255, 0.94); border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15); animation: lobby-rise 0.45s ease-out both; }
+#lobby-panel { grid-area: main; justify-self: center; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; width: min(440px, 100%); box-sizing: border-box; padding: 24px; background: rgba(255, 255, 255, 0.94); border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15); animation: lobby-rise 0.45s ease-out both; }
+#lobby-chat { grid-area: chat; justify-self: center; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; width: min(440px, 100%); min-width: 0; box-sizing: border-box; padding: 16px; background: rgba(255, 255, 255, 0.94); border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15); animation: lobby-rise 0.45s ease-out both; }
 #lobby-chat h2 { margin: 0; font-size: 18px; }
+#lobby-chat .chat-form { grid-template-columns: minmax(0, 1fr); }
 #lobby-chat .chat-lines { display: flex; flex-direction: column; height: 220px; padding: 6px 8px; background: #f1f6fa; border-radius: 6px; color: #222; }
 #lobby-chat .chat-line:first-child { margin-top: auto; }
 #lobby-chat .chat-lines:empty::before { content: 'No messages yet'; color: #6b7a86; }
+@media (max-width: 360px) { #lobby-panel { padding: 16px; } }
 @media (min-width: 900px) {
   #lobby-layout { grid-template-columns: minmax(320px, 440px) minmax(320px, 440px); grid-template-areas: "main chat"; align-items: start; gap: 24px; }
   #lobby-panel, #lobby-chat { justify-self: stretch; width: auto; }
@@ -151,18 +153,19 @@ const STYLE = `${CHAT_FORM_STYLE}
 .lobby-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; min-height: 44px; border-radius: 6px; }
 #lobby-link { min-width: 0; overflow-wrap: anywhere; }
 #lobby-players { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
-#lobby-players li { display: flex; gap: 8px; align-items: center; min-height: 44px; padding: 0 8px; border-radius: 6px; background: #f1f6fa; transition: opacity 0.35s; }
+#lobby-players li { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: center; min-height: 44px; padding: 0 8px; border-radius: 6px; background: #f1f6fa; transition: opacity 0.35s; }
 #lobby-players li.away { opacity: 0.5; }
+.lobby-status { white-space: nowrap; }
 .lobby-char { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #4a5a66; font-size: 13px; }
 #lobby-picker { display: grid; gap: 8px; min-width: 0; }
 #lobby-picker[hidden] { display: none; }
 #lobby-picker h2 { margin: 0; font-size: 16px; }
-#lobby-picker-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+#lobby-picker-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
 #lobby-panel .pick-card { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 6px; align-items: center; min-width: 0; padding: 4px 6px; color: #1d2b36; background: #f1f6fa; border: 2px solid #c5d3de; text-align: left; line-height: 1.15; }
 #lobby-panel .pick-card.own { border-color: #2f6f9f; background: #dcecf8; }
 #lobby-panel .pick-card.taken { opacity: 0.6; cursor: default; }
 .pick-text { display: grid; min-width: 0; }
-.pick-name { font-weight: 600; overflow-wrap: anywhere; }
+.pick-name { font-weight: 600; overflow-wrap: break-word; }
 .pick-sub { font-size: 12px; color: #4a5a66; overflow-wrap: anywhere; }
 .pick-group { display: grid; gap: 4px; }
 .pick-group-label { font-size: 13px; color: #4a5a66; }
@@ -204,7 +207,7 @@ const STYLE = `${CHAT_FORM_STYLE}
 #lobby-players li.pulse { animation: lobby-pulse 0.5s ease-out; }
 #lobby-players li.leaving { animation: lobby-leave 0.25s ease-in forwards; pointer-events: none; }
 .lobby-swatch { width: 12px; height: 12px; border-radius: 50%; flex: none; }
-.lobby-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.lobby-name { flex: 1 1 72px; min-width: 0; overflow-wrap: anywhere; }
 .lobby-badge { padding: 2px 8px; border-radius: 999px; color: #fff; background: #c07a14; font-size: 12px; font-weight: 600; text-transform: uppercase; }
 #lobby-players li.is-ready .lobby-status { color: #1f7a3d; font-weight: 600; }
 .lobby-flash { animation: lobby-flash 0.7s ease-out; }
