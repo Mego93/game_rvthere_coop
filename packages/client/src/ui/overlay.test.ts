@@ -1,5 +1,6 @@
 import {
   AXIS_Y,
+  defaultAppearance,
   IDENTITY,
   PLAYER_CROUCH_EYE_HEIGHT,
   PLAYER_EYE_HEIGHT,
@@ -25,8 +26,8 @@ const lobby: LobbyMessage = {
   room: 'camel',
   phase: 'playing',
   players: [
-    { playerId: 'p1', name: 'Amal', colour: '#e4572e', ready: false, connected: true },
-    { playerId: 'p2', name: 'Badr', colour: '#17bebb', ready: false, connected: true },
+    { playerId: 'p1', name: 'Amal', colour: '#e4572e', ready: false, connected: true, appearance: defaultAppearance('sounile') },
+    { playerId: 'p2', name: 'Badr', colour: '#17bebb', ready: false, connected: true, appearance: defaultAppearance('rafael') },
   ],
   adminId: 'p1',
   courseId: 'test',

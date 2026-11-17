@@ -1,4 +1,4 @@
-import type { LobbyMessage, LobbyPlayer } from '@lodgy/shared';
+import { defaultAppearance, type LobbyMessage, type LobbyPlayer } from '@lodgy/shared';
 import { expect, test } from 'vitest';
 import { lobbyView, OSM_ATTRIBUTION, VEHICLE_LABELS } from './lobby';
 
@@ -8,6 +8,7 @@ const player = (playerId: string, name: string, changes: Partial<LobbyPlayer> = 
   colour: '#e4572e',
   ready: false,
   connected: true,
+  appearance: defaultAppearance('sounile'),
   ...changes,
 });
 
