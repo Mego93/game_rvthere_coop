@@ -1,0 +1,60 @@
+# Step 28a: hills and pits (terrain for the living road)
+
+Step 28 is split in four so that each lands, is reviewed and merges alone: 28a hills and pits (this plan, terrain only), 28b animals (goats and scooters that spawn as you approach), 28c random items, 28d parkour sections. This plan fixes names, rules and test cases. Implementers write the tests first. Where the plan and the spec disagree, or neither answers a question, stop and report. All numbers are starting values (feel is the owner's); the step ends at `needs sign-off`.
+
+## Decisions already taken
+
+- The owner asked (2026-11-15) for holes, hills and crazy sections on the real road; the pit "deep enough to need the winch" and "a hill the RV needs the winch for" are from the same message.
+- Hills need no new segment type: a hill is flat road, then `road` with `slope` up, a crest, then `road` with `slope` down (the builder already supports signed slopes and rejects a curved road next to a sloped one, so flat straights separate them from curves).
+- Holes (pits) are a new segment type `pit`, built from the same road pieces as `bank` (a descent, a floor, a climb).
+
+## Rules
+
+R1. **`pit` segment** (`segments.ts`): `{ type: 'pit'; depth: number; gradient: number; floor: number; anchors: number } & Omit<SegmentExtras, 'anchors'>`. The surface is a flat approach of `PIT_APPROACH` (15 m), a descent of `depth / sin(gradient)` metres at `-gradient` degrees, a flat floor of `floor` metres, a climb at `+gradient` degrees, and a flat exit of `PIT_EXIT` (10 m). The road keeps its width and the 25 m shoulders follow the road pieces' height as for `bank`. The surface kinds are `road` for approach, floor and exit, `gravel` for the two ramps. Validation errors as for `bank`: depth positive, gradient between 0 and 90 exclusive, `floor` at least 4 m (the RV's length plus margin), anchors a count. Exit yaw 0, straight.
+R2. **Anchors in a pit**: `anchors` boulders stand on the exit side of the rim (as `bank` places them past the top of the ramp, alternating sides, `BOULDER_*` constants), so a vehicle that cannot climb out can be winched out. A pit with `anchors: 0` is allowed (a pothole the vehicle drives out of).
+R3. **Constants** in `constants.ts`: `PIT_APPROACH` 15, `PIT_EXIT` 10, plus `PIT_ANCHOR_FIRST_ALONG` and `PIT_ANCHOR_PAIR_SPACING` copying the `BOULDER_*` values. No other constants.
+R4. **Vehicle capabilities are measured, not guessed.** Task 1 measures (a script in the scratchpad plus a recorded table in the ROADMAP decision line) for both vehicles: the steepest ramp gradient (5 to 40 degrees, 1-degree steps) each can climb with full throttle from a standing start at the bottom of a 30 m ramp within 20 s; and the same for a pit climb out of a floor. The following numbers then become fixed in the generator:
+   - `HILL_SLOPE` = the largest whole-degree slope both vehicles climb within 20 s, minus 1 (flat-out climbable, felt as a hill); at most 8.
+   - `BIG_HILL_SLOPE` = the smallest whole-degree slope the Lodgy climbs and the RV does not (the RV needs the winch); if none exists in that range, use `HILL_SLOPE + 4` and report it.
+   - `SHALLOW_PIT` = depth 0.6 m, gradient 10, floor 6 m, anchors 0 (both vehicles drive out; a jolt).
+   - `DEEP_PIT` = depth 2.0 m, gradient = the smallest whole-degree gradient neither vehicle climbs from a standstill in 20 s, but at most 30 (under the 30 degree pitch margin the winch rule needs, see ROADMAP "Step 26 needs the owner's play-through"), floor 8 m, anchors 2; the winch pulls out of it (T6).
+R5. **Generator placement** (extends `marrakech.plan.ts`, `marrakech.extras.ts` and `buildMarrakech.ts`; the committed `marrakech.generated.ts` is regenerated and the freshness test follows): on straights of the existing route, never on inserted segments or stop or hazard segments, never the first or last segment, each at least 120 m clear of any stop, hazard or other terrain feature on both sides:
+   - 3 hills (flat 15 m, climb 60 m at `HILL_SLOPE`, flat crest 10 m, descent at `-HILL_SLOPE`, flat 15 m) at about 0.15, 0.55 and 0.80 of the route length;
+   - 1 big hill at about 0.35 of the route length (anchors: 2 boulders at the crest are carried by a `road` segment's anchor list as `bank` does: `road` has no anchors field, so the big hill's top is a flat `road` with `anchors` supported through `SegmentExtras.anchors`, which already exists);
+   - 4 shallow pits at about 0.22, 0.47, 0.66 and 0.90;
+   - 1 deep pit at about 0.30 and one at about 0.75.
+   Where no straight of the needed length exists within 1.3 km of the target, the generator takes the nearest and reports the distance (as the existing inserts do).
+R6. **Fuel and stops are unaffected** (pits and hills lie between stops; a stop segment must not be adjacent to a pit: `DEEP_PIT` and a stop segment are at least 150 m apart). The generator re-runs the stop planner after placing terrain, so the 1.5 km maximum gap still holds; if it cannot hold, report and stop.
+R7. **Minimap, HUD and checkpoints** need no change. Each new segment gets a checkpoint like any other (the spawn is at `SEGMENT_SPAWN_INSET` on the surface); a checkpoint inside a pit is not allowed: the planner keeps the first segment of a pit group (the approach is the `pit` segment's own flat 15 m, so the spawn lands on the approach).
+R8. **Rendering**: pits and hills use the existing road and gravel drawing. The pit's descent and climb ramps use the `gravel` texture; no new art. (A "pit" sign or decor is out of scope.)
+
+## Tests (numbered)
+
+T1. `segments.test.ts` for `pit`: the surface heights at the approach, the floor, the exit match `depth`; the descent is `depth / sin(gradient)` long; the exit is flat and at the entry's height; surfaceAt is continuous; invalid depth, gradient, floor throw; anchors stand on the exit side of the rim and not inside the pit; the shoulders follow the road (as the bank test).
+T2. A solo drive (as `solo.test.ts`) of both vehicles through a `shallow pit` segment: both pass within 2 x length / 6 s + 20 s, nothing flipped.
+T3. A solo drive of the Lodgy and the RV through each hill: Lodgy and RV pass the `HILL_SLOPE` hill; the RV does not pass the `BIG_HILL_SLOPE` hill within the time (stuck), the Lodgy does (the test states what it asserts; if the measured capabilities make `BIG_HILL_SLOPE` passable for both, the test asserts the pass and the plan's rule falls back to `HILL_SLOPE + 4` with a note).
+T4. A solo drive into the `DEEP_PIT`: both vehicles reach the floor, neither climbs out by throttle within 20 s (stuck); neither flips on descent.
+T5. The winch pulls both vehicles out of the `DEEP_PIT` using its anchors (a scripted attach, reel; the Lodgy and the RV; the RV on a 30 degree margin as the ROADMAP says; if the winch cannot, report numbers and stop).
+T6. The capability table of R4 is recorded in a test that re-measures a coarse subset (three gradients per vehicle) so a physics change that alters them fails loudly.
+T7. Generator tests (`marrakech.extras.test.ts` and the freshness test): the course has 3 hills, 1 big hill, 4 shallow and 2 deep pits at their targets within 1.3 km; none inside a forbidden neighbourhood (R5, R6); every segment still builds; the stop gaps stay at most 1.5 km; the built course still has fewer than 9,000 ground boxes; the lazy build stays under 3 s; the number of checkpoints grows by the number of added segments.
+T8. Full per-segment drive (`marrakech.drive.test.ts`): the sample set gains one hill, the big hill, one shallow pit and one deep pit; for the big hill and the deep pit the RV is excluded like the bank (`RV_NEEDS_WINCH` becomes a set of kinds), and the Lodgy passes the big hill and uses the winch for the deep pit in its own test (T5). `MARRAKECH_FULL=1` runs everything.
+T9. The decor and terrain grid still build under budget (`marrakech.perf.test.ts` budgets hold).
+
+## Existing tests that change
+
+- `marrakech.route.test.ts` and `marrakech.extras.test.ts`: segment counts, the inserted index list (`MARRAKECH_INSERTED`) and hazard indexes shift; they must read indexes from the generated data, not constants (fix any that hard-code).
+- `marrakech.drive.test.ts`: `RV_NEEDS_WINCH` per R8 above.
+- `segments.test.ts`: the `SegmentDef` union gains `pit`; any exhaustive switch over `type` (grep `case 'bank'` in shared and client) gains a `pit` case (the client draws it as road).
+- `courses.test.ts` and `defs.test.ts` need nothing unless they list segment types.
+
+## Tasks
+
+1. **Capability measurement and `pit` segment** (R1 to R4, T1, T6, T2 to T4 as feasible): write the measurement first, record the table, then the segment type and its tests. Stop and report the table before Task 2 if `BIG_HILL_SLOPE` or `DEEP_PIT` cannot be found in range.
+2. **Generator placement and the course** (R5 to R7, T7, T8), regenerate `marrakech.generated.ts`, update the existing tests above.
+3. **The winch out of a deep pit** (T5) and the drive samples (T8), the ROADMAP and spec (the spec's segment list gains `pit`; the Course section lists hills and pits; the decision line with the measured table), every check.
+
+Review after each task by a Sonnet reviewer; Opus reviews the plan and the whole branch when the weekly limit resets (Nov 19); the standing owner request is to merge at the end of each step.
+
+## Out of scope
+
+Animals (28b), random items (28c), parkour (28d), pit signs or decor, craters as props, a jump crest for the vehicles (a ramp the vehicle takes air from) which belongs to 28d.
