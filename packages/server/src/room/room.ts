@@ -1,5 +1,8 @@
 import {
   CAMPAIGN,
+  CHAT_BURST,
+  CHAT_HISTORY,
+  CHAT_REFILL_SECONDS,
   HELD_SLOT_TIMEOUT,
   WORLD_REBUILD_COOLDOWN,
   DEFAULT_TIME_OF_DAY,
@@ -17,6 +20,7 @@ import {
   resultsOf,
   type AdminTool,
   type BuiltCourse,
+  type ChatMessage,
   type ErrorReason,
   type InputFields,
   type ItemKind,
@@ -51,6 +55,9 @@ export interface RoomPlayer {
   connectedSince: number;
   // When the connection dropped, or null while connected.
   heldSince: number | null;
+  // The chat token bucket: tokens left (fractional) at room-clock time chatAt; kept across reconnects.
+  chatTokens: number;
+  chatAt: number;
 }
 
 export interface Room {
@@ -73,7 +80,7 @@ export interface Room {
   kick(by: RoomPlayer, playerId: string): ErrorReason | null;
   // Sends the lobby message to every player.
   announce(): void;
-  // After the lobby message to a joiner: sends the last results to a player who joins while they are shown.
+  // After the lobby message to a joiner: sends the last results to a player who joins while they are shown, then the chat history, oldest first.
   catchUp(player: RoomPlayer): void;
   // The lobby and run commands answer the reason they were refused, or null. The checks run in the order not_admin, bad_phase, not_ready.
   setReady(player: RoomPlayer, ready: boolean): ErrorReason | null;
@@ -85,6 +92,8 @@ export interface Room {
   toLobby(by: RoomPlayer): ErrorReason | null;
   // Selects the next campaign course and enters the lobby; refused on the last course or one outside the campaign.
   next(by: RoomPlayer): ErrorReason | null;
+  // Relays a valid chat line to every connected player and keeps it in the history; a player with no token left is ignored silently.
+  chat(player: RoomPlayer, text: string, now: number): void;
   pushInput(player: RoomPlayer, input: PlayerInput): void;
   // Spends the crew's coins on an item at a fuel station's counter; applies at once.
   buy(player: RoomPlayer, item: ItemKind): 'ok' | 'cannot_buy';
@@ -145,6 +154,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   // The first token to join is the creator's.
   let creatorToken: string | null = null;
   let joinedByOthers = false;
+  // The last CHAT_HISTORY chat lines; chatId counts lines from 1 and is never reset.
+  const chatHistory: ChatMessage[] = [];
+  let chatId = 0;
 
   const broadcast = (message: ServerMessage) => {
     const data = JSON.stringify(message);
@@ -291,6 +303,8 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
         connected: true,
         connectedSince: now,
         heldSince: null,
+        chatTokens: CHAT_BURST,
+        chatAt: now,
       };
       nextPlayerNumber += 1;
       creatorToken ??= token;
@@ -348,6 +362,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     announce: broadcastLobby,
     catchUp(player) {
       if (phase === 'results' && lastResults) player.connection.send(JSON.stringify(lastResults));
+      for (const line of chatHistory) player.connection.send(JSON.stringify(line));
     },
     setReady(player, ready) {
       if (phase !== 'lobby') return 'bad_phase';
@@ -431,6 +446,19 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       settings = { ...settings, courseId: campaign[index + 1]! };
       enterLobby();
       return null;
+    },
+    chat(player, text, now) {
+      if (!players.includes(player)) return;
+      // The 1e-6 allowance stops floating-point error leaving the bucket just short of a whole token.
+      player.chatTokens = Math.min(CHAT_BURST, player.chatTokens + Math.max(0, now - player.chatAt) / CHAT_REFILL_SECONDS);
+      player.chatAt = Math.max(player.chatAt, now);
+      if (player.chatTokens < 1 - 1e-6) return;
+      player.chatTokens = Math.max(0, player.chatTokens - 1);
+      chatId += 1;
+      const line: ChatMessage = { type: 'chat', id: chatId, playerId: player.playerId, name: player.name, text, at: Math.floor(now) };
+      chatHistory.push(line);
+      if (chatHistory.length > CHAT_HISTORY) chatHistory.shift();
+      broadcast(line);
     },
     pushInput(player, input) {
       if (phase === 'playing') player.queue.push(input);
