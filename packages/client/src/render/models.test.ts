@@ -141,6 +141,24 @@ describe('desert look', () => {
   });
 });
 
+describe('Sketchfab look', () => {
+  const metal = (name: string, map: THREE.Texture | null, metalnessMap: THREE.Texture | null = null) =>
+    new THREE.MeshStandardMaterial({ name, map, metalnessMap, metalness: 1, color: 0x336699 });
+  const wrap = (material: THREE.Material) => new THREE.Group().add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material));
+
+  it('keeps the file colours (no tint), drops full metal and keeps at most 0.4 where a metal map says where', () => {
+    const plain = metal('Wood_1', null);
+    const mapped = metal('Pot', new THREE.Texture(), new THREE.Texture());
+    prepareModel(wrap(plain), 1, 'sketchfab');
+    prepareModel(wrap(mapped), 1, 'sketchfab');
+    expect(plain.color.getHex()).toBe(0x336699);
+    expect(plain.metalness).toBe(0);
+    expect(mapped.color.getHex()).toBe(0x336699);
+    expect(mapped.metalness).toBeLessThanOrEqual(0.4);
+    expect(mapped.metalness).toBeGreaterThan(0);
+  });
+});
+
 describe('fitted', () => {
   const unit = () => {
     const group = new THREE.Group();
