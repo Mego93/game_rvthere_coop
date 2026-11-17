@@ -337,6 +337,16 @@ export const BOULDER_FIRST_ALONG = 3;
 export const BOULDER_PAIR_SPACING = 2;
 // m in from the road edge where boulders stand.
 export const BOULDER_EDGE_INSET = 1;
+// m of flat road before a pit's descent.
+export const PIT_APPROACH = 15;
+// m of flat road after a pit's climb.
+export const PIT_EXIT = 10;
+// m into the pit's exit flat where the first boulders stand (as a bank's).
+export const PIT_ANCHOR_FIRST_ALONG = BOULDER_FIRST_ALONG;
+// m between each further pair of a pit's boulders.
+export const PIT_ANCHOR_PAIR_SPACING = BOULDER_PAIR_SPACING;
+// degrees, the climb out of the deep pit: the RV cannot climb it, the Lodgy can (no exit up to 33 traps both).
+export const PIT_DEEP_EXIT = 28;
 // m, half the thickness of the water decor.
 export const WATER_HALF_THICKNESS = 0.05;
 // m of gap between the road edge and a stop's parking zone.

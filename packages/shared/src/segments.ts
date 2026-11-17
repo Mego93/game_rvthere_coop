@@ -5,6 +5,10 @@ import {
   ALLEY_WIDTH,
   BANK_APPROACH,
   BANK_TOP,
+  PIT_ANCHOR_FIRST_ALONG,
+  PIT_ANCHOR_PAIR_SPACING,
+  PIT_APPROACH,
+  PIT_EXIT,
   BOULDER_EDGE_INSET,
   BOULDER_FIRST_ALONG,
   BOULDER_PAIR_SPACING,
@@ -77,6 +81,8 @@ export type SegmentDef =
   | ({ type: 'ford'; width: number; rocks: number } & SegmentExtras)
   // A bank's own `anchors` count takes the place of the extras' anchor list.
   | ({ type: 'bank'; height: number; gradient: number; anchors: number } & Omit<SegmentExtras, 'anchors'>)
+  // A pit descends `depth` at `gradient`, runs flat for `floor`, climbs out at `gradientOut` (default `gradient`); its `anchors` count replaces the extras' list.
+  | ({ type: 'pit'; depth: number; gradient: number; gradientOut?: number; floor: number; anchors: number } & Omit<SegmentExtras, 'anchors'>)
   | ({ type: 'roadworks'; length: number; obstacles: number } & SegmentExtras);
 
 export interface SurfacePoint {
@@ -523,6 +529,32 @@ function buildBank(def: Extract<SegmentDef, { type: 'bank' }>): LocalSegment {
   return finish(pieces, { ground: [...roadBoxes(pieces, false), ...shoulderBoxes(pieces, 0)], walls: [], props: [], anchors, decor: [], width: ROAD_WIDTH }, extras, id);
 }
 
+function buildPit(def: Extract<SegmentDef, { type: 'pit' }>): LocalSegment {
+  const gradientOut = def.gradientOut ?? def.gradient;
+  if (!(def.depth > 0)) throw new Error('A pit needs a positive depth');
+  checkCount(def.anchors, 'Pit anchors');
+  for (const g of [def.gradient, gradientOut]) if (!(g > 0 && g < 90)) throw new Error('A pit needs gradients between 0 and 90 degrees');
+  // The RV's length plus margin.
+  if (!(def.floor >= 4)) throw new Error('A pit floor must be at least 4 m');
+  const approach = roadPieces(PIT_APPROACH, 0, 0);
+  const descent = roadPieces(def.depth / Math.sin(degToRad(def.gradient)), 0, -def.gradient, 'gravel', approach[approach.length - 1]);
+  const floor = roadPieces(def.floor, 0, 0, 'road', descent[descent.length - 1]);
+  const climb = roadPieces(def.depth / Math.sin(degToRad(gradientOut)), 0, gradientOut, 'gravel', floor[floor.length - 1]);
+  const exit = roadPieces(PIT_EXIT, 0, 0, 'road', climb[climb.length - 1]);
+  const pieces = [...approach, ...descent, ...floor, ...climb, ...exit];
+  const surfaceAt = surfaceOnPieces(pieces);
+  const exitStart = exit[0]!.alongStart;
+  const id = idCounter();
+  const anchors = Array.from({ length: def.anchors }, (_, i): Placed => {
+    const side = i % 2 === 0 ? -1 : 1;
+    const along = exitStart + PIT_ANCHOR_FIRST_ALONG + PIT_ANCHOR_PAIR_SPACING * Math.floor(i / 2);
+    if (along > exitStart + PIT_EXIT) throw new Error('Too many boulders for the exit of the pit');
+    return { id: id('boulder'), kind: 'boulder', pose: { pos: offsetFrom(surfaceAt(along), side * (ROAD_WIDTH / 2 - BOULDER_EDGE_INSET)), rot: yawQuat(0) } };
+  });
+  const { anchors: _count, ...extras } = def;
+  return finish(pieces, { ground: [...roadBoxes(pieces, false), ...shoulderBoxes(pieces, 0)], walls: [], props: [], anchors, decor: [], width: ROAD_WIDTH }, extras, id);
+}
+
 function buildRoadworks(def: Extract<SegmentDef, { type: 'roadworks' }>): LocalSegment {
   checkLength(def.length, 'A roadworks segment');
   checkCount(def.obstacles, 'Obstacles');
@@ -555,6 +587,8 @@ export function buildSegment(def: SegmentDef): LocalSegment {
       return buildFord(def);
     case 'bank':
       return buildBank(def);
+    case 'pit':
+      return buildPit(def);
     case 'roadworks':
       return buildRoadworks(def);
   }

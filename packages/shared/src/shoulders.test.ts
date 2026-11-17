@@ -22,6 +22,7 @@ const SHOULDERED: [string, SegmentDef][] = [
   ['road with a stop', { type: 'road', length: 60, stop: { kind: 'fuel', side: 1, along: 30 } }],
   ['sand', { type: 'sand', length: 60, palms: 2 }],
   ['bank', { type: 'bank', height: 3, gradient: 15, anchors: 2 }],
+  ['pit', { type: 'pit', depth: 2, gradient: 15, gradientOut: 33, floor: 8, anchors: 2 }],
   ['roadworks', { type: 'roadworks', length: 60, obstacles: 3 }],
 ];
 
@@ -33,7 +34,13 @@ describe('SH2 shoulders', () => {
   test.each(SHOULDERED)('%s: the surface 10 m past the road edge, both sides, equals the road at the same distance along', (_name, def) => {
     const seg = buildSegment(def);
     const lengthAlong = (def as { length?: number }).length ?? 0;
-    const end = def.type === 'bank' ? 15 + 10 + def.height / Math.tan((def.gradient * Math.PI) / 180) : lengthAlong;
+    const run = (depth: number, gradient: number) => depth / Math.tan((gradient * Math.PI) / 180);
+    const end =
+      def.type === 'bank'
+        ? 15 + 10 + run(def.height, def.gradient)
+        : def.type === 'pit'
+          ? 15 + 10 + def.floor + run(def.depth, def.gradient) + run(def.depth, def.gradientOut ?? def.gradient)
+          : lengthAlong;
     for (let along = 0.25; along < end - 1; along += 0.5) {
       const s = seg.surfaceAt(along);
       const centre = groundHeightAt(seg.ground, s.pos.x, s.pos.z);
@@ -71,6 +78,8 @@ describe('SH2 shoulders', () => {
     expect(groundSurfaceAt(bank.ground, OFF, -5)).toBe('gravel');
     const works = buildSegment({ type: 'roadworks', length: 60, obstacles: 3 });
     expect(groundSurfaceAt(works.ground, OFF, -30)).toBe('gravel');
+    const pit = buildSegment({ type: 'pit', depth: 2, gradient: 15, floor: 8, anchors: 0 });
+    expect(groundSurfaceAt(pit.ground, OFF, -5)).toBe('gravel');
   });
 
   test.each([
