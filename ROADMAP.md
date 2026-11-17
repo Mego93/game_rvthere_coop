@@ -57,6 +57,8 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | 33 | Sketchfab art pass: several rotating Moroccan/Arabian figures as Souleyman, models for items and obstacles, sky and sprites | planned | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
 | 34 | Emotes (the 67 gesture, dab and more), the quick phrase "Le mal est fait", a tajine item that speeds the player on foot, random weather that changes during the run | planned | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
 | 35 | UI redesign (home, lobby, HUD, menus, results) | planned | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
+| 36 | Paris course: from Rue Gutenberg (15th arrondissement) to the Eiffel Tower, real route, with an Audi TT as its vehicle (Sketchfab model) | planned (last) | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
+| 37 | Dubai course: from Dubai International Airport to the Burj Khalifa, real route, with a Lamborghini Urus as its vehicle (Sketchfab model) | planned (last) | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
 
 ## Owner feedback 2026-11-15
 
@@ -135,6 +137,7 @@ After the step 31 merge and the in-game screenshots, the owner sent this list (k
 - "The models of items, obstacles etc. are still plain and simple; search on Sketchfab for each. Same for sprites, skybox etc." → step 33.
 - "Add some emotes like 67, dab; add a quick chat text 'le mal est fait'; add tajine as items for speed; random weather." → step 34. Owner's answers: the tajine speeds the player on foot; weather is a 'Random' lobby option that changes during the run.
 - "Better UI (use the front end design skill)." → step 35. The front-end design skill is not installed in the cloud session; the redesign follows its usual principles unless the owner installs it.
+- "I want a Paris course, from Rue Gutenberg to the Eiffel Tower, with an Audi TT as vehicle" and "a Dubai course, from the airport to the Burj Khalifa, with an Urus as vehicle; search the associated models on Sketchfab" → steps 36 and 37, set aside for last. To confirm when they start: which Rue Gutenberg (the 15th arrondissement one is assumed), whether each new vehicle is tied to its course or selectable everywhere, and the city scenery (Haussmann buildings, Dubai towers) also from Sketchfab.
 - Order (owner's answer): the void fix and the terrain first, then the models, then emotes, tajine and weather, then the UI.
 
 ### Order and dependencies
