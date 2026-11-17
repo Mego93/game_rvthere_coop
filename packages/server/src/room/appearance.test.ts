@@ -137,18 +137,50 @@ test('a joiner during playing gets a default appearance in the lobby message', (
   expect(looks(badr)).toEqual([defaultAppearance('sounile'), defaultAppearance('rafael')]);
 });
 
-test('a reconnecting player keeps the look, also after another joiner took a lower free character', () => {
-  const { host, guest, server, advance } = setup();
+test('a reconnecting player keeps the look, and a joiner in between takes another character', () => {
+  const { host, guest, server } = setup();
   const { client, room } = host();
   const badr = guest(room, 2);
   const chosen: Appearance = { characterId: 'alexander', glasses: 'round', top: 'suit', hat: 'cap' };
   choose(badr, chosen);
   badr.close();
+  const carol = guest(room, 3);
+  expect(looks(carol)).toEqual([defaultAppearance('sounile'), chosen, defaultAppearance('rafael')]);
   const again = connectFakeClient(server);
   again.send({ type: 'join', room, name: 'Ignored', token: token(2) });
-  expect(looks(again)).toEqual([defaultAppearance('sounile'), chosen]);
-  expect(looks(client)).toEqual([defaultAppearance('sounile'), chosen]);
-  advance(0.1);
+  const expected = [defaultAppearance('sounile'), chosen, defaultAppearance('rafael')];
+  for (const watcher of [again, client, carol]) expect(looks(watcher)).toEqual(expected);
+});
+
+test('a malformed appearance gets bad_message and changes nothing', () => {
+  const { host } = setup();
+  const { client } = host();
+  client.send({ type: 'appearance', characterId: 'bob', glasses: 'none', top: 'default', hat: 'none' } as never);
+  client.send({ type: 'appearance', characterId: 'luiz' } as never);
+  expect(reasons(client)).toEqual(['bad_message', 'bad_message']);
+  expect(looks(client)).toEqual([defaultAppearance('sounile')]);
+});
+
+test('appearance before joining gets bad_message, like the other lobby commands', () => {
+  const { server } = setup();
+  const client = connectFakeClient(server);
+  choose(client, defaultAppearance('luiz'));
+  expect(reasons(client)).toEqual(['bad_message']);
+});
+
+test('a joiner during results gets a default appearance in the lobby message', () => {
+  const base = getCourse('test');
+  const finishing: BuiltCourse = { ...base, finish: { center: base.checkpoints[0]!.spawn.pos, halfExtents: vec3(20, 20, 20), rot: IDENTITY } };
+  const fake = createFakeDeps(RAPIER);
+  const server = createRoomServer(fake.deps, { campaign: ['test'], courses: { test: finishing } });
+  const client = connectFakeClient(server);
+  client.send({ type: 'create', name: 'Amal', token: token(1) });
+  startRun(client);
+  fake.advance(0.1);
+  const badr = connectFakeClient(server);
+  badr.send({ type: 'join', room: client.last('welcome').room, name: 'Badr', token: token(2) });
+  expect(badr.last('lobby').phase).toBe('results');
+  expect(looks(badr)).toEqual([defaultAppearance('sounile'), defaultAppearance('rafael')]);
 });
 
 test('a kicked player\'s character is free for the next join', () => {

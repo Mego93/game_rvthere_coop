@@ -302,6 +302,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
         playerId: `p${nextPlayerNumber}`,
         name,
         colour: colour ?? PLAYER_COLOURS[0],
+        // room_full guarantees a free character: CHARACTER_IDS.length === MAX_PLAYERS (tested).
         appearance: defaultAppearance(firstFreeCharacter(players.map((other) => other.appearance.characterId)) ?? CHARACTER_IDS[0]),
         token,
         connection,
