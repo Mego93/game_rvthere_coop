@@ -1,4 +1,4 @@
-import { deepFreeze, type CharacterId } from '@lodgy/shared';
+import { deepFreeze, type CharacterId, type SkinChoice } from '@lodgy/shared';
 
 export const HAIR_STYLES = ['bald', 'short', 'wavy', 'swept', 'long'] as const;
 export const FACIAL_STYLES = ['none', 'moustache', 'beard'] as const;
@@ -23,6 +23,9 @@ export interface Look {
   // The character's own glasses; the `default` choice resolves to this.
   glasses: 'none' | 'round';
 }
+
+// `default` is the face colour of the model's texture; the tone is a free choice, independent of the character.
+export const SKIN_TONES: Readonly<Record<SkinChoice, string>> = deepFreeze({ default: '#f6d1a5', tan: '#d9a877', brown: '#a56b43', dark: '#6b4429' });
 
 const DARK_HAIR = '#2a211c';
 const OLIVE = '#6b6f3a';

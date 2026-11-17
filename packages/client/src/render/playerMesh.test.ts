@@ -157,7 +157,7 @@ test('S31: disposing one figure leaves the shared look materials and geometry of
   expect((a.getObjectByName('look-hat') as THREE.Mesh).material).toBe((b.getObjectByName('look-hat') as THREE.Mesh).material);
 });
 
-test('S31: every character with every add-on stays within the mesh cap (8 added, 4 by default)', () => {
+test('S31: every character with every add-on stays within the mesh cap (10 added, 6 by default)', () => {
   const added = (mesh: THREE.Group) => {
     let count = 0;
     mesh.traverse((node) => {
@@ -166,9 +166,9 @@ test('S31: every character with every add-on stays within the mesh cap (8 added,
     return count;
   };
   for (const id of CHARACTER_IDS) {
-    expect(added(createPlayerMesh('A', '#e0a030', defaultAppearance(id)))).toBeLessThanOrEqual(4);
-    expect(added(createPlayerMesh('A', '#e0a030', { characterId: id, glasses: 'round', top: 'suit', hat: 'fez', skin: 'default', eyes: 'default', smile: 'default' }))).toBeLessThanOrEqual(8);
-    expect(added(createPlayerMesh('A', '#e0a030', { characterId: id, glasses: 'round', top: 'default', hat: 'cap', skin: 'default', eyes: 'default', smile: 'default' }))).toBeLessThanOrEqual(8);
+    expect(added(createPlayerMesh('A', '#e0a030', defaultAppearance(id)))).toBeLessThanOrEqual(6);
+    expect(added(createPlayerMesh('A', '#e0a030', { characterId: id, glasses: 'round', top: 'suit', hat: 'fez', skin: 'default', eyes: 'default', smile: 'default' }))).toBeLessThanOrEqual(10);
+    expect(added(createPlayerMesh('A', '#e0a030', { characterId: id, glasses: 'round', top: 'default', hat: 'cap', skin: 'default', eyes: 'default', smile: 'default' }))).toBeLessThanOrEqual(10);
   }
 });
 

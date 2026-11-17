@@ -1,8 +1,8 @@
-import { CHARACTER_IDS, GLASSES_CHOICES, HAT_CHOICES, TOP_CHOICES, defaultAppearance, type Appearance } from '@lodgy/shared';
+import { CHARACTER_IDS, EYES_CHOICES, GLASSES_CHOICES, HAT_CHOICES, SKIN_CHOICES, SMILE_CHOICES, TOP_CHOICES, defaultAppearance, type Appearance } from '@lodgy/shared';
 import * as THREE from 'three';
 import { describe, expect, test, vi } from 'vitest';
-import { CHARACTER_LOOKS } from './characterLooks';
-import { applyLook } from './characterRig';
+import { CHARACTER_LOOKS, SKIN_TONES } from './characterLooks';
+import { BEARD_BOXES, MOUSTACHE_BOX, applyLook } from './characterRig';
 
 const textured = new THREE.MeshStandardMaterial();
 textured.userData.shared = true;
@@ -38,14 +38,15 @@ const built = (appearance: Appearance) => {
 };
 
 describe('applyLook', () => {
-  test('legs take the trousers colour; torso and arms the top; the head keeps its texture', () => {
+  test('legs take the trousers colour; torso and arms the top; the head is a flat skin colour', () => {
     for (const id of CHARACTER_IDS) {
       const model = built(defaultAppearance(id));
       const look = CHARACTER_LOOKS[id];
       expect('#' + colourOf(model, 'leg-left')).toBe(look.trousers);
       expect('#' + colourOf(model, 'leg-right')).toBe(look.trousers);
       for (const name of ['torso', 'arm-left', 'arm-right']) expect('#' + colourOf(model, name)).toBe(look.top);
-      expect((model.getObjectByName('head') as THREE.Mesh).material).toBe(textured);
+      expect('#' + colourOf(model, 'head')).toBe(SKIN_TONES.default);
+      expect((model.getObjectByName('head') as THREE.Mesh).material).not.toBe(textured);
     }
   });
 
@@ -91,6 +92,7 @@ describe('applyLook', () => {
     const cuffs = looks(model).filter((mesh) => mesh.name === 'look-cuff');
     expect(cuffs.map((mesh) => mesh.parent!.name).sort()).toEqual(['arm-left', 'arm-right']);
     for (const cuff of cuffs) expect((cuff.material as THREE.MeshStandardMaterial).color.getHexString()).toBe('f6d1a5');
+    for (const skin of SKIN_CHOICES) for (const cuff of looks(built({ ...defaultAppearance('huu'), skin })).filter((mesh) => mesh.name === 'look-cuff')) expect('#' + (cuff.material as THREE.MeshStandardMaterial).color.getHexString()).toBe(SKIN_TONES[skin]);
     for (const id of CHARACTER_IDS) if (id !== 'huu') expect(names(built(defaultAppearance(id)))).not.toContain('look-cuff');
   });
 
@@ -169,13 +171,17 @@ describe('applyLook', () => {
     expect(() => applyLook(root, { ...defaultAppearance('rafael'), hat: 'fez', skin: 'default', eyes: 'default', smile: 'default' })).not.toThrow();
   });
 
-  test('added meshes are bounded: defaults 4, any combination 8, across all six characters', () => {
+  test('added meshes are bounded: defaults 6, any combination 10, across all six characters', () => {
+    let most = 0;
     for (const id of CHARACTER_IDS) {
-      expect(looks(built(defaultAppearance(id))).length).toBeLessThanOrEqual(4);
-      for (const glasses of GLASSES_CHOICES) for (const top of TOP_CHOICES) for (const hat of HAT_CHOICES) {
-        expect(looks(built({ characterId: id, glasses, top, hat, skin: 'default', eyes: 'default', smile: 'default' })).length).toBeLessThanOrEqual(8);
+      expect(looks(built(defaultAppearance(id))).length).toBeLessThanOrEqual(6);
+      for (const glasses of GLASSES_CHOICES) for (const top of TOP_CHOICES) for (const hat of HAT_CHOICES) for (const [skin, eyes, smile] of [['default', 'default', 'default'], ['dark', 'happy', 'grin']] as const) {
+        const count = looks(built({ characterId: id, glasses, top, hat, skin, eyes, smile })).length;
+        expect(count).toBeLessThanOrEqual(10);
+        most = Math.max(most, count);
       }
     }
+    expect(most).toBeLessThanOrEqual(10);
   });
 
   test('all added meshes use shared geometry and shared materials, and are flat shaded', () => {
@@ -208,5 +214,95 @@ describe('applyLook', () => {
     built({ ...defaultAppearance('alexander'), top: 'suit', hat: 'cap', glasses: 'round' });
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+
+  test('the skin tones are the four from the spec and recolour the head', () => {
+    expect(SKIN_TONES).toEqual({ default: '#f6d1a5', tan: '#d9a877', brown: '#a56b43', dark: '#6b4429' });
+    for (const skin of SKIN_CHOICES) expect('#' + colourOf(built({ ...defaultAppearance('luiz'), skin }), 'head')).toBe(SKIN_TONES[skin]);
+  });
+
+  test('every character gets one merged eyes mesh and one merged mouth mesh on the head, casting no shadow', () => {
+    for (const id of CHARACTER_IDS) {
+      const model = built(defaultAppearance(id));
+      for (const name of ['look-eyes', 'look-mouth']) {
+        expect(names(model).filter((n) => n === name)).toHaveLength(1);
+        const mesh = model.getObjectByName(name) as THREE.Mesh;
+        expect(mesh.parent!.name).toBe('head');
+        expect(mesh.castShadow).toBe(false);
+        expect(mesh.geometry.userData.shared).toBe(true);
+        expect(mesh.geometry.getAttribute('color')).toBeDefined();
+      }
+    }
+  });
+
+  const boundsOf = (model: THREE.Object3D, name: string) => {
+    const geometry = (model.getObjectByName(name) as THREE.Mesh).geometry;
+    geometry.computeBoundingBox();
+    return geometry.boundingBox!;
+  };
+  const hasWhite = (model: THREE.Object3D, name: string) => {
+    const colour = (model.getObjectByName(name) as THREE.Mesh).geometry.getAttribute('color');
+    for (let i = 0; i < colour.count; i++) if (colour.getX(i) > 0.99 && colour.getY(i) > 0.99 && colour.getZ(i) > 0.99) return true;
+    return false;
+  };
+
+  test('eyes and mouth stay on the +Z face of the head, inside its width and height', () => {
+    for (const eyes of EYES_CHOICES) for (const smile of SMILE_CHOICES) {
+      const model = built({ ...defaultAppearance('luiz'), eyes, smile });
+      for (const name of ['look-eyes', 'look-mouth']) {
+        const box = boundsOf(model, name);
+        expect(box.min.x).toBeGreaterThanOrEqual(-4);
+        expect(box.max.x).toBeLessThanOrEqual(4);
+        expect(box.min.y).toBeGreaterThanOrEqual(0);
+        expect(box.max.y).toBeLessThanOrEqual(8);
+        expect(box.min.z).toBeGreaterThanOrEqual(3.9);
+        expect(box.max.z).toBeLessThanOrEqual(4.5);
+      }
+    }
+  });
+
+  test('the four eye styles differ: sleepy sits lower and thinner, wide has a white part, happy is stepped', () => {
+    const eyes = (style: (typeof EYES_CHOICES)[number]) => built({ ...defaultAppearance('luiz'), eyes: style });
+    const base = boundsOf(eyes('default'), 'look-eyes');
+    expect(boundsOf(eyes('sleepy'), 'look-eyes').max.y).toBeLessThan(base.max.y);
+    expect(boundsOf(eyes('sleepy'), 'look-eyes').getSize(new THREE.Vector3()).y).toBeLessThan(base.getSize(new THREE.Vector3()).y);
+    expect(boundsOf(eyes('wide'), 'look-eyes').getSize(new THREE.Vector3()).y).toBeGreaterThan(base.getSize(new THREE.Vector3()).y);
+    expect(hasWhite(eyes('wide'), 'look-eyes')).toBe(true);
+    expect(hasWhite(eyes('default'), 'look-eyes')).toBe(false);
+    const count = (style: (typeof EYES_CHOICES)[number]) => (eyes(style).getObjectByName('look-eyes') as THREE.Mesh).geometry.getAttribute('position').count;
+    expect(count('happy')).toBeGreaterThan(count('default'));
+    for (const style of EYES_CHOICES) expect(boundsOf(eyes(style), 'look-eyes').min.x).toBeLessThan(-1);
+  });
+
+  test('the three smiles differ: grin is wider with a white teeth strip, neutral is flat', () => {
+    const mouth = (style: (typeof SMILE_CHOICES)[number]) => built({ ...defaultAppearance('luiz'), smile: style });
+    const size = (style: (typeof SMILE_CHOICES)[number]) => boundsOf(mouth(style), 'look-mouth').getSize(new THREE.Vector3());
+    expect(size('grin').x).toBeGreaterThan(size('default').x);
+    expect(hasWhite(mouth('grin'), 'look-mouth')).toBe(true);
+    expect(hasWhite(mouth('default'), 'look-mouth')).toBe(false);
+    expect(size('neutral').y).toBeLessThan(size('default').y);
+    const count = (style: (typeof SMILE_CHOICES)[number]) => (mouth(style).getObjectByName('look-mouth') as THREE.Mesh).geometry.getAttribute('position').count;
+    expect(count('default')).toBe(3 * 24);
+  });
+
+  test('the moustache sits above the mouth and the beard below it, for every smile', () => {
+    for (const smile of SMILE_CHOICES) {
+      const mouth = boundsOf(built({ ...defaultAppearance('rafael'), smile }), 'look-mouth');
+      expect(MOUSTACHE_BOX[4] - MOUSTACHE_BOX[1] / 2).toBeGreaterThanOrEqual(mouth.max.y);
+      for (const [, height, , , y] of BEARD_BOXES.filter((box) => box !== MOUSTACHE_BOX)) expect(y + height / 2).toBeLessThanOrEqual(mouth.min.y);
+    }
+  });
+
+  test("rafael's beard is a small chin strip: at most two thirds of the head wide and 2 units tall, narrow sides", () => {
+    const headWidth = 8;
+    const parts = BEARD_BOXES.filter((box) => box !== MOUSTACHE_BOX);
+    expect(parts.length).toBeGreaterThanOrEqual(1);
+    const strip = parts[0]!;
+    const sides = parts.slice(1);
+    expect(strip[0]).toBeLessThanOrEqual((2 / 3) * headWidth);
+    for (const box of parts) expect(box[1]).toBeLessThanOrEqual(2);
+    for (const side of sides) expect(side[0]).toBeLessThan(strip[0] / 4);
+    for (const box of BEARD_BOXES) expect(Math.abs(box[3]) + box[0] / 2).toBeLessThanOrEqual(4.4);
+    expect(MOUSTACHE_BOX[0]).toBe(3.6);
   });
 });
