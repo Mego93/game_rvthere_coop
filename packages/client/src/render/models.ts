@@ -87,9 +87,16 @@ const PACK_TINTS: Record<string, number> = { 'city-commercial': 0xe6c79a, 'city-
 // Models in this pack keep the colours they came with.
 const UNTINTED_PACKS = new Set(['real']);
 
+// Sketchfab models keep their colours but several came fully metallic, which reads black without a matching sky.
+const SKETCHFAB_MAX_MAPPED_METAL = 0.4;
+
 function desert(material: THREE.Material, pack: string | undefined): THREE.Material {
   if (UNTINTED_PACKS.has(pack ?? '')) return material;
   const standard = material as THREE.MeshStandardMaterial;
+  if (pack === 'sketchfab' && standard.isMeshStandardMaterial) {
+    standard.metalness = standard.metalnessMap ? Math.min(standard.metalness, SKETCHFAB_MAX_MAPPED_METAL) : 0;
+    return material;
+  }
   if (!standard.isMeshStandardMaterial || standard.metalnessMap) return material;
   standard.metalness = 0;
   const tint = standard.map ? PACK_TINTS[pack ?? ''] : NATURE_TINTS[standard.name];

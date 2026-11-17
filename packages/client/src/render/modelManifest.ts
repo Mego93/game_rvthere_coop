@@ -1,4 +1,4 @@
-import { PLAYER_HEIGHT } from '@lodgy/shared';
+import { ANIMAL_HALF_GOAT, COIN_RADIUS, ITEM_KINDS, PLAYER_HEIGHT, PROP_KINDS } from '@lodgy/shared';
 
 export type ModelTarget = number | { x: number; y: number; z: number };
 
@@ -8,6 +8,9 @@ export interface ModelEntry {
   targetSize: ModelTarget;
   pack: string;
 }
+
+// The longest side of a collision box in metres; the prop, item and animal code stretches the model to the other sides.
+const longest = (half: { x: number; y: number; z: number }) => 2 * Math.max(half.x, half.y, half.z);
 
 const model = (pack: string, name: string, targetSize: ModelTarget): ModelEntry => ({ file: `${pack}/${name}.glb`, targetSize, pack });
 
@@ -21,23 +24,42 @@ export const MODEL_MANIFEST = {
   // character
   'character.player': model('characters', 'character-c', PLAYER_HEIGHT),
   // prop
-  'prop.crate': model('car-kit', 'box', 0.6),
-  'prop.cart': model('city-roads', 'dumpster', 1.6),
-  'prop.barrier': model('city-roads', 'construction-barrier', 2),
-  'prop.cone': model('city-roads', 'construction-cone', 0.7),
+  'prop.crate': model('sketchfab', 'crate', longest(PROP_KINDS.crate.halfExtents)),
+  'prop.cart': model('sketchfab', 'cart', longest(PROP_KINDS.cart.halfExtents)),
+  'prop.barrier': model('sketchfab', 'barrier', longest(PROP_KINDS.barrier.halfExtents)),
+  'prop.cone': model('sketchfab', 'cone', 0.7),
+  'prop.scooter': model('sketchfab', 'scooter', longest(PROP_KINDS.scooter.halfExtents)),
   'prop.fence': model('city-roads', 'construction-fence', 2),
   'prop.light': model('city-roads', 'construction-light', 1.2),
   // anchor
   'anchor.palm': model('nature', 'tree_palm', 6),
-  'anchor.boulder': model('nature', 'rock_tallA', 2.2),
+  'anchor.boulder': model('sketchfab', 'rocks', 2.2),
   'anchor.milestone': model('nature', 'statue_obelisk', 2),
+  // item (step 34 uses the tajine; its size is a starting value)
+  'item.jerrycan': model('sketchfab', 'jerrycan', longest(ITEM_KINDS.jerrycan.halfExtents)),
+  'item.toolbox': model('sketchfab', 'toolbox', longest(ITEM_KINDS.toolbox.halfExtents)),
+  'item.healthKit': model('sketchfab', 'first-aid', longest(ITEM_KINDS.healthKit.halfExtents)),
+  'item.tajine': model('sketchfab', 'tajine', 0.4),
+  coin: model('sketchfab', 'coin', COIN_RADIUS * 2),
+  // animal
+  'animal.goat': model('sketchfab', 'goat', longest(ANIMAL_HALF_GOAT)),
+  'animal.scooter': model('sketchfab', 'scooter', longest(PROP_KINDS.scooter.halfExtents)),
+  // souleyman
+  'souleyman.headdress': model('sketchfab', 'headdress', 0.74),
   // stop
   'stop.fuel': model('city-commercial', 'low-detail-building-wide-a', 12),
   'stop.garage': model('city-commercial', 'low-detail-building-wide-b', 12),
   'stop.awning': model('city-commercial', 'detail-awning-wide', 5),
   'stop.overhang': model('city-commercial', 'detail-overhang-wide', 5),
   'stop.parasol': model('city-commercial', 'detail-parasol-a', 3),
-  // decor
+  // decor (the longest side in metres; placed in step 33 task 2)
+  'decor.agave': model('sketchfab', 'agave', 1.2),
+  'decor.kasbah': model('sketchfab', 'kasbah', 24),
+  'decor.mosque': model('sketchfab', 'mosque', 30),
+  'decor.stall': model('sketchfab', 'stall', 3.2),
+  'decor.tyres': model('sketchfab', 'tyres', 1),
+  'decor.cliffs': model('sketchfab', 'cliffs', 10),
+  'decor.mountains': model('sketchfab', 'mountains', 30),
   'decor.palm.a': model('nature', 'tree_palm', 7),
   'decor.palm.b': model('nature', 'tree_palmTall', 9),
   'decor.palm.c': model('nature', 'tree_palmBend', 7),

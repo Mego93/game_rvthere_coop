@@ -73,6 +73,31 @@ describe('real vehicles', () => {
   });
 });
 
+describe('Sketchfab models (step 33)', () => {
+  const swapped = { 'prop.crate': 'crate', 'prop.barrier': 'barrier', 'prop.cart': 'cart', 'prop.cone': 'cone', 'anchor.boulder': 'rocks' } as const;
+  const added = {
+    'item.jerrycan': 'jerrycan', 'item.toolbox': 'toolbox', 'item.healthKit': 'first-aid', 'item.tajine': 'tajine', coin: 'coin',
+    'animal.goat': 'goat', 'animal.scooter': 'scooter', 'prop.scooter': 'scooter', 'decor.agave': 'agave', 'decor.kasbah': 'kasbah',
+    'decor.mosque': 'mosque', 'decor.stall': 'stall', 'decor.tyres': 'tyres', 'decor.cliffs': 'cliffs', 'decor.mountains': 'mountains',
+    'souleyman.headdress': 'headdress',
+  } as const;
+
+  it('T1: the swapped keys point into the sketchfab pack and the new keys exist', () => {
+    for (const [key, name] of [...Object.entries(swapped), ...Object.entries(added)]) {
+      const entry = MODEL_MANIFEST[key as keyof typeof MODEL_MANIFEST];
+      expect(entry, key).toBeDefined();
+      expect(entry.file, key).toBe(`sketchfab/${name}.glb`);
+      expect(entry.pack, key).toBe('sketchfab');
+    }
+  });
+
+  it('every Sketchfab file the manifest names is listed, and the palm is shipped without a key', () => {
+    const named = new Set(MODEL_KEYS.map((key) => MODEL_MANIFEST[key].file).filter((file) => file.startsWith('sketchfab/')));
+    const files = readdirSync(join(PUBLIC, 'models/sketchfab')).filter((name) => name.endsWith('.glb'));
+    expect(files.filter((name) => !named.has(`sketchfab/${name}`))).toEqual(['palm.glb']);
+  });
+});
+
 describe('model triangle budgets', () => {
   const triangles = (file: string): number => {
     const bytes = readFileSync(join(PUBLIC, 'models', file));
@@ -87,9 +112,10 @@ describe('model triangle budgets', () => {
     return total;
   };
 
-  it('A5: palms stay at most 1000 triangles, everything else at most 2500, the real vehicles at most 20000', () => {
+  it('A5: palms stay at most 1000 triangles, everything else at most 2500, the Sketchfab models at most 6500 (the mosque has 6110), the real vehicles at most 20000', () => {
     for (const key of MODEL_KEYS) {
-      const limit = MODEL_MANIFEST[key].pack === 'real' ? 20_000 : key.includes('palm') ? 1000 : 2500;
+      const pack = MODEL_MANIFEST[key].pack;
+      const limit = pack === 'real' ? 20_000 : pack === 'sketchfab' ? 6500 : key.includes('palm') ? 1000 : 2500;
       expect(triangles(MODEL_MANIFEST[key].file), key).toBeLessThanOrEqual(limit);
     }
   });

@@ -4,7 +4,10 @@ import { fitted, hasModel, instantiate, shadowed } from './models';
 
 const COLOURS: Record<PropKind, number> = { crate: 0xb5833f, barrier: 0xc0392b, cart: 0x8b5a2b, scooter: 0x8e1b1b };
 const UNKNOWN_HALF = 0.25;
-const MODEL_KEYS: Partial<Record<PropKind, string>> = { crate: 'prop.crate', cart: 'prop.cart', barrier: 'prop.barrier' };
+export const PROP_MODEL_KEYS: Record<PropKind, string> = { crate: 'prop.crate', cart: 'prop.cart', barrier: 'prop.barrier', scooter: 'prop.scooter' };
+export const ITEM_MODEL_KEYS: Record<ItemKind, string> = { jerrycan: 'item.jerrycan', toolbox: 'item.toolbox', healthKit: 'item.healthKit' };
+// Turns that bring each file's long side onto the hit box's long side (x for the barrier, z for the cart) and the scooter's front to -z.
+const PROP_YAW: Record<PropKind, number> = { crate: 0, barrier: 0, cart: Math.PI / 2, scooter: Math.PI };
 
 const material = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) =>
   new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 1, metalness: 0, ...extra });
@@ -60,24 +63,33 @@ function healthKit(h: { x: number; y: number; z: number }): THREE.Group {
   return group;
 }
 
-function itemMesh(kind: ItemKind): THREE.Group {
+// A model stretched to a collision box and centred on the body's origin.
+export function fitToHalf(model: THREE.Object3D, h: { x: number; y: number; z: number }, yaw: number): THREE.Group {
+  const fit = fitted(model, { x: h.x * 2, y: h.y * 2, z: h.z * 2 }, yaw);
+  fit.position.y = -h.y;
+  const root = new THREE.Group();
+  root.add(fit);
+  return shadowed(root);
+}
+
+export const fitPropModel = (model: THREE.Object3D, kind: PropKind): THREE.Group => fitToHalf(model, PROP_KINDS[kind].halfExtents, PROP_YAW[kind]);
+export const fitItemModel = (model: THREE.Object3D, kind: ItemKind): THREE.Group => fitToHalf(model, ITEM_KINDS[kind].halfExtents, 0);
+
+function loadedModel(key: string): THREE.Group | null {
+  return hasModel(key) ? instantiate(key) : null;
+}
+
+function itemMesh(kind: ItemKind): THREE.Object3D {
+  const model = loadedModel(ITEM_MODEL_KEYS[kind]);
+  if (model) return fitItemModel(model, kind);
   const h = ITEM_KINDS[kind].halfExtents;
   return kind === 'jerrycan' ? jerrycan(h) : kind === 'toolbox' ? toolbox(h) : healthKit(h);
 }
 
 // A model of the prop's kind stretched to its collision box and centred on the body's origin, or null when it did not load.
 function propModel(kind: PropKind): THREE.Group | null {
-  const key = MODEL_KEYS[kind];
-  if (!key || !hasModel(key)) return null;
-  const model = instantiate(key);
-  if (!model) return null;
-  const h = PROP_KINDS[kind].halfExtents;
-  // The barrier's long side is z in the file and x in the collision box.
-  const fit = fitted(model, { x: h.x * 2, y: h.y * 2, z: h.z * 2 }, kind === 'barrier' ? Math.PI / 2 : 0);
-  fit.position.y = -h.y;
-  const root = new THREE.Group();
-  root.add(fit);
-  return shadowed(root);
+  const model = loadedModel(PROP_MODEL_KEYS[kind]);
+  return model ? fitPropModel(model, kind) : null;
 }
 
 // A prop or item drawn as its model or a box of its kind's size; a kind this client does not know is a grey 0.5 m cube.
