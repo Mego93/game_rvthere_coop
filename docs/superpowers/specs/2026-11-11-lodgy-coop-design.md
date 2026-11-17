@@ -279,7 +279,9 @@ Surface types affect tyre grip and rolling resistance: road, sand, riverbed, gra
 
 | Course | Route | Spec |
 |---|---|---|
-| 1 | From the start point west to Marrakech airport: rural track, palm grove, an oued, the city's edge, the airport road. Flat terrain. About 10 minutes. | 1 |
+| 1 | From the start point west to Marrakech airport: rural track, palm grove, an oued, the city's edge, the airport road. Flat terrain. About 10 minutes. |
+
+The campaign's course is now `marrakech` (step 27): the real driving route from the villa to Marrakech airport, about 21.4 km as built (224 segments, generated from the route stored as local metres in `marrakech.route.ts`; route data from OpenStreetMap contributors, ODbL, credited in `CREDITS.md` and the lobby). Sand, an alley, two roadworks, a ford and a bank are inserted on straights; the step 25 hazards sit on five segments; 19 fuel stops (gaps up to 1.29 km) and 5 garages. The target time is 30 minutes. `airport` (2.6 km) stays as a short practice course. The minimap shows a 600 m window around the player on routes over 3 km. 1 |
 | 2 | To the Ourika valley | 2 |
 | 3 | Into the Atlas | 2 |
 
