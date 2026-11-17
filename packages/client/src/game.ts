@@ -43,8 +43,9 @@ import { createPlayerMesh, disposePlayerMesh, LABEL_RANGE, placePlayerMesh, play
 import { createCoinMeshes } from './render/coinMesh';
 import { createAnimalMeshes } from './render/animalMeshes';
 import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMesh';
-import { applyConditions, conditionsLook, configureRenderer, toneMappedColour, weatherBlend, type Look } from './render/conditions';
-import { applySky, hasSky } from './render/environment';
+import { applyConditions, conditionsLook, configureRenderer, toneMappedColour, type Look } from './render/conditions';
+import { createWeatherTracker } from './render/weatherTracker';
+import { applySky, hasSky, prewarmEnvironment } from './render/environment';
 import { createDecorRenderer } from './render/decorRenderer';
 import { scatterDecor, seedFromId } from './render/decorScatter';
 import { createScene } from './render/scene';
@@ -137,6 +138,8 @@ export interface GameView {
   onChat: () => void;
   // B was pressed in a state where the wheel may open; the page opens it.
   onEmoteWheel: () => void;
+  // The wheel must close: the local player was seated, downed or removed.
+  onEmoteWheelClose: () => void;
 }
 
 const stanceFields = (stance: PlayerSnapshot['stance']): Pick<PlayerSnapshot, 'stance'> | Record<string, never> => (stance === undefined ? {} : { stance });
@@ -170,18 +173,18 @@ export function createGame(
     return found;
   };
   const look = lookFor(startWeather);
-  let weather: Weather = startWeather;
-  // The clock second the current weather became the target; -Infinity is settled.
-  let weatherSince = Number.NEGATIVE_INFINITY;
-  // The weather whose sky and image light are applied; they switch at the blend's midpoint.
-  let skyWeather: Weather = startWeather;
-  let weatherSeen = false;
+  const weatherTracker = createWeatherTracker(startWeather);
   const isTouch = view.touchUi !== null;
   // Software GL cannot afford shadows or image-based light.
   const shadows = !isTouch && !view.softwareGl;
   const imageLight = hasSky(firstLobby.timeOfDay, startWeather) && !view.softwareGl;
   const conditions = applyConditions(scene, look, isTouch, vehicleConfig.halfExtents, imageLight, shadows);
   applySky(renderer, scene, look, firstLobby.timeOfDay, imageLight, startWeather);
+  // A random room will meet the overcast sky later; build its light now rather than mid-run.
+  if (firstLobby.weather === 'random' && imageLight) {
+    prewarmEnvironment(renderer, firstLobby.timeOfDay, 'clear');
+    prewarmEnvironment(renderer, firstLobby.timeOfDay, 'rain');
+  }
   configureRenderer(renderer, look, shadows);
   const vehicleMesh = createVehicleMesh(vehicleConfig, view.softwareGl);
   vehicleMesh.visible = false;
@@ -335,7 +338,7 @@ export function createGame(
   };
   const requestEmote = () => {
     const entry = latestLocal;
-    if (emoteWheelAllowed({ phase: lobby.phase, seated: entry === null || entry.seat !== null, downed: entry === null || entry.downed !== null, open: anyOpen() })) view.onEmoteWheel();
+    if (emoteWheelAllowed({ phase: lobby.phase, seated: entry === null || entry.seat !== null, downed: entry === null || entry.downed !== null, carrying: entry !== null && entry.hands !== null, open: anyOpen() })) view.onEmoteWheel();
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.code === 'F3') {
@@ -548,6 +551,7 @@ export function createGame(
       stops: course.stops,
       targetTime: course.targetTime,
       touch: view.touchUi !== null,
+      weather: weatherTracker.weather(),
       ...(local && onFoot ? { eye: eyeHeight } : {}),
     };
     overlay.textContent = overlayText(overlayData);
@@ -574,15 +578,14 @@ export function createGame(
     } else audio.setLoop('engine', false);
     if (vehicle && winchOn(latestCable, lobby.phase)) audio.setLoop('winch', true, { at: add(vehicle.pos, rotate(vehicle.rot, vehicleConfig.winchMount)) });
     else audio.setLoop('winch', false);
-    audio.setLoop('rain', rainOn(weather), { volume: 0.3 });
+    audio.setLoop('rain', rainOn(weatherTracker.weather()), { volume: 0.3 });
     decor.update(camera.position, now / 1000);
-    const blend = weatherBlend(now / 1000 - weatherSince);
-    const shownLook = conditions.setLook(lookFor(weather), blend);
+    const shownLook = conditions.setLook(lookFor(weatherTracker.weather()), weatherTracker.blend(now / 1000));
     renderer.toneMappingExposure = shownLook.exposure;
-    if (skyWeather !== weather && blend >= 0.5) {
-      skyWeather = weather;
-      const lighting = hasSky(firstLobby.timeOfDay, weather) && !view.softwareGl;
-      if (!applySky(renderer, scene, shownLook, firstLobby.timeOfDay, lighting, weather)) scene.background = toneMappedColour(shownLook.sky, shownLook.exposure);
+    const newSky = weatherTracker.takeSky(now / 1000);
+    if (newSky) {
+      const lighting = hasSky(firstLobby.timeOfDay, newSky) && !view.softwareGl;
+      if (!applySky(renderer, scene, shownLook, firstLobby.timeOfDay, lighting, newSky)) scene.background = toneMappedColour(shownLook.sky, shownLook.exposure);
     }
     conditions.update(camera.position, frameSeconds, local && onFoot ? local.pos : vehicle ? vehicle.pos : camera.position);
     conditions.setLights(vehicle, players);
@@ -614,17 +617,13 @@ export function createGame(
       const won = buffer.latestStatus()?.won ?? false;
       if (wasWon === false && won) audio.play('win');
       wasWon = won;
-      if (snapshot.weather !== undefined && snapshot.weather !== weather) {
-        weather = snapshot.weather;
-        // The first weather the server names replaces the clear start at once; later ones blend.
-        weatherSince = weatherSeen ? performance.now() / 1000 : Number.NEGATIVE_INFINITY;
-      }
-      if (snapshot.weather !== undefined) weatherSeen = true;
+      weatherTracker.push(snapshot.weather, performance.now() / 1000);
       predictor.setVehicle(snapshot.vehicle.pos, snapshot.vehicle.rot);
       const held = new Set(snapshot.players.flatMap((player) => (player.hands === null || player.hands === 'hook' ? [] : [player.hands])));
       predictor.setProps(buffer.latestProps().filter((prop) => !held.has(prop.id)));
       const entry = snapshot.players.find((player) => player.playerId === playerId);
       latestLocal = entry ?? null;
+      if (emoteOpen && (!entry || entry.seat !== null || entry.downed !== null)) view.onEmoteWheelClose();
       refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, false);
       if (entry && predictionActive(entry)) reconciler.correct(predictedFrom(entry), snapshot.ackSeq);
       else reconciler.suspend();

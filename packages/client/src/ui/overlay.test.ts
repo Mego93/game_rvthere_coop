@@ -468,3 +468,14 @@ test('B6: a crouched player aims from the lower eye when the prompt is resolved'
   const crouched = { ...standing, stance: 'crouch' as const };
   expect(interactAction(rv, vehicle, crouched, [crouched], 0, 0, props, stowed, [])).toEqual({ kind: 'pickUpItem', itemId: 'low' });
 });
+
+test('W6: the weather line shows the weather in force, and marks a random room', () => {
+  const line = (weather: 'clear' | 'rain' | 'random', now?: 'rain' | 'sandstorm') =>
+    overlayText({ lobby: { ...lobby, weather }, config: rv, tick: 3, fps: 60, vehicle: null, players: [], localId: 'p1', predicted: null, server: null, ...noAim, ...(now ? { weather: now } : {}) })
+      .split('\n')
+      .find((text) => text.startsWith('weather'));
+  expect(line('rain')).toBe('weather  midday rain');
+  expect(line('random', 'sandstorm')).toBe('weather  midday sandstorm (random)');
+  expect(line('clear', 'rain')).toBe('weather  midday rain');
+});
+

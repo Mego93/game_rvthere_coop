@@ -21,6 +21,7 @@ import {
   type VehicleConfig,
   type Vec3,
   type VehicleState,
+  type Weather,
 } from '@lodgy/shared';
 import type { RunStatus } from '../net/snapshotBuffer';
 import { buildUseContext } from './useContext';
@@ -64,6 +65,8 @@ export interface OverlayData {
   targetTime: number;
   // True on a touch device, which changes the control line.
   touch?: boolean;
+  // The weather in force now; with a random room it differs from the lobby's setting.
+  weather?: Weather;
   // The local camera eye height above the feet, shown in the debug overlay.
   eye?: number;
 }
@@ -168,7 +171,7 @@ export function useHint({ lobby, config, vehicle, players, localId, aim }: Overl
 }
 
 // The debug text shown until the real HUD exists.
-export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses, cable, anchors, status, stops, targetTime, touch, eye }: OverlayData): string {
+export function overlayText({ lobby, config, tick, fps, vehicle, players, localId, predicted, server, aim, propPoses, cable, anchors, status, stops, targetTime, touch, eye, weather }: OverlayData): string {
   const names = lobby.players.map((player) => {
     const snapshot = players.find((candidate) => candidate.playerId === player.playerId);
     return snapshot ? `${player.name} (${snapshot.seat ?? 'on foot'})` : player.name;
@@ -177,7 +180,7 @@ export function overlayText({ lobby, config, tick, fps, vehicle, players, localI
     `room     ${lobby.room}   vehicle ${lobby.vehicleId}   course ${lobby.courseId}`,
     `players  ${names.join(', ')}`,
     `tick     ${tick}   fps ${Math.round(fps)}`,
-    `weather  ${lobby.timeOfDay} ${lobby.weather}`,
+    `weather  ${lobby.timeOfDay} ${weather ?? lobby.weather}${weather !== undefined && lobby.weather === 'random' ? ' (random)' : ''}`,
   ];
   if (status) {
     lines.push(`time     ${clock(status.elapsed)}   cp ${status.checkpoint + 1}/${status.checkpointCount}   restarts ${status.restarts}   respawns ${status.respawns}`);

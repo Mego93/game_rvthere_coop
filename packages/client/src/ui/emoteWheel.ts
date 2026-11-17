@@ -6,12 +6,14 @@ export interface WheelState {
   phase: Phase;
   seated: boolean;
   downed: boolean;
+  // Holding a prop, the hook or an item in hand, which the server refuses.
+  carrying: boolean;
   // Any menu, panel or the wheel itself is open.
   open: boolean;
 }
 
-// The wheel opens only in a run, on foot and upright, with nothing else open.
-export const emoteWheelAllowed = (state: WheelState): boolean => state.phase === 'playing' && !state.seated && !state.downed && !state.open;
+// The wheel opens only in a run, on foot, upright and empty-handed, with nothing else open.
+export const emoteWheelAllowed = (state: WheelState): boolean => state.phase === 'playing' && !state.seated && !state.downed && !state.carrying && !state.open;
 
 type KeyFacts = { code: string; repeat: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean };
 
@@ -32,10 +34,10 @@ const STYLE = `
 #emote-ring button small { display: block; font-weight: 400; font-size: 11px; opacity: 0.7; }
 #emote-ring button:hover, #emote-ring button:focus-visible { background: #cfe3f1; outline: 2px solid #2f6f9f; }
 #emote-ring button[data-emote="sixSeven"] { left: 50%; top: 20%; }
-#emote-ring button[data-emote="dab"] { left: 83%; top: 50%; }
+#emote-ring button[data-emote="dab"] { left: 80%; top: 50%; }
 #emote-ring button[data-emote="wave"] { left: 50%; top: 80%; }
-#emote-ring button[data-emote="dance"] { left: 17%; top: 50%; }
-#emote-close { position: absolute; left: 50%; top: 50%; width: 64px; min-height: 44px; margin: -22px 0 0 -32px; padding: 4px; font: inherit; font-weight: 400; color: #1d3b52; background: transparent; border: 1px solid #b9cddc; border-radius: 22px; cursor: pointer; }
+#emote-ring button[data-emote="dance"] { left: 20%; top: 50%; }
+#emote-ring #emote-close { position: absolute; left: 50%; top: 50%; width: 64px; min-height: 44px; margin: -22px 0 0 -32px; padding: 4px; font: inherit; font-weight: 400; color: #1d3b52; background: transparent; border: 1px solid #b9cddc; border-radius: 22px; cursor: pointer; }
 `;
 
 export interface EmoteWheelHandlers {

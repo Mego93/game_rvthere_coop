@@ -102,30 +102,34 @@ function lightingCopy(sky: THREE.DataTexture): THREE.DataTexture {
 
 interface Prefiltered {
   generator: THREE.PMREMGenerator;
-  time: SkyId | null;
-  target: THREE.WebGLRenderTarget | null;
+  targets: Map<SkyId, THREE.WebGLRenderTarget>;
 }
 
 const prefiltered = new WeakMap<THREE.WebGLRenderer, Prefiltered>();
 
-// One generator per renderer; only the current time of day's prefiltered map is kept.
+// One generator per renderer; each sky is prefiltered once and kept, so a weather change that returns to a sky costs nothing.
 function environmentMap(renderer: THREE.WebGLRenderer, time: SkyId): THREE.Texture | null {
   const sky = skies.get(time);
   if (!sky) return null;
   let entry = prefiltered.get(renderer);
   if (!entry) {
-    entry = { generator: new THREE.PMREMGenerator(renderer), time: null, target: null };
+    entry = { generator: new THREE.PMREMGenerator(renderer), targets: new Map() };
     prefiltered.set(renderer, entry);
   }
-  if (entry.time !== time || !entry.target) {
-    entry.target?.dispose();
+  let target = entry.targets.get(time);
+  if (!target) {
     const source = lightingCopy(sky);
-    entry.target = entry.generator.fromEquirectangular(source);
+    target = entry.generator.fromEquirectangular(source);
     source.dispose();
-    entry.target.texture.userData.shared = true;
-    entry.time = time;
+    target.texture.userData.shared = true;
+    entry.targets.set(time, target);
   }
-  return entry.target.texture;
+  return target.texture;
+}
+
+// Builds the image light of the sky a weather will need, ahead of its first use (a random room's overcast sky), so the change does not stall a frame.
+export function prewarmEnvironment(renderer: THREE.WebGLRenderer, timeOfDay: TimeOfDay, weather: Weather): void {
+  environmentMap(renderer, skyFor(timeOfDay, weather));
 }
 
 // Sets the sky as background and, unless `lighting` is off, as image-based light; false when the file is missing and the flat sky colour stays.

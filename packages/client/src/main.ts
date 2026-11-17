@@ -162,7 +162,7 @@ const menuPanelOpen = () => helpPanel.isOpen() || tutorial.isOpen();
 // Shown on its own the first time the lobby appears on this page load, unless it was finished or skipped before.
 let tutorialOffered = false;
 window.addEventListener('keydown', (event) => {
-  if (!tutorial.isOpen() && isHelpKey(event, event.target instanceof Element ? event.target.tagName : null)) helpPanel.toggle();
+  if (!tutorial.isOpen() && !emoteWheel.isOpen() && isHelpKey(event, event.target instanceof Element ? event.target.tagName : null)) helpPanel.toggle();
 });
 
 const home = createHome(document.querySelector<HTMLElement>('#home')!, {
@@ -398,7 +398,7 @@ function startGame(lobby: LobbyMessage) {
       ? createTouchSource({ surface: canvas, win: window, doc: document, width: () => window.innerWidth, controls })
       : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document, pointerGate));
   touchUi?.setVisible(true);
-  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, firstPerson, onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen(), chatOpen: chatPanel.isOpen(), emoteOpen: emoteWheel.isOpen(), onChat: () => chatPanel.open(), onEmoteWheel: () => emoteWheel.open() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, firstPerson, onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen(), chatOpen: chatPanel.isOpen(), emoteOpen: emoteWheel.isOpen(), onChat: () => chatPanel.open(), onEmoteWheel: () => emoteWheel.open(), onEmoteWheelClose: () => emoteWheel.close() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
 }
 
 const clock = () => performance.now() / 1000;

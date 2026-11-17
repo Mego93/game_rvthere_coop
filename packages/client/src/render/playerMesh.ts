@@ -39,21 +39,24 @@ const IDLE_SPEED = 0.3;
 const WALK_SPEED_FOR_CLIP = 1.6;
 const SPEED_SMOOTHING = 10;
 
-// An emote's start on the caller's clock, where the player stood, and the rest rotation of the nodes no clip drives.
+// Per driven node: `base` is the last rotation the clip (or the rest pose) gave it, `out` the last one the emote wrote.
+interface NodeOverlay {
+  base: THREE.Quaternion;
+  out: THREE.Quaternion;
+}
+// An emote's start on the caller's clock, where the player stood, and its driven nodes.
 interface EmoteRun {
   emote: Emote;
   start: number;
   x: number;
   z: number;
-  rest: Map<PoseNode, THREE.Quaternion>;
+  overlays: Map<PoseNode, NodeOverlay>;
 }
 const POSE_NODES: readonly PoseNode[] = ['torso', 'arm-left', 'arm-right', 'head'];
 const EMOTE_CANCEL_DISTANCE = 1;
 
 interface Animation {
   nodes: Partial<Record<PoseNode, THREE.Object3D>>;
-  // Nodes a clip rotates: the mixer rewrites them every frame, so an emote needs no restore.
-  clipped: Set<string>;
   emote: EmoteRun | null;
   mixer: THREE.AnimationMixer;
   idle: THREE.AnimationAction;
@@ -116,9 +119,7 @@ function createCharacter(colour: string, appearance?: Appearance): THREE.Group |
   walk.setEffectiveWeight(0);
   const nodes: Animation['nodes'] = {};
   for (const name of POSE_NODES) nodes[name] = model.getObjectByName(name) ?? undefined;
-  const clipped = new Set<string>();
-  for (const clip of [idleClip, walkClip]) for (const track of clip.tracks) if (/\.(quaternion|rotation)/.test(track.name)) clipped.add(track.name.split('.')[0]!);
-  animations.set(group, { nodes, clipped, emote: null, mixer, idle, walk, x: 0, z: 0, speed: 0, fresh: true });
+  animations.set(group, { nodes, emote: null, mixer, idle, walk, x: 0, z: 0, speed: 0, fresh: true });
   return group;
 }
 
@@ -158,9 +159,19 @@ export function createPlayerMesh(name: string, colour: string, appearance?: Appe
 const scratchEuler = new THREE.Euler();
 const scratchQuat = new THREE.Quaternion();
 
+// A node the node's own value differs from `out` was rewritten by the mixer: that is the new base.
+function syncBase(overlay: NodeOverlay, node: THREE.Object3D): void {
+  if (!node.quaternion.equals(overlay.out)) overlay.base.copy(node.quaternion);
+}
+
 function endEmote(animation: Animation): void {
   if (!animation.emote) return;
-  for (const [name, rest] of animation.emote.rest) animation.nodes[name]?.quaternion.copy(rest);
+  for (const [name, overlay] of animation.emote.overlays) {
+    const node = animation.nodes[name];
+    if (!node) continue;
+    syncBase(overlay, node);
+    node.quaternion.copy(overlay.base);
+  }
   animation.emote = null;
 }
 
@@ -169,12 +180,12 @@ export function playEmote(mesh: THREE.Group, emote: Emote, now: number): void {
   const animation = animations.get(mesh);
   if (!animation) return;
   endEmote(animation);
-  const rest = new Map<PoseNode, THREE.Quaternion>();
+  const overlays = new Map<PoseNode, NodeOverlay>();
   for (const name of EMOTE_NODES[emote]) {
     const node = animation.nodes[name];
-    if (node && !animation.clipped.has(name)) rest.set(name, node.quaternion.clone());
+    if (node) overlays.set(name, { base: node.quaternion.clone(), out: node.quaternion.clone() });
   }
-  animation.emote = { emote, start: now, x: animation.x, z: animation.z, rest };
+  animation.emote = { emote, start: now, x: animation.x, z: animation.z, overlays };
 }
 
 function applyEmote(animation: Animation, player: PlayerSnapshot, now: number): void {
@@ -188,13 +199,12 @@ function applyEmote(animation: Animation, player: PlayerSnapshot, now: number): 
   }
   const weight = emoteWeight(t);
   const pose = emotePose(run.emote, t);
-  for (const name of EMOTE_NODES[run.emote]) {
-    const node = animation.nodes[name];
-    if (!node) continue;
-    const rest = run.rest.get(name);
-    if (rest) node.quaternion.copy(rest);
+  for (const [name, overlay] of run.overlays) {
+    const node = animation.nodes[name]!;
+    syncBase(overlay, node);
     const { x, y, z } = pose[name];
-    node.quaternion.slerp(scratchQuat.setFromEuler(scratchEuler.set(x, y, z)), weight);
+    node.quaternion.copy(overlay.base).slerp(scratchQuat.setFromEuler(scratchEuler.set(x, y, z)), weight);
+    overlay.out.copy(node.quaternion);
   }
 }
 
