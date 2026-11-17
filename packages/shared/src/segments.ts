@@ -279,6 +279,23 @@ export function hazardSpan(h: Hazard): [start: number, end: number] {
   return [h.along - barrierZ, h.along + (h.count - 1) * GATES_SPACING + barrierZ];
 }
 
+// Where a segment blocks or slows the road on purpose, as spans along its route in m; the corridor raises a berm beside each.
+export function obstacleSpans(def: SegmentDef, routeLength: number): [from: number, to: number][] {
+  switch (def.type) {
+    case 'road':
+      return (def.hazards ?? []).map(hazardSpan);
+    case 'pit':
+      return def.depth >= 1 ? [[0, routeLength]] : [];
+    case 'alley':
+    case 'ford':
+    case 'bank':
+    case 'roadworks':
+      return [[0, routeLength]];
+    case 'sand':
+      return [];
+  }
+}
+
 function checkHazards(def: Extract<SegmentDef, { type: 'road' }>, routeLength: number, debrisAlong: number[]): Hazard[] {
   const hazards = def.hazards ?? [];
   if (hazards.length === 0) return hazards;

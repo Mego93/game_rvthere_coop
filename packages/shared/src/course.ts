@@ -52,4 +52,6 @@ export interface BuiltCourse {
   targetTime: number;
   // Along-route spans (m) with no ambient animals, sorted and disjoint; only on courses that opt in.
   ambient?: { blocked: { from: number; to: number }[] };
+  // Present on courses that opt in to the solid land beside the road: the along-route spans (m) of the obstacles that get a berm, sorted and disjoint.
+  corridor?: { obstacles: { from: number; to: number }[] };
 }

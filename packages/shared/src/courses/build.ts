@@ -2,7 +2,7 @@ import { AMBIENT_ENDS, AMBIENT_MARGIN, CHECKPOINT_TRIGGER, FINISH_PAD, FINISH_TR
 import type { Box, BuiltCourse, Checkpoint, GroundBox, Placed } from '../course';
 import { add, deepFreeze, quatMul, rotate, vec3, type Pose, type Vec3 } from '../math';
 import { createRouteIndex } from '../routeAlong';
-import { buildSegment, hazardSpan, yawPitchQuat, yawQuat, type LocalSegment, type SegmentDef } from '../segments';
+import { buildSegment, hazardSpan, obstacleSpans, yawPitchQuat, yawQuat, type LocalSegment, type SegmentDef } from '../segments';
 
 export interface CourseDef {
   id: string;
@@ -10,6 +10,8 @@ export interface CourseDef {
   targetTime: number;
   // Switches on ambient animals; the built course then carries `ambient` spans.
   ambient?: boolean;
+  // Gives the course the solid, uneven land beside the road (see corridor.ts).
+  corridor?: boolean;
 }
 
 interface Frame {
@@ -27,6 +29,16 @@ function placer(frame: Frame) {
     pose: { pos: point(p.pose.pos), rot: quatMul(q, p.pose.rot) },
   });
   return { q, point, box, placed };
+}
+
+function mergeSpans(spans: { from: number; to: number }[]): { from: number; to: number }[] {
+  const merged: { from: number; to: number }[] = [];
+  for (const span of [...spans].sort((a, b) => a.from - b.from || a.to - b.to)) {
+    const last = merged[merged.length - 1];
+    if (last && span.from <= last.to) last.to = Math.max(last.to, span.to);
+    else merged.push({ ...span });
+  }
+  return merged;
 }
 
 export function buildCourse(def: CourseDef): BuiltCourse {
@@ -56,6 +68,7 @@ export function buildCourse(def: CourseDef): BuiltCourse {
   };
 
   const raw: { from: number; to: number }[] = [];
+  const obstacles: { from: number; to: number }[] = [];
   let routeAt = 0;
   let frame: Frame = { pos: vec3(0, 0, 0), yaw: 0 };
   const addRoute = (local: LocalSegment, at: ReturnType<typeof placer>, first: boolean) => {
@@ -96,9 +109,12 @@ export function buildCourse(def: CourseDef): BuiltCourse {
     };
     course.checkpoints.push(checkpoint);
     addRoute(local, at, index === 0);
-    if (def.ambient) {
-      const from = routeAt;
+    const from = routeAt;
+    if (def.ambient || def.corridor) {
       for (let i = 1; i < local.route.length; i++) routeAt += Math.hypot(local.route[i]![0] - local.route[i - 1]![0], local.route[i]![1] - local.route[i - 1]![1]);
+    }
+    if (def.corridor) for (const [a, b] of obstacleSpans(segmentDef, routeAt - from)) obstacles.push({ from: from + a, to: from + b });
+    if (def.ambient) {
       const terrain = segmentDef.type !== 'road' || Boolean(segmentDef.slope);
       if (terrain) raw.push({ from: from - AMBIENT_MARGIN, to: routeAt + AMBIENT_MARGIN });
       const marks: [number, number][] = [];
@@ -131,6 +147,7 @@ export function buildCourse(def: CourseDef): BuiltCourse {
     }
     course.ambient = { blocked };
   }
+  if (def.corridor) course.corridor = { obstacles: mergeSpans(obstacles) };
 
   let lowest = Infinity;
   for (const b of ground) {

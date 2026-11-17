@@ -512,3 +512,50 @@ export const ANIMAL_PROBE_UP = 20;
 export const ANIMAL_PROBE_LENGTH = 60;
 // m, peak height of the hop a hit animal makes while it lingers.
 export const ANIMAL_KNOCK_HOP = 0.4;
+
+// Corridor: the solid, uneven land beside the road. `d` is the horizontal distance to the route.
+// m, the solid terrain starts 1 m under the shoulder edge.
+export const CORRIDOR_INNER = 29;
+// m, the relief ramps in from the shoulder edge zone to here.
+export const CORRIDOR_BLEND_START = 34;
+export const CORRIDOR_BLEND_END = 40;
+// m, the largest relief height, reached at CORRIDOR_RELIEF_FULL.
+export const CORRIDOR_RELIEF = 5;
+export const CORRIDOR_RELIEF_FULL = 60;
+export const CORRIDOR_RIDGE_START = 100;
+export const CORRIDOR_RIDGE_END = 116;
+export const CORRIDOR_RIDGE_HEIGHT = 16;
+// m, the solid terrain ends here for gameplay; the tiles go on to CORRIDOR_LAND_END at the ridge-top height.
+export const CORRIDOR_OUTER = 124;
+// m, beyond this a player or the vehicle is out of bounds.
+export const OUT_OF_BOUNDS = 126;
+export const CORRIDOR_LAND_END = OUT_OF_BOUNDS + 4;
+export const CORRIDOR_CELL = 4;
+export const CORRIDOR_TILE_CELLS = 32;
+// m, half the window of the smoothed route height used as the terrain base.
+export const CORRIDOR_SMOOTH = 60;
+// m under the route height beside the road, so the shoulder always wins the wheel ray.
+export const CORRIDOR_UNDER = 0.05;
+// Relief lattice spacings (m) and weights; the weights sum to 1.
+export const CORRIDOR_NOISE = deepFreeze([
+  { spacing: 35, weight: 0.7 },
+  { spacing: 11, weight: 0.3 },
+] as const);
+// Scales the noise so the steepest relief slope stays under 20 degrees (the unscaled lattice reaches 32); the relief then peaks near CORRIDOR_RELIEF x this.
+export const CORRIDOR_NOISE_SCALE = 0.55;
+// m, vertices out to here take the under-the-road height, so a point on the shoulder edge never interpolates up to a raised vertex (a cell corner is at most a cell diagonal away).
+export const CORRIDOR_UNDER_UNTIL = 30 + CORRIDOR_CELL * Math.SQRT2 + 0.1;
+// Berm around an obstacle: it rises between these distances, stands CORRIDOR_BERM_HEIGHT above the road top, and falls back by CORRIDOR_BLEND_END.
+export const CORRIDOR_BERM_START = 31;
+export const CORRIDOR_BERM_CREST_START = 34;
+export const CORRIDOR_BERM_CREST_END = 37;
+export const CORRIDOR_BERM_HEIGHT = 3;
+// m along the route each side of an obstacle's span at full height, then the same again fading out.
+export const CORRIDOR_BERM_MARGIN = 20;
+export const CORRIDOR_BERM_FADE = 20;
+// m to the side of the route a player lands at when brought back from out of bounds, from the road edge.
+export const CORRIDOR_OOB_LANDING_OFFSET = ROAD_WIDTH / 2 + 8;
+// m, a landing this close to a stop's zone goes to the vehicle instead.
+export const CORRIDOR_OOB_STOP_CLEAR = 10;
+// m above the route height the landing probe starts.
+export const CORRIDOR_OOB_PROBE_UP = 3;
