@@ -361,6 +361,8 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
       (value.slide.launch === undefined || (finite(value.slide.launch) && value.slide.launch >= 0))));
 const isPropSnapshot = (value: unknown): value is PropSnapshot =>
   isRecord(value) && isText(value.id) && isText(value.kind) && isVec3(value.pos) && isQuat(value.rot);
+// Far above the most the director keeps alive (9).
+const MAX_ANIMALS = 32;
 const isAnimalSnapshot = (value: unknown): boolean =>
   isRecord(value) &&
   isCount(value.id) &&
@@ -444,7 +446,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         data.players.every(isPlayerSnapshot) &&
         Array.isArray(data.props) &&
         data.props.every(isPropSnapshot) &&
-        (data.animals === undefined || (Array.isArray(data.animals) && data.animals.every(isAnimalSnapshot))) &&
+        (data.animals === undefined || (Array.isArray(data.animals) && data.animals.length <= MAX_ANIMALS && data.animals.every(isAnimalSnapshot))) &&
         isCableSnapshot(data.cable)
         ? message
         : null;

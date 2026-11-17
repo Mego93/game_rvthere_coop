@@ -1,12 +1,11 @@
 import { createDirector, markHit, rearm, stepDirector, type AmbientEvent, type AnimalKind, type AnimalSnapshot, type DirectorAnimal, type DirectorState } from './ambient';
-import { ANIMAL_HALF_GOAT, ANIMAL_HALF_SCOOTER, ANIMAL_HIT_MARGIN, ANIMAL_HIT_SPEED, ANIMAL_PROBE_LENGTH, ANIMAL_PROBE_UP, TICK_DT } from './constants';
+import { ANIMAL_HALF_GOAT, ANIMAL_HALF_SCOOTER, ANIMAL_HIT_LINGER, ANIMAL_HIT_MARGIN, ANIMAL_HIT_SPEED, ANIMAL_KNOCK_HOP, ANIMAL_PROBE_LENGTH, ANIMAL_PROBE_UP, TICK_DT } from './constants';
 import { GROUP_ANIMAL, GROUP_GROUND, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, quatFromAxisAngle, type Quat, type Vec3 } from './math';
 import type { Rapier, RapierWorld, RigidBody } from './rapier';
 import { createRouteIndex, type RouteIndex } from './routeAlong';
 
 export interface AnimalHit {
-  id: number;
   kind: AnimalKind;
   pos: Vec3;
 }
@@ -25,7 +24,6 @@ export interface Animals {
 interface Entry {
   body: RigidBody;
   colliderHandle: number;
-  half: Vec3;
   x: number;
   y: number;
   z: number;
@@ -33,7 +31,8 @@ interface Entry {
   // m/s in the world; zero while standing.
   vx: number;
   vz: number;
-  placed: boolean;
+  // Set at a hit: where the animal was and the velocity it is pushed with while it lingers.
+  knock?: { x: number; y: number; z: number; vx: number; vz: number };
 }
 
 const halfOf = (kind: AnimalKind): Vec3 => (kind === 'goat' ? ANIMAL_HALF_GOAT : ANIMAL_HALF_SCOOTER);
@@ -62,7 +61,7 @@ export function createAnimals(rapier: Rapier, physics: RapierWorld, route: reado
     return hit ? aroundY + ANIMAL_PROBE_UP - hit.timeOfImpact : fallback;
   };
 
-  const place = (a: DirectorAnimal, entry: Entry | undefined, vehicleY: number): Entry => {
+  const place = (a: DirectorAnimal, entry: Entry | undefined, vehicleY: number): void => {
     const at = index.pointAt(a.along);
     // The right of the travel direction is (-tz, tx).
     const rx = -at.tz;
@@ -78,9 +77,17 @@ export function createAnimals(rapier: Rapier, physics: RapierWorld, route: reado
       const y = groundAt(x, z, vehicleY, vehicleY - 1) + half.y;
       const body = physics.createRigidBody(rapier.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y, z).setRotation(quatFromAxisAngle(AXIS_Y, yaw)));
       const collider = physics.createCollider(rapier.ColliderDesc.cuboid(half.x, half.y, half.z).setCollisionGroups(groups(GROUP_ANIMAL, GROUP_WORLD)), body);
-      e = { body, colliderHandle: collider.handle, half, x, y, z, yaw, vx: 0, vz: 0, placed: true };
+      e = { body, colliderHandle: collider.handle, x, y, z, yaw, vx: 0, vz: 0 };
       entries.set(a.id, e);
       byHandle.set(collider.handle, a.id);
+    } else if (e.knock) {
+      // Pushed along the vehicle's travel in a parabolic hop that lands as the linger ends.
+      const k = e.knock;
+      const u = Math.min(a.hitAge / ANIMAL_HIT_LINGER, 1);
+      e.x = k.x + k.vx * a.hitAge;
+      e.z = k.z + k.vz * a.hitAge;
+      e.y = k.y + 4 * ANIMAL_KNOCK_HOP * u * (1 - u);
+      e.body.setNextKinematicTranslation({ x: e.x, y: e.y, z: e.z });
     } else if (x !== e.x || z !== e.z) {
       e.y = groundAt(x, z, e.y, e.y - half.y) + half.y;
       e.body.setNextKinematicTranslation({ x, y: e.y, z });
@@ -89,7 +96,6 @@ export function createAnimals(rapier: Rapier, physics: RapierWorld, route: reado
     }
     e.vx = rx * a.velocity;
     e.vz = rz * a.velocity;
-    return e;
   };
 
   return {
@@ -128,7 +134,10 @@ export function createAnimals(rapier: Rapier, physics: RapierWorld, route: reado
         markHit(director, id);
         e.vx = 0;
         e.vz = 0;
-        hits.push({ id, kind: a.kind, pos: { x: e.x, y: e.y, z: e.z } });
+        const horizontal = Math.hypot(vehicleVelocity.x, vehicleVelocity.z);
+        const push = horizontal > 1e-6 ? (0.5 * relative) / horizontal : 0;
+        e.knock = { x: e.x, y: e.y, z: e.z, vx: vehicleVelocity.x * push, vz: vehicleVelocity.z * push };
+        hits.push({ kind: a.kind, pos: { x: e.x, y: e.y, z: e.z } });
       }
       return hits;
     },

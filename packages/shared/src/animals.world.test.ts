@@ -178,13 +178,81 @@ describe('T5: hit rule', () => {
     expect('animals' in world.snapshot()).toBe(false);
   });
 
-  test('contact below ANIMAL_HIT_SPEED costs nothing', () => {
+  // The vehicle starts with its nose about 1 m from the goat's near edge and has no driver, so it only coasts.
+  test('contact above ANIMAL_HIT_SPEED hits and contact below it costs nothing', () => {
+    const slow = standingGoat();
+    const goatX = slow.snapshot().animals![0]!.x;
+    place(slow, goatX, 56.5, 1.5);
+    run(slow, 20);
+    const slowHealth = slow.snapshot().vehicle.health;
+    const slowEvents = run(slow, seconds(4));
+    // The vehicle did reach the goat: its centre is past the point where the nose touches it.
+    expect(-slow.snapshot().vehicle.pos.z).toBeGreaterThan(58.5);
+    expect(hitsOf(slowEvents, 'goatHit')).toHaveLength(0);
+    expect(slow.snapshot().vehicle.health).toBeCloseTo(slowHealth, 10);
+    expect(slow.snapshot().animals![0]!.hit).toBeUndefined();
+
+    const fast = standingGoat();
+    place(fast, goatX, 56.5, 2.5);
+    run(fast, 20);
+    const fastHealth = fast.snapshot().vehicle.health;
+    const fastEvents = run(fast, seconds(4));
+    expect(hitsOf(fastEvents, 'goatHit')).toHaveLength(1);
+    expect(fast.snapshot().vehicle.health).toBeCloseTo(fastHealth - ANIMAL_HIT_DAMAGE, 10);
+  });
+
+  test('a goat inside the chassis box of a parked vehicle costs nothing', () => {
     const world = standingGoat();
-    const goat = world.snapshot().animals![0]!;
-    const events = drive(world, goat.x, 1, 5);
+    const goatX = world.snapshot().animals![0]!.x;
+    place(world, goatX, 60, 0);
+    run(world, 20);
+    const health = world.snapshot().vehicle.health;
+    const events = run(world, seconds(3));
     expect(hitsOf(events, 'goatHit')).toHaveLength(0);
-    expect(world.snapshot().vehicle.health).toBeCloseTo(events.health, 10);
+    expect(world.snapshot().vehicle.health).toBeCloseTo(health, 10);
     expect(world.snapshot().animals![0]!.hit).toBeUndefined();
+  });
+
+  test('no hit is taken on a tick with a restart pending or with health at 0', () => {
+    const pending = standingGoat();
+    place(pending, pending.snapshot().animals![0]!.x, 58, 6);
+    pending.restartCheckpoint();
+    expect(hitsOf(pending.step(new Map()), 'goatHit')).toHaveLength(0);
+    expect(pending.snapshot().animals).toBeUndefined();
+
+    const dead = standingGoat();
+    dead.debugVehicle().damage(2, 0);
+    place(dead, dead.snapshot().animals![0]!.x, 58, 6);
+    expect(hitsOf(dead.step(new Map()), 'goatHit')).toHaveLength(0);
+  });
+
+  test('a hit animal is knocked along the travel direction in a hop, deterministically, and is gone after the linger', () => {
+    const track = () => {
+      const world = standingGoat();
+      const start = world.snapshot().animals![0]!;
+      place(world, start.x, 56.5, 6);
+      const path: { x: number; y: number; z: number }[] = [];
+      let hits = 0;
+      for (let i = 0; i < seconds(6) && (path.length === 0 || world.snapshot().animals); i++) {
+        hits += hitsOf(world.step(new Map()), 'goatHit').length;
+        const goat = world.snapshot().animals?.[0];
+        if (goat?.hit) path.push({ x: goat.x, y: goat.y, z: goat.z });
+      }
+      return { start, path, hits, world };
+    };
+    const a = track();
+    const b = track();
+    expect(a.path).toEqual(b.path);
+    expect(a.hits).toBe(1);
+    expect(a.path.length).toBeGreaterThan(60);
+    const last = a.path[a.path.length - 1]!;
+    // Pushed down the road (toward -Z), not sideways.
+    expect(last.z).toBeLessThan(a.path[0]!.z - 1);
+    expect(Math.abs(last.x - a.path[0]!.x)).toBeLessThan(0.5);
+    const peak = Math.max(...a.path.map((p) => p.y)) - a.path[0]!.y;
+    expect(peak).toBeGreaterThan(0.3);
+    expect(peak).toBeLessThanOrEqual(0.4 + 1e-6);
+    expect(a.world.snapshot().animals).toBeUndefined();
   });
 
   test('health never falls below ANIMAL_HEALTH_FLOOR', () => {

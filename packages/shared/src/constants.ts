@@ -484,3 +484,5 @@ export const ANIMAL_HIT_MARGIN = 0.1;
 // m above the ground the director's animals are probed from, and the probe length.
 export const ANIMAL_PROBE_UP = 20;
 export const ANIMAL_PROBE_LENGTH = 60;
+// m, peak height of the hop a hit animal makes while it lingers.
+export const ANIMAL_KNOCK_HOP = 0.4;

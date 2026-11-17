@@ -1,6 +1,7 @@
 import { AMBIENT_ENDS, AMBIENT_MARGIN, CHECKPOINT_TRIGGER, FINISH_PAD, FINISH_TRIGGER, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET } from '../constants';
 import type { Box, BuiltCourse, Checkpoint, GroundBox, Placed } from '../course';
 import { add, deepFreeze, quatMul, rotate, vec3, type Pose, type Vec3 } from '../math';
+import { createRouteIndex } from '../routeAlong';
 import { buildSegment, hazardSpan, yawPitchQuat, yawQuat, type LocalSegment, type SegmentDef } from '../segments';
 
 export interface CourseDef {
@@ -120,8 +121,7 @@ export function buildCourse(def: CourseDef): BuiltCourse {
   };
 
   if (def.ambient) {
-    let total = 0;
-    for (let i = 1; i < course.route.length; i++) total += Math.hypot(course.route[i]![0] - course.route[i - 1]![0], course.route[i]![1] - course.route[i - 1]![1]);
+    const total = createRouteIndex(course.route).length;
     raw.push({ from: -1, to: AMBIENT_ENDS }, { from: total - AMBIENT_ENDS, to: total + 1 });
     const blocked: { from: number; to: number }[] = [];
     for (const span of raw.map((r) => ({ from: Math.max(0, r.from), to: Math.min(total, r.to) })).sort((a, b) => a.from - b.from || a.to - b.to)) {

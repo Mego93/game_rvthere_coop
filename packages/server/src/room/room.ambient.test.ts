@@ -47,10 +47,11 @@ function play(course: BuiltCourse) {
 
 const firstEvent = planAmbient(hashSeed('amb'), flagged.ambient!.blocked.at(-1)!.to, flagged.ambient!.blocked)[0]!;
 
+// The vehicle parks just before the first event, so the animal crosses through it and is hit.
 function goToFirstEventAndFinish(game: ReturnType<typeof play>) {
   const body = game.room.debugWorld()!.debugBody('vehicle')!;
-  body.setTranslation({ x: 0, y: 1, z: -(firstEvent.along - 100) }, true);
-  game.run(120);
+  body.setTranslation({ x: 0, y: 1, z: -(firstEvent.along - 1) }, true);
+  game.run(300);
   const finish = flagged.finish.center;
   body.setTranslation({ x: finish.x, y: finish.y + 1, z: finish.z }, true);
   game.run(120);
@@ -74,6 +75,8 @@ test('T8: results, stars and final time are the same with and without animals', 
   goToFirstEventAndFinish(on);
   goToFirstEventAndFinish(off);
   expect(on.results()).not.toBeNull();
+  // The animal was hit in the flagged run; stars and final time do not read health, so the results match.
+  expect(on.snapshots.some((s) => s.animals?.some((a) => a.hit))).toBe(true);
   expect(on.results()).toEqual(off.results());
   on.room.dispose();
   off.room.dispose();

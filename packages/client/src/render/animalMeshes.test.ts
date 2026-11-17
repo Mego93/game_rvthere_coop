@@ -68,3 +68,21 @@ test('T9: a hit animal lies tipped over about its long axis, and stands again if
   meshes.update([goat(1)]);
   expect(inner.rotation.z).toBe(0);
 });
+
+test('T9: a hit animal keeps its tipped pose while it is knocked along, and a reused id starts fresh', () => {
+  const scene = new THREE.Scene();
+  const meshes = createAnimalMeshes(scene);
+  meshes.update([goat(1, 0, { hit: true })]);
+  meshes.update([goat(1, 2, { hit: true, y: 0.7 })]);
+  const root = scene.children[0]!;
+  expect(root.position.x).toBe(2);
+  expect(root.position.y).toBe(0.7);
+  expect(Math.abs(root.children[0]!.rotation.z)).toBeCloseTo(HIT_TILT);
+  meshes.update([]);
+  meshes.update([goat(1, 5)]);
+  expect(scene.children).toHaveLength(1);
+  expect(scene.children[0]!.children[0]!.rotation.z).toBe(0);
+  meshes.update([scooter(1)]);
+  expect(scene.children).toHaveLength(1);
+  expect(scene.children[0]!.children[0]!.name).not.toBe('body');
+});

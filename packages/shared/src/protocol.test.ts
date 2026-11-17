@@ -751,11 +751,19 @@ describe('E1: the event message', () => {
 });
 
 describe('animals on the wire (T7)', () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => ({ id: i, kind: 'goat', x: 0, y: 0, z: 0, yaw: 0 }));
+
+  test('at most 32 animals are accepted', () => {
+    expect(parseServerMessage(JSON.stringify({ ...snapshot, animals: many(32) }))).not.toBeNull();
+    expect(parseServerMessage(JSON.stringify({ ...snapshot, animals: many(33) }))).toBeNull();
+  });
+
   test('a snapshot without animals parses with the field absent', () => {
     const parsed = parseServerMessage(JSON.stringify(snapshot)) as Record<string, unknown>;
     expect('animals' in parsed).toBe(false);
   });
 
+  // A model of the old behaviour (an event kind it does not list is dropped), not the old parser itself.
   test('an old parser, which knows the event kinds without the animal ones, drops the new kinds without throwing', () => {
     const oldKinds = EVENT_KINDS.filter((kind) => kind !== 'goatHit' && kind !== 'scooterHit') as readonly string[];
     const oldParse = (raw: string) => {

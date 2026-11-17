@@ -1,3 +1,4 @@
+import { createRouteIndex } from './routeAlong';
 import { createAnimals, type Animals } from './animals';
 import { hashSeed, planAmbient, type AmbientEvent, type AnimalSnapshot } from './ambient';
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
@@ -128,12 +129,6 @@ export interface World {
   dispose(): void;
 }
 
-const routeLength = (route: readonly (readonly [number, number])[]): number => {
-  let total = 0;
-  for (let i = 1; i < route.length; i++) total += Math.hypot(route[i]![0] - route[i - 1]![0], route[i]![1] - route[i - 1]![1]);
-  return total;
-};
-
 // One non-finite number would stay in the physics state for good, so it is treated as no input.
 const finite = (value: number | undefined): number => (value !== undefined && Number.isFinite(value) ? value : 0);
 
@@ -159,7 +154,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const items = createItems(rapier, physics, course);
   const players = createPlayers(rapier, physics, vehicle, props, course);
   const winch = createWinch(rapier, physics, vehicle, props, course);
-  const ambientPlan = options.ambient === true ? (options.ambientPlan ?? (course.ambient ? planAmbient(hashSeed(course.id), routeLength(course.route), course.ambient.blocked) : undefined)) : undefined;
+  const ambientPlan = options.ambient === true ? (options.ambientPlan ?? (course.ambient ? planAmbient(hashSeed(course.id), createRouteIndex(course.route).length, course.ambient.blocked) : undefined)) : undefined;
   const animals: Animals | null = ambientPlan ? createAnimals(rapier, physics, course.route, ambientPlan) : null;
   const animalField = (): { animals?: AnimalSnapshot[] } => {
     const list = animals?.snapshot();
@@ -743,7 +738,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       players.stepOnFoot(onFoot);
       const impactSpeed = vehicle.afterPhysics();
       if (impactSpeed > 0) events.push({ kind: 'impact', tick, pos: { ...vehicle.body.translation() } });
-      if (animals && velocityBefore) {
+      if (animals && velocityBefore && !restartPending && vehicle.health() > 0) {
         for (const hit of animals.hits({ pos: vehicle.body.translation(), rot: vehicle.body.rotation(), half: vehicleConfig.halfExtents }, velocityBefore)) {
           vehicle.damage(ANIMAL_HIT_DAMAGE, ANIMAL_HEALTH_FLOOR);
           events.push({ kind: hit.kind === 'goat' ? 'goatHit' : 'scooterHit', tick, pos: hit.pos });

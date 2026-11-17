@@ -443,3 +443,12 @@ test('animals survive a full snapshot, take hit from the newer one, and an absen
   expect(buffer.sample(100)!.animals).toEqual([]);
   expect(createSnapshotBuffer().sample(0)).toBeNull();
 });
+
+test('a hit animal knocked along keeps hit and blends its position', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(withAnimals(3, [animal(1, 0, 0, true)]), 3 * TICK_DT);
+  buffer.push(withAnimals(9, [animal(1, 4, 0, true)]), 9 * TICK_DT);
+  const view = buffer.sample((6 + DELAY_TICKS) * TICK_DT)!.animals[0]!;
+  expect(view.x).toBeCloseTo(2, 6);
+  expect(view.hit).toBe(true);
+});
