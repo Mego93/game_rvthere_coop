@@ -115,11 +115,11 @@ const SILHOUETTE = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/
 const STYLE = `
 #lobby { position: fixed; inset: 0; z-index: 20; display: grid; overflow-x: hidden; overflow-y: auto; background: linear-gradient(#8ec5ea, #cfe6f5 55%, #f6ead2); }
 #lobby[hidden] { display: none; }
-#lobby-bg { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
-.lobby-dunes { position: absolute; left: 0; bottom: 0; width: 200%; height: 120px; background-repeat: repeat-x; background-position: 0 100%; }
+#lobby-bg { contain: strict; position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.lobby-dunes { will-change: transform; position: absolute; left: 0; bottom: 0; width: 200%; height: 120px; background-repeat: repeat-x; background-position: 0 100%; }
 #lobby-dunes-far { background-image: ${DUNES_FAR}; background-size: 800px 120px; height: 140px; opacity: 0.8; animation: lobby-drift-far 160s linear infinite; }
 #lobby-dunes-near { background-image: ${DUNES}; background-size: 600px 120px; animation: lobby-drift-near 80s linear infinite; }
-#lobby-vehicle-sil { position: absolute; left: 0; bottom: 52px; width: 120px; height: 50px; background: ${SILHOUETTE} no-repeat center / contain; opacity: 0.6; animation: lobby-cross 28s linear infinite, lobby-bob 0.9s ease-in-out infinite alternate; }
+#lobby-vehicle-sil { will-change: transform; position: absolute; left: 0; bottom: 52px; width: 120px; height: 50px; background: ${SILHOUETTE} no-repeat center / contain; opacity: 0.6; animation: lobby-cross 28s linear infinite, lobby-bob 0.9s ease-in-out infinite alternate; }
 #lobby-layout { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "chat"; gap: 16px; justify-content: center; align-content: center; width: 100%; box-sizing: border-box; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
 #lobby-panel { grid-area: main; justify-self: center; display: grid; gap: 12px; width: min(440px, 100%); box-sizing: border-box; padding: 24px; background: rgba(255, 255, 255, 0.94); border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15); animation: lobby-rise 0.45s ease-out both; }
 #lobby-chat { grid-area: chat; justify-self: center; width: min(440px, 100%); min-width: 0; box-sizing: border-box; }
