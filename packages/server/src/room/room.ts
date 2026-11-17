@@ -12,6 +12,8 @@ import {
   TICK_RATE,
   createWorld,
   getCourse,
+  hashSeed,
+  mixSeed,
   resultsOf,
   type AdminTool,
   type BuiltCourse,
@@ -137,6 +139,8 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   // The time of the latest update; a run starts counting from it.
   let lastNow = createdAt;
   let lastBuild = Number.NEGATIVE_INFINITY;
+  // Runs started in this room; a course restart keeps its number, so the item drop layout stays.
+  let runNumber = 0;
   let emptySince: number | null = createdAt;
   // The first token to join is the creator's.
   let creatorToken: string | null = null;
@@ -191,9 +195,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   };
 
   // A world for the room's configuration, with every player in it and cp-0 recorded.
-  const createRunWorld = (): World => {
+  const createRunWorld = (run: number): World => {
     const course = config.courses?.[settings.courseId] ?? getCourse(settings.courseId);
-    const next = createWorld(rapier, { courseId: settings.courseId, vehicleId: settings.vehicleId, weather: settings.weather, ambient: course.ambient !== undefined }, course);
+    const next = createWorld(rapier, { courseId: settings.courseId, vehicleId: settings.vehicleId, weather: settings.weather, ambient: course.ambient !== undefined, itemDrops: course.ambient !== undefined, itemSeed: mixSeed(hashSeed(course.id), run) }, course);
     try {
       // Held slots join the world when they rejoin.
       for (const player of players) if (player.connected) next.addPlayer(player.playerId);
@@ -367,7 +371,8 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       if (players.some((player) => player.playerId !== adminId && player.connected && !player.ready)) return 'not_ready';
       if (lastNow - lastBuild < WORLD_REBUILD_COOLDOWN) return 'bad_phase';
       // Built first: if it throws, the room is still in the lobby, untouched.
-      const fresh = createRunWorld();
+      const fresh = createRunWorld(runNumber + 1);
+      runNumber += 1;
       for (const player of players) {
         player.queue = createInputQueue();
         player.sentFull = false;
@@ -389,7 +394,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       if (refused) return refused;
       if (lastNow - lastBuild < WORLD_REBUILD_COOLDOWN) return 'bad_phase';
       // The queues stay: the client's game keeps running and its seq keeps rising.
-      const fresh = createRunWorld();
+      const fresh = createRunWorld(runNumber);
       const old = world;
       world = fresh;
       tickOffset += worldTicks;
