@@ -126,6 +126,7 @@ const STYLE = `
 #lobby-chat:empty { display: none; }
 @media (min-width: 900px) {
   #lobby-layout { grid-template-columns: minmax(320px, 440px) minmax(320px, 440px); grid-template-areas: "main chat"; align-items: start; gap: 24px; }
+  #lobby-layout:has(#lobby-chat:empty) { grid-template-columns: minmax(320px, 440px); grid-template-areas: "main"; }
   #lobby-panel, #lobby-chat { justify-self: stretch; width: auto; }
 }
 #lobby-panel h1 { margin: 0; font-size: 22px; }
