@@ -429,6 +429,14 @@ describe('useHint', () => {
   const kit = (changes: Partial<PlayerSnapshot> = {}) => holding({ inventory: ['healthKit', null, null], ...changes });
   const mate = (changes: Partial<PlayerSnapshot> = {}) => ({ ...player('p2', nearDoor.pos.x, nearDoor.pos.z - 1.5), ...changes });
 
+  test('U2: a selected tajine says Hold F to eat on foot, and nothing seated or downed', () => {
+    const tajine = { inventory: ['tajine', null, null] } as Partial<PlayerSnapshot>;
+    expect(useHint(data([holding(tajine)]))).toBe('Hold F to eat');
+    expect(useHint(data([holding({ ...tajine, health: 40 })]))).toBe('Hold F to eat');
+    expect(useHint(data([holding({ ...tajine, downed: 5 })]))).toBeNull();
+    expect(useHint(data([holding({ ...tajine, seat: 'driver' })]))).toBeNull();
+  });
+
   test('names the jerrycan and toolbox actions without the line prefix', () => {
     expect(useHint(data([holding({ inventory: ['jerrycan', null, null] })], low))).toBe('Hold F to refuel');
     expect(useHint(data([holding({ inventory: ['toolbox', null, null] })], low))).toBe('Hold F to repair');

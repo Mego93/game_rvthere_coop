@@ -29,7 +29,7 @@ const STYLE = `
 #touch-actions button { width: 64px; height: 64px; }
 #touch-menu { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); width: 56px; height: 36px; border-radius: 10px; font-size: 12px; }
 #touch-chat { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + 56px + 8px + env(safe-area-inset-right)); width: 56px; height: 44px; border-radius: 10px; font-size: 12px; }
-#touch-emote { position: absolute; top: calc(60px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); width: 56px; height: 44px; border-radius: 10px; font-size: 12px; }
+#touch-emote { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + 2 * (56px + 8px) + env(safe-area-inset-right)); width: 56px; height: 44px; border-radius: 10px; font-size: 12px; }
 #touch-slots { position: absolute; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 8px; }
 #touch-slots button { width: 56px; height: 56px; border-radius: 10px; font-size: 11px; }
 #touch-slots button.selected { border-color: #ffd34e; box-shadow: 0 0 0 2px #ffd34e; }

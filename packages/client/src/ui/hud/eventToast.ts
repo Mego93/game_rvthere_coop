@@ -8,6 +8,9 @@ const TEXT: Partial<Record<EventMessage['kind'], string>> = { checkpoint: SOULEY
 // The toast text for a server event, or null when the kind has none.
 export const eventToastText = (kind: EventMessage['kind']): string | null => TEXT[kind] ?? null;
 
+// The eat toast is for the eater; every other toast is for everyone.
+export const toastFor = (message: Pick<EventMessage, 'kind' | 'playerId'>, localId: string): boolean => message.kind !== 'eat' || message.playerId === localId;
+
 // The newest event toast stays for EVENT_TOAST_SECONDS; a later one replaces it.
 export function createEventToast() {
   let text: string | null = null;

@@ -54,7 +54,7 @@ import { FIRST_PERSON_FOV, onFootPose, seatedPose } from './render/firstPersonCa
 import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createSeatRing, createVehicleMesh, disposeSeatRing, placeSeatRing, placeVehicleMesh } from './render/vehicleMesh';
-import { createEventToast } from './ui/hud/eventToast';
+import { createEventToast, toastFor } from './ui/hud/eventToast';
 import { createSeatAnnouncer } from './ui/hud/seatToast';
 import { interactAction, overlayText, type OverlayData } from './ui/overlay';
 import { createHud } from './ui/hud/hud';
@@ -584,8 +584,12 @@ export function createGame(
     renderer.toneMappingExposure = shownLook.exposure;
     const newSky = weatherTracker.takeSky(now / 1000);
     if (newSky) {
-      const lighting = hasSky(firstLobby.timeOfDay, newSky) && !view.softwareGl;
-      if (!applySky(renderer, scene, shownLook, firstLobby.timeOfDay, lighting, newSky)) scene.background = toneMappedColour(shownLook.sky, shownLook.exposure);
+      const lighting = imageLight && hasSky(firstLobby.timeOfDay, newSky);
+      if (!applySky(renderer, scene, shownLook, firstLobby.timeOfDay, lighting, newSky)) {
+        scene.background = toneMappedColour(shownLook.sky, shownLook.exposure);
+        // The old sky's light would stay lit under a flat background.
+        if (imageLight) scene.environment = null;
+      }
     }
     conditions.update(camera.position, frameSeconds, local && onFoot ? local.pos : vehicle ? vehicle.pos : camera.position);
     conditions.setLights(vehicle, players);
@@ -631,7 +635,7 @@ export function createGame(
     onEvent(message) {
       const sound = soundFor(message, playerId);
       if (sound) audio.play(sound.kind, { ...(sound.positional ? { at: message.pos } : {}), ...(sound.volume === undefined ? {} : { volume: sound.volume }) });
-      eventToast.show(message.kind, performance.now() / 1000);
+      if (toastFor(message, playerId)) eventToast.show(message.kind, performance.now() / 1000);
     },
     setControlsOpen(open) {
       controlsOpen = open;

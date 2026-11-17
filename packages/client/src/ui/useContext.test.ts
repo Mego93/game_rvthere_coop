@@ -24,6 +24,12 @@ const config = getVehicleConfig('lodgy');
 const aim = { yaw: 0, pitch: 0 };
 
 describe('buildUseContext', () => {
+  test('U2: onFoot is true standing, false seated or downed', () => {
+    expect(buildUseContext(local, [local], vehicle, config, aim).self.onFoot).toBe(true);
+    expect(buildUseContext({ ...local, seat: 'driver' }, [local], vehicle, config, aim).self.onFoot).toBe(false);
+    expect(buildUseContext({ ...local, downed: 3 }, [local], vehicle, config, aim).self.onFoot).toBe(false);
+  });
+
   test('the eye is at the standing height, or the crouch height for crouch and slide', () => {
     expect(buildUseContext(local, [local], vehicle, config, aim).self.eye.y).toBeCloseTo(2 + PLAYER_EYE_HEIGHT, 12);
     expect(buildUseContext({ ...local, stance: 'crouch' }, [local], vehicle, config, aim).self.eye.y).toBeCloseTo(2 + PLAYER_CROUCH_EYE_HEIGHT, 12);
