@@ -1,5 +1,6 @@
-import { CHARACTER_SCALE, isCrouchedStance, PLAYER_COLOURS, PLAYER_COLOUR_PATTERN, PLAYER_HEIGHT, PLAYER_RADIUS, type PlayerSnapshot } from '@lodgy/shared';
+import { CHARACTER_SCALE, isCrouchedStance, PLAYER_COLOURS, PLAYER_COLOUR_PATTERN, PLAYER_HEIGHT, PLAYER_RADIUS, type Appearance, type PlayerSnapshot } from '@lodgy/shared';
 import * as THREE from 'three';
+import { applyLook } from './characterRig';
 import { animationsOf, hasModel, instantiate, shadowed } from './models';
 
 export const HEAD_RADIUS = 0.2 * CHARACTER_SCALE;
@@ -72,20 +73,25 @@ function applyStance(mesh: THREE.Group, stance: PlayerSnapshot['stance'], second
   return state.tilt;
 }
 
-// The blocky character, its shirt and sleeves in the player's colour, turned to face -Z and fitted to the player's height; null when the model did not load.
-function createCharacter(colour: string): THREE.Group | null {
+// The blocky character, in the look of its appearance or else its shirt and sleeves in the player's colour, turned to face -Z and fitted to the player's height; null when the model did not load.
+function createCharacter(colour: string, appearance?: Appearance): THREE.Group | null {
   if (!hasModel('character.player')) return null;
   const model = instantiate('character.player');
   const clipList = animationsOf('character.player');
   const idleClip = clipList.find((clip) => clip.name === 'idle');
   const walkClip = clipList.find((clip) => clip.name === 'walk');
   if (!model || !idleClip || !walkClip) return null;
-  const shirt = new THREE.MeshStandardMaterial({ color: colour, roughness: 1, metalness: 0 });
-  model.traverse((node) => {
-    if (node.name === 'torso' || node.name === 'arm-left' || node.name === 'arm-right') (node as THREE.Mesh).material = shirt;
-  });
+  // shadowed sets every flag, so the look goes on after it to keep small parts out of the shadow pass.
+  shadowed(model);
+  if (appearance) applyLook(model, appearance);
+  else {
+    const shirt = new THREE.MeshStandardMaterial({ color: colour, roughness: 1, metalness: 0 });
+    model.traverse((node) => {
+      if (node.name === 'torso' || node.name === 'arm-left' || node.name === 'arm-right') (node as THREE.Mesh).material = shirt;
+    });
+  }
   const group = new THREE.Group();
-  group.add(shadowed(model));
+  group.add(model);
   // The file's front is +Z; players face -Z.
   model.rotation.y = Math.PI;
   const mixer = new THREE.AnimationMixer(model);
@@ -96,10 +102,10 @@ function createCharacter(colour: string): THREE.Group | null {
   return group;
 }
 
-// A character model (or a capsule body and a sphere head in the player's colour, a dark visor on the front (-Z)), and the name above.
-export function createPlayerMesh(name: string, colour: string): THREE.Group {
+// A character model (or a capsule body and a sphere head in the player's colour, a dark visor on the front (-Z), ignoring the appearance), and the name above.
+export function createPlayerMesh(name: string, colour: string, appearance?: Appearance): THREE.Group {
   const safe = PLAYER_COLOUR_PATTERN.test(colour) ? colour : PLAYER_COLOURS[0];
-  const character = createCharacter(safe);
+  const character = createCharacter(safe, appearance);
   if (character) {
     character.add(nameSprite(name));
     return character;
