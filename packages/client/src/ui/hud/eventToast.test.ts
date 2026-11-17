@@ -1,11 +1,12 @@
 import { EVENT_KINDS } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { EVENT_TOAST_SECONDS, createEventToast, eventToastText } from './eventToast';
+import { EVENT_TOAST_SECONDS, SOULEYMAN_GREETING, createEventToast, eventToastText } from './eventToast';
 
-test('T9: the goat and scooter events have a toast, the others none', () => {
+test('T9: the goat, scooter and checkpoint events have a toast, the others none', () => {
+  expect(eventToastText('checkpoint')).toBe(SOULEYMAN_GREETING);
   expect(eventToastText('goatHit')).toBe('Goat!');
   expect(eventToastText('scooterHit')).toBe('Scooter!');
-  expect(EVENT_KINDS.filter((kind) => eventToastText(kind) !== null)).toEqual(['goatHit', 'scooterHit']);
+  expect(EVENT_KINDS.filter((kind) => eventToastText(kind) !== null)).toEqual(['checkpoint', 'goatHit', 'scooterHit']);
 });
 
 test('T9: a toast lasts EVENT_TOAST_SECONDS and a later one replaces it; other events show nothing', () => {
