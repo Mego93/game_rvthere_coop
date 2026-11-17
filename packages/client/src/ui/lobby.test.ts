@@ -65,6 +65,11 @@ test('L17: a held player is shown as disconnected and does not block Start', () 
   expect(view.startEnabled).toBe(true);
 });
 
+test('P9: the lobby view carries the character name of every player', () => {
+  const view = lobbyView(message([player('p1', 'Amal'), player('p2', 'Badr', { appearance: defaultAppearance('huu') })]), 'p1');
+  expect(view.players.map((entry) => entry.character)).toEqual(['Sounile', 'Huu']);
+});
+
 test('L17: the status of the admin and of a ready player', () => {
   const view = lobbyView(message([player('p1', 'Amal'), player('p2', 'Badr', { ready: true })]), 'p1');
   expect(view.players.map((entry) => entry.status)).toEqual(['admin', 'ready']);
