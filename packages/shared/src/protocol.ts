@@ -1,4 +1,5 @@
 import { CHAT_MAX_LENGTH, ITEM_KINDS, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, TIMES_OF_DAY, WEATHERS, type ItemKind, type TimeOfDay, type Weather } from './constants';
+import { isAppearance, type Appearance } from './characters';
 import { courseIds } from './courses/index';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
 import type { PropSnapshot } from './props';
@@ -56,6 +57,7 @@ export type ClientMessage =
   | { type: 'buy'; item: ItemKind }
   | { type: 'pong' }
   | { type: 'ready'; ready: boolean }
+  | ({ type: 'appearance' } & Appearance)
   | ({ type: 'configure' } & RoomSettings)
   | { type: 'kick'; playerId: string }
   | { type: 'start' }
@@ -79,7 +81,7 @@ export interface RoomSettings {
 export type Phase = 'lobby' | 'playing' | 'results';
 
 // The type comes from the list, so a reason cannot be added to one and forgotten in the other.
-export const ERROR_REASONS = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full', 'cannot_buy', 'kicked', 'not_admin', 'not_ready', 'bad_phase', 'replaced'] as const;
+export const ERROR_REASONS = ['unknown_room', 'room_full', 'name_taken', 'bad_message', 'server_full', 'cannot_buy', 'kicked', 'not_admin', 'not_ready', 'bad_phase', 'replaced', 'character_taken'] as const;
 export type ErrorReason = (typeof ERROR_REASONS)[number];
 
 export interface LobbyPlayer {
@@ -88,6 +90,7 @@ export interface LobbyPlayer {
   colour: string;
   ready: boolean;
   connected: boolean;
+  appearance: Appearance;
 }
 
 export interface LobbyMessage {
@@ -310,6 +313,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return { type: 'pong' };
     case 'ready':
       return typeof fields.ready === 'boolean' ? { type: 'ready', ready: fields.ready } : null;
+    case 'appearance':
+      return isAppearance(fields) ? { type: 'appearance', characterId: fields.characterId, glasses: fields.glasses, top: fields.top, hat: fields.hat } : null;
     case 'configure': {
       const { courseId, vehicleId, timeOfDay, weather } = fields;
       return isCourseId(courseId) && isVehicleId(vehicleId) && isTimeOfDay(timeOfDay) && isWeather(weather)
@@ -414,7 +419,8 @@ const isLobbyPlayer = (value: unknown): value is LobbyPlayer =>
   isText(value.colour) &&
   PLAYER_COLOUR_PATTERN.test(value.colour) &&
   typeof value.ready === 'boolean' &&
-  typeof value.connected === 'boolean';
+  typeof value.connected === 'boolean' &&
+  isAppearance(value.appearance);
 
 // Checks one message from the server. Returns null for anything the page cannot use.
 // The server is trusted, but the page may be older than it, and one snapshot without finite numbers would spoil the interpolation for good.
