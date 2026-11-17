@@ -11,6 +11,9 @@ const ZIP = '#9a9aa2';
 const GLASSES = '#101014';
 const CAP = '#2f5d8a';
 const FEZ = '#a8322d';
+// The model texture's skin tone (#f6d1a5 on the face), for the bare forearms under a tee's short sleeves.
+const SKIN = '#f6d1a5';
+const DRAWSTRING = '#8e8e98';
 
 // Added parts are named with this prefix and never reuse a name of the model.
 const PREFIX = 'look-';
@@ -58,13 +61,13 @@ function merged(key: string, boxes: readonly Box[], extra: () => THREE.BufferGeo
 const SLAB = [8.6, 1.2, 8.6, 0, 8.0, 0] as const;
 const HAIR: Record<Exclude<HairStyle, 'bald'>, readonly Box[]> = {
   short: [SLAB, [8.6, 3.2, 1.2, 0, 6.0, -3.7], [0.6, 2.8, 5.4, 4.2, 6.0, -1.3], [0.6, 2.8, 5.4, -4.2, 6.0, -1.3]],
-  wavy: [[8.6, 1.8, 8.6, 0, 7.9, 0], [8.6, 4.4, 1.4, 0, 5.8, -3.6], [1.0, 3.6, 6.0, 4.15, 5.8, -1.0], [1.0, 3.6, 6.0, -4.15, 5.8, -1.0], [3.0, 1.0, 0.8, -1.5, 7.5, 4.2]],
+  wavy: [[8.6, 1.8, 8.6, 0, 7.9, 0], [8.6, 4.4, 1.4, 0, 5.8, -3.6], [1.0, 3.6, 6.0, 4.15, 5.8, -1.0], [1.0, 3.6, 6.0, -4.15, 5.8, -1.0], [3.0, 1.0, 0.8, -1.5, 7.5, 4.2], [2.6, 0.9, 1.0, 2.5, 8.8, 0.5], [2.0, 0.8, 1.0, -2.5, 8.6, -1.0]],
   swept: [[8.6, 1.4, 8.6, 0, 7.9, 0], [8.6, 3.0, 1.2, 0, 6.0, -3.7], [0.6, 2.4, 5.0, 4.2, 6.2, -1.5], [0.6, 2.4, 5.0, -4.2, 6.2, -1.5], [5.0, 1.4, 1.0, 1.2, 7.4, 4.2], [2.4, 0.9, 0.8, 3.0, 6.9, 4.2]],
   long: [SLAB, [8.6, 8.0, 1.4, 0, 4.0, -3.6], [1.0, 6.5, 5.0, 4.15, 4.75, -1.5], [1.0, 6.5, 5.0, -4.15, 4.75, -1.5]],
 };
 const MOUSTACHE: Box = [3.6, 0.7, 0.5, 0, 2.6, 4.2];
 const BEARD: readonly Box[] = [MOUSTACHE, [7.0, 2.6, 0.6, 0, 1.2, 4.15], [0.6, 2.4, 3.0, 4.1, 1.5, 2.5], [0.6, 2.4, 3.0, -4.1, 1.5, 2.5]];
-const GLASSES_BOXES: readonly Box[] = [[1.4, 0.2, 0.2, 0, 4.0, 4.15], [0.2, 0.2, 4.0, 4.1, 4.0, 2.2], [0.2, 0.2, 4.0, -4.1, 4.0, 2.2]];
+const GLASSES_BOXES: readonly Box[] = [[1.4, 0.2, 0.2, 0, 4.0, 4.15], [0.2, 0.2, 4.0, 4.0, 4.0, 2.2], [0.2, 0.2, 4.0, -4.0, 4.0, 2.2]];
 const CAP_BOXES: readonly Box[] = [[9.8, 1.6, 9.8, 0, 9.0, 0], [8.0, 0.4, 2.4, 0, 8.5, 5.2]];
 
 // Torso-local units: x within 0.4, y 0.3..1.2, z within 0.3, the front on +Z.
@@ -74,6 +77,11 @@ const COLLAR_BOX: Box = [0.34, 0.12, 0.04, 0, 1.14, 0.31];
 const HEM_BOX: Box = [0.82, 0.08, 0.62, 0, 0.34, 0];
 const TRIM_BOXES: readonly Box[] = [[0.05, 0.9, 0.03, 0, 0.75, 0.315], [0.82, 0.07, 0.62, 0, 0.335, 0]];
 const HOOD_BOX: Box = [0.56, 0.22, 0.14, 0, 1.1, -0.33];
+// The hood's rim at the front of the neck and two drawstrings, one light mesh.
+const DRAWSTRING_BOXES: readonly Box[] = [[0.4, 0.07, 0.04, 0, 1.17, 0.31], [0.03, 0.3, 0.03, -0.07, 1.0, 0.32], [0.03, 0.3, 0.03, 0.07, 1.0, 0.32]];
+// Arm-local: the forearm below a short sleeve, a hair wider than the arm (0.4 wide and deep).
+const CUFF_LEFT: Box = [0.42, 0.3, 0.42, 0.2, -0.85, 0];
+const CUFF_RIGHT: Box = [0.42, 0.3, 0.42, -0.2, -0.85, 0];
 const SUIT_COLLAR_BOX: Box = [0.3, 0.14, 0.03, 0, 1.13, 0.315];
 const TIE_BOX: Box = [0.07, 0.5, 0.03, 0, 0.92, 0.32];
 
@@ -117,7 +125,13 @@ export function applyLook(model: THREE.Object3D, appearance: Appearance): void {
       addBox(torso, 'collar', COLLAR_BOX, look.under ?? WHITE);
       addBox(torso, 'hem', HEM_BOX, look.under ?? WHITE);
     } else if (look.outfit === 'cardigan') add(torso, 'trim', merged('cardigan-trim', TRIM_BOXES), look.trim ?? look.top, false);
-    else if (look.outfit === 'hoodie') add(torso, 'hood', unitBox(), look.top, true, HOOD_BOX);
+    else if (look.outfit === 'hoodie') {
+      add(torso, 'hood', unitBox(), look.top, true, HOOD_BOX);
+      add(torso, 'drawstring', merged('drawstring', DRAWSTRING_BOXES), DRAWSTRING, false);
+    } else if (look.outfit === 'tee') {
+      addBox(node('arm-left'), 'cuff', CUFF_LEFT, SKIN);
+      addBox(node('arm-right'), 'cuff', CUFF_RIGHT, SKIN);
+    }
   } else if (appearance.top === 'suit') {
     addBox(torso, 'collar', SUIT_COLLAR_BOX, WHITE);
     addBox(torso, 'tie', TIE_BOX, TIE);

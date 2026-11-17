@@ -31,7 +31,7 @@ const BLACK = '#1b1b1f';
 
 export const CHARACTER_LOOKS: Readonly<Record<CharacterId, Look>> = deepFreeze({
   sounile: { top: BLACK, trousers: '#9db8d8', hair: { style: 'short', colour: DARK_HAIR }, facial: 'moustache', outfit: 'halfzip', glasses: 'none' },
-  rafael: { top: '#23262b', trousers: OLIVE, hair: { style: 'bald', colour: DARK_HAIR }, facial: 'beard', outfit: 'jacket', under: '#1c1d20', glasses: 'round' },
+  rafael: { top: '#2a2e36', trousers: OLIVE, hair: { style: 'bald', colour: DARK_HAIR }, facial: 'beard', outfit: 'jacket', under: '#121214', glasses: 'round' },
   nandan: { top: '#1f2a44', trousers: BEIGE, hair: { style: 'wavy', colour: DARK_HAIR }, facial: 'none', outfit: 'sweater', under: '#e8e6df', glasses: 'none' },
   alexander: { top: '#ece3c8', trousers: OLIVE, hair: { style: 'short', colour: DARK_HAIR }, facial: 'none', outfit: 'cardigan', trim: '#b3262e', glasses: 'none' },
   luiz: { top: BLACK, trousers: BEIGE, hair: { style: 'swept', colour: '#d9bf86' }, facial: 'none', outfit: 'hoodie', glasses: 'none' },

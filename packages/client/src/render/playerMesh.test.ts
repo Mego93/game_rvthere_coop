@@ -23,7 +23,12 @@ vi.mock('./models', () => ({
     }
     return root;
   },
-  shadowed: (root: THREE.Object3D) => root,
+  shadowed: (root: THREE.Object3D) => {
+    root.traverse((node) => {
+      node.castShadow = true;
+    });
+    return root;
+  },
 }));
 
 beforeAll(() => {
@@ -165,4 +170,11 @@ test('S31: every character with every add-on stays within the mesh cap (8 added,
     expect(added(createPlayerMesh('A', '#e0a030', { characterId: id, glasses: 'round', top: 'suit', hat: 'fez' }))).toBeLessThanOrEqual(8);
     expect(added(createPlayerMesh('A', '#e0a030', { characterId: id, glasses: 'round', top: 'default', hat: 'cap' }))).toBeLessThanOrEqual(8);
   }
+});
+
+test('S31: the look goes on after shadowed, so glasses and facial hair keep castShadow false', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030', defaultAppearance('rafael'));
+  expect((mesh.getObjectByName('look-glasses') as THREE.Mesh).castShadow).toBe(false);
+  expect((mesh.getObjectByName('look-facial') as THREE.Mesh).castShadow).toBe(false);
+  expect((mesh.getObjectByName('torso') as THREE.Mesh).castShadow).toBe(true);
 });

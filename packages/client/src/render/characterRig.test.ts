@@ -64,6 +64,8 @@ describe('applyLook', () => {
   });
 
   test('the own outfit parts are not built under a sweatshirt or suit, hair and face parts stay', () => {
+    const extra = ['look-drawstring', 'look-cuff'];
+    for (const top of ['sweatshirt', 'suit'] as const) for (const id of CHARACTER_IDS) for (const name of extra) expect(names(built({ ...defaultAppearance(id), top }))).not.toContain(name);
     const own = { jacket: 'look-under', halfzip: 'look-zip', cardigan: 'look-trim', hoodie: 'look-hood', sweater: 'look-hem' } as const;
     for (const id of CHARACTER_IDS) {
       const outfit = CHARACTER_LOOKS[id].outfit;
@@ -76,6 +78,37 @@ describe('applyLook', () => {
         if (CHARACTER_LOOKS[id].facial !== 'none') expect(result).toContain('look-facial');
       }
     }
+  });
+
+  test("luiz's hoodie shows a light rim and drawstrings at the front", () => {
+    const model = built(defaultAppearance('luiz'));
+    expect(model.getObjectByName('look-drawstring')!.parent!.name).toBe('torso');
+    expect(colourOf(model, 'look-drawstring')).not.toBe(colourOf(model, 'torso'));
+  });
+
+  test("huu's tee has skin-coloured forearms on both arms, and no other outfit has cuffs", () => {
+    const model = built(defaultAppearance('huu'));
+    const cuffs = looks(model).filter((mesh) => mesh.name === 'look-cuff');
+    expect(cuffs.map((mesh) => mesh.parent!.name).sort()).toEqual(['arm-left', 'arm-right']);
+    for (const cuff of cuffs) expect((cuff.material as THREE.MeshStandardMaterial).color.getHexString()).toBe('f6d1a5');
+    for (const id of CHARACTER_IDS) if (id !== 'huu') expect(names(built(defaultAppearance(id)))).not.toContain('look-cuff');
+  });
+
+  test("rafael's jacket and the tee under it differ clearly in lightness", () => {
+    const { top, under } = CHARACTER_LOOKS.rafael;
+    const lightness = (hex: string) => new THREE.Color(hex).getHSL({ h: 0, s: 0, l: 0 }, THREE.SRGBColorSpace).l;
+    expect(lightness(top) - lightness(under!)).toBeGreaterThan(0.05);
+  });
+
+  test("nandan's wavy hair has more boxes than short hair, so it reads uneven", () => {
+    const count = (id: 'nandan' | 'alexander') => (built(defaultAppearance(id)).getObjectByName('look-hair') as THREE.Mesh).geometry.getAttribute('position').count;
+    expect(count('nandan')).toBeGreaterThan(count('alexander'));
+  });
+
+  test('glasses temples stay within the head width', () => {
+    const mesh = built(defaultAppearance('rafael')).getObjectByName('look-glasses') as THREE.Mesh;
+    mesh.geometry.computeBoundingBox();
+    expect(mesh.geometry.boundingBox!.max.x).toBeLessThanOrEqual(4.1 + 1e-6);
   });
 
   test('hair hangs off the head in the look colour; bald has none', () => {
