@@ -149,9 +149,9 @@ export function createGame(
   const isTouch = view.touchUi !== null;
   // Software GL cannot afford shadows or image-based light.
   const shadows = !isTouch && !view.softwareGl;
-  const imageLight = hasSky(firstLobby.timeOfDay) && !view.softwareGl;
+  const imageLight = hasSky(firstLobby.timeOfDay, firstLobby.weather) && !view.softwareGl;
   const conditions = applyConditions(scene, look, isTouch, vehicleConfig.halfExtents, imageLight, shadows);
-  applySky(renderer, scene, look, firstLobby.timeOfDay, imageLight);
+  applySky(renderer, scene, look, firstLobby.timeOfDay, imageLight, firstLobby.weather);
   configureRenderer(renderer, look, shadows);
   const vehicleMesh = createVehicleMesh(vehicleConfig, view.softwareGl);
   vehicleMesh.visible = false;

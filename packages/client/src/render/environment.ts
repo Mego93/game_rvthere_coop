@@ -1,37 +1,45 @@
-import type { TimeOfDay, Vec3 } from '@lodgy/shared';
+import type { TimeOfDay, Vec3, Weather } from '@lodgy/shared';
 import * as THREE from 'three';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { conditionsLook, toneMappedColour, type Look } from './conditions';
 
 const SKY_BASE_URL = '/env/';
 
-export const SKY_FILES: Record<TimeOfDay, string> = {
+// The sky of each time of day, and the overcast sky that rain and sandstorms use by day.
+export type SkyId = TimeOfDay | 'overcast';
+
+export const SKY_FILES: Record<SkyId, string> = {
   dawn: 'qwantani_dawn_puresky_1k.hdr',
   midday: 'kloofendal_48d_partly_cloudy_puresky_1k.hdr',
   sunset: 'qwantani_sunset_puresky_1k.hdr',
-  // The night sky is the dusk sky, darkened by its intensities.
-  night: 'qwantani_dusk_2_puresky_1k.hdr',
+  night: 'qwantani_night_puresky_1k.hdr',
+  overcast: 'kloofendal_overcast_puresky_1k.hdr',
 };
 
+// Night keeps its own sky in any weather: the overcast file is a daylight sky.
+export function skyFor(timeOfDay: TimeOfDay, weather: Weather = 'clear'): SkyId {
+  return timeOfDay !== 'night' && weather !== 'clear' ? 'overcast' : timeOfDay;
+}
+
 // Where the sun is in each file, measured on the file: azimuth is atan2(z, x) of the brightest direction, in degrees.
-export const SKY_SUN_AZIMUTH: Record<TimeOfDay, number> = { dawn: 36.3, midday: 34.3, sunset: 36, night: 36.6 };
+export const SKY_SUN_AZIMUTH: Record<SkyId, number> = { dawn: 36.3, midday: 34.3, sunset: 36, night: 101.6, overcast: 29.2 };
 
 const degrees = (radians: number) => (radians * 180) / Math.PI;
 
 // The backgroundRotation/environmentRotation about Y (degrees) that shows the file's sun in conditions.ts's sunDirection; three turns the sky by the opposite angle.
-export function skyYaw(timeOfDay: TimeOfDay, sunDirection: Vec3 = conditionsLook(timeOfDay, 'clear').sunDirection): number {
+export function skyYaw(timeOfDay: TimeOfDay, sunDirection: Vec3 = conditionsLook(timeOfDay, 'clear').sunDirection, weather: Weather = 'clear'): number {
   const world = degrees(Math.atan2(sunDirection.z, sunDirection.x));
-  const yaw = SKY_SUN_AZIMUTH[timeOfDay] - world;
+  const yaw = SKY_SUN_AZIMUTH[skyFor(timeOfDay, weather)] - world;
   return (((yaw + 180) % 360) + 360) % 360 - 180;
 }
 
-const skies = new Map<TimeOfDay, THREE.DataTexture>();
+const skies = new Map<SkyId, THREE.DataTexture>();
 let skyPreload: Promise<void> | null = null;
 
 export const SKY_COUNT = Object.keys(SKY_FILES).length;
 
-export function hasSky(timeOfDay: TimeOfDay): boolean {
-  return skies.has(timeOfDay);
+export function hasSky(timeOfDay: TimeOfDay, weather: Weather = 'clear'): boolean {
+  return skies.has(skyFor(timeOfDay, weather));
 }
 
 // Never rejects: a failed file logs once and its time of day keeps the flat sky colour.
@@ -40,7 +48,7 @@ export function preloadSkies(onProgress?: (done: number, total: number) => void)
     const loader = new HDRLoader();
     let done = 0;
     await Promise.all(
-      (Object.keys(SKY_FILES) as TimeOfDay[]).map(async (time) => {
+      (Object.keys(SKY_FILES) as SkyId[]).map(async (time) => {
         try {
           const texture = await loader.loadAsync(SKY_BASE_URL + SKY_FILES[time]);
           texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -94,14 +102,14 @@ function lightingCopy(sky: THREE.DataTexture): THREE.DataTexture {
 
 interface Prefiltered {
   generator: THREE.PMREMGenerator;
-  time: TimeOfDay | null;
+  time: SkyId | null;
   target: THREE.WebGLRenderTarget | null;
 }
 
 const prefiltered = new WeakMap<THREE.WebGLRenderer, Prefiltered>();
 
 // One generator per renderer; only the current time of day's prefiltered map is kept.
-function environmentMap(renderer: THREE.WebGLRenderer, time: TimeOfDay): THREE.Texture | null {
+function environmentMap(renderer: THREE.WebGLRenderer, time: SkyId): THREE.Texture | null {
   const sky = skies.get(time);
   if (!sky) return null;
   let entry = prefiltered.get(renderer);
@@ -121,11 +129,12 @@ function environmentMap(renderer: THREE.WebGLRenderer, time: TimeOfDay): THREE.T
 }
 
 // Sets the sky as background and, unless `lighting` is off, as image-based light; false when the file is missing and the flat sky colour stays.
-export function applySky(renderer: THREE.WebGLRenderer, scene: THREE.Scene, look: Look, timeOfDay: TimeOfDay, lighting = true): boolean {
-  const sky = skies.get(timeOfDay);
-  const environment = sky && lighting ? environmentMap(renderer, timeOfDay) : null;
+export function applySky(renderer: THREE.WebGLRenderer, scene: THREE.Scene, look: Look, timeOfDay: TimeOfDay, lighting = true, weather: Weather = 'clear'): boolean {
+  const id = skyFor(timeOfDay, weather);
+  const sky = skies.get(id);
+  const environment = sky && lighting ? environmentMap(renderer, id) : null;
   if (!sky || (lighting && !environment)) return false;
-  const yaw = (skyYaw(timeOfDay, look.sunDirection) * Math.PI) / 180;
+  const yaw = (skyYaw(timeOfDay, look.sunDirection, weather) * Math.PI) / 180;
   scene.background = look.hdriBackground ? sky : toneMappedColour(look.sky, look.exposure);
   scene.backgroundIntensity = look.backgroundIntensity;
   scene.backgroundRotation.set(0, yaw, 0);

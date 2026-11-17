@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CREDITS_FAILED, CREDITS_URL, loadCredits } from './credits';
 
@@ -35,4 +35,28 @@ describe('OpenStreetMap credit (R12, T13)', () => {
       expect(text).toContain('https://www.openstreetmap.org/copyright');
     });
   }
+});
+
+describe('Sketchfab credits (step 33)', () => {
+  const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
+  const files = readdirSync(new URL('../../public/models/sketchfab/', import.meta.url)).filter((name) => name.endsWith('.glb'));
+  for (const [name, path] of [['root CREDITS.md', '../../../../CREDITS.md'], ['served credits', '../../public/CREDITS.md']] as const) {
+    it(`${name} has an entry for every Sketchfab model, with its source, licence and the modification`, () => {
+      const lines = read(path).split('\n');
+      expect(files.length).toBeGreaterThan(0);
+      for (const file of files) {
+        const entry = lines.find((line) => line.startsWith('- ') && line.includes(`\`${file}\``));
+        expect(entry, file).toBeDefined();
+        expect(entry, file).toContain('https://sketchfab.com/3d-models/');
+        expect(entry, file).toMatch(/Licence: (CC BY 4\.0|CC0 1\.0)/);
+        expect(entry, file).toContain('Modified: textures resized');
+      }
+    });
+  }
+
+  it('every Sketchfab model is in the folder License.txt, and the served credits list the two new skies', () => {
+    const licence = read('../../public/models/sketchfab/License.txt');
+    for (const file of files) expect(licence, file).toContain(`File: ${file}`);
+    for (const sky of ['qwantani_night_puresky_1k.hdr', 'kloofendal_overcast_puresky_1k.hdr']) expect(read('../../public/CREDITS.md')).toContain(sky);
+  });
 });

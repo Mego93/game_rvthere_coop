@@ -1,0 +1,145 @@
+[
+ {
+  "name": "jerrycan",
+  "uid": "cc3fa5c4c9f44abc9e9abf2f3cf27d29",
+  "viewer": "https://sketchfab.com/3d-models/low-poly-jerry-can-fuel-can-cc3fa5c4c9f44abc9e9abf2f3cf27d29",
+  "from": "picks/items/jerrycan-cc3fa5c4c9f44abc9e9abf2f3cf27d29/cc3fa5c4c9f44abc9e9abf2f3cf27d29.glb",
+  "max": 256
+ },
+ {
+  "name": "toolbox",
+  "uid": "31b3d48ddc8f4b40a4099647fa016305",
+  "viewer": "https://sketchfab.com/3d-models/old-tool-box-31b3d48ddc8f4b40a4099647fa016305",
+  "from": "picks/items/toolbox-31b3d48ddc8f4b40a4099647fa016305/31b3d48ddc8f4b40a4099647fa016305.glb",
+  "max": 256
+ },
+ {
+  "name": "first-aid",
+  "uid": "f84d239f92364681b9ee901d517b90b8",
+  "viewer": "https://sketchfab.com/3d-models/health-kit-f84d239f92364681b9ee901d517b90b8",
+  "from": "picks/items/first-aid-f84d239f92364681b9ee901d517b90b8/f84d239f92364681b9ee901d517b90b8.glb",
+  "max": 256
+ },
+ {
+  "name": "tajine",
+  "uid": "d94e461276e5447d809650a9afb52955",
+  "viewer": "https://sketchfab.com/3d-models/low-poly-tajine-earthenware-pot-d94e461276e5447d809650a9afb52955",
+  "from": "picks/items/tajine-d94e461276e5447d809650a9afb52955/d94e461276e5447d809650a9afb52955.glb",
+  "max": 256
+ },
+ {
+  "name": "coin",
+  "uid": "6c092b0c3aae431ba26556fb8af68d99",
+  "viewer": "https://sketchfab.com/3d-models/coin-low-poly-medieval-cc0-6c092b0c3aae431ba26556fb8af68d99",
+  "from": "picks/items/coin-6c092b0c3aae431ba26556fb8af68d99/6c092b0c3aae431ba26556fb8af68d99.glb",
+  "max": 256
+ },
+ {
+  "name": "crate",
+  "uid": "6606aaf169b74eb6908fbce1090ca248",
+  "viewer": "https://sketchfab.com/3d-models/wood-shipping-box-low-poly-6606aaf169b74eb6908fbce1090ca248",
+  "from": "picks/obstacles/crate-6606aaf169b74eb6908fbce1090ca248/6606aaf169b74eb6908fbce1090ca248.glb",
+  "max": 256
+ },
+ {
+  "name": "barrier",
+  "uid": "e0fb4ba5ee434433bbdb4a16aaa2f8fb",
+  "viewer": "https://sketchfab.com/3d-models/lowpoly-concrete-barrier-e0fb4ba5ee434433bbdb4a16aaa2f8fb",
+  "from": "picks/obstacles/barrier-e0fb4ba5ee434433bbdb4a16aaa2f8fb/e0fb4ba5ee434433bbdb4a16aaa2f8fb.glb",
+  "max": 256,
+  "drop": [
+   "roadblock2"
+  ]
+ },
+ {
+  "name": "cart",
+  "uid": "a108b5dd469045f182eabf41f10b0d26",
+  "viewer": "https://sketchfab.com/3d-models/hat-gadi-indian-hand-cart-a108b5dd469045f182eabf41f10b0d26",
+  "from": "picks/obstacles/hand-cart-a108b5dd469045f182eabf41f10b0d26/a108b5dd469045f182eabf41f10b0d26.glb",
+  "max": 256
+ },
+ {
+  "name": "scooter",
+  "uid": "0339ea59d4584d0abc9074c382396af2",
+  "viewer": "https://sketchfab.com/3d-models/orange-vespa-low-poly-0339ea59d4584d0abc9074c382396af2",
+  "from": "picks/obstacles/scooter-0339ea59d4584d0abc9074c382396af2/0339ea59d4584d0abc9074c382396af2.glb",
+  "max": 256
+ },
+ {
+  "name": "goat",
+  "uid": "e08bb2e734004870b1ed4c21f111a854",
+  "viewer": "https://sketchfab.com/3d-models/low-poly-goat-e08bb2e734004870b1ed4c21f111a854",
+  "from": "picks/obstacles/goat-e08bb2e734004870b1ed4c21f111a854/e08bb2e734004870b1ed4c21f111a854.glb",
+  "max": 512
+ },
+ {
+  "name": "rocks",
+  "uid": "f4200e8f693e49a28b59dd7f18e8dc65",
+  "viewer": "https://sketchfab.com/3d-models/low-poly-desert-rocks-asset-pack-f4200e8f693e49a28b59dd7f18e8dc65",
+  "from": "picks/obstacles/rocks-f4200e8f693e49a28b59dd7f18e8dc65/f4200e8f693e49a28b59dd7f18e8dc65.glb",
+  "max": 256
+ },
+ {
+  "name": "tyres",
+  "uid": "65cc7bcf581646a3bc42cf31d0580bcb",
+  "viewer": "https://sketchfab.com/3d-models/racetrack-tire-stack-standard-v2-65cc7bcf581646a3bc42cf31d0580bcb",
+  "from": "picks/obstacles/tyre-stack-65cc7bcf581646a3bc42cf31d0580bcb/65cc7bcf581646a3bc42cf31d0580bcb.glb",
+  "max": 256
+ },
+ {
+  "name": "cone",
+  "uid": "1e00acb7d0b14c4380549f423fe0f34b",
+  "viewer": "https://sketchfab.com/3d-models/psx-style-traffic-cone-1e00acb7d0b14c4380549f423fe0f34b",
+  "from": "picks/obstacles/traffic-cone-1e00acb7d0b14c4380549f423fe0f34b/1e00acb7d0b14c4380549f423fe0f34b.glb",
+  "max": 256
+ },
+ {
+  "name": "agave",
+  "uid": "705fed6ebab542f8acf6016c70edea35",
+  "viewer": "https://sketchfab.com/3d-models/stylised-agave-plant-705fed6ebab542f8acf6016c70edea35",
+  "from": "picks/decor/agave-cactus-705fed6ebab542f8acf6016c70edea35/705fed6ebab542f8acf6016c70edea35.glb",
+  "max": 512
+ },
+ {
+  "name": "cliffs",
+  "uid": "954738987a9443a99bc5a0e4825dce04",
+  "viewer": "https://sketchfab.com/3d-models/free-modular-cliffs-954738987a9443a99bc5a0e4825dce04",
+  "from": "picks/decor/desert-rocks-cliffs-954738987a9443a99bc5a0e4825dce04/954738987a9443a99bc5a0e4825dce04.glb",
+  "max": 512
+ },
+ {
+  "name": "kasbah",
+  "uid": "cf52f4fcba9f493284fbcc1d446f7446",
+  "viewer": "https://sketchfab.com/3d-models/desert-village-cf52f4fcba9f493284fbcc1d446f7446",
+  "from": "picks/decor/house-kasbah-cf52f4fcba9f493284fbcc1d446f7446/cf52f4fcba9f493284fbcc1d446f7446.glb",
+  "max": 512
+ },
+ {
+  "name": "mosque",
+  "uid": "e04f80ea13a94f879e7a26b1628e1a21",
+  "viewer": "https://sketchfab.com/3d-models/arabic-mosque-e04f80ea13a94f879e7a26b1628e1a21",
+  "from": "picks/decor/mosque-e04f80ea13a94f879e7a26b1628e1a21/e04f80ea13a94f879e7a26b1628e1a21.glb",
+  "max": 512
+ },
+ {
+  "name": "stall",
+  "uid": "2735bf5e9dd84a50827496c755b313a8",
+  "viewer": "https://sketchfab.com/3d-models/low-poly-market-stall-1-2735bf5e9dd84a50827496c755b313a8",
+  "from": "picks/decor/market-stall-2735bf5e9dd84a50827496c755b313a8/2735bf5e9dd84a50827496c755b313a8.glb",
+  "max": 512
+ },
+ {
+  "name": "mountains",
+  "uid": "62c8d97529e64437a52ac42c41339a01",
+  "viewer": "https://sketchfab.com/3d-models/mountains-62c8d97529e64437a52ac42c41339a01",
+  "from": "picks/decor/mountains-62c8d97529e64437a52ac42c41339a01/62c8d97529e64437a52ac42c41339a01.glb",
+  "max": 512
+ },
+ {
+  "name": "headdress",
+  "uid": "205773879931426c975ce9005274ca81",
+  "viewer": "https://sketchfab.com/3d-models/arab-headdress-205773879931426c975ce9005274ca81",
+  "from": "models/chars/205773879931426c975ce9005274ca81.glb",
+  "max": 256
+ }
+]

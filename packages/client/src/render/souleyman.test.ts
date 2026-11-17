@@ -1,7 +1,8 @@
 import { CHARACTER_SCALE, quatFromAxisAngle, AXIS_Y, vec3, type Checkpoint } from '@lodgy/shared';
 import * as THREE from 'three';
-import { expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { SOULEYMAN_GREETING } from '../ui/hud/eventToast';
+import { loadManifestModel } from './modelTestHelper';
 import { createSouleymanMesh, createSouleymanMeshes, SOULEYMAN_LATERAL, souleymanPlacements } from './souleyman';
 
 const box = { center: vec3(0, 0, 0), halfExtents: vec3(1, 1, 1), rot: { x: 0, y: 0, z: 0, w: 1 } };
@@ -82,4 +83,93 @@ test('a quarter turn swaps the footprint extents', () => {
   expect(b.x).toBeCloseTo(a.z, 2);
   expect(b.z).toBeCloseTo(a.x, 2);
   expect(b.x).toBeLessThan(b.z - 0.1);
+});
+
+// The model path (step 33): the game's blocky character in four looks, merged per material and per look.
+const { loaded } = vi.hoisted(() => ({ loaded: new Map<string, () => THREE.Group>() }));
+
+vi.mock('./models', async (original) => ({
+  ...(await original<typeof import('./models')>()),
+  hasModel: (key: string) => loaded.has(key),
+  instantiate: (key: string) => loaded.get(key)?.() ?? null,
+}));
+
+describe('four looks on the game character', () => {
+  const place = (index: number) => ({ x: index * 3, y: 1, z: -7, yaw: 0.3, variant: index % 4 });
+
+  beforeEach(async () => {
+    loaded.clear();
+    const character = await loadManifestModel('character.player');
+    const headdress = await loadManifestModel('souleyman.headdress');
+    loaded.set('character.player', () => character.clone(true));
+    loaded.set('souleyman.headdress', () => headdress.clone(true));
+  });
+
+  const names = (figure: THREE.Object3D) => {
+    const found: string[] = [];
+    figure.traverse((node) => found.push(node.name));
+    return found;
+  };
+
+  test('T3: a figure of each look stands on the ground, is about 1.8 x CHARACTER_SCALE tall to the head and casts shadows', () => {
+    for (let variant = 0; variant < 4; variant++) {
+      const figure = createSouleymanMesh(variant);
+      figure.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(figure);
+      expect(box.min.y, `look ${variant}`).toBeCloseTo(0, 2);
+      const head = figure.getObjectByName('head') as THREE.Mesh;
+      head.geometry.computeBoundingBox();
+      expect(head.geometry.boundingBox!.clone().applyMatrix4(head.matrixWorld).max.y, `look ${variant}`).toBeCloseTo(1.8 * CHARACTER_SCALE, 2);
+      figure.traverse((node) => {
+        if ((node as THREE.Mesh).isMesh && !node.name.startsWith('look-')) expect((node as THREE.Mesh).castShadow, node.name).toBe(true);
+      });
+    }
+  });
+
+  test('T3: each look has its own head wear: pointed hood, white turban, red fez, the Sketchfab headdress parented to the head', () => {
+    const wear = (variant: number) => names(createSouleymanMesh(variant)).filter((name) => ['hood', 'turban', 'fez', 'headdress'].includes(name));
+    expect(wear(0)).toContain('hood');
+    expect(wear(1)).toContain('turban');
+    expect(wear(2)).toContain('fez');
+    expect(wear(3)).toContain('headdress');
+    const figure = createSouleymanMesh(3);
+    const headdress = figure.getObjectByName('headdress')!;
+    expect(headdress.parent).toBe(figure.getObjectByName('head'));
+    for (const variant of [0, 1, 2]) expect(names(createSouleymanMesh(variant))).not.toContain('headdress');
+  });
+
+  test('T3: the four looks differ in robe colour and in silhouette', () => {
+    const robe = (variant: number) => (createSouleymanMesh(variant).getObjectByName('robe') as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    const colours = new Set([0, 1, 2, 3].map((variant) => robe(variant).color.getHex()));
+    expect(colours.size).toBe(4);
+    const tops = [0, 1, 2, 3].map((variant) => new THREE.Box3().setFromObject(createSouleymanMesh(variant)).max.y);
+    expect(new Set(tops.map((y) => y.toFixed(3))).size).toBeGreaterThan(1);
+  });
+
+  test('T3: souleymanPlacements gives the look index % 4 in checkpoint order', () => {
+    const list = Array.from({ length: 9 }, (_, index) => checkpoint(`c${index}`, index, 0, 0, 0));
+    expect(souleymanPlacements(list).map((p) => p.variant)).toEqual([0, 1, 2, 3, 0, 1, 2, 3, 0]);
+  });
+
+  test('T3: the merged mesh count is bounded by looks x 6 and does not grow with the figure count', () => {
+    const few = createSouleymanMeshes([0, 1, 2, 3].map(place));
+    const many = createSouleymanMeshes(Array.from({ length: 80 }, (_, index) => place(index)));
+    expect(few.length).toBeGreaterThan(4);
+    expect(few.length).toBeLessThanOrEqual(4 * 6);
+    expect(many.length).toBe(few.length);
+    for (const mesh of many) expect(mesh.name).toBe('souleyman');
+    const vertices = (meshes: THREE.Mesh[]) => meshes.reduce((sum, mesh) => sum + mesh.geometry.getAttribute('position').count, 0);
+    expect(vertices(many)).toBeGreaterThan(vertices(few) * 15);
+  });
+
+  test('T3: a figure is merged at its place, standing on y, and every look is present', () => {
+    const meshes = createSouleymanMeshes([place(0), place(1), place(2), place(3)]);
+    const bounds = new THREE.Box3();
+    for (const mesh of meshes) bounds.union(new THREE.Box3().setFromObject(mesh));
+    expect(bounds.min.y).toBeCloseTo(1, 2);
+    expect(bounds.min.x).toBeLessThan(0);
+    expect(bounds.max.x).toBeGreaterThan(9);
+    const withoutModel = (loaded.clear(), createSouleymanMeshes([0, 1, 2, 3].map(place)));
+    expect(withoutModel.length).toBeLessThanOrEqual(6);
+  });
 });

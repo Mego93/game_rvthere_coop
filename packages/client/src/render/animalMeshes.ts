@@ -1,9 +1,12 @@
 import { ANIMAL_HALF_GOAT, ANIMAL_HALF_SCOOTER, type AnimalSnapshot } from '@lodgy/shared';
 import * as THREE from 'three';
-import { createPropMesh, disposePropMesh } from './propMesh';
+import { hasModel, instantiate } from './models';
+import { createPropMesh, disposePropMesh, fitToHalf } from './propMesh';
 
 // Tipped about the long (z) axis: nearly on its side.
 export const HIT_TILT = 1.4;
+// The goat file runs head to tail along x with the head at -x; the game's goat faces -z.
+export const GOAT_YAW = -Math.PI / 2;
 const GOAT_COLOUR = 0xcbbf9a;
 const HORN_COLOUR = 0x5a4a32;
 
@@ -31,6 +34,9 @@ export function createGoatMesh(): THREE.Group {
   return group;
 }
 
+// The goat model stretched to ANIMAL_HALF_GOAT and centred on the hit box, like createGoatMesh.
+export const fitGoatModel = (model: THREE.Object3D): THREE.Group => fitToHalf(model, ANIMAL_HALF_GOAT, GOAT_YAW);
+
 interface Entry {
   root: THREE.Group;
   inner: THREE.Object3D;
@@ -39,7 +45,8 @@ interface Entry {
 }
 
 function build(kind: AnimalSnapshot['kind']): Entry {
-  const inner = kind === 'goat' ? createGoatMesh() : createPropMesh('scooter');
+  const model = kind === 'goat' && hasModel('animal.goat') ? instantiate('animal.goat') : null;
+  const inner = kind === 'goat' ? (model ? fitGoatModel(model) : createGoatMesh()) : createPropMesh('scooter');
   const root = new THREE.Group();
   root.add(inner);
   // The distance from the box centre down to where its side meets the ground when it lies over.
@@ -49,17 +56,7 @@ function build(kind: AnimalSnapshot['kind']): Entry {
 
 function dispose(scene: THREE.Scene, entry: Entry) {
   scene.remove(entry.root);
-  if (entry.kind === 'goat') {
-    entry.inner.traverse((node) => {
-      if (!(node instanceof THREE.Mesh)) return;
-      node.geometry.dispose();
-    });
-    const seen = new Set<THREE.Material>();
-    entry.inner.traverse((node) => {
-      if (node instanceof THREE.Mesh) seen.add(node.material as THREE.Material);
-    });
-    for (const material of seen) material.dispose();
-  } else disposePropMesh(entry.inner);
+  disposePropMesh(entry.inner);
 }
 
 export interface AnimalMeshes {
