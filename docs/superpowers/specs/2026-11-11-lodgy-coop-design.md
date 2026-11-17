@@ -81,6 +81,8 @@ A run never hard-fails. The vehicle is lost when its health reaches 0 or its cen
 
 A checkpoint sits at the start of every segment. It is recorded the first time the vehicle's centre enters that segment's trigger region. The course start is the first checkpoint, recorded at run start. The last checkpoint is the most recently recorded one.
 
+**Souleyman.** Each checkpoint is shown as a static figure named Souleyman (a robe with a hood, a turban and a beard), standing `ROAD_WIDTH / 2 + 1.5` m to the right of the centre line at the checkpoint's spawn, facing the road. He has no body and no snapshot data; the client draws him and shows the toast `Souleyman: Saved. Bonne route!` with the checkpoint sound when the `checkpoint` event arrives. There is no blue trigger box any more. He is a procedural placeholder; a downloaded CC0 or CC-BY model would replace only the mesh builder.
+
 An empty fuel tank is not a loss. It disables drive until someone refuels.
 
 ### Players
