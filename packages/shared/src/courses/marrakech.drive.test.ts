@@ -10,6 +10,7 @@ import { createWorld, type World } from '../world';
 import { alongOf, alongOfPoint, driveWorld, segmentRouteLength, segmentStarts } from './driveRig';
 import { getCourse, getCourseDef } from './index';
 import { MARRAKECH_INSERTED } from './marrakech.generated';
+import { DEEP_PIT } from './terrain';
 import { boardVehicle, exitVehicle, pushAside } from './soloRig';
 
 // The shared package has no DOM or Node typings.
@@ -40,13 +41,13 @@ const ROADWORKS = new Set(def.segments.flatMap((s, i) => (s.type === 'roadworks'
 type Kind = 'hill' | 'bigHill' | 'pit' | 'deepPit';
 const groups: { kind: Kind; indexes: number[] }[] = [];
 def.segments.forEach((s, i) => {
-  if (s.type === 'pit') groups.push({ kind: s.gradientOut ? 'deepPit' : 'pit', indexes: [i] });
+  if (s.type === 'pit') groups.push({ kind: JSON.stringify(s) === JSON.stringify(DEEP_PIT) ? 'deepPit' : 'pit', indexes: [i] });
   const next = def.segments[i + 2];
   if (s.type === 'road' && s.slope && s.slope > 0 && next?.type === 'road' && next.slope === -s.slope) groups.push({ kind: s.slope === BIG_HILL_SLOPE ? 'bigHill' : 'hill', indexes: [i - 1, i, i + 1, i + 2, i + 3] });
 });
 const bank = def.segments.findIndex((s) => s.type === 'bank');
 // Spec: the RV needs the winch on the bank, the big hill and the deep pits (they have anchors), so its drive skips them; the Lodgy drives them (a deep pit is a jolt for it).
-export const RV_NEEDS_WINCH: ReadonlySet<string> = new Set(['bank', 'bigHill', 'deepPit']);
+const RV_NEEDS_WINCH: ReadonlySet<string> = new Set(['bank', 'bigHill', 'deepPit']);
 const winchSegments = new Set<number>([...(bank >= 0 && RV_NEEDS_WINCH.has('bank') ? [bank] : []), ...groups.filter((g) => RV_NEEDS_WINCH.has(g.kind)).flatMap((g) => g.indexes)]);
 const skipsFor = (vehicleId: string): Set<number> => (vehicleId === 'rv' ? winchSegments : new Set());
 

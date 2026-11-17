@@ -70,13 +70,26 @@ describe('T7 the terrain in the generated course', () => {
     for (const s of of('deepPit')) expect(segments[s.first]).toEqual(DEEP_PIT);
   });
 
-  it('puts each feature within 1.3 km of its target (the unshifted fraction), and the shifts stay that small', () => {
+  it('puts each feature within 200 m of its target, the 0.55 hill within 1.3 km, and the shifts stay small', () => {
     const { placements } = planMarrakech();
-    const terrain = placements.filter((p) => MARRAKECH_TERRAIN.some((e) => e.name === p.name)).slice(-MARRAKECH_TERRAIN.length);
+    const terrain = placements.slice(-MARRAKECH_TERRAIN.length);
     expect(terrain.map((p) => p.name)).toEqual(MARRAKECH_TERRAIN.map((e) => e.name));
-    for (const p of terrain) expect(p.distance, p.name).toBeLessThanOrEqual(MAX_TERRAIN_DISTANCE);
+    terrain.forEach((p, i) => {
+      // The 0.55 hill: the roadworks insert at 0.52 takes the nearest straight of 165 m (alone it would still be 585 m out), so it goes 1,085 m away.
+      const exception = MARRAKECH_TERRAIN[i]!.name === 'hill' && MARRAKECH_TERRAIN[i]!.fraction === 0.55;
+      expect(p.distance, `${p.name} ${MARRAKECH_TERRAIN[i]!.fraction}`).toBeLessThanOrEqual(exception ? MAX_TERRAIN_DISTANCE : 200);
+    });
     expect(MARRAKECH_TERRAIN_SHIFTS).toHaveLength(MARRAKECH_TERRAIN.length);
-    for (const shift of MARRAKECH_TERRAIN_SHIFTS) expect(Math.abs(shift)).toBeLessThan(MAX_TERRAIN_DISTANCE);
+    for (const shift of MARRAKECH_TERRAIN_SHIFTS) expect(Math.abs(shift)).toBeLessThanOrEqual(200);
+  });
+
+  it('keeps the new terrain 120 m from the sand, alley, roadworks and ford group', () => {
+    const old = segments.flatMap((def, i) => (['sand', 'alley', 'roadworks', 'ford'].includes(def.type) ? [{ first: i, last: def.type === 'ford' ? i + 2 : i }] : []));
+    expect(old).toHaveLength(5);
+    for (const s of spans) for (const o of old) {
+      const between = Math.max(start[o.first]! - (start[s.last]! + advance[s.last]!), start[s.first]! - (start[o.last]! + advance[o.last]!));
+      expect(between, `${s.kind} ${s.first} and insert ${o.first}`).toBeGreaterThanOrEqual(TERRAIN_HAZARD_CLEAR - 1e-6);
+    }
   });
 
   it('keeps terrain on straights: never the first or last segment, never next to a curve', () => {
@@ -112,7 +125,8 @@ describe('T7 the terrain in the generated course', () => {
   it('gives each added segment its own checkpoint', () => {
     const course = buildCourse({ id: 'marrakech-terrain', segments, targetTime: 1800 });
     expect(course.checkpoints).toHaveLength(segments.length);
-    expect(segments.length).toBeGreaterThan(fitRoute(MARRAKECH_ROUTE).segments.length + 40);
+    // 33 inserted segments in 15 inserts, each split off a straight that leaves up to two remainders: 212 fitted segments grow to 260.
+    expect(course.checkpoints.length - fitRoute(MARRAKECH_ROUTE).segments.length).toBe(48);
   });
 });
 

@@ -26,7 +26,8 @@ export function hillSegments(slope: number): SegmentDef[] {
   const crest = flat();
   if (slope === BIG_HILL_SLOPE) {
     climb.anchors = BIG_HILL_ANCHORS_ALONG.map((along, i) => boulder(along, i % 2 === 0 ? -1 : 1));
-    crest.anchors = [boulder(SEGMENT_MIN_LENGTH / 2, BIG_HILL_ANCHORS_ALONG.length % 2 === 0 ? -1 : 1)];
+    // The climb's two boulders take the left then the right, so the crest's is on the left again.
+    crest.anchors = [boulder(SEGMENT_MIN_LENGTH / 2, -1)];
   }
   return [flat(), climb, crest, { type: 'road', length, slope: -slope }, flat()];
 }

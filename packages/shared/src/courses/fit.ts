@@ -273,8 +273,7 @@ interface Item {
 
 const freeStraight = (def: SegmentDef): boolean => def.type === 'road' && !def.curve && !def.slope && !def.stop && !def.hazards;
 
-// Replaces a stretch of the straight nearest each target; each side that stays is 0 or at least 15 m. Net length is unchanged.
-// A spec's length is the horizontal advance of its segments, so a group may hold sloped members (a hill).
+// Replaces a stretch of the straight nearest each target (spec length = horizontal advance, so groups may slope); each side that stays is 0 or at least 15 m.
 export function planInserts(segments: readonly SegmentDef[], specs: readonly InsertSpec[]): { segments: SegmentDef[]; placements: InsertPlacement[]; inserted: number[]; groups: InsertGroup[] } {
   let items: Item[] = segments.map((def) => ({ defs: [def], length: 'length' in def ? def.length : 0, free: freeStraight(def) }));
   const total = items.reduce((sum, item) => sum + item.length, 0);

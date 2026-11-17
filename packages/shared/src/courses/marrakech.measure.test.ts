@@ -70,13 +70,17 @@ function gapLeft(vehicleId: string, a: number, b: number): number {
 }
 
 const pairs = fuelIndexes.slice(0, -1).map((a, n) => [a, fuelIndexes[n + 1]!] as const);
-// The sampled gaps: the longest, the one holding the ford group, the first and the last.
+// The sampled gaps: the longest, the one with the most skipped length, the one holding the ford group, the first and the last.
 const sampled = new Set<number>();
 {
   const length = (n: number) => ranges.slice(pairs[n]![0], pairs[n]![1] + 1).reduce((sum, r) => sum + r.to - r.from, 0);
   let longest = 0;
   pairs.forEach((_, n) => length(n) > length(longest) && (longest = n));
   sampled.add(longest);
+  const skippedLength = (n: number) => ranges.slice(pairs[n]![0], pairs[n]![1] + 1).reduce((sum, r, i) => sum + (skips('rv').has(pairs[n]![0] + i) ? r.to - r.from : 0), 0);
+  let mostTerrain = 0;
+  pairs.forEach((_, n) => skippedLength(n) > skippedLength(mostTerrain) && (mostTerrain = n));
+  sampled.add(mostTerrain);
   sampled.add(0);
   sampled.add(pairs.length - 1);
   const ford = def.segments.findIndex((s) => s.type === 'ford');

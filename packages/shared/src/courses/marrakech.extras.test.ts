@@ -103,7 +103,7 @@ describe('planExtras terrain exclusion', () => {
   const gap = (i: number, first: number, last: number): number => Math.max(starts[first]! - (starts[i]! + advance(base[i]!)), starts[i]! - (starts[last]! + advance(base[last]!)), 0);
   const index = (segments: SegmentDef[], pick: (d: Extract<SegmentDef, { type: 'road' }>) => boolean): number[] => segments.flatMap((d, i) => (d.type === 'road' && pick(d) ? [i] : []));
 
-  it('keeps stops 150 m and hazards 120 m (150 m for a deep pit) from a span, and still plans', () => {
+  it('keeps stops and hazards 120 m (150 m for a deep pit) from a terrain span, and still plans', () => {
     const terrain = [{ first: 20, last: 22 }, { first: 40, last: 40, deep: true }];
     const without = planExtras(base, [20, 21, 22, 40], { garageEvery: 1200 });
     const r = planExtras(base, [20, 21, 22, 40], { garageEvery: 1200, terrain });
@@ -122,4 +122,3 @@ describe('planExtras terrain exclusion', () => {
     expect(planExtras(base, [], { garageEvery: 1200, terrain: [] }).segments).toEqual(planExtras(base, [], { garageEvery: 1200 }).segments);
   });
 });
-
