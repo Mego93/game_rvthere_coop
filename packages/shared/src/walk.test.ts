@@ -62,7 +62,7 @@ function walker(course: BuiltCourse, feet: Vec3) {
     launch: 0,
   };
   let before: InputFields = NEUTRAL_INPUT;
-  const tick = (fields: Partial<InputFields> = {}, carry: { carrying?: boolean; holdsProp?: boolean } = {}) => {
+  const tick = (fields: Partial<InputFields> = {}, carry: { carrying?: boolean; holdsProp?: boolean; speedScale?: number } = {}) => {
     const input = { ...NEUTRAL_INPUT, ...fields };
     const result = stepWalk(env, state, {
       jumpPressed: input.jump && !before.jump,
@@ -74,6 +74,7 @@ function walker(course: BuiltCourse, feet: Vec3) {
       moveX: input.moveX,
       moveY: input.moveY,
       yaw: input.yaw,
+      speedScale: carry.speedScale ?? 1,
     });
     before = input;
     return result;

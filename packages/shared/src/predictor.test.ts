@@ -35,6 +35,7 @@ const rest = (pos: Vec3): PredictedState => ({
   slideAir: 0,
   slideDir: { x: 0, z: 0 },
   launch: 0,
+  tajine: 0,
   carrying: false,
   holdsProp: false,
 });
@@ -466,6 +467,47 @@ describe('createPredictor', () => {
     expect(predictedFrom({ ...base, hands: 'crate-1' })).toMatchObject({ carrying: true, holdsProp: true });
   });
 
+  test('predictedFrom reads the tajine timer, 0 when absent', () => {
+    const base: PlayerSnapshot = {
+      playerId: 'p', pos: vec3(1, 2, 3), yaw: 0, seat: null, hands: null, ground: null, walk: { x: 0, z: 0 }, carry: { x: 0, z: 0 },
+      vy: 0, grounded: true, inventory: [null, null, null], slot: 0, hold: null, health: 100, downed: null,
+    };
+    expect(predictedFrom(base).tajine).toBe(0);
+    expect(predictedFrom({ ...base, tajine: 7.5 }).tajine).toBe(7.5);
+  });
+
+  test('(tajine) a predictor reset from a snapshot with the tajine runs at the boosted speed and matches the server, then drops the boost when the timer ends', () => {
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
+    world.addPlayer('p');
+    world.teleportPlayer('p', FAR);
+    for (let i = 0; i < 10; i++) world.step(new Map());
+    world.debugSetInventory('p', ['tajine', null, null]);
+    for (let i = 0; i < 200 && world.snapshot().players[0]!.tajine === undefined; i++) world.step(new Map([['p', { ...NEUTRAL_INPUT, seq: 0, use: true }]]));
+    world.step(new Map());
+    const vehicle = world.snapshot().vehicle;
+    const predictor = createPredictor(RAPIER, world.course, lodgy);
+    predictor.setVehicle(vehicle.pos, vehicle.rot);
+    const eaten = world.snapshot().players[0]!;
+    expect(eaten.tajine).toBeGreaterThan(14);
+    const me = driver(predictor, predictedFrom(eaten));
+    // Back and forth along x so the ground never runs out, for the whole timer and some after it.
+    let serverEnd = -1;
+    let predictedEnd = -1;
+    for (let i = 0; i < 17 * 60; i++) {
+      const fields = { moveY: 1, sprint: true, yaw: Math.floor(i / 120) % 2 === 0 ? Math.PI / 2 : -Math.PI / 2 };
+      world.step(new Map([['p', { ...NEUTRAL_INPUT, seq: 0, ...fields }]]));
+      me.tick(fields);
+      const server = world.snapshot().players[0]!;
+      if (serverEnd < 0 && server.tajine === undefined) serverEnd = i;
+      if (predictedEnd < 0 && me.state.tajine === 0) predictedEnd = i;
+      // Exact while both are boosted, and within the timer rounding (0.1 s in all) of the end.
+      if (i < 14.5 * 60) expect(Math.hypot(server.pos.x - me.state.pos.x, server.pos.z - me.state.pos.z)).toBeLessThan(1e-9);
+    }
+    expect(Math.abs(serverEnd - predictedEnd)).toBeLessThanOrEqual(6);
+    predictor.dispose();
+    world.dispose();
+  });
+
   test('predictedFrom copies', () => {
     const snapshot: PlayerSnapshot = {
       playerId: 'p',
@@ -497,6 +539,7 @@ describe('createPredictor', () => {
       slideAir: 0,
       slideDir: { x: 0, z: 0 },
       launch: 0,
+      tajine: 0,
       carrying: false,
       holdsProp: false,
     });

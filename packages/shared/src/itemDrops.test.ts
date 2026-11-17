@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eligibleSpans, hashSeed } from './ambient';
+import { eligibleSpans, hashSeed, mulberry32 } from './ambient';
 import {
   AMBIENT_REARM_CLEAR,
   ITEM_DROP_AHEAD,
@@ -12,7 +12,7 @@ import {
   ROAD_WIDTH,
 } from './constants';
 import { getCourse } from './courses/index';
-import { createItemDirector, markDropped, mixSeed, planItemDrops, rearmItems, stepItemDirector, type ItemDropEvent } from './itemDrops';
+import { createItemDirector, kindOfRoll, markDropped, mixSeed, planItemDrops, rearmItems, stepItemDirector, type ItemDropEvent } from './itemDrops';
 import { createRouteIndex } from './routeAlong';
 
 const marrakech = getCourse('marrakech');
@@ -77,14 +77,32 @@ describe('T1 planItemDrops on marrakech', () => {
   });
   it('kind mix is within a binomial tolerance of ITEM_DROP_MIX', () => {
     const n = plan.length;
-    for (const kind of ['jerrycan', 'toolbox', 'healthKit'] as const) {
+    for (const kind of ['jerrycan', 'toolbox', 'healthKit', 'tajine'] as const) {
       const p = ITEM_DROP_MIX[kind];
       const got = plan.filter((e) => e.kind === kind).length;
       expect(Math.abs(got - p * n)).toBeLessThanOrEqual(3 * Math.sqrt(n * p * (1 - p)) + 1);
     }
   });
   it('mix probabilities sum to 1', () => {
-    expect(ITEM_DROP_MIX.jerrycan + ITEM_DROP_MIX.toolbox + ITEM_DROP_MIX.healthKit).toBeCloseTo(1, 12);
+    expect(ITEM_DROP_MIX.jerrycan + ITEM_DROP_MIX.toolbox + ITEM_DROP_MIX.healthKit + ITEM_DROP_MIX.tajine).toBeCloseTo(1, 12);
+  });
+  it('adding the tajine leaves every seeded jerrycan drop where it was', () => {
+    const rolls = (run: number) => {
+      const rand = mulberry32(mixSeed(hashSeed('marrakech'), run));
+      const spots: number[] = [];
+      // Mirrors planItemDrops' draw order: jitter, kind, side per slot.
+      for (let k = 0; k < 40; k++) {
+        rand();
+        spots.push(rand());
+        rand();
+      }
+      return spots;
+    };
+    for (const run of [1, 2, 3, 50]) for (const r of rolls(run)) expect(kindOfRoll(r) === 'jerrycan').toBe(r < 0.2);
+  });
+  it('rolls map to kinds in the order jerrycan, toolbox, healthKit, tajine with the plan thresholds', () => {
+    const roll = (r: number) => kindOfRoll(r);
+    expect([0, 0.19, 0.2, 0.49, 0.5, 0.84, 0.85, 0.999].map(roll)).toEqual(['jerrycan', 'jerrycan', 'toolbox', 'toolbox', 'healthKit', 'healthKit', 'tajine', 'tajine']);
   });
 });
 

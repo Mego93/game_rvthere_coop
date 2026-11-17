@@ -1,4 +1,4 @@
-import { CHAT_MAX_LENGTH, ITEM_KINDS, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, TIMES_OF_DAY, WEATHERS, type ItemKind, type TimeOfDay, type Weather } from './constants';
+import { CHAT_MAX_LENGTH, EMOTES, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, SHOP_ITEMS, TIMES_OF_DAY, WEATHERS, WEATHER_SETTINGS, type Emote, type ItemKind, type ShopItem, type TimeOfDay, type Weather, type WeatherSetting } from './constants';
 import { isAppearance, type Appearance } from './characters';
 import { courseIds } from './courses/index';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
@@ -54,7 +54,7 @@ export type ClientMessage =
   | { type: 'create'; name: string; token: string }
   | { type: 'join'; room: string; name: string; token: string }
   | ({ type: 'input' } & PlayerInput)
-  | { type: 'buy'; item: ItemKind }
+  | { type: 'buy'; item: ShopItem }
   | { type: 'pong' }
   | { type: 'ready'; ready: boolean }
   | ({ type: 'appearance' } & Appearance)
@@ -66,7 +66,8 @@ export type ClientMessage =
   | { type: 'adminTool'; tool: AdminTool }
   | { type: 'toLobby' }
   | { type: 'next' }
-  | { type: 'chat'; text: string };
+  | { type: 'chat'; text: string }
+  | { type: 'emote'; emote: Emote };
 
 export const ADMIN_TOOLS = ['skipCheckpoint', 'refill'] as const;
 export type AdminTool = (typeof ADMIN_TOOLS)[number];
@@ -75,7 +76,7 @@ export interface RoomSettings {
   courseId: string;
   vehicleId: string;
   timeOfDay: TimeOfDay;
-  weather: Weather;
+  weather: WeatherSetting;
 }
 
 export type Phase = 'lobby' | 'playing' | 'results';
@@ -102,7 +103,7 @@ export interface LobbyMessage {
   courseId: string;
   vehicleId: string;
   timeOfDay: TimeOfDay;
-  weather: Weather;
+  weather: WeatherSetting;
 }
 
 export interface ResultsMessage {
@@ -110,7 +111,7 @@ export interface ResultsMessage {
   courseId: string;
   vehicleId: string;
   timeOfDay: TimeOfDay;
-  weather: Weather;
+  weather: WeatherSetting;
   elapsed: number;
   restarts: number;
   respawns: number;
@@ -149,13 +150,15 @@ export interface PlayerSnapshot {
   health: number;
   // Seconds left before respawn while downed.
   downed: number | null;
+  // Seconds of the tajine left, rounded to 0.1; absent at 0.
+  tajine?: number;
   // Absent means standing; a stance this version does not know is read as standing.
   stance?: 'crouch' | 'slide';
   // Present only while a slide or its cooldown runs; timers are whole ticks.
   slide?: { ticks: number; cooldown: number; air: number; dirX: number; dirZ: number; launch?: number };
 }
 
-export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit'] as const;
+export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit', 'eat'] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
 export interface EventMessage {
@@ -183,6 +186,7 @@ export type ServerMessage =
   | ResultsMessage
   | { type: 'error'; reason: ErrorReason }
   | ChatMessage
+  | { type: 'emote'; playerId: string; emote: Emote }
   | { type: 'ping' };
 
 // `id` counts a room's chat lines from 1; `at` is the server clock in whole seconds, opaque to clients.
@@ -234,7 +238,9 @@ export const cleanToken = (value: unknown): string | null =>
   typeof value === 'string' && TOKEN_PATTERN.test(value) ? value : null;
 
 const isTimeOfDay = (value: unknown): value is TimeOfDay => (TIMES_OF_DAY as readonly unknown[]).includes(value);
-const isWeather = (value: unknown): value is Weather => (WEATHERS as readonly unknown[]).includes(value);
+export const isWeather = (value: unknown): value is Weather => (WEATHERS as readonly unknown[]).includes(value);
+export const isWeatherSetting = (value: unknown): value is WeatherSetting => (WEATHER_SETTINGS as readonly unknown[]).includes(value);
+export const isEmote = (value: unknown): value is Emote => (EMOTES as readonly unknown[]).includes(value);
 const isCourseId = (value: unknown): value is string => typeof value === 'string' && courseIds().includes(value);
 const isVehicleId = (value: unknown): value is string => (VEHICLE_IDS as readonly unknown[]).includes(value);
 
@@ -308,7 +314,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return input ? { type: 'input', ...input } : null;
     }
     case 'buy':
-      return typeof fields.item === 'string' && Object.hasOwn(ITEM_KINDS, fields.item) ? { type: 'buy', item: fields.item as ItemKind } : null;
+      return typeof fields.item === 'string' && (SHOP_ITEMS as readonly string[]).includes(fields.item) ? { type: 'buy', item: fields.item as ShopItem } : null;
     case 'pong':
       return { type: 'pong' };
     case 'ready':
@@ -317,7 +323,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return isAppearance(fields) ? { type: 'appearance', characterId: fields.characterId, glasses: fields.glasses, top: fields.top, hat: fields.hat, skin: fields.skin, eyes: fields.eyes, smile: fields.smile } : null;
     case 'configure': {
       const { courseId, vehicleId, timeOfDay, weather } = fields;
-      return isCourseId(courseId) && isVehicleId(vehicleId) && isTimeOfDay(timeOfDay) && isWeather(weather)
+      return isCourseId(courseId) && isVehicleId(vehicleId) && isTimeOfDay(timeOfDay) && isWeatherSetting(weather)
         ? { type: 'configure', courseId, vehicleId, timeOfDay, weather }
         : null;
     }
@@ -333,6 +339,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const text = cleanChat(fields.text);
       return text ? { type: 'chat', text } : null;
     }
+    case 'emote':
+      return isEmote(fields.emote) ? { type: 'emote', emote: fields.emote } : null;
     case 'adminTool':
       return typeof fields.tool === 'string' && (ADMIN_TOOLS as readonly string[]).includes(fields.tool)
         ? { type: 'adminTool', tool: fields.tool as AdminTool }
@@ -382,6 +390,7 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   value.health <= 100 &&
   (value.downed === null || (finite(value.downed) && value.downed >= 0)) &&
   (value.hold === null || (isRecord(value.hold) && isText(value.hold.action) && isText(value.hold.targetId) && finite(value.hold.progress))) &&
+  (value.tajine === undefined || (finite(value.tajine) && value.tajine > 0)) &&
   (value.stance === undefined || isText(value.stance)) &&
   (value.slide === undefined ||
     (isRecord(value.slide) &&
@@ -445,6 +454,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       return (ERROR_REASONS as readonly string[]).includes(data.reason) ? message : { type: 'error', reason: 'bad_message' };
     case 'chat':
       return isCount(data.id) && isText(data.playerId) && isText(data.name) && isText(data.text) && isCount(data.at) && (data.replay === undefined || data.replay === true) ? message : null;
+    case 'emote':
+      return isText(data.playerId) && isEmote(data.emote) ? { type: 'emote', playerId: data.playerId, emote: data.emote } : null;
     case 'lobby':
       return isText(data.room) &&
         (data.phase === 'lobby' || data.phase === 'playing' || data.phase === 'results') &&
@@ -454,7 +465,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         isText(data.courseId) &&
         isText(data.vehicleId) &&
         isTimeOfDay(data.timeOfDay) &&
-        isWeather(data.weather)
+        isWeatherSetting(data.weather)
         ? message
         : null;
     case 'snapshot':
@@ -481,6 +492,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         data.players.every(isPlayerSnapshot) &&
         Array.isArray(data.props) &&
         data.props.every(isPropSnapshot) &&
+        (data.weather === undefined || isWeather(data.weather)) &&
         (data.animals === undefined || (Array.isArray(data.animals) && data.animals.length <= MAX_ANIMALS && data.animals.every(isAnimalSnapshot))) &&
         isCableSnapshot(data.cable)
         ? message
@@ -496,7 +508,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       return isText(data.courseId) &&
         isText(data.vehicleId) &&
         isTimeOfDay(data.timeOfDay) &&
-        isWeather(data.weather) &&
+        isWeatherSetting(data.weather) &&
         finite(data.elapsed) &&
         data.elapsed >= 0 &&
         isCount(data.restarts) &&

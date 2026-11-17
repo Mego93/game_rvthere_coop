@@ -298,7 +298,8 @@ describe('airport', () => {
     expect(airportCourse.stops.map((s) => s.kind).sort()).toEqual(['fuel', 'garage']);
     expect(airportCourse.stops.find((s) => s.kind === 'fuel')!.shopCounter).toBeDefined();
     expect(airportCourse.coins.length).toBeGreaterThan(0);
-    expect(new Set(airportCourse.pickups.map((p) => p.kind))).toEqual(new Set(Object.keys(ITEM_KINDS)));
+    // The fixed pickups are the original three kinds; the tajine only drops.
+    expect(new Set(airportCourse.pickups.map((p) => p.kind))).toEqual(new Set(['jerrycan', 'toolbox', 'healthKit']));
   });
 
   test('T2: the sand segment\'s checkpoint spawn is on a non-sand surface', () => {
