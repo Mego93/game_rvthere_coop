@@ -1,7 +1,6 @@
 import { CHAT_LIMIT, CHAT_FORM_STYLE, createChatForm, renderChatLines, type ChatLine, type SubmitResult } from './chat';
-import { CHARACTER_IDS, CHARACTER_NAMES, GLASSES_CHOICES, HAT_CHOICES, TIMES_OF_DAY, TOP_CHOICES, VEHICLE_IDS, WEATHERS, courseIds, defaultAppearance, type Appearance, type LobbyMessage, type RoomSettings } from '@lodgy/shared';
-import { CHARACTER_LOOKS } from '../render/characterLooks';
-import { createPickerState } from './characterPicker';
+import { CHARACTER_IDS, CHARACTER_NAMES, TIMES_OF_DAY, VEHICLE_IDS, WEATHERS, courseIds, defaultAppearance, type Appearance, type LobbyMessage, type RoomSettings } from '@lodgy/shared';
+import { OPTION_ROWS, createPickerState, optionText, portraitModel } from './characterPicker';
 
 export const VEHICLE_LABELS: Record<string, string> = { lodgy: 'Lodgy', rv: 'RV' };
 const vehicleLabel = (id: string) => (Object.hasOwn(VEHICLE_LABELS, id) ? VEHICLE_LABELS[id] : id);
@@ -173,6 +172,8 @@ const STYLE = `${CHAT_FORM_STYLE}
 .pick-segments { display: flex; gap: 4px; }
 #lobby-panel .pick-seg { flex: 1 1 0; min-width: 0; padding: 4px 2px; font-size: 13px; color: #1d2b36; background: #fff; border-color: #9ab; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #lobby-panel .pick-seg[aria-pressed='true'] { color: #fff; background: #2f6f9f; border-color: #2f6f9f; }
+#lobby-panel .pick-seg.swatch { min-width: 44px; background: var(--swatch); border-color: #9ab; color: transparent; }
+#lobby-panel .pick-seg.swatch[aria-pressed='true'] { background: var(--swatch); outline: 3px solid #2f6f9f; outline-offset: -3px; }
 #lobby-picker-note { margin: 0; min-height: 1.2em; color: #b3261e; font-size: 14px; }
 .pt { position: relative; width: 44px; height: 56px; flex: none; overflow: hidden; }
 .pt > * { position: absolute; display: none; }
@@ -186,15 +187,25 @@ const STYLE = `${CHAT_FORM_STYLE}
 .pt-tie { left: 21px; bottom: 8px; width: 3px; height: 17px; background: #1b1d27; }
 .pt[data-top='suit'] .pt-tie { display: block; }
 .pt { isolation: isolate; }
-.pt-head { display: block; left: 11px; bottom: 26px; width: 22px; height: 22px; border-radius: 50%; background: #e0b48c; }
+.pt-head { display: block; left: 11px; bottom: 26px; width: 22px; height: 22px; border-radius: 50%; background: var(--skin, #f6d1a5); }
+.pt-eyes { display: block; left: 15px; bottom: 38px; width: 14px; height: 4px; }
+.pt-eyes::before, .pt-eyes::after { content: ''; position: absolute; top: 0; width: 3px; height: 3px; background: #1a1a1f; }
+.pt-eyes::before { left: 0; }
+.pt-eyes::after { right: 0; }
+.pt[data-eyes='wide'] .pt-eyes::before, .pt[data-eyes='wide'] .pt-eyes::after { top: -1px; width: 5px; height: 5px; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 1.5px #1a1a1f; }
+.pt[data-eyes='sleepy'] .pt-eyes::before, .pt[data-eyes='sleepy'] .pt-eyes::after { top: 2px; width: 4px; height: 1.5px; }
+.pt[data-eyes='happy'] .pt-eyes::before, .pt[data-eyes='happy'] .pt-eyes::after { top: 0; width: 4px; height: 3px; background: transparent; border-top: 2px solid #1a1a1f; border-radius: 50% 50% 0 0; }
+.pt-smile { display: block; left: 17px; bottom: 30px; width: 10px; height: 3px; border-bottom: 2px solid #3a1e1e; border-radius: 0 0 6px 6px; }
+.pt[data-smile='grin'] .pt-smile { left: 15px; width: 14px; height: 4px; border-bottom: 0; background: #3a1e1e; box-shadow: inset 0 1.5px 0 #fff; }
+.pt[data-smile='neutral'] .pt-smile { height: 2px; border-bottom: 0; border-radius: 1px; background: #3a1e1e; }
 .pt-hair { left: 10px; bottom: 38px; width: 24px; height: 11px; border-radius: 12px 12px 3px 3px; background: var(--hair); }
 .pt:not([data-hair='bald']) .pt-hair { display: block; }
 .pt[data-hair='wavy'] .pt-hair { left: 8px; width: 28px; height: 13px; bottom: 37px; border-radius: 10px; }
 .pt[data-hair='swept'] .pt-hair { height: 10px; border-radius: 12px 4px 3px 10px; }
 .pt[data-hair='long'] .pt-hair { height: 24px; bottom: 25px; border-radius: 12px 12px 4px 4px; z-index: -1; }
-.pt-mou { left: 16px; bottom: 32px; width: 12px; height: 3px; border-radius: 2px; background: var(--hair); }
+.pt-mou { left: 16px; bottom: 34px; width: 12px; height: 2px; border-radius: 2px; background: var(--hair); }
 .pt[data-facial='moustache'] .pt-mou { display: block; }
-.pt-beard { left: 11px; bottom: 26px; width: 22px; height: 10px; border-radius: 2px 2px 11px 11px; background: var(--hair); }
+.pt-beard { left: 14px; bottom: 26px; width: 16px; height: 4px; border-radius: 2px 2px 8px 8px; background: var(--hair); }
 .pt[data-facial='beard'] .pt-beard { display: block; }
 .pt-glasses { left: 13px; bottom: 37px; width: 18px; height: 7px; }
 .pt[data-glasses='round'] .pt-glasses { display: block; }
@@ -241,33 +252,26 @@ const SETTINGS = [
   { key: 'weather', id: 'lobby-weather', label: 'Weather', options: () => WEATHERS.map((id) => ({ value: id, text: id })) },
 ] as const;
 
-const SWEATSHIRT = '#8a8f98';
-const SUIT = '#2b2f3a';
-const OPTION_TEXT = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
-const OPTION_ROWS = [
-  { key: 'glasses', label: 'Glasses', choices: GLASSES_CHOICES },
-  { key: 'top', label: 'Top', choices: TOP_CHOICES },
-  { key: 'hat', label: 'Hat', choices: HAT_CHOICES },
-] as const;
-
-// A flat portrait of a character from CHARACTER_LOOKS, in CSS shapes; the add-ons show only when an appearance is given.
+// A flat portrait of a character in CSS shapes, from portraitModel.
 function paintPortrait(portrait: HTMLElement, appearance: Appearance, withAddOns: boolean) {
-  const look = CHARACTER_LOOKS[appearance.characterId];
-  const top = withAddOns ? appearance.top : 'default';
-  const glasses = withAddOns && appearance.glasses !== 'default' ? appearance.glasses : look.glasses;
-  portrait.dataset.top = top === 'default' ? 'own' : top;
-  portrait.dataset.hair = look.hair.style;
-  portrait.dataset.facial = look.facial;
-  portrait.dataset.glasses = glasses;
-  portrait.dataset.hat = withAddOns ? appearance.hat : 'none';
-  portrait.dataset.under = look.under ? 'yes' : 'no';
-  portrait.dataset.stripe = look.trim || look.outfit === 'halfzip' ? 'yes' : 'no';
+  const model = portraitModel(appearance, withAddOns);
+  const data = portrait.dataset;
+  data.top = model.top;
+  data.hair = model.hair;
+  data.facial = model.facial;
+  data.glasses = model.glasses;
+  data.hat = model.hat;
+  data.under = model.under ? 'yes' : 'no';
+  data.stripe = model.stripe ? 'yes' : 'no';
+  data.eyes = model.eyes;
+  data.smile = model.smile;
   const style = portrait.style;
-  style.setProperty('--top', top === 'sweatshirt' ? SWEATSHIRT : top === 'suit' ? SUIT : look.top);
-  style.setProperty('--trousers', look.trousers);
-  style.setProperty('--hair', look.hair.colour);
-  style.setProperty('--under', look.under ?? look.top);
-  style.setProperty('--stripe', look.trim ?? '#6b6b72');
+  style.setProperty('--top', model.topColour);
+  style.setProperty('--trousers', model.trousers);
+  style.setProperty('--hair', model.hairColour);
+  style.setProperty('--under', model.underColour);
+  style.setProperty('--stripe', model.stripeColour);
+  style.setProperty('--skin', model.skin);
 }
 
 export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen {
@@ -374,7 +378,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     const portrait = el('span');
     portrait.className = 'pt';
     portrait.setAttribute('aria-hidden', 'true');
-    for (const name of ['legs', 'body', 'stripe', 'under', 'tie', 'head', 'hair', 'mou', 'beard', 'glasses', 'hat']) {
+    for (const name of ['legs', 'body', 'stripe', 'under', 'tie', 'head', 'eyes', 'smile', 'hair', 'mou', 'beard', 'glasses', 'hat']) {
       const part = el('i');
       part.className = `pt-${name}`;
       portrait.append(part);
@@ -413,7 +417,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
       cardsBox.append(button);
       pickCards.set(characterId, { button, portrait, sub });
     }
-    for (const { key, label, choices } of OPTION_ROWS) {
+    for (const { key, label, choices, swatches } of OPTION_ROWS) {
       const group = el('div');
       group.className = 'pick-group';
       group.setAttribute('role', 'group');
@@ -422,15 +426,20 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
       caption.className = 'pick-group-label';
       const segments = el('div');
       segments.className = 'pick-segments';
-      for (const choice of choices) {
-        const button = el('button', `lobby-pick-${key}-${choice}`, OPTION_TEXT(choice));
+      choices.forEach((choice, index) => {
+        const button = el('button', `lobby-pick-${key}-${choice}`, optionText(choice));
         button.type = 'button';
         button.className = 'pick-seg';
-        button.title = OPTION_TEXT(choice);
+        button.title = optionText(choice);
+        if (swatches) {
+          button.classList.add('swatch');
+          button.style.setProperty('--swatch', swatches[index]!);
+          button.setAttribute('aria-label', `${label}: ${optionText(choice)}`);
+        }
         button.addEventListener('click', () => choose({ [key]: choice }));
         segments.append(button);
         pickSegments.set(`${key}:${choice}`, button);
-      }
+      });
       group.append(caption, segments);
       picker.append(group);
     }

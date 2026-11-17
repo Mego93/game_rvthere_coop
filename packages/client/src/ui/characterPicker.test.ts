@@ -1,6 +1,7 @@
 import { defaultAppearance, type Appearance, type LobbyMessage, type LobbyPlayer } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { createPickerState, mergeAppearance, pickerView } from './characterPicker';
+import { SKIN_TONES } from '../render/characterLooks';
+import { OPTION_ROWS, createPickerState, mergeAppearance, optionText, pickerView, portraitModel } from './characterPicker';
 
 const player = (playerId: string, name: string, appearance: Appearance, connected = true): LobbyPlayer => ({
   playerId,
@@ -152,4 +153,51 @@ test('P16: a new choice clears the note and reset clears everything', () => {
   expect(state.note).toBe('');
   state.reset();
   expect(state.view(lobby, 'p1')!.pending).toBeNull();
+});
+
+test('S6: the option rows are glasses, top, hat, skin, eyes, smile, with the S7 labels', () => {
+  expect(OPTION_ROWS.map((row) => row.key)).toEqual(['glasses', 'top', 'hat', 'skin', 'eyes', 'smile']);
+  const labels = (key: string) => OPTION_ROWS.find((row) => row.key === key)!.choices.map(optionText);
+  expect(labels('skin')).toEqual(['Default', 'Tan', 'Brown', 'Dark']);
+  expect(labels('eyes')).toEqual(['Default', 'Wide', 'Sleepy', 'Happy']);
+  expect(labels('smile')).toEqual(['Default', 'Grin', 'Neutral']);
+  expect(OPTION_ROWS.find((row) => row.key === 'skin')!.swatches).toEqual(Object.values(SKIN_TONES));
+  for (const row of OPTION_ROWS) if (row.key !== 'skin') expect(row.swatches).toBeUndefined();
+});
+
+test('S6: a skin, eyes or smile tap keeps every other choice and sends the full appearance', () => {
+  const own = { ...defaultAppearance('sounile'), glasses: 'round', hat: 'cap' } as const;
+  const lobby = message([player('p1', 'Amal', own)]);
+  const state = createPickerState();
+  expect(state.choose(lobby, 'p1', { skin: 'dark' })).toEqual({ ...own, skin: 'dark' });
+  expect(state.choose(lobby, 'p1', { eyes: 'happy' })).toEqual({ ...own, skin: 'dark', eyes: 'happy' });
+  expect(state.choose(lobby, 'p1', { smile: 'grin' })).toEqual({ ...own, skin: 'dark', eyes: 'happy', smile: 'grin' });
+  expect(state.choose(lobby, 'p1', { smile: 'grin' })).toBeNull();
+});
+
+test('S6: a pending skin choice is kept until the echo shows it, and an echo differing only in skin does not clear it', () => {
+  const server = defaultAppearance('luiz');
+  const pending = { ...server, skin: 'brown' } as const;
+  expect(mergeAppearance(server, pending)).toEqual({ appearance: pending, pending });
+  expect(mergeAppearance({ ...server, eyes: 'wide' }, { ...server, eyes: 'wide', smile: 'neutral' }).pending).not.toBeNull();
+  expect(mergeAppearance(pending, pending)).toEqual({ appearance: pending, pending: null });
+});
+
+test('S6: the portrait model carries the skin colour, eyes and smile of the own card, defaults elsewhere', () => {
+  const own = { ...defaultAppearance('rafael'), skin: 'dark', eyes: 'sleepy', smile: 'grin' } as const;
+  const shown = portraitModel(own, true);
+  expect(shown.skin).toBe(SKIN_TONES.dark);
+  expect(shown.eyes).toBe('sleepy');
+  expect(shown.smile).toBe('grin');
+  const other = portraitModel(own, false);
+  expect(other.skin).toBe(SKIN_TONES.default);
+  expect(other.eyes).toBe('default');
+  expect(other.smile).toBe('default');
+});
+
+test('S6: the portrait model resolves the character look, glasses default and add-ons', () => {
+  expect(portraitModel(defaultAppearance('rafael'), true)).toMatchObject({ facial: 'beard', glasses: 'round', hat: 'none', hair: 'bald', top: 'own' });
+  expect(portraitModel(defaultAppearance('luiz'), true)).toMatchObject({ facial: 'none', glasses: 'none', hair: 'swept' });
+  expect(portraitModel({ ...defaultAppearance('luiz'), glasses: 'round', top: 'suit', hat: 'fez' }, true)).toMatchObject({ glasses: 'round', top: 'suit', hat: 'fez' });
+  expect(portraitModel({ ...defaultAppearance('luiz'), glasses: 'round', top: 'suit', hat: 'fez' }, false)).toMatchObject({ glasses: 'none', top: 'own', hat: 'none' });
 });

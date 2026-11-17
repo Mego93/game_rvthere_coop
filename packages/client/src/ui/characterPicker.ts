@@ -1,4 +1,5 @@
-import { CHARACTER_IDS, CHARACTER_NAMES, type Appearance, type CharacterId, type LobbyMessage } from '@lodgy/shared';
+import { CHARACTER_IDS, CHARACTER_NAMES, EYES_CHOICES, GLASSES_CHOICES, HAT_CHOICES, SKIN_CHOICES, SMILE_CHOICES, TOP_CHOICES, defaultAppearance, type Appearance, type CharacterId, type LobbyMessage } from '@lodgy/shared';
+import { CHARACTER_LOOKS, SKIN_TONES } from '../render/characterLooks';
 
 export interface PickerCard {
   characterId: CharacterId;
@@ -14,6 +15,71 @@ export interface PickerView {
   // The own appearance with the unconfirmed choice applied.
   appearance: Appearance;
   pending: Appearance | null;
+}
+
+export const optionText = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+
+type OptionKey = 'glasses' | 'top' | 'hat' | 'skin' | 'eyes' | 'smile';
+export interface OptionRow {
+  key: OptionKey;
+  label: string;
+  choices: readonly string[];
+  // Skin only: the colour of each choice, shown as a swatch instead of text.
+  swatches?: readonly string[];
+}
+
+export const OPTION_ROWS: readonly OptionRow[] = [
+  { key: 'glasses', label: 'Glasses', choices: GLASSES_CHOICES },
+  { key: 'top', label: 'Top', choices: TOP_CHOICES },
+  { key: 'hat', label: 'Hat', choices: HAT_CHOICES },
+  { key: 'skin', label: 'Skin', choices: SKIN_CHOICES, swatches: SKIN_CHOICES.map((choice) => SKIN_TONES[choice]) },
+  { key: 'eyes', label: 'Eyes', choices: EYES_CHOICES },
+  { key: 'smile', label: 'Smile', choices: SMILE_CHOICES },
+];
+
+const SWEATSHIRT = '#8a8f98';
+const SUIT = '#2b2f3a';
+
+// What a card's flat portrait shows; the add-ons, skin, eyes and smile only for the own card (`withAddOns`).
+export interface PortraitModel {
+  top: 'own' | 'sweatshirt' | 'suit';
+  hair: string;
+  facial: string;
+  glasses: 'none' | 'round';
+  hat: string;
+  under: boolean;
+  stripe: boolean;
+  skin: string;
+  eyes: string;
+  smile: string;
+  topColour: string;
+  trousers: string;
+  hairColour: string;
+  underColour: string;
+  stripeColour: string;
+}
+
+export function portraitModel(appearance: Appearance, withAddOns: boolean): PortraitModel {
+  const look = CHARACTER_LOOKS[appearance.characterId];
+  const shown = withAddOns ? appearance : defaultAppearance(appearance.characterId);
+  const top = shown.top === 'default' ? 'own' : shown.top;
+  return {
+    top,
+    hair: look.hair.style,
+    facial: look.facial,
+    glasses: shown.glasses === 'default' ? look.glasses : shown.glasses,
+    hat: shown.hat,
+    under: look.under !== undefined,
+    stripe: look.trim !== undefined || look.outfit === 'halfzip',
+    skin: SKIN_TONES[shown.skin],
+    eyes: shown.eyes,
+    smile: shown.smile,
+    topColour: top === 'sweatshirt' ? SWEATSHIRT : top === 'suit' ? SUIT : look.top,
+    trousers: look.trousers,
+    hairColour: look.hair.colour,
+    underColour: look.under ?? look.top,
+    stripeColour: look.trim ?? '#6b6b72',
+  };
 }
 
 const same = (a: Appearance, b: Appearance) => a.characterId === b.characterId && a.glasses === b.glasses && a.top === b.top && a.hat === b.hat && a.skin === b.skin && a.eyes === b.eyes && a.smile === b.smile;
