@@ -194,9 +194,9 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
   const BIG = 12;
 
   const crowded = (x: number, z: number, r: number): boolean => {
-    for (const o of taken) if (Math.hypot(x - o.x, z - o.z) < r + o.r) return true;
+    for (const o of taken) if (Math.abs(x - o.x) < r + o.r && Math.hypot(x - o.x, z - o.z) < r + o.r) return true;
     if (r > BIG) {
-      for (const list of grid.values()) for (const o of list) if (Math.hypot(x - o.x, z - o.z) < r + o.r) return true;
+      for (const list of grid.values()) for (const o of list) if (Math.abs(x - o.x) < r + o.r && Math.hypot(x - o.x, z - o.z) < r + o.r) return true;
       return false;
     }
     const cx = Math.floor(x / CELL);
@@ -227,7 +227,7 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
       const local = localBox(stop.zone, x, z);
       if (Math.abs(local.x) <= stop.zone.halfExtents.x + STOP_MARGIN && Math.abs(local.z) <= stop.zone.halfExtents.z + STOP_MARGIN) return false;
     }
-    for (const b of blockers) if (Math.hypot(x - b.x, z - b.z) < OBJECT_CLEARANCE) return false;
+    for (const b of blockers) if (Math.abs(x - b.x) < OBJECT_CLEARANCE && Math.hypot(x - b.x, z - b.z) < OBJECT_CLEARANCE) return false;
     for (const w of water) {
       const local = localBox(w, x, z);
       if (Math.abs(local.x) <= w.halfExtents.x + WATER_MARGIN && Math.abs(local.z) <= w.halfExtents.z + WATER_MARGIN) return false;

@@ -1,5 +1,6 @@
-import type { BuiltCourse } from '@lodgy/shared';
+import type { Box, BuiltCourse } from '@lodgy/shared';
 import * as THREE from 'three';
+import { nearestSegment } from './routeIndex';
 import { groundTexture, type SceneOptions } from './groundTextures';
 
 export const TERRAIN_CELL = 40;
@@ -16,13 +17,38 @@ const RED_EARTH = 0xa65a3a;
 const EPS = 1e-9;
 const FROM_Y = 10000;
 
+const q = new THREE.Quaternion();
+const o = new THREE.Vector3();
+const d = new THREE.Vector3();
+const GROUND_CELL = 64;
+const groundGrids = new WeakMap<readonly Box[], Map<string, Box[]>>();
+
+// The ground boxes whose bounding square can reach the point's grid cell.
+function groundNear(course: BuiltCourse, x: number, z: number): readonly Box[] {
+  let grid = groundGrids.get(course.ground);
+  if (!grid) {
+    grid = new Map();
+    for (const box of course.ground) {
+      const h = box.halfExtents;
+      const reach = Math.hypot(h.x, h.y, h.z);
+      for (let i = Math.floor((box.center.x - reach) / GROUND_CELL); i <= Math.floor((box.center.x + reach) / GROUND_CELL); i++) {
+        for (let j = Math.floor((box.center.z - reach) / GROUND_CELL); j <= Math.floor((box.center.z + reach) / GROUND_CELL); j++) {
+          const key = `${i},${j}`;
+          const list = grid.get(key);
+          if (list) list.push(box);
+          else grid.set(key, [box]);
+        }
+      }
+    }
+    groundGrids.set(course.ground, grid);
+  }
+  return grid.get(`${Math.floor(x / GROUND_CELL)},${Math.floor(z / GROUND_CELL)}`) ?? [];
+}
+
 // Height of the top of the highest ground box under (x, z), or null off the ground.
 export function surfaceYAt(course: BuiltCourse, x: number, z: number): number | null {
-  const q = new THREE.Quaternion();
-  const o = new THREE.Vector3();
-  const d = new THREE.Vector3();
   let best: number | null = null;
-  for (const box of course.ground) {
+  for (const box of groundNear(course, x, z)) {
     const h = box.halfExtents;
     const reach = Math.hypot(h.x, h.y, h.z);
     if (Math.abs(x - box.center.x) > reach || Math.abs(z - box.center.z) > reach) continue;
@@ -78,7 +104,7 @@ export function routeDistance(course: BuiltCourse, x: number, z: number): { dist
   let best = Infinity;
   let y = heights[0] ?? 0;
   if (route.length === 1) return { distance: Math.hypot(x - route[0]![0], z - route[0]![1]), y };
-  for (let i = 0; i < route.length - 1; i++) {
+  const along = (i: number) => {
     const x0 = route[i]![0];
     const z0 = route[i]![1];
     const dx = route[i + 1]![0] - x0;
@@ -87,11 +113,13 @@ export function routeDistance(course: BuiltCourse, x: number, z: number): { dist
     const t = lengthSquared === 0 ? 0 : Math.min(1, Math.max(0, ((x - x0) * dx + (z - z0) * dz) / lengthSquared));
     const ex = x - (x0 + dx * t);
     const ez = z - (z0 + dz * t);
-    const squared = ex * ex + ez * ez;
-    if (squared < best) {
-      best = squared;
-      y = heights[i]! + (heights[i + 1]! - heights[i]!) * t;
-    }
+    return { squared: ex * ex + ez * ez, t };
+  };
+  const i = nearestSegment(route, x, z, (k) => along(k).squared, true);
+  if (i >= 0) {
+    const hit = along(i);
+    best = hit.squared;
+    y = heights[i]! + (heights[i + 1]! - heights[i]!) * hit.t;
   }
   return { distance: Math.sqrt(best), y };
 }
