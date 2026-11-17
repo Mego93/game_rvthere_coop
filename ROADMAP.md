@@ -53,6 +53,10 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | 29 | Souleyman: a Moroccan NPC on the road saves your progress, replacing the blue checkpoint marker | needs sign-off | `docs/superpowers/plans/step-29-souleyman.md` | [owner feedback](#owner-feedback-2026-11-15) | Owner, by playing it |
 | 30 | Lobby and chat: an animated, responsive lobby; text chat in the lobby and in the game | needs sign-off | `docs/superpowers/plans/step-30-lobby-chat.md` | [owner feedback](#owner-feedback-2026-11-15) | Owner, by playing it |
 | 31 | Character customization: six fixed characters with glasses, top, hat, skin, eyes and smile, seen by every player | needs sign-off | `docs/superpowers/plans/step-31-characters.md` | [owner feedback](#owner-feedback-2026-11-15) | Owner, by playing it |
+| 32 | Solid, uneven land beside the road (no more falling into the void), a boundary ridge, mud patches that slow vehicles, rock obstacles, denser decor | planned | `docs/superpowers/plans/step-32-terrain.md` | [owner feedback](#owner-feedback-2026-11-17) | Owner, by playing it |
+| 33 | Sketchfab art pass: several rotating Moroccan/Arabian figures as Souleyman, models for items and obstacles, sky and sprites | planned | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
+| 34 | Emotes (the 67 gesture, dab and more), the quick phrase "Le mal est fait", a tajine item that speeds the player on foot, random weather that changes during the run | planned | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
+| 35 | UI redesign (home, lobby, HUD, menus, results) | planned | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
 
 ## Owner feedback 2026-11-15
 
@@ -123,6 +127,15 @@ The photos stay out of the repository. Each character is a stylised low-poly fig
 5. **Luiz**: black hoodie, beige trousers, light swept hair.
 6. **Huu** (the owner): black tee, round glasses (default), dark longer hair.
 The lobby offers these six (one per slot, locked to six) with the customization options on top. The six are fixed characters; the glasses, sweatshirt, suit and other items are changeable add-ons.
+
+### Owner feedback (2026-11-17)
+After the step 31 merge and the in-game screenshots, the owner sent this list (kept close to their words):
+- "Souleyman: search for a model on Sketchfab, different Arabian models, typical." → step 33. Owner's answer: several models in rotation, all named Souleyman.
+- "Terrain does not have any relief, it's plain; vary height, make it uneven a lot; add sloppy dirt to slow; add more things to the decor; also more obstacles. We also fall in the void when out of bounds." → step 32.
+- "The models of items, obstacles etc. are still plain and simple; search on Sketchfab for each. Same for sprites, skybox etc." → step 33.
+- "Add some emotes like 67, dab; add a quick chat text 'le mal est fait'; add tajine as items for speed; random weather." → step 34. Owner's answers: the tajine speeds the player on foot; weather is a 'Random' lobby option that changes during the run.
+- "Better UI (use the front end design skill)." → step 35. The front-end design skill is not installed in the cloud session; the redesign follows its usual principles unless the owner installs it.
+- Order (owner's answer): the void fix and the terrain first, then the models, then emotes, tajine and weather, then the UI.
 
 ### Order and dependencies
 26 first (small), then 27 and 28 together (course data), 29 uses 27's checkpoints, 30 and 31 both need protocol fields and come last. Every step follows the usual workflow (plan, review, owner go-ahead, tasks with review, Opus branch review, checks).
