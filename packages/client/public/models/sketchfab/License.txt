@@ -1,0 +1,125 @@
+Low Poly Jerry Can - Fuel Can by prorookie123
+https://sketchfab.com/3d-models/low-poly-jerry-can-fuel-can-cc3fa5c4c9f44abc9e9abf2f3cf27d29
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: jerrycan.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Old Tool Box by Марк
+https://sketchfab.com/3d-models/old-tool-box-31b3d48ddc8f4b40a4099647fa016305
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: toolbox.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Health kit by cs
+https://sketchfab.com/3d-models/health-kit-f84d239f92364681b9ee901d517b90b8
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: first-aid.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Low Poly Tajine - Earthenware Pot by SoapyCanine
+https://sketchfab.com/3d-models/low-poly-tajine-earthenware-pot-d94e461276e5447d809650a9afb52955
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: tajine.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Coin - Low Poly Medieval, CC0 by Avramania
+https://sketchfab.com/3d-models/coin-low-poly-medieval-cc0-6c092b0c3aae431ba26556fb8af68d99
+Licence: CC0 1.0
+File: coin.glb
+Modified: textures resized to at most 256 px and re-encoded.
+
+Wood Shipping Box (low poly) by ehsan.avard
+https://sketchfab.com/3d-models/wood-shipping-box-low-poly-6606aaf169b74eb6908fbce1090ca248
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: crate.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Lowpoly Concrete Barrier by qb
+https://sketchfab.com/3d-models/lowpoly-concrete-barrier-e0fb4ba5ee434433bbdb4a16aaa2f8fb
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: barrier.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Hat gadi (Indian Hand Cart) by 4mecharmi
+https://sketchfab.com/3d-models/hat-gadi-indian-hand-cart-a108b5dd469045f182eabf41f10b0d26
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: cart.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Orange Vespa Low poly by bicraft
+https://sketchfab.com/3d-models/orange-vespa-low-poly-0339ea59d4584d0abc9074c382396af2
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: scooter.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Low-poly Goat by Zafflex
+https://sketchfab.com/3d-models/low-poly-goat-e08bb2e734004870b1ed4c21f111a854
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: goat.glb
+Modified: textures resized to at most 512 px and re-encoded; unused data removed.
+
+Low poly Desert Rocks asset pack by Gibbonsoft
+https://sketchfab.com/3d-models/low-poly-desert-rocks-asset-pack-f4200e8f693e49a28b59dd7f18e8dc65
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: rocks.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Racetrack tire stack standard (v2) by mira9
+https://sketchfab.com/3d-models/racetrack-tire-stack-standard-v2-65cc7bcf581646a3bc42cf31d0580bcb
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: tyres.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+PSX Style Traffic Cone by wooolvie
+https://sketchfab.com/3d-models/psx-style-traffic-cone-1e00acb7d0b14c4380549f423fe0f34b
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: cone.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Low-poly Cali Palm by Alice Ursu
+https://sketchfab.com/3d-models/low-poly-cali-palm-c3014726e47b4977b6097306224fdd94
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: palm.glb
+Modified: textures resized to at most 512 px and re-encoded; unused data removed.
+
+Stylised Agave Plant by SunsetScorpion
+https://sketchfab.com/3d-models/stylised-agave-plant-705fed6ebab542f8acf6016c70edea35
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: agave.glb
+Modified: textures resized to at most 512 px and re-encoded; unused data removed.
+
+[Free] Modular Cliffs by SimplePolygon
+https://sketchfab.com/3d-models/free-modular-cliffs-954738987a9443a99bc5a0e4825dce04
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: cliffs.glb
+Modified: textures resized to at most 512 px and re-encoded; unused data removed.
+
+Desert Village by Lucas Philippe
+https://sketchfab.com/3d-models/desert-village-cf52f4fcba9f493284fbcc1d446f7446
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: kasbah.glb
+Modified: textures resized to at most 512 px and re-encoded; unused data removed.
+
+Arabic mosque by milkmanfromhell
+https://sketchfab.com/3d-models/arabic-mosque-e04f80ea13a94f879e7a26b1628e1a21
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: mosque.glb
+Modified: textures resized to at most 512 px and re-encoded; unused data removed.
+
+Low Poly Market Stall 1 by jjmax30
+https://sketchfab.com/3d-models/low-poly-market-stall-1-2735bf5e9dd84a50827496c755b313a8
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: stall.glb
+Modified: textures resized to at most 512 px and re-encoded; unused data removed.
+
+Mountains by DJMaesen
+https://sketchfab.com/3d-models/mountains-62c8d97529e64437a52ac42c41339a01
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: mountains.glb
+Modified: textures resized to at most 512 px and re-encoded; unused data removed.
+
+Arab Headdress by effacestudios
+https://sketchfab.com/3d-models/arab-headdress-205773879931426c975ce9005274ca81
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: headdress.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
