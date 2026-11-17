@@ -20,8 +20,8 @@ test('E4: every row of the table maps to its sound', () => {
     downed: 'downed',
     revive: 'revive',
     respawn: null,
-    goatHit: null,
-    scooterHit: null,
+    goatHit: 'impact',
+    scooterHit: 'impact',
   };
   for (const kind of EVENT_KINDS) expect(soundFor(event(kind, { pos: POS, playerId: 'other' }), 'me')?.kind ?? null, kind).toBe(expected[kind]);
 });
@@ -52,4 +52,11 @@ test('R10: M toggles mute unless typing or a modifier is held', () => {
   expect(isMuteKey({ ...key, altKey: true }, 'BODY')).toBe(false);
   expect(isMuteKey({ ...key, repeat: true }, 'BODY')).toBe(false);
   expect(isMuteKey({ ...key, code: 'KeyN' }, 'BODY')).toBe(false);
+});
+
+test('T9: a goat or scooter hit plays the impact sound at half volume, at its place for others', () => {
+  for (const kind of ['goatHit', 'scooterHit'] as const) {
+    expect(soundFor(event(kind, { pos: POS }), 'me')).toEqual({ kind: 'impact', positional: true, volume: 0.5 });
+    expect(soundFor(event(kind), 'me')).toEqual({ kind: 'impact', positional: false, volume: 0.5 });
+  }
 });

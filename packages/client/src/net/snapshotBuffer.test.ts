@@ -6,6 +6,7 @@ import {
   quatFromAxisAngle,
   vec3,
   yawOf,
+  type AnimalSnapshot,
   type PlayerSnapshot,
   type PropSnapshot,
   type SnapshotMessage,
@@ -417,4 +418,28 @@ test('resetReady survives the copy and the blend, and stays absent when not set'
   const plain = createSnapshotBuffer();
   plain.push(snapshot(3), 3 * TICK_DT);
   expect('resetReady' in plain.sample(3 * TICK_DT + INTERPOLATION_DELAY)!.vehicle).toBe(false);
+});
+
+const animal = (id: number, x: number, yaw = 0, hit = false): AnimalSnapshot => ({ id, kind: 'goat', x, y: 0.3, z: -5, yaw, ...(hit ? { hit: true as const } : {}) });
+const withAnimals = (tick: number, animals: AnimalSnapshot[] | undefined, full = false): SnapshotMessage => ({ ...snapshot(tick, [], [], full), ...(animals ? { animals } : {}) });
+
+test('animals blend position and yaw by id, the shorter way round, and a new one appears as it is', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(withAnimals(3, [animal(1, 0, Math.PI - 0.1)]), 3 * TICK_DT);
+  buffer.push(withAnimals(9, [animal(1, 6, -Math.PI + 0.1), animal(2, 4)]), 9 * TICK_DT);
+  const view = buffer.sample((6 + DELAY_TICKS) * TICK_DT)!.animals;
+  expect(view.map((a) => a.id)).toEqual([1, 2]);
+  expect(view[0]!.x).toBeCloseTo(3, 6);
+  expect(Math.abs(Math.abs(view[0]!.yaw) - Math.PI)).toBeLessThan(1e-6);
+  expect(view[1]!.x).toBe(4);
+});
+
+test('animals survive a full snapshot, take hit from the newer one, and an absent field means none', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(withAnimals(3, [animal(1, 0)]), 3 * TICK_DT);
+  buffer.push(withAnimals(6, [animal(1, 1, 0, true)], true), 6 * TICK_DT);
+  expect(buffer.sample(100)!.animals).toEqual([animal(1, 1, 0, true)]);
+  buffer.push(withAnimals(9, undefined), 9 * TICK_DT);
+  expect(buffer.sample(100)!.animals).toEqual([]);
+  expect(createSnapshotBuffer().sample(0)).toBeNull();
 });

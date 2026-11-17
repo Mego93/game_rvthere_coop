@@ -37,18 +37,22 @@ const SOUND_OF_EVENT: Record<EventMessage['kind'], SoundName | null> = {
   downed: 'downed',
   revive: 'revive',
   respawn: null,
-  goatHit: null,
-  scooterHit: null,
+  goatHit: 'impact',
+  scooterHit: 'impact',
 };
+
+// Events whose sound plays quieter than full.
+const VOLUME_OF_EVENT: Partial<Record<EventMessage['kind'], number>> = { goatHit: 0.5, scooterHit: 0.5 };
 
 const ALWAYS_FLAT: ReadonlySet<SoundName> = new Set(['coin', 'purchase', 'click', 'win']);
 
 // The sound for a server event, and whether it plays at a place; the local player's own events and events without a position are heard flat.
-export function soundFor(event: Pick<EventMessage, 'kind' | 'playerId' | 'pos'>, localId: string): { kind: SoundName; positional: boolean } | null {
+export function soundFor(event: Pick<EventMessage, 'kind' | 'playerId' | 'pos'>, localId: string): { kind: SoundName; positional: boolean; volume?: number } | null {
   const kind = SOUND_OF_EVENT[event.kind];
   if (kind === null) return null;
   const positional = !ALWAYS_FLAT.has(kind) && event.playerId !== localId && event.pos !== undefined;
-  return { kind, positional };
+  const volume = VOLUME_OF_EVENT[event.kind];
+  return volume === undefined ? { kind, positional } : { kind, positional, volume };
 }
 
 export interface MuteKeyEvent {
