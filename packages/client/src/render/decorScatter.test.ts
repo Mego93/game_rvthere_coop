@@ -1,4 +1,4 @@
-import { getCourse, getCourseDef, ROAD_WIDTH, rotate, segmentRanges, type Box } from '@lodgy/shared';
+import { buildCourse, getCourse, getCourseDef, ROAD_WIDTH, rotate, segmentRanges, type Box, type CourseDef } from '@lodgy/shared';
 import { describe, expect, test } from 'vitest';
 import { CITY_LENGTH, DECOR_DENSITY, NEAR_ALLOWED_MODELS, NEAR_MAX_SIZE, scatterDecor, seedFromId } from './decorScatter';
 import { MODEL_KEYS, MODEL_MANIFEST } from './modelManifest';
@@ -139,8 +139,21 @@ describe('scatterDecor', () => {
   });
 
   test('the density table covers the road types', () => {
-    for (const type of ['road', 'sand', 'ford', 'bank', 'roadworks', 'city'] as const) expect(DECOR_DENSITY[type]).toBeDefined();
+    for (const type of ['road', 'sand', 'ford', 'bank', 'pit', 'roadworks', 'city'] as const) expect(DECOR_DENSITY[type]).toBeDefined();
     expect(ROAD_WIDTH).toBe(10);
+  });
+
+  test('a pit scatters like open road', () => {
+    expect(DECOR_DENSITY.pit).toEqual(DECOR_DENSITY.road);
+    const def: CourseDef = {
+      id: 'pit-scatter',
+      segments: [{ type: 'road', length: 200 }, { type: 'pit', depth: 2, gradient: 15, gradientOut: 28, floor: 8, anchors: 2 }, { type: 'road', length: 200 }],
+      targetTime: 60,
+    };
+    const course = buildCourse(def);
+    const placed = scatterDecor(course, def, seedFromId('pit-scatter'));
+    expect(placed.length).toBeGreaterThan(0);
+    expect(scatterDecor(course, def, seedFromId('pit-scatter'))).toEqual(placed);
   });
 });
 
