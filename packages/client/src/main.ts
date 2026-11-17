@@ -224,6 +224,7 @@ const lobby = createLobby(document, {
   onConfigure: (settings) => socket?.send({ type: 'configure', ...settings }),
   onStart: () => socket?.send({ type: 'start' }),
   onKick: (target) => socket?.send({ type: 'kick', playerId: target }),
+  onAppearance: (appearance) => socket?.send({ type: 'appearance', ...appearance }),
   onCredits: () => credits.open(),
   onTutorial: () => tutorial.open(),
   onChat: sendChat,

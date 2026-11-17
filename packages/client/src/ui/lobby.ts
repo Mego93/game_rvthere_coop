@@ -1,5 +1,7 @@
 import { CHAT_LIMIT, CHAT_FORM_STYLE, createChatForm, renderChatLines, type ChatLine, type SubmitResult } from './chat';
-import { TIMES_OF_DAY, VEHICLE_IDS, WEATHERS, courseIds, type LobbyMessage, type RoomSettings } from '@lodgy/shared';
+import { CHARACTER_NAMES, GLASSES_CHOICES, HAT_CHOICES, TIMES_OF_DAY, TOP_CHOICES, VEHICLE_IDS, WEATHERS, courseIds, type Appearance, type LobbyMessage, type RoomSettings } from '@lodgy/shared';
+import { CHARACTER_LOOKS } from '../render/characterLooks';
+import { pickerView, type PickerView } from './characterPicker';
 
 export const VEHICLE_LABELS: Record<string, string> = { lodgy: 'Lodgy', rv: 'RV' };
 const vehicleLabel = (id: string) => (Object.hasOwn(VEHICLE_LABELS, id) ? VEHICLE_LABELS[id] : id);
@@ -8,6 +10,8 @@ export interface LobbyPlayerView {
   playerId: string;
   name: string;
   colour: string;
+  // The display name of the character the player has chosen.
+  character: string;
   isAdmin: boolean;
   connected: boolean;
   // "admin", "ready" or "not ready", with " (disconnected)" for a held slot.
@@ -38,6 +42,7 @@ export function lobbyView(message: LobbyMessage, localId: string): LobbyView {
       playerId: entry.playerId,
       name: entry.name,
       colour: entry.colour,
+      character: CHARACTER_NAMES[entry.appearance.characterId],
       isAdmin: admin,
       connected: entry.connected,
       status: entry.connected ? base : `${base} (disconnected)`,
@@ -89,6 +94,7 @@ interface PlayerCard {
   item: HTMLLIElement;
   swatch: HTMLSpanElement;
   name: HTMLSpanElement;
+  character: HTMLSpanElement;
   status: HTMLSpanElement;
   kick: HTMLButtonElement | null;
 }
@@ -98,6 +104,8 @@ export interface LobbyHandlers {
   onConfigure(settings: RoomSettings): void;
   onStart(): void;
   onKick(playerId: string): void;
+  // Sends the player's full chosen look; the server answers with the next lobby message or an error.
+  onAppearance(appearance: Appearance): void;
   onCredits(): void;
   onTutorial(): void;
   // Sends a line typed or picked in the lobby chat; says whether it went.
@@ -145,6 +153,53 @@ const STYLE = `${CHAT_FORM_STYLE}
 #lobby-players { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 #lobby-players li { display: flex; gap: 8px; align-items: center; min-height: 44px; padding: 0 8px; border-radius: 6px; background: #f1f6fa; transition: opacity 0.35s; }
 #lobby-players li.away { opacity: 0.5; }
+.lobby-char { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #4a5a66; font-size: 13px; }
+#lobby-picker { display: grid; gap: 8px; min-width: 0; }
+#lobby-picker[hidden] { display: none; }
+#lobby-picker h2 { margin: 0; font-size: 16px; }
+#lobby-picker-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+#lobby-panel .pick-card { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 6px; align-items: center; min-width: 0; padding: 4px 6px; color: #1d2b36; background: #f1f6fa; border: 2px solid #c5d3de; text-align: left; line-height: 1.15; }
+#lobby-panel .pick-card.own { border-color: #2f6f9f; background: #dcecf8; }
+#lobby-panel .pick-card.taken { opacity: 0.6; cursor: default; }
+.pick-text { display: grid; min-width: 0; }
+.pick-name { font-weight: 600; overflow-wrap: anywhere; }
+.pick-sub { font-size: 12px; color: #4a5a66; overflow-wrap: anywhere; }
+.pick-group { display: grid; gap: 4px; }
+.pick-group-label { font-size: 13px; color: #4a5a66; }
+.pick-segments { display: flex; gap: 4px; }
+#lobby-panel .pick-seg { flex: 1 1 0; min-width: 0; padding: 4px 2px; font-size: 13px; color: #1d2b36; background: #fff; border-color: #9ab; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#lobby-panel .pick-seg[aria-pressed='true'] { color: #fff; background: #2f6f9f; border-color: #2f6f9f; }
+#lobby-picker-note { margin: 0; min-height: 1.2em; color: #b3261e; font-size: 14px; }
+.pt { position: relative; width: 44px; height: 56px; flex: none; overflow: hidden; }
+.pt > * { position: absolute; display: none; }
+.pt-legs { display: block; left: 12px; bottom: 0; width: 20px; height: 8px; background: var(--trousers); }
+.pt-body { display: block; left: 5px; bottom: 6px; width: 34px; height: 24px; border-radius: 9px 9px 2px 2px; background: var(--top); }
+.pt-stripe { left: 20px; bottom: 6px; width: 4px; height: 20px; background: var(--stripe); }
+.pt[data-top='own'][data-stripe='yes'] .pt-stripe { display: block; }
+.pt-under { left: 16px; bottom: 24px; width: 12px; height: 7px; border-radius: 0 0 6px 6px; background: var(--under); }
+.pt[data-top='own'][data-under='yes'] .pt-under, .pt[data-top='suit'] .pt-under { display: block; }
+.pt[data-top='suit'] .pt-under { background: #fff; }
+.pt-tie { left: 21px; bottom: 8px; width: 3px; height: 17px; background: #1b1d27; }
+.pt[data-top='suit'] .pt-tie { display: block; }
+.pt-head { display: block; left: 11px; bottom: 26px; width: 22px; height: 22px; border-radius: 50%; background: #e0b48c; }
+.pt-hair { left: 10px; bottom: 38px; width: 24px; height: 11px; border-radius: 12px 12px 3px 3px; background: var(--hair); }
+.pt:not([data-hair='bald']) .pt-hair { display: block; }
+.pt[data-hair='wavy'] .pt-hair { left: 8px; width: 28px; height: 13px; bottom: 37px; border-radius: 10px; }
+.pt[data-hair='swept'] .pt-hair { height: 10px; border-radius: 12px 4px 3px 10px; }
+.pt[data-hair='long'] .pt-hair { height: 24px; bottom: 25px; border-radius: 12px 12px 4px 4px; z-index: 0; }
+.pt[data-hair='long'] .pt-head { z-index: 1; }
+.pt-mou { left: 16px; bottom: 32px; width: 12px; height: 3px; border-radius: 2px; background: var(--hair); }
+.pt[data-facial='moustache'] .pt-mou { display: block; }
+.pt-beard { left: 11px; bottom: 26px; width: 22px; height: 10px; border-radius: 2px 2px 11px 11px; background: var(--hair); }
+.pt[data-facial='beard'] .pt-beard { display: block; }
+.pt-glasses { left: 13px; bottom: 37px; width: 18px; height: 7px; }
+.pt[data-glasses='round'] .pt-glasses { display: block; }
+.pt-glasses::before, .pt-glasses::after { content: ''; position: absolute; top: 0; width: 6px; height: 6px; border: 1.5px solid #1d1d22; border-radius: 50%; }
+.pt-glasses::before { left: 0; }
+.pt-glasses::after { right: 0; }
+.pt-hat { left: 9px; bottom: 46px; width: 26px; height: 7px; border-radius: 6px 6px 1px 1px; background: #c0392b; }
+.pt[data-hat='cap'] .pt-hat { display: block; }
+.pt[data-hat='fez'] .pt-hat { display: block; left: 12px; width: 20px; height: 9px; border-radius: 2px; background: #a8201a; }
 #lobby-players li.joining { animation: lobby-join 0.4s ease-out both; }
 #lobby-players li.pulse { animation: lobby-pulse 0.5s ease-out; }
 #lobby-players li.leaving { animation: lobby-leave 0.25s ease-in forwards; pointer-events: none; }
@@ -182,6 +237,35 @@ const SETTINGS = [
   { key: 'weather', id: 'lobby-weather', label: 'Weather', options: () => WEATHERS.map((id) => ({ value: id, text: id })) },
 ] as const;
 
+const SWEATSHIRT = '#8a8f98';
+const SUIT = '#2b2f3a';
+const OPTION_TEXT = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+const OPTION_ROWS = [
+  { key: 'glasses', label: 'Glasses', choices: GLASSES_CHOICES },
+  { key: 'top', label: 'Top', choices: TOP_CHOICES },
+  { key: 'hat', label: 'Hat', choices: HAT_CHOICES },
+] as const;
+
+// A flat portrait of a character from CHARACTER_LOOKS, in CSS shapes; the add-ons show only when an appearance is given.
+function paintPortrait(portrait: HTMLElement, appearance: Appearance, withAddOns: boolean) {
+  const look = CHARACTER_LOOKS[appearance.characterId];
+  const top = withAddOns ? appearance.top : 'default';
+  const glasses = withAddOns && appearance.glasses !== 'default' ? appearance.glasses : look.glasses;
+  portrait.dataset.top = top === 'default' ? 'own' : top;
+  portrait.dataset.hair = look.hair.style;
+  portrait.dataset.facial = look.facial;
+  portrait.dataset.glasses = glasses;
+  portrait.dataset.hat = withAddOns ? appearance.hat : 'none';
+  portrait.dataset.under = look.under ? 'yes' : 'no';
+  portrait.dataset.stripe = look.trim || look.outfit === 'halfzip' ? 'yes' : 'no';
+  const style = portrait.style;
+  style.setProperty('--top', top === 'sweatshirt' ? SWEATSHIRT : top === 'suit' ? SUIT : look.top);
+  style.setProperty('--trousers', look.trousers);
+  style.setProperty('--hair', look.hair.colour);
+  style.setProperty('--under', look.under ?? look.top);
+  style.setProperty('--stripe', look.trim ?? '#6b6b72');
+}
+
 export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen {
   const el = <K extends keyof HTMLElementTagNameMap>(tag: K, id?: string, text?: string) => {
     const element = doc.createElement(tag);
@@ -203,6 +287,11 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   linkRow.append(link, copy);
   const settingsBox = el('div');
   const players = el('ul', 'lobby-players');
+  const picker = el('section', 'lobby-picker');
+  picker.hidden = true;
+  const cardsBox = el('div', 'lobby-picker-cards');
+  const note = el('p', 'lobby-picker-note');
+  note.setAttribute('role', 'status');
   const ready = el('button', 'lobby-ready', 'Ready');
   ready.type = 'button';
   const start = el('button', 'lobby-start', 'Start');
@@ -219,7 +308,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   osm.rel = 'noopener';
   const tutorial = el('button', 'lobby-tutorial', 'Tutorial');
   tutorial.type = 'button';
-  panel.append(title, linkRow, settingsBox, players, ready, start, error, tutorial, credits, osm);
+  panel.append(title, linkRow, settingsBox, players, picker, ready, start, error, tutorial, credits, osm);
   const background = el('div', 'lobby-bg');
   background.setAttribute('aria-hidden', 'true');
   for (const id of ['lobby-dunes-far', 'lobby-dunes-near']) {
@@ -248,6 +337,12 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   let renderedEditable: boolean | null = null;
   let pending: Partial<RoomSettings> = {};
   let server: RoomSettings | null = null;
+  let lastMessage: LobbyMessage | null = null;
+  let localId = '';
+  let pendingLook: Appearance | null = null;
+  let pickerShown: PickerView | null = null;
+  const pickCards = new Map<string, { button: HTMLButtonElement; portrait: HTMLElement; sub: HTMLElement }>();
+  const pickSegments = new Map<string, HTMLButtonElement>();
 
   const applySettings = (values: RoomSettings, overrideFocus: boolean) => {
     for (const { key, id, options } of SETTINGS) {
@@ -272,15 +367,105 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     element.addEventListener('animationend', () => element.classList.remove(name), { once: true });
   };
 
+  const portraitFor = () => {
+    const portrait = el('span');
+    portrait.className = 'pt';
+    portrait.setAttribute('aria-hidden', 'true');
+    for (const name of ['legs', 'body', 'stripe', 'under', 'tie', 'head', 'hair', 'mou', 'beard', 'glasses', 'hat']) {
+      const part = el('i');
+      part.className = `pt-${name}`;
+      portrait.append(part);
+    }
+    return portrait;
+  };
+
+  const choose = (change: Partial<Appearance>) => {
+    if (!pickerShown) return;
+    const next = { ...pickerShown.appearance, ...change };
+    if (JSON.stringify(next) === JSON.stringify(pickerShown.appearance)) return;
+    note.textContent = '';
+    error.textContent = '';
+    pendingLook = next;
+    renderPicker();
+    handlers.onAppearance(next);
+  };
+
+  const buildPicker = () => {
+    const heading = el('h2', undefined, 'Your character');
+    cardsBox.setAttribute('role', 'group');
+    cardsBox.setAttribute('aria-label', 'Your character');
+    picker.append(heading, cardsBox);
+    for (const characterId of Object.keys(CHARACTER_LOOKS) as (keyof typeof CHARACTER_LOOKS)[]) {
+      const button = el('button', `lobby-pick-${characterId}`);
+      button.type = 'button';
+      button.className = 'pick-card';
+      const portrait = portraitFor();
+      const text = el('span');
+      text.className = 'pick-text';
+      const name = el('span', undefined, CHARACTER_NAMES[characterId]);
+      name.className = 'pick-name';
+      const sub = el('span');
+      sub.className = 'pick-sub';
+      text.append(name, sub);
+      button.append(portrait, text);
+      button.addEventListener('click', () => choose({ characterId }));
+      cardsBox.append(button);
+      pickCards.set(characterId, { button, portrait, sub });
+    }
+    for (const { key, label, choices } of OPTION_ROWS) {
+      const group = el('div');
+      group.className = 'pick-group';
+      group.setAttribute('role', 'group');
+      group.setAttribute('aria-label', label);
+      const caption = el('span', undefined, label);
+      caption.className = 'pick-group-label';
+      const segments = el('div');
+      segments.className = 'pick-segments';
+      for (const choice of choices) {
+        const button = el('button', `lobby-pick-${key}-${choice}`, OPTION_TEXT(choice));
+        button.type = 'button';
+        button.className = 'pick-seg';
+        button.addEventListener('click', () => choose({ [key]: choice }));
+        segments.append(button);
+        pickSegments.set(`${key}:${choice}`, button);
+      }
+      group.append(caption, segments);
+      picker.append(group);
+    }
+    picker.append(note);
+  };
+  buildPicker();
+
+  const renderPicker = () => {
+    const shown = lastMessage ? pickerView(lastMessage, localId, pendingLook) : null;
+    pickerShown = shown;
+    pendingLook = shown?.pending ?? null;
+    picker.hidden = !shown;
+    if (!shown) return;
+    for (const card of shown.cards) {
+      const parts = pickCards.get(card.characterId)!;
+      const own = card.state === 'own';
+      parts.button.classList.toggle('own', own);
+      parts.button.classList.toggle('taken', card.state === 'taken');
+      parts.button.disabled = card.state === 'taken';
+      parts.button.setAttribute('aria-pressed', String(own));
+      parts.sub.textContent = own ? 'You' : card.state === 'taken' ? `${card.holderName}${card.away ? ' (away)' : ''}` : 'Free';
+      paintPortrait(parts.portrait, own ? shown.appearance : { characterId: card.characterId, glasses: 'default', top: 'default', hat: 'none' }, own);
+    }
+    for (const { key, choices } of OPTION_ROWS) for (const choice of choices) pickSegments.get(`${key}:${choice}`)!.setAttribute('aria-pressed', String(shown.appearance[key] === choice));
+  };
+
   const makeCard = (): PlayerCard => {
     const item = el('li');
     const swatch = el('span');
     swatch.className = 'lobby-swatch';
     const name = el('span');
     name.className = 'lobby-name';
+    const character = el('span');
+    character.className = 'lobby-char';
     const status = el('span');
-    item.append(swatch, name, status);
-    return { item, swatch, name, status, kick: null };
+    item.append(swatch, name, character, status);
+    return { item, swatch, name, character, status, kick: null };
   };
   const syncKick = (card: PlayerCard, entry: LobbyPlayerView) => {
     if (!entry.canKick) {
@@ -377,8 +562,11 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   });
 
   return {
-    show(message, localId) {
-      view = lobbyView(message, localId);
+    show(message, id) {
+      view = lobbyView(message, id);
+      lastMessage = message;
+      localId = id;
+      renderPicker();
       room = message.room;
       link.textContent = `${location.origin}/${message.room}`;
       if (renderedEditable !== view.settingsEditable) buildSettings(view.settingsEditable);
@@ -402,6 +590,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
         }
         card.swatch.style.background = entry.colour;
         card.name.textContent = entry.name;
+        card.character.textContent = entry.character;
         card.status.textContent = entry.status;
         card.status.className = entry.isAdmin ? 'lobby-status lobby-badge' : 'lobby-status';
         card.item.classList.toggle('is-ready', entry.status.startsWith('ready'));
@@ -424,6 +613,9 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     },
     hide() {
       pending = {};
+      pendingLook = null;
+      lastMessage = null;
+      note.textContent = '';
       previous = null;
       for (const { id } of SETTINGS) delete doc.getElementById(id)?.dataset.value;
       players.textContent = '';
@@ -436,8 +628,15 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     setError(text) {
       // A refusal may be of a change; drop the unconfirmed ones so the next echo restores the server's values.
       pending = {};
+      const refusedLook = pendingLook !== null;
+      if (pendingLook) {
+        // A refused character or look: show the server's again, and say why next to the picker.
+        pendingLook = null;
+        renderPicker();
+        note.textContent = text;
+      }
       if (server && renderedEditable) applySettings(server, true);
-      error.textContent = text;
+      error.textContent = refusedLook ? '' : text;
     },
   };
 }
