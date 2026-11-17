@@ -22,8 +22,8 @@ const SIX = 6;
 const KINDS = ['jerrycan', 'toolbox', 'healthKit'] as const;
 const drops: ItemDropEvent[] = Array.from({ length: SIX }, (_, i) => ({ id: i, along: 30 + i * 20, side: i % 2 === 0 ? 1 : -1, lateral: (i % 2 === 0 ? 1 : -1) * 6.5, kind: KINDS[i % 3]! }));
 
-// Measured: 26053 bytes in all, six drops add 1264 bytes.
-test('T7: six live drops add at most 1.5 KB to the marrakech full snapshot with 6 players and 9 animals, which stays under 27 KB', () => {
+// Measured: 30055 bytes in all, six drops add 1264 bytes (26053 before the step 28d parkour props; limit raised per P2).
+test('T7: six live drops add at most 1.5 KB to the marrakech full snapshot with 6 players and 9 animals, which stays under 32 KB', () => {
   const size = (s: object) => JSON.stringify({ type: 'snapshot', ackSeq: 0, full: true, ...s }).length;
   const build = (itemDrops: boolean) => {
     const world = createWorld(RAPIER, { courseId: 'marrakech', vehicleId: 'lodgy', ambient: true, ambientPlan: dense, itemDrops, itemPlan: drops });
@@ -39,6 +39,6 @@ test('T7: six live drops add at most 1.5 KB to the marrakech full snapshot with 
   expect(snapshot.animals).toHaveLength(AMBIENT_MAX_GOATS + AMBIENT_MAX_SCOOTERS);
   const total = size(snapshot);
   console.info(`T7 full snapshot with drops: ${total} bytes, six drops add ${total - without} bytes`);
-  expect(total).toBeLessThan(27_000);
+  expect(total).toBeLessThan(32_000);
   expect(total - without).toBeLessThanOrEqual(1500);
 });

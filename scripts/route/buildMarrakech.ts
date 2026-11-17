@@ -22,7 +22,7 @@ const text = [
   ...segments.map(line),
   '];',
   '',
-  '// Indexes of the inserted terrain (sand, alley, roadworks, ford group, hills, pits); stops and hazards skip them.',
+  '// Indexes of the inserted terrain (sand, alley, roadworks, ford group, hills, pits, parkour sections); stops and hazards skip them.',
   `export const MARRAKECH_INSERTED: readonly number[] = [${inserted.join(', ')}];`,
   '',
 ].join('\n');

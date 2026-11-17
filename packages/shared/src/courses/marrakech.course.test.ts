@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { CAMPAIGN } from '../constants';
+import { hashSeed, planAmbient } from '../ambient';
+import { mixSeed, planItemDrops } from '../itemDrops';
+import { createRouteIndex } from '../routeAlong';
 import { buildSegment, type SegmentDef } from '../segments';
 import { courseIds, getCourse, getCourseDef, segmentRanges } from './index';
+import { TERRAIN_DEEP_CLEAR, TERRAIN_HAZARD_CLEAR } from './marrakech.extras';
 import { MARRAKECH_INSERTED } from './marrakech.generated';
+import { MARRAKECH_TERRAIN, MAX_TERRAIN_DISTANCE, planMarrakech } from './marrakech.plan';
+import { CREST_AND_PULL, PIT_GAUNTLET, RUBBLE_RUN } from './parkour';
 
 type RoadDef = Extract<SegmentDef, { type: 'road' }>;
 
@@ -64,7 +70,8 @@ describe('stops (T7)', () => {
 });
 
 describe('hazards (T6)', () => {
-  const hazards = roads.flatMap(({ s, i }) => (s.hazards ?? []).map((h) => ({ kind: h.kind, i, at: mid(i) })));
+  // The parkour sections carry their own hazards; the plan's five sit on ordinary segments.
+  const hazards = roads.filter(({ i }) => !MARRAKECH_INSERTED.includes(i)).flatMap(({ s, i }) => (s.hazards ?? []).map((h) => ({ kind: h.kind, i, at: mid(i) })));
 
   it('has the five of the plan near their fractions (A5: up to 1.3 km)', () => {
     expect(hazards.map((h) => h.kind)).toEqual(['crateWall', 'gates', 'roadblock', 'crateWall', 'roadblock']);
@@ -118,5 +125,85 @@ describe('pickups and coins (T8)', () => {
   it('has unique ids', () => {
     const ids = [...course.coins, ...course.pickups, ...course.props, ...course.anchors, ...course.stops].map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('parkour sections (28d)', () => {
+  const sections = [
+    { name: 'parkour', defs: RUBBLE_RUN, clear: TERRAIN_HAZARD_CLEAR },
+    { name: 'parkour', defs: CREST_AND_PULL, clear: TERRAIN_HAZARD_CLEAR },
+    { name: 'parkourPit', defs: PIT_GAUNTLET, clear: TERRAIN_DEEP_CLEAR },
+  ].map((s) => {
+    const first = def.segments.findIndex((_, i) => s.defs.every((d, k) => JSON.stringify(def.segments[i + k]) === JSON.stringify(d)));
+    return { ...s, first, last: first + s.defs.length - 1 };
+  });
+  // The inserted terrain as runs of consecutive segment indexes, in course order.
+  const groups: { first: number; last: number }[] = [];
+  for (const i of MARRAKECH_INSERTED) {
+    const last = groups[groups.length - 1];
+    if (last && last.last === i - 1) last.last = i;
+    else groups.push({ first: i, last: i });
+  }
+  const between = (a: { first: number; last: number }, b: { first: number; last: number }): number => Math.max(ranges[b.first]!.from - ranges[a.last]!.to, ranges[a.first]!.from - ranges[b.last]!.to);
+
+  it('holds the three sections once each, in order, as whole inserted groups', () => {
+    expect(sections.every((s) => s.first > 0)).toBe(true);
+    expect(sections[0]!.last).toBeLessThan(sections[1]!.first);
+    expect(sections[1]!.last).toBeLessThan(sections[2]!.first);
+    for (const s of sections) expect(groups).toContainEqual({ first: s.first, last: s.last });
+    expect(sections.reduce((sum, s) => sum + s.defs.length, 0)).toBe(19);
+  });
+
+  it('puts each section within MAX_TERRAIN_DISTANCE of its target and fills the placement list', () => {
+    const terrain = planMarrakech().placements.slice(-MARRAKECH_TERRAIN.length);
+    const entries = MARRAKECH_TERRAIN.map((e, i) => ({ e, p: terrain[i]! })).filter(({ e }) => e.name.startsWith('parkour'));
+    expect(entries.map(({ e }) => [e.name, e.fraction])).toEqual([['parkour', 0.1], ['parkour', 0.43], ['parkourPit', 0.72]]);
+    for (const { e, p } of entries) expect(p.distance, `${e.name} ${e.fraction}`).toBeLessThanOrEqual(MAX_TERRAIN_DISTANCE);
+  });
+
+  it('keeps each section 120 m (150 m for the pit section) from every insert and terrain group placed before it', () => {
+    for (const [n, s] of sections.entries()) {
+      for (const g of groups) {
+        // The sections are placed last and in order, so only the later ones are exempt.
+        if (g.first === s.first || sections.slice(n + 1).some((o) => o.first === g.first)) continue;
+        expect(between(s, g), `section at ${s.first} and group at ${g.first}`).toBeGreaterThanOrEqual(s.clear - 1e-6);
+      }
+    }
+  });
+
+  it('keeps every stop and hazard outside the sections by the terrain clearance, and no random pickup, coin, stop or garage on a section segment (each is exactly its def)', () => {
+    for (const s of sections) {
+      for (let i = s.first; i <= s.last; i++) {
+        const d = def.segments[i] as SegmentDef;
+        expect(JSON.stringify(d), `segment ${i}`).toBe(JSON.stringify(s.defs[i - s.first]));
+        if (d.type === 'road') {
+          expect(d.stop).toBeUndefined();
+          expect(d.coins).toBeUndefined();
+        }
+      }
+      for (const [i, d] of def.segments.entries()) {
+        if (d.type !== 'road' || !(d.stop || d.hazards) || (i >= s.first && i <= s.last)) continue;
+        const gap = Math.max(ranges[s.first]!.from - ranges[i]!.to, ranges[i]!.from - ranges[s.last]!.to);
+        expect(gap, `segment ${i} to the section at ${s.first}`).toBeGreaterThanOrEqual(s.clear - 1e-6);
+      }
+    }
+  });
+
+  it('keeps ambient events and item drops out of the sections, except on the end flat of RUBBLE_RUN', () => {
+    const course = getCourse('marrakech');
+    const routeIndex = createRouteIndex(course.route);
+    const blocked = course.ambient!.blocked;
+    const pickups = course.pickups.map((p) => routeIndex.project(p.pose.pos.x, p.pose.pos.z).along);
+    const alongs = [
+      ...planAmbient(hashSeed('marrakech'), routeIndex.length, blocked).map((e) => e.along),
+      ...[1, 2, 3, 4, 5].flatMap((n) => planItemDrops(mixSeed(hashSeed('marrakech'), n), routeIndex.length, blocked, pickups).map((e) => e.along)),
+    ];
+    expect(alongs.length).toBeGreaterThan(50);
+    for (const s of sections) {
+      // RUBBLE_RUN's last flat 15 m is not blocked.
+      const to = ranges[s.first === sections[0]!.first ? s.last - 1 : s.last]!.to;
+      const from = ranges[s.first]!.from;
+      for (const a of alongs) expect(a >= from && a <= to, `along ${a.toFixed(0)} in the section at ${s.first}`).toBe(false);
+    }
   });
 });

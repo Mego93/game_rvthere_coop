@@ -4,6 +4,7 @@ import { planExtras, TERRAIN_HAZARD_CLEAR, TERRAIN_DEEP_CLEAR, type ExtrasReport
 import { DEEP_PIT, hillSegments, SHALLOW_PIT } from './terrain';
 import { fitRoute, planInserts, type FitReport, type InsertPlacement, type InsertSpec, type Route } from './fit';
 import { MARRAKECH_ROUTE } from './marrakech.route';
+import { CREST_AND_PULL, PIT_GAUNTLET, RUBBLE_RUN } from './parkour';
 
 // How far a built segment advances the course, flat and straight.
 const advanceOf = (defs: SegmentDef[]): number => defs.reduce((sum, def) => sum - buildSegment(def).exit.pos.z, 0);
@@ -31,7 +32,7 @@ interface TerrainEntry {
 
 const terrainEntry = (name: string, fraction: number, segments: SegmentDef[], clearance: number): TerrainEntry => ({ name, fraction, segments, clearance });
 
-// Hills and pits go in after the inserts above, in this order, each clear of every earlier insert (a deep pit 150 m).
+// Hills, pits and the parkour sections go in after the inserts above, in this order, each clear of every earlier insert (a deep pit 150 m).
 export const MARRAKECH_TERRAIN: readonly TerrainEntry[] = [
   terrainEntry('hill', 0.15, hillSegments(HILL_SLOPE), TERRAIN_HAZARD_CLEAR),
   terrainEntry('hill', 0.55, hillSegments(HILL_SLOPE), TERRAIN_HAZARD_CLEAR),
@@ -39,10 +40,13 @@ export const MARRAKECH_TERRAIN: readonly TerrainEntry[] = [
   terrainEntry('bigHill', 0.35, hillSegments(BIG_HILL_SLOPE), TERRAIN_HAZARD_CLEAR),
   ...[0.22, 0.47, 0.66, 0.9].map((fraction) => terrainEntry('pit', fraction, [SHALLOW_PIT], TERRAIN_HAZARD_CLEAR)),
   ...[0.27, 0.77].map((fraction) => terrainEntry('deepPit', fraction, [DEEP_PIT], TERRAIN_DEEP_CLEAR)),
+  terrainEntry('parkour', 0.1, RUBBLE_RUN, TERRAIN_HAZARD_CLEAR),
+  terrainEntry('parkour', 0.43, CREST_AND_PULL, TERRAIN_HAZARD_CLEAR),
+  terrainEntry('parkourPit', 0.72, PIT_GAUNTLET, TERRAIN_DEEP_CLEAR),
 ];
 
 // Metres each terrain target is moved along the route (found by scripts/route/searchTerrain.ts so the 1.5 km fuel chain holds); every feature stays within MAX_TERRAIN_DISTANCE of its target.
-export const MARRAKECH_TERRAIN_SHIFTS: readonly number[] = [0, 0, -100, 0, -150, -50, 0, 0, 0, 0];
+export const MARRAKECH_TERRAIN_SHIFTS: readonly number[] = [-200, 0, -100, 0, -150, -50, 0, -150, 550, 0, 100, -200, 0];
 export const MAX_TERRAIN_DISTANCE = 1300;
 
 const TERRAIN_NAMES = new Set(MARRAKECH_TERRAIN.map((entry) => entry.name));
@@ -68,7 +72,7 @@ export function placeTerrain(fitted: readonly SegmentDef[], shifts: readonly num
     const target = MARRAKECH_TERRAIN[i - terrain]!.fraction * total;
     return { ...p, target, distance: Math.abs(p.at - target) };
   });
-  const spans = planned.groups.filter((g) => TERRAIN_NAMES.has(g.name)).map((g) => ({ first: g.first, last: g.last, deep: g.name === 'deepPit' }));
+  const spans = planned.groups.filter((g) => TERRAIN_NAMES.has(g.name)).map((g) => ({ first: g.first, last: g.last, deep: g.name === 'deepPit' || g.name === 'parkourPit' }));
   return { segments: planned.segments, placements, inserted: planned.inserted, spans };
 }
 

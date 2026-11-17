@@ -10,6 +10,7 @@ import { createWorld, type World } from '../world';
 import { alongOf, alongOfPoint, driveWorld, segmentRouteLength, segmentStarts } from './driveRig';
 import { getCourse, getCourseDef } from './index';
 import { MARRAKECH_INSERTED } from './marrakech.generated';
+import { CREST_AND_PULL, PIT_GAUNTLET, RUBBLE_RUN } from './parkour';
 import { DEEP_PIT } from './terrain';
 import { boardVehicle, exitVehicle, pushAside } from './soloRig';
 
@@ -40,7 +41,16 @@ const ROADWORKS = new Set(def.segments.flatMap((s, i) => (s.type === 'roadworks'
 // The hills and pits as groups of segment indexes: a hill is flat, climb, crest, descent, flat.
 type Kind = 'hill' | 'bigHill' | 'pit' | 'deepPit';
 const groups: { kind: Kind; indexes: number[] }[] = [];
+// The parkour sections (28d): their own hills and pits are driven by the section tests, not sampled here.
+const sectionIndexes = new Set<number>(
+  [RUBBLE_RUN, CREST_AND_PULL, PIT_GAUNTLET].flatMap((defs) => {
+    const first = def.segments.findIndex((_, i) => defs.every((d, k) => JSON.stringify(def.segments[i + k]) === JSON.stringify(d)));
+    if (first < 0) throw new Error('a parkour section is missing from the marrakech course');
+    return defs.map((_, k) => first + k);
+  }),
+);
 def.segments.forEach((s, i) => {
+  if (sectionIndexes.has(i)) return;
   if (s.type === 'pit') groups.push({ kind: JSON.stringify(s) === JSON.stringify(DEEP_PIT) ? 'deepPit' : 'pit', indexes: [i] });
   const next = def.segments[i + 2];
   if (s.type === 'road' && s.slope && s.slope > 0 && next?.type === 'road' && next.slope === -s.slope) groups.push({ kind: s.slope === BIG_HILL_SLOPE ? 'bigHill' : 'hill', indexes: [i - 1, i, i + 1, i + 2, i + 3] });
@@ -68,7 +78,7 @@ export function curveExtremes(): { sharpest: number; stretched: number; curves: 
 
 // One of each terrain kind: the second hill, the big hill, the second shallow pit and the first deep pit.
 const sampledTerrain = (): number[] => (['hill', 'bigHill', 'pit', 'deepPit'] as const).flatMap((kind) => groups.filter((g) => g.kind === kind)[kind === 'hill' || kind === 'pit' ? 1 : 0]!.indexes);
-const terrainIndexes = new Set(groups.flatMap((g) => g.indexes));
+const terrainIndexes = new Set([...groups.flatMap((g) => g.indexes), ...sectionIndexes]);
 
 // Segments of a sample: the first, the last, the sand, alley, roadworks and ford group, one hill, the big hill, one shallow and one deep pit, each hazard segment, a few curves incl. the sharpest and the most stretched.
 export function sampleSegments(): number[] {
