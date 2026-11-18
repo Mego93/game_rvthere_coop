@@ -135,6 +135,11 @@ test('knows the content types the client needs', () => {
   expect(contentType('x.unknown')).toBe('application/octet-stream');
 });
 
+test('serves .woff2 fonts as font/woff2', () => {
+  expect(contentType('assets/rubik-latin-wght-normal-AbC123.woff2')).toBe('font/woff2');
+  expect(contentType('X.WOFF2')).toBe('font/woff2');
+});
+
 test('the room query the page adds is ignored: create and join still work', async () => {
   const amal = await connect('?create=1');
   amal.send({ type: 'create', name: 'Amal', token: 'query-token-amal' });

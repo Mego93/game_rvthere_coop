@@ -422,6 +422,7 @@ test('the full-quality render path draws the marrakech run without console or pa
   await expect(page.locator('#home')).toBeHidden({ timeout: 30_000 });
   await startRun(page);
   await expect(page.locator('#hud-compass')).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => tick(page), { timeout: 20_000 }).toBeGreaterThan(0);
   const before = await tick(page);
   await expect.poll(() => tick(page), { timeout: 20_000 }).toBeGreaterThan(before);
   await page.waitForTimeout(1000);

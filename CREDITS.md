@@ -4,6 +4,13 @@
 
 The geometry of the Marrakech route is derived from OpenStreetMap data: © OpenStreetMap contributors, available under the Open Database Licence (ODbL). See https://www.openstreetmap.org/copyright .
 
+## Fonts
+
+Both fonts are licensed under the SIL Open Font License 1.1 (https://openfontlicense.org), are used unmodified (Latin subset, variable woff2) and are served from the game's own files, from the npm packages `@fontsource-variable/rubik` and `@fontsource-variable/inter`.
+
+- "Rubik" by Hubert & Fischer and Meir Sadan, used for titles and numbers. Source: https://fontsource.org/fonts/rubik (https://fonts.google.com/specimen/Rubik). Licence: SIL Open Font License 1.1.
+- "Inter" by Rasmus Andersson, used for text. Source: https://fontsource.org/fonts/inter (https://rsms.me/inter/). Licence: SIL Open Font License 1.1.
+
 ## Models, textures, sounds
 
 Their sources and licences (CC0 1.0 and CC BY 4.0) are recorded in `packages/client/public/CREDITS.md`, which the game serves as `/CREDITS.md`, and in `packages/client/public/sounds/LICENSE.md`.

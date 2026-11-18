@@ -27,17 +27,18 @@ export const emoteForKey = (code: string): Emote | null => {
 };
 
 const STYLE = `
-#emote-wheel { position: fixed; inset: 0; z-index: 16; display: grid; place-items: center; background: rgba(0, 0, 0, 0.35); }
+#emote-wheel { position: fixed; inset: 0; z-index: 16; display: grid; place-items: center; background: var(--scrim); }
 #emote-wheel[hidden] { display: none; }
-#emote-ring { position: relative; width: 300px; height: 300px; border-radius: 50%; background: rgba(255, 255, 255, 0.92); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4); font: 600 15px system-ui, sans-serif; color: #1d3b52; }
-#emote-ring button { position: absolute; width: 92px; min-height: 56px; margin: -28px 0 0 -46px; padding: 6px; box-sizing: border-box; font: inherit; color: #1d3b52; background: #e3eef6; border: 1px solid #b9cddc; border-radius: 10px; cursor: pointer; touch-action: manipulation; }
-#emote-ring button small { display: block; font-weight: 400; font-size: 11px; opacity: 0.7; }
-#emote-ring button:hover, #emote-ring button:focus-visible { background: #cfe3f1; outline: 2px solid #2f6f9f; }
+#emote-ring { width: 300px; height: 300px; border-radius: 50%; font: 600 16px/1.2 var(--font-text); animation: emote-pop var(--dur) var(--ease) both; }
+#emote-ring button { position: absolute; width: 92px; min-height: 56px; margin: -28px 0 0 -46px; padding: 6px; touch-action: manipulation; flex-direction: column; gap: 0; }
+#emote-ring button small { display: block; font-weight: 500; font-size: 12px; color: var(--ink-soft); }
 #emote-ring button[data-emote="sixSeven"] { left: 50%; top: 20%; }
 #emote-ring button[data-emote="dab"] { left: 80%; top: 50%; }
 #emote-ring button[data-emote="wave"] { left: 50%; top: 80%; }
 #emote-ring button[data-emote="dance"] { left: 20%; top: 50%; }
-#emote-ring #emote-close { position: absolute; left: 50%; top: 50%; width: 64px; min-height: 44px; margin: -22px 0 0 -32px; padding: 4px; font: inherit; font-weight: 400; color: #1d3b52; background: transparent; border: 1px solid #b9cddc; border-radius: 22px; cursor: pointer; }
+#emote-ring #emote-close { left: 50%; top: 50%; width: 64px; min-width: 0; min-height: 44px; margin: -22px 0 0 -32px; padding: 4px; font-size: 14px; font-weight: 500; }
+@keyframes emote-pop { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #emote-ring { animation: none; } }
 `;
 
 export interface EmoteWheelHandlers {
@@ -62,9 +63,11 @@ export function createEmoteWheel(doc: Document, handlers: EmoteWheelHandlers): E
   root.setAttribute('aria-label', 'Emotes');
   const ring = doc.createElement('div');
   ring.id = 'emote-ring';
+  ring.className = 'ui-panel';
   EMOTES.forEach((emote, index) => {
     const button = doc.createElement('button');
     button.type = 'button';
+    button.className = 'ui-btn';
     button.dataset.emote = emote;
     button.textContent = EMOTE_LABELS[emote];
     const hint = doc.createElement('small');
@@ -75,6 +78,7 @@ export function createEmoteWheel(doc: Document, handlers: EmoteWheelHandlers): E
   });
   const closeButton = doc.createElement('button');
   closeButton.id = 'emote-close';
+  closeButton.className = 'ui-btn';
   closeButton.type = 'button';
   closeButton.textContent = 'Close';
   closeButton.addEventListener('click', () => set(false));

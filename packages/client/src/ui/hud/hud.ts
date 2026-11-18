@@ -2,7 +2,7 @@ import { clamp } from '@lodgy/shared';
 import { LOW_FRACTION, MAP_MARGIN, MAP_SIZE_DESKTOP, MAP_SIZE_TOUCH } from './constants';
 import { ICON_COIN, ICON_FUEL, ICON_HEALTHKIT, ICON_HEART, ICON_HULL, ICON_JERRYCAN, ICON_SEAT, ICON_TAJINE, ICON_TOOLBOX } from './icons';
 import { splitPrompt } from './splitPrompt';
-import { ownHealthFraction, type HudModel } from './hudModel';
+import { gaugePercent, ownHealthFraction, ownHealthPoints, type HudModel } from './hudModel';
 import { createMapPlan, mapScene } from './mapScene';
 
 export interface HudMarker { id: string; name: string; seconds: number; x: number; y: number; behind: boolean }
@@ -17,74 +17,85 @@ const SLOT_ICONS: Record<string, string> = { jerrycan: ICON_JERRYCAN, toolbox: I
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const STYLE = `
-#hud { --hud-glass: rgba(12, 16, 24, 0.38); --hud-border: rgba(255, 255, 255, 0.14); --hud-accent: #ffd34e; --hud-fuel: #ffb23e; --hud-good: #6ee07a; --hud-bad: #ff4e4e; --hud-info: #4ec3ff; position: fixed; inset: 0; z-index: 5; box-sizing: border-box; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); pointer-events: none; user-select: none; -webkit-user-select: none; color: rgba(255, 255, 255, 0.92); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55); font: 600 13px/1.3 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+#hud { position: fixed; inset: 0; z-index: 5; box-sizing: border-box; padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); pointer-events: none; user-select: none; -webkit-user-select: none; color: var(--on-glass); text-shadow: var(--glass-text-shadow); font: 600 13px/1.3 var(--font-text); font-variant-numeric: tabular-nums; }
 #hud[hidden], #hud [hidden] { display: none; }
-#hud .glass { background: var(--hud-glass); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid var(--hud-border); border-radius: 12px; }
-#hud.touch .glass { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(12, 16, 24, 0.55); }
+#hud .glass { background: var(--glass); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid var(--glass-line); border-radius: 12px; }
+#hud.touch .glass { backdrop-filter: none; -webkit-backdrop-filter: none; }
 #hud .marker.glass { backdrop-filter: none; -webkit-backdrop-filter: none; }
 #hud svg.ico { width: 14px; height: 14px; display: block; }
 #hud .panel { padding: 6px 10px; }
-#hud #hud-compass { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(320px, 40vw); height: 22px; overflow: hidden; border-radius: 11px; }
-#hud-compass-marker { position: absolute; top: 4px; width: 0; height: 0; }
-#hud-compass-marker::before { content: ''; position: absolute; left: -5px; top: 0; width: 10px; height: 7px; background: var(--hud-accent); clip-path: polygon(0 0, 50% 100%, 100% 0, 50% 45%); }
-#hud-compass-label { position: absolute; top: 4px; white-space: nowrap; font-size: 10px; line-height: 14px; opacity: 0.7; }
-#hud-compass-left, #hud-compass-right { position: absolute; top: 3px; color: var(--hud-accent); font-size: 13px; line-height: 1; }
+#hud #hud-compass { position: absolute; top: calc(8px + var(--safe-top)); left: 50%; transform: translateX(-50%); width: min(320px, 40vw); height: 24px; overflow: hidden; border-radius: 12px; }
+#hud.touch #hud-compass { width: min(240px, 36vw); }
+@media (max-width: 700px) { #hud.touch #hud-compass { width: min(240px, 34vw); } }
+#hud-compass-marker { position: absolute; top: 5px; width: 0; height: 0; }
+#hud-compass-marker::before { content: ''; position: absolute; left: -5px; top: 0; width: 10px; height: 7px; background: var(--glass-accent); clip-path: polygon(0 0, 50% 100%, 100% 0, 50% 45%); }
+#hud-compass-label { position: absolute; top: 4px; white-space: nowrap; font-size: 11px; line-height: 16px; }
+#hud-compass-left, #hud-compass-right { position: absolute; top: 4px; color: var(--glass-accent); font-size: 13px; line-height: 1; }
 #hud-compass-left { left: 8px; }
 #hud-compass-right { right: 8px; }
 #hud-compass-centre { display: none; }
-#hud #hud-minimap { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: calc(8px + env(safe-area-inset-left)); border-radius: 50%; overflow: hidden; box-sizing: border-box; border-color: rgba(255, 255, 255, 0.2); }
-#hud.touch #hud-vehicle { top: calc(56px + env(safe-area-inset-top)); }
-#hud-minimap .route { fill: none; stroke: rgba(255, 255, 255, 0.55); stroke-width: 2; stroke-linejoin: round; }
-#hud-minimap .vehicle { fill: var(--hud-accent); }
-#hud-minimap .self { fill: var(--hud-info); }
-#hud-minimap .player { fill: #fff; }
-#hud-minimap .stop-fuel { fill: #ff8a3d; }
-#hud-minimap .stop-garage { fill: var(--hud-good); }
-#hud-minimap .item { stroke: rgba(0, 0, 0, 0.6); stroke-width: 1; }
-#hud-minimap .item.jerrycan { fill: #d9a21b; }
-#hud-minimap .item.toolbox { fill: #4a90d9; }
-#hud-minimap .item.healthKit { fill: #d94a4a; }
-#hud-minimap .item.tajine { fill: #c2662d; }
-#hud-minimap .finish { fill: #fff; stroke: #111; stroke-width: 1.5; }
-#hud-minimap .checkpoint { fill: none; stroke: #fff; stroke-width: 2; }
+#hud #hud-minimap { position: absolute; top: calc(8px + var(--safe-top)); left: calc(8px + var(--safe-left)); border-radius: 50%; overflow: hidden; box-sizing: border-box; }
+#hud-minimap .route { fill: none; stroke: var(--glass-route); stroke-width: 2; stroke-linejoin: round; }
+#hud-minimap .vehicle { fill: var(--glass-accent); }
+#hud-minimap .self { fill: var(--glass-info); }
+#hud-minimap .player { fill: var(--on-glass); }
+#hud-minimap .stop-fuel { fill: var(--stop-fuel); }
+#hud-minimap .stop-garage { fill: var(--stop-garage); }
+#hud-minimap .item { stroke: var(--glass-halo); stroke-width: 1; }
+#hud-minimap .item.jerrycan { fill: var(--item-jerrycan); }
+#hud-minimap .item.toolbox { fill: var(--item-toolbox); }
+#hud-minimap .item.healthKit { fill: var(--item-health); }
+#hud-minimap .item.tajine { fill: var(--item-tajine); }
+#hud-minimap .finish { fill: var(--finish-a); stroke: var(--finish-b); stroke-width: 1.5; }
+#hud-minimap .checkpoint { fill: none; stroke: var(--on-glass); stroke-width: 2; }
 #hud-minimap .checkpoint.reached { opacity: 0.3; }
-#hud-minimap .tick { stroke: var(--hud-info); stroke-width: 2; }
-#hud-vehicle { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); display: grid; gap: 5px; min-width: 112px; }
-#hud-vehicle .row { display: grid; grid-template-columns: 14px 1fr; gap: 6px; align-items: center; }
-#hud .bar { height: 6px; background: rgba(255, 255, 255, 0.2); border-radius: 3px; overflow: hidden; }
-#hud .bar > i { display: block; height: 100%; width: 100%; background: var(--hud-good); transform-origin: left; }
-#hud .bar.fuel > i { background: var(--hud-fuel); }
-#hud .bar.low > i { background: var(--hud-bad); animation: hud-pulse 1.2s ease-in-out infinite; }
+#hud-minimap .tick { stroke: var(--glass-info); stroke-width: 2; }
+#hud-vehicle { position: absolute; top: calc(8px + var(--safe-top)); right: calc(8px + var(--safe-right)); display: grid; gap: 5px; min-width: 150px; }
+#hud-vehicle .row { display: grid; grid-template-columns: 14px 1fr 34px; gap: 6px; align-items: center; }
+#hud-vehicle .num, #hud-health .num { text-align: right; font-size: 12px; }
+#hud .bar { height: 6px; background: var(--glass-track); border-radius: 3px; overflow: hidden; }
+#hud .bar > i { display: block; height: 100%; width: 100%; background: var(--glass-good); transform-origin: left; }
+#hud .bar.fuel > i { background: var(--glass-accent); }
+#hud .bar.low > i { background: var(--glass-bad); animation: hud-pulse 1.2s ease-in-out infinite; }
 @keyframes hud-pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
-#hud-seat { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-#hud-seat-toast { position: absolute; top: calc(40px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); padding: 6px 16px; font-size: 15px; white-space: nowrap; border-radius: 999px; }
-#hud-meta { display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 600; }
+#hud-vehicle .info { display: contents; }
+#hud-vehicle #hud-seat { justify-self: start; gap: 4px; padding: 0 8px; font-size: 12px; text-shadow: none; }
+#hud-seat svg.ico { width: 12px; height: 12px; }
+#hud-meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; }
 #hud-meta .wallet { display: inline-flex; align-items: center; gap: 4px; }
-#hud-meta .wallet svg.ico { color: var(--hud-accent); width: 9px; height: 9px; }
-#hud #hud-health { backdrop-filter: none; -webkit-backdrop-filter: none; position: absolute; left: calc(8px + env(safe-area-inset-left)); bottom: calc(8px + env(safe-area-inset-bottom)); width: 120px; display: grid; grid-template-columns: 14px 1fr; gap: 6px; align-items: center; height: 14px; background: none; border: 0; padding: 0; transition: opacity 0.3s; }
-#hud-health.full { opacity: 0.4; }
-#hud-health svg.ico { color: var(--hud-bad); }
-#hud-slots { position: absolute; right: calc(8px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); display: flex; gap: 6px; }
-#hud-slots .slot { position: relative; width: 52px; height: 52px; display: grid; grid-template-rows: 1fr auto; justify-items: center; align-items: center; padding: 6px 2px 4px; box-sizing: border-box; transition: transform 0.12s; }
-#hud-slots .slot .icon { width: 22px; height: 22px; }
-#hud-slots .slot .icon svg.ico { width: 22px; height: 22px; }
+#hud-meta .wallet svg.ico { color: var(--glass-accent); width: 10px; height: 10px; }
+#hud.touch #hud-vehicle { top: calc(56px + var(--safe-top)); right: auto; left: 50%; transform: translateX(-50%); box-sizing: border-box; width: min(260px, 60vw); min-width: 0; height: 52px; padding: 3px 8px; grid-template-columns: 1fr 1fr; gap: 2px 10px; align-content: center; }
+#hud.touch #hud-vehicle .row { grid-template-columns: 14px 1fr 30px; gap: 4px; }
+#hud.touch #hud-vehicle .info { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
+#hud.touch #hud-vehicle #hud-meta { flex: 1; }
+#hud-seat-toast { position: absolute; top: calc(40px + var(--safe-top)); left: 0; right: 0; width: max-content; max-width: 60vw; margin: 0 auto; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hud.touch #hud-seat-toast { top: calc(116px + var(--safe-top)); max-width: min(300px, calc(100vw - 2 * (var(--safe-left) + 160px))); }
+#hud #hud-health { position: absolute; left: calc(8px + var(--safe-left)); bottom: calc(8px + var(--safe-bottom)); box-sizing: border-box; width: 150px; height: 28px; padding: 0 10px; display: grid; grid-template-columns: 14px 1fr 30px; gap: 6px; align-items: center; transition: background-color 0.3s, border-color 0.3s; }
+#hud #hud-health.full { background: transparent; border-color: transparent; }
+#hud-health svg.ico { color: var(--glass-bad); }
+#hud-slots { position: absolute; left: 50%; bottom: calc(8px + var(--safe-bottom)); transform: translateX(-50%); display: flex; gap: 6px; }
+#hud-slots .slot { position: relative; width: 52px; height: 52px; display: grid; grid-template-rows: 1fr auto; justify-items: center; align-items: center; padding: 6px 2px 4px; }
+#hud-slots .slot .icon, #hud-slots .slot .icon svg.ico { width: 22px; height: 22px; }
 #hud-slots .slot .label { font-size: 10px; line-height: 1; white-space: nowrap; }
-#hud-slots .slot .badge { position: absolute; top: 3px; left: 5px; font-size: 10px; line-height: 1; opacity: 0.8; }
-#hud-slots .slot.selected { border: 2px solid var(--hud-accent); transform: scale(1.08); }
+#hud-slots .slot .badge { position: absolute; top: 3px; left: 5px; font-size: 10px; line-height: 1; }
+#hud-slots .slot.selected { transform: scale(1.08); }
 #hud-slots .slot.empty .icon, #hud-slots .slot.empty .label { display: none; }
-#hud-slots .slot.empty { opacity: 0.4; }
-#hud-prompt { position: absolute; left: 50%; bottom: calc(72px + env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: 70vw; text-align: center; white-space: pre; }
-#hud-prompt-text { display: inline-flex; align-items: center; gap: 14px; padding: 6px 12px; }
+#hud-slots .slot.empty { opacity: 0.55; }
+#hud-prompt { position: absolute; left: 50%; bottom: calc(72px + var(--safe-bottom)); transform: translateX(-50%); width: max-content; max-width: 70vw; text-align: center; }
+#hud.touch #hud-prompt { bottom: calc(76px + var(--safe-bottom)); max-width: 250px; }
+#hud-prompt-text { display: inline-flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 14px; padding: 6px 12px; white-space: pre; }
+#hud.touch #hud-prompt-text { white-space: normal; }
 #hud-prompt-text:empty { display: none; }
 #hud-prompt-text .part { display: inline-flex; align-items: center; gap: 6px; }
-#hud-prompt-text .keycap { display: inline-grid; place-items: center; min-width: 22px; height: 22px; box-sizing: border-box; border-radius: 6px; background: rgba(255, 255, 255, 0.9); color: #10151d; text-shadow: none; font-size: 12px; font-weight: 700; }
+#hud-prompt-text .keycap { display: inline-grid; place-items: center; min-width: 22px; height: 22px; box-sizing: border-box; border-radius: 6px; background: var(--paper); color: var(--ink); text-shadow: none; font-size: 12px; font-weight: 700; }
 #hud-prompt-text .keycap.pill { padding: 0 8px; border-radius: 11px; }
-#hud-prompt-text .keycap.hold { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25), 0 0 0 3px var(--hud-accent); margin: 3px; }
+#hud-prompt-text .keycap.hold { box-shadow: 0 0 0 2px var(--glass-line), 0 0 0 3px var(--glass-accent); margin: 3px; }
 #hud-prompt-hold { width: 160px; height: 6px; margin: 4px auto 0; }
-#hud #hud-downed { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); padding: 8px 20px; font-size: 22px; border-radius: 999px; border-color: var(--hud-bad); }
+#hud #hud-downed { position: absolute; left: 0; right: 0; top: 40%; width: max-content; margin: 0 auto; padding: 8px 20px; font: 700 22px/1.2 var(--font-display); border-radius: 999px; border-color: var(--glass-bad); }
+#hud.touch #hud-downed { top: 44%; }
 #hud .marker { position: absolute; transform: translate(-50%, -100%); display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; font-size: 12px; white-space: nowrap; border-radius: 999px; }
-#hud .marker::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--hud-bad); }
-@media (prefers-reduced-motion: reduce) { #hud .bar.low > i { animation: none; } #hud-slots .slot { transition: none; } #hud-health { transition: none; } }
+#hud .marker::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--glass-bad); }
+@media (prefers-reduced-motion: reduce) { #hud .bar.low > i { animation: none; } #hud #hud-health { transition: none; } }
 `;
 
 // Icons come from the constants in icons.ts, never from player-controlled text.
@@ -157,14 +168,15 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
     const row = el('div', vehiclePanel, undefined, 'row');
     icon(el('span', row), iconMarkup);
     const track = el('div', row, undefined, `bar ${extra}`);
-    return { track, fill: el('i', track) };
+    return { track, fill: el('i', track), num: el('span', row, undefined, 'num') };
   };
   const fuelBar = bar(ICON_FUEL, 'fuel');
   const vehicleHealthBar = bar(ICON_HULL, 'health');
-  const seat = el('div', vehiclePanel, 'hud-seat');
+  const info = el('div', vehiclePanel, undefined, 'info');
+  const seat = el('div', info, 'hud-seat', 'ui-chip');
   icon(seat, ICON_SEAT);
   const seatText = el('span', seat);
-  const meta = el('div', vehiclePanel, 'hud-meta');
+  const meta = el('div', info, 'hud-meta');
   const timer = el('span', meta);
   const wallet = el('span', meta, undefined, 'wallet');
   icon(wallet, ICON_COIN);
@@ -174,12 +186,13 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
   icon(el('span', health), ICON_HEART);
   const ownHealth = el('div', health, undefined, 'bar health');
   const ownFill = el('i', ownHealth);
+  const ownNum = el('span', health, undefined, 'num');
 
   const slots = el('div', root, 'hud-slots');
   const slotNodes: { tile: HTMLElement; icon: HTMLElement; label: HTMLElement }[] = [];
   if (!opts.touch) {
     for (let i = 0; i < 3; i++) {
-      const tile = el('div', slots, undefined, 'slot glass empty');
+      const tile = el('div', slots, undefined, 'ui-slot slot empty');
       el('span', tile, undefined, 'badge').textContent = String(i + 1);
       slotNodes.push({ tile, icon: el('span', tile, undefined, 'icon'), label: el('span', tile, undefined, 'label') });
     }
@@ -192,7 +205,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
   const holdFill = el('i', hold);
   hold.hidden = true;
 
-  const seatToast = el('div', root, 'hud-seat-toast', 'glass');
+  const seatToast = el('div', root, 'hud-seat-toast', 'ui-toast');
   seatToast.hidden = true;
 
   const downed = el('div', root, 'hud-downed', 'glass');
@@ -314,6 +327,8 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       const hull = v ? clamp(v.health, 0, 1) : 0;
       scale(fuelBar.fill, fuel);
       scale(vehicleHealthBar.fill, hull);
+      text(fuelBar.num, gaugePercent(fuel));
+      text(vehicleHealthBar.num, gaugePercent(hull));
       flag(fuelBar.track, 'low', !!v?.fuelLow);
       flag(vehicleHealthBar.track, 'low', !!v?.healthLow);
       toggle(seat, model.ownSeat === null);
@@ -325,6 +340,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
 
       const own = ownHealthFraction(model.ownHealth);
       scale(ownFill, own);
+      text(ownNum, String(ownHealthPoints(model.ownHealth)));
       flag(ownHealth, 'low', own < LOW_FRACTION);
       flag(health, 'full', own >= 1);
 

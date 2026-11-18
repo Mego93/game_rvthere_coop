@@ -15,12 +15,13 @@ export async function loadCredits(fetcher: Fetcher = (url) => fetch(url)): Promi
 }
 
 const STYLE = `
-#credits { position: fixed; inset: 0; z-index: 40; display: grid; background: rgba(0, 0, 0, 0.5); }
+#credits { position: fixed; inset: 0; z-index: 40; display: grid; background: var(--scrim); }
 #credits[hidden] { display: none; }
-#credits-panel { display: grid; grid-template-rows: auto 1fr auto; gap: 12px; width: min(560px, 92vw); max-height: 86vh; margin: auto; padding: 20px; box-sizing: border-box; background: #fff; border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3); }
-#credits-panel h2 { margin: 0; font-size: 20px; }
-#credits-text { margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.45 ui-monospace, Menlo, monospace; color: #222; }
-#credits-close { padding: 10px; font: inherit; font-size: 16px; color: #fff; background: #2f6f9f; border: 1px solid #2f6f9f; border-radius: 6px; }
+#credits-panel { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px; width: min(560px, 92vw); max-height: 86vh; margin: auto; padding: 18px; animation: credits-rise 200ms var(--ease) both; }
+#credits-panel h2 { margin: 0; font-size: 22px; color: var(--teal); }
+#credits-text { margin: 0; padding: 10px 12px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.45 var(--font-mono); color: var(--ink); background: var(--paper); border-radius: var(--radius-ctl); }
+@keyframes credits-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #credits-panel { animation: none; } }
 `;
 
 export interface CreditsPanel {
@@ -39,6 +40,7 @@ export function createCredits(doc: Document, fetcher?: Fetcher): CreditsPanel {
   style.textContent = STYLE;
   const panel = doc.createElement('div');
   panel.id = 'credits-panel';
+  panel.className = 'ui-panel';
   const title = doc.createElement('h2');
   title.textContent = 'Credits';
   const text = doc.createElement('pre');
@@ -46,6 +48,7 @@ export function createCredits(doc: Document, fetcher?: Fetcher): CreditsPanel {
   const close = doc.createElement('button');
   close.id = 'credits-close';
   close.type = 'button';
+  close.className = 'ui-btn ui-btn-primary';
   close.textContent = 'Close';
   panel.append(title, text, close);
   root.append(style, panel);

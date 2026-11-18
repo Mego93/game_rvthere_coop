@@ -60,3 +60,18 @@ describe('Sketchfab credits (step 33)', () => {
     for (const sky of ['qwantani_night_puresky_1k.hdr', 'kloofendal_overcast_puresky_1k.hdr']) expect(read('../../public/CREDITS.md')).toContain(sky);
   });
 });
+
+describe('font credits (step 35)', () => {
+  const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
+  for (const [name, path] of [['root CREDITS.md', '../../../../CREDITS.md'], ['served credits', '../../public/CREDITS.md']] as const) {
+    it(`${name} names Rubik and Inter with the SIL Open Font License 1.1 and their source`, () => {
+      const lines = read(path).split('\n');
+      for (const [font, source] of [['Rubik', 'https://fontsource.org/fonts/rubik'], ['Inter', 'https://fontsource.org/fonts/inter']]) {
+        const entry = lines.find((line) => line.startsWith('- ') && line.includes(`"${font}"`));
+        expect(entry, font).toBeDefined();
+        expect(entry, font).toContain('SIL Open Font License 1.1');
+        expect(entry, font).toContain(source);
+      }
+    });
+  }
+});
