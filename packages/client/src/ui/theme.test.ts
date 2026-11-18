@@ -77,6 +77,8 @@ describe('theme tokens', () => {
 describe('V7 contrast pairs (WCAG, at least 4.5:1)', () => {
   const pairs: [string, Rgb, Rgb][] = [
     ['white on glass over white', solid('--white'), over(TOKENS['--glass']!, '#ffffff')],
+    ['glass-accent on glass-strong over white', solid('--glass-accent'), over(TOKENS['--glass-strong']!, '#ffffff')],
+    ['glass-info on glass-strong over white', solid('--glass-info'), over(TOKENS['--glass-strong']!, '#ffffff')],
     ['white on terracotta-strong', solid('--white'), solid('--terracotta-strong')],
     ['white on terracotta-deep (primary hover)', solid('--white'), solid('--terracotta-deep')],
     ['ink on sand', solid('--ink'), solid('--sand')],

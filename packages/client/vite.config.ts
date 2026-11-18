@@ -6,11 +6,14 @@ function themeInHead(): Plugin {
   return {
     name: 'lodgy-theme-in-head',
     transformIndexHtml(_html, ctx) {
-      const tags: { tag: string; attrs?: Record<string, string | boolean>; children?: string; injectTo: 'head-prepend' }[] = [
-        { tag: 'style', attrs: { id: 'lodgy-theme' }, children: THEME_CSS, injectTo: 'head-prepend' },
+      const tags: { tag: string; attrs?: Record<string, string | boolean>; children?: string; injectTo: 'head' }[] = [
+        { tag: 'style', attrs: { id: 'lodgy-theme' }, children: THEME_CSS, injectTo: 'head' },
       ];
-      const font = Object.keys(ctx.bundle ?? {}).find((name) => /(^|\/)inter-latin-wght-normal[^/]*\.woff2$/.test(name));
-      if (font) tags.push({ tag: 'link', attrs: { rel: 'preload', href: `/${font}`, as: 'font', type: 'font/woff2', crossorigin: '' }, injectTo: 'head-prepend' });
+      // Preloads the two text faces; the tags go at the end of <head> so <meta charset> stays in the first 1024 bytes.
+      for (const face of ['inter', 'rubik']) {
+        const font = Object.keys(ctx.bundle ?? {}).find((name) => new RegExp(`(^|/)${face}-latin-wght-normal[^/]*\\.woff2$`).test(name));
+        if (font) tags.push({ tag: 'link', attrs: { rel: 'preload', href: `/${font}`, as: 'font', type: 'font/woff2', crossorigin: '' }, injectTo: 'head' });
+      }
       return tags;
     },
   };

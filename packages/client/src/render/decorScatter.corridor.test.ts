@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { buildCourse, type Box, rotate, CORRIDOR_OUTER, corridorHeightAt, corridorOf, getCourse, getCourseDef, routeFrame, segmentRanges, type CourseDef } from '@lodgy/shared';
 import { describe, expect, test } from 'vitest';
 import { buildCells, DESKTOP_DECOR, TOUCH_DECOR, visibleCells } from './decorChunks';
-import { scatterDecor, seedFromId, type DecorPlacement } from './decorScatter';
+import { scatterDecor, scatterDecorSteps, seedFromId, type DecorPlacement } from './decorScatter';
 import { farMeshHeight, routeDistance } from './terrain';
 
 const course = getCourse('marrakech');
@@ -178,5 +178,19 @@ describe('courses without a corridor', () => {
     const airport = getCourse('airport');
     const list = scatterDecor(airport, getCourseDef('airport')!, seedFromId('airport'));
     expect(list.some((p) => /kasbah|mosque|stall|agave|tyres|cliffs$|mountains/.test(p.model))).toBe(false);
+  });
+});
+
+describe('scatterDecorSteps', () => {
+  test('the sliced scatter equals the synchronous one and takes many steps', () => {
+    const steps = scatterDecorSteps(course, def, seedFromId('marrakech'));
+    let count = 0;
+    let result = steps.next();
+    while (!result.done) {
+      count += 1;
+      result = steps.next();
+    }
+    expect(count).toBeGreaterThan(100);
+    expect(result.value).toEqual(placements);
   });
 });

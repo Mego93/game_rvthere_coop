@@ -26,8 +26,7 @@ import { createEmoteWheel } from './ui/emoteWheel';
 import { createHome, errorText } from './ui/home';
 import { createLobby } from './ui/lobby';
 import { createResults } from './ui/results';
-import { warmCourse } from './render/warm';
-import { hudTestMode, startHudTest } from './ui/hudTest';
+import { WARM_BUDGET_DESKTOP_MS, WARM_BUDGET_TOUCH_MS, cancelWarm, warmCourse } from './render/warm';
 import { installTheme } from './ui/theme';
 import { createTouchUi } from './ui/touchUi';
 import { createTutorial, shouldAutoShowTutorial } from './ui/tutorial';
@@ -158,11 +157,11 @@ let phase: Phase | null = null;
 // What the home page says when the socket next closes.
 let closeReason = CONNECTION_LOST;
 
+// The theme goes in before any screen is built, so every component can use its tokens and shared classes.
+installTheme(document);
 const credits = createCredits(document);
 // The tutorial first: both close on Escape in the capture phase, and the one on top (the tutorial) must take it.
 const tutorial = createTutorial(document, { touch: touchDevice, store: nameStore, onChange: () => game?.setControlsOpen(menuPanelOpen()) });
-// The theme goes in before any screen is built, so every component can use its tokens and shared classes.
-installTheme(document);
 
 const helpPanel = createControlsPanel(document, () => game?.setControlsOpen(menuPanelOpen()), () => credits.open());
 const menuPanelOpen = () => helpPanel.isOpen() || tutorial.isOpen();
@@ -269,7 +268,7 @@ function onLobby(message: LobbyMessage) {
     stopGame();
     results.hide();
     lobby.show(message, playerId);
-    warmCourse(message.courseId);
+    warmCourse(message.courseId, () => phase === 'lobby', touchDevice ? WARM_BUDGET_TOUCH_MS : WARM_BUDGET_DESKTOP_MS);
     chatLog.markRead();
     if (shouldAutoShowTutorial(nameStore, tutorialOffered)) tutorial.open();
     tutorialOffered = true;
@@ -372,6 +371,7 @@ function onMessage(message: ServerMessage) {
 
 // The renderer is made when the first run starts, so a browser without WebGL still gets the home page and a clear message.
 function startGame(lobby: LobbyMessage) {
+  cancelWarm();
   try {
     if (!renderer) {
       renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -426,6 +426,7 @@ function clearReconnectTimers() {
 
 // Puts the page on the home page after the connection ended.
 function showHome(text: string) {
+  cancelWarm();
   clearReconnectTimers();
   reconnectOverlay.hidden = true;
   socket = null;
@@ -629,9 +630,9 @@ canvas.addEventListener('webglcontextlost', () => {
 // Back and forward change the address without loading the page; reloading puts the page in step with it.
 window.addEventListener('popstate', () => location.reload());
 
-// ?hudtest is the layout check's and the screenshots' way in: the HUD on a fixed sample, no room.
-const hudTest = hudTestMode(location.search);
+// ?hudtest is the layout check's and the screenshots' way in: the HUD on a fixed sample, no room. Loaded only when asked for.
+const hudTest = new URLSearchParams(location.search).has('hudtest');
 const rejoin = hudTest ? null : takeRejoin(sessionStore, roomFromPath(location.pathname));
-if (hudTest) startHudTest(hudTest, { touch: touchDevice, chatPanel, emoteWheel, helpPanel, tutorial, results });
+if (hudTest) void import('./ui/hudTest').then(({ hudTestMode, startHudTest }) => startHudTest(hudTestMode(location.search)!, { touch: touchDevice, chatPanel, emoteWheel, helpPanel, tutorial, results }));
 else if (rejoin) autoJoin(roomFromPath(location.pathname)!, rejoin.name, rejoin.playerId);
 else home.show({ room: roomFromPath(location.pathname), name });

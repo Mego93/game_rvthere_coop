@@ -1,6 +1,6 @@
 import { getCourse, SHOULDER_WIDTH, type BuiltCourse } from '@lodgy/shared';
 import { describe, expect, test } from 'vitest';
-import { buildTerrainGrid, routeDistance, surfaceYAt, terrainHeight, terrainShade, TERRAIN_CELL, TERRAIN_MARGIN } from './terrain';
+import { buildTerrainGrid, routeDistance, terrainGridOf, terrainGridSteps, warmTerrainGrid, surfaceYAt, terrainHeight, terrainShade, TERRAIN_CELL, TERRAIN_MARGIN } from './terrain';
 
 const courses = (['airport', 'segment-demo'] as const).map((id) => getCourse(id));
 
@@ -158,5 +158,38 @@ describe('surfaceYAt with one huge ground box', () => {
     expect(surfaceYAt(course, 3000, -2500)).toBeCloseTo(-1, 9);
     expect(surfaceYAt(course, 100, 100)).toBeCloseTo(1, 9);
     expect(surfaceYAt(course, 5000, 0)).toBeNull();
+  });
+});
+
+describe('terrainGridOf', () => {
+  test('returns the same grid object each time, equal to an uncached build', () => {
+    const course = courses[0]!;
+    const grid = terrainGridOf(course);
+    expect(terrainGridOf(course)).toBe(grid);
+    expect(grid).toEqual(buildTerrainGrid(course));
+  });
+});
+
+describe('terrainGridSteps and warmTerrainGrid', () => {
+  test('the sliced build equals the synchronous one and takes many steps', () => {
+    for (const course of [...courses, getCourse('marrakech')]) {
+      const steps = terrainGridSteps(course);
+      let count = 0;
+      let result = steps.next();
+      while (!result.done) {
+        count += 1;
+        result = steps.next();
+      }
+      expect(count).toBeGreaterThan(10);
+      expect(result.value).toEqual(buildTerrainGrid(course));
+    }
+  });
+
+  test('warming fills terrainGridOf without a second build', () => {
+    const copy = { ...courses[1]! };
+    for (const _ of warmTerrainGrid(copy));
+    const grid = terrainGridOf(copy);
+    expect(terrainGridOf(copy)).toBe(grid);
+    expect(grid).toEqual(buildTerrainGrid(copy));
   });
 });

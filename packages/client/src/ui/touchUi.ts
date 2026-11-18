@@ -27,12 +27,12 @@ const STYLE = `
 #touch-ui button.on { border-color: var(--glass-accent); box-shadow: 0 0 0 2px var(--glass-accent); }
 #touch-actions { position: absolute; right: calc(12px + var(--safe-right)); bottom: calc(12px + var(--safe-bottom)); display: grid; grid-template-columns: repeat(2, 64px); gap: 10px; }
 #touch-actions button { width: 64px; height: 64px; }
-#touch-menu, #touch-chat, #touch-emote { position: absolute; top: calc(8px + var(--safe-top)); width: 44px; height: 44px; border-radius: 12px; font-size: 11px; }
+#touch-ui #touch-menu, #touch-ui #touch-chat, #touch-ui #touch-emote { position: absolute; top: calc(8px + var(--safe-top)); width: 44px; height: 44px; border-radius: 12px; font-size: 11px; }
 #touch-menu { right: calc(12px + var(--safe-right)); }
 #touch-chat { right: calc(12px + 52px + var(--safe-right)); }
 #touch-emote { right: calc(12px + 2 * 52px + var(--safe-right)); }
 #touch-slots { position: absolute; left: 50%; bottom: calc(12px + var(--safe-bottom)); transform: translateX(-50%); display: flex; gap: 8px; }
-#touch-slots button { width: 56px; height: 56px; border-radius: 12px; font-size: 12px; }
+#touch-ui #touch-slots button { width: 56px; height: 56px; border-radius: 12px; font-size: 12px; }
 #touch-slots button.selected { border-color: var(--glass-accent); box-shadow: 0 0 0 2px var(--glass-accent); }
 #touch-joystick { position: absolute; border: 2px solid var(--glass-line-strong); border-radius: 50%; background: var(--glass-faint); pointer-events: none; }
 #touch-joystick-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: var(--glass-line-strong); }

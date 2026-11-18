@@ -221,7 +221,7 @@ const STYLE = `${CHAT_FORM_STYLE}
 }
 #chat-panel .chat-lines:empty { display: none; }
 #chat-toasts { position: fixed; z-index: 15; left: max(8px, var(--safe-left)); top: 50%; transform: translateY(-50%); width: max-content; max-width: min(360px, 30vw); display: grid; gap: 4px; pointer-events: none; }
-.chat-toast { padding: 4px 10px; font: 500 14px/1.35 var(--font-text); color: var(--on-glass); background: var(--glass); border: 1px solid var(--glass-line); border-radius: 10px; text-shadow: var(--glass-text-shadow); overflow-wrap: anywhere; animation: chat-fade ${TOAST_SECONDS}s linear forwards; }
+.chat-toast { padding: 4px 10px; font: 500 14px/1.35 var(--font-text); color: var(--on-glass); background: var(--glass-strong); border: 1px solid var(--glass-line); border-radius: 10px; text-shadow: var(--glass-text-shadow); overflow-wrap: anywhere; animation: chat-fade ${TOAST_SECONDS}s linear forwards; }
 .chat-toast .chat-name { font-weight: 700; margin-right: 6px; color: var(--glass-info); }
 .chat-toast.own .chat-name { color: var(--glass-accent); }
 @media (pointer: coarse) {

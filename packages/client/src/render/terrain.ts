@@ -217,7 +217,8 @@ export interface TerrainGrid {
   cells: number;
 }
 
-export function buildTerrainGrid(course: BuiltCourse): TerrainGrid {
+// The grid as steps: every 8 rows of the heights pass, every 32 rows of the later passes and each row of chunks, so a caller can spread the work over time.
+export function* terrainGridSteps(course: BuiltCourse): Generator<void, TerrainGrid> {
   const { minX, minZ, cols, rows } = gridShape(course);
   const positions = new Float32Array((cols + 1) * (rows + 1) * 3);
   const uvs = new Float32Array((cols + 1) * (rows + 1) * 2);
@@ -227,6 +228,7 @@ export function buildTerrainGrid(course: BuiltCourse): TerrainGrid {
   const distances = new Float32Array((cols + 1) * (rows + 1));
   const corridor = corridorOf(course);
   for (let j = 0; j <= rows; j++) {
+    if (j % 8 === 0) yield;
     for (let i = 0; i <= cols; i++) {
       const x = minX + i * TERRAIN_CELL;
       const z = minZ + j * TERRAIN_CELL;
@@ -237,6 +239,7 @@ export function buildTerrainGrid(course: BuiltCourse): TerrainGrid {
     }
   }
   for (let j = 0; j <= rows; j++) {
+    if (j % 32 === 0) yield;
     for (let i = 0; i <= cols; i++) {
       const x = minX + i * TERRAIN_CELL;
       const z = minZ + j * TERRAIN_CELL;
@@ -255,6 +258,7 @@ export function buildTerrainGrid(course: BuiltCourse): TerrainGrid {
   }
   const heightAt = (i: number, j: number) => positions[(Math.min(rows, Math.max(0, j)) * (cols + 1) + Math.min(cols, Math.max(0, i))) * 3 + 1]!;
   for (let j = 0; j <= rows; j++) {
+    if (j % 32 === 0) yield;
     for (let i = 0; i <= cols; i++) {
       const slopeX = (heightAt(i + 1, j) - heightAt(i - 1, j)) / (2 * TERRAIN_CELL);
       const slopeZ = (heightAt(i, j + 1) - heightAt(i, j - 1)) / (2 * TERRAIN_CELL);
@@ -266,6 +270,7 @@ export function buildTerrainGrid(course: BuiltCourse): TerrainGrid {
   const chunks: TerrainChunk[] = [];
   let cells = 0;
   for (let cj = 0; cj < rows; cj += TERRAIN_CHUNK_CELLS) {
+    yield;
     for (let ci = 0; ci < cols; ci += TERRAIN_CHUNK_CELLS) {
       const indices: number[] = [];
       let lowY = Infinity;
@@ -299,8 +304,35 @@ export function buildTerrainGrid(course: BuiltCourse): TerrainGrid {
   return { minX, maxX: minX + cols * TERRAIN_CELL, minZ, maxZ: minZ + rows * TERRAIN_CELL, cols, rows, positions, uvs, shades, normals, chunks, cells };
 }
 
+export function buildTerrainGrid(course: BuiltCourse): TerrainGrid {
+  const steps = terrainGridSteps(course);
+  for (;;) {
+    const next = steps.next();
+    if (next.done) return next.value;
+  }
+}
+
+const grids = new WeakMap<BuiltCourse, TerrainGrid>();
+
+// The grid of a course, built once per page load and shared; nothing writes to it.
+export function terrainGridOf(course: BuiltCourse): TerrainGrid {
+  let grid = grids.get(course);
+  if (!grid) {
+    grid = buildTerrainGrid(course);
+    grids.set(course, grid);
+  }
+  return grid;
+}
+
+// Builds the grid in steps and stores it where terrainGridOf finds it.
+export function* warmTerrainGrid(course: BuiltCourse): Generator<void, void> {
+  if (grids.has(course)) return;
+  const grid = yield* terrainGridSteps(course);
+  if (!grids.has(course)) grids.set(course, grid);
+}
+
 export function createTerrainMesh(course: BuiltCourse, { lite = false, flat = false }: SceneOptions = {}): THREE.Group {
-  const grid = buildTerrainGrid(course);
+  const grid = terrainGridOf(course);
   const attributes = {
     position: new THREE.BufferAttribute(grid.positions, 3),
     uv: new THREE.BufferAttribute(grid.uvs, 2),
