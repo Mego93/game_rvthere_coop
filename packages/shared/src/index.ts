@@ -30,6 +30,7 @@ export * from './stops';
 export * from './surfaceHeight';
 export * from './vehicle';
 export * from './vehicles';
+export * from './weather';
 export * from './walk';
 export * from './winch';
 export * from './world';

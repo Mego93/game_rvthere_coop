@@ -33,7 +33,8 @@ export interface HoldVehicle {
 }
 
 export interface UseContext {
-  self: { id: string; feet: Vec3; eye: Vec3; aim: Vec3; health: number };
+  // onFoot: not seated, not downed and not waiting to respawn.
+  self: { id: string; feet: Vec3; eye: Vec3; aim: Vec3; health: number; onFoot: boolean };
   vehicle: HoldVehicle;
   // Every other player, in join order.
   players: { id: string; feet: Vec3; health: number; downed: number | null; seated: boolean }[];
@@ -54,10 +55,11 @@ const vehicleNeeds = (item: ItemKind, ctx: UseContext): boolean => {
   return distanceToBox(ctx.self.feet, ctx.vehicle.half, ctx.vehicle.pos, ctx.vehicle.rot) <= USE_RANGE;
 };
 
-// Rules I8, H9 and J6.
+// Rules I8, H9, J6 and the tajine: eating targets the eater.
 export function useTarget(item: ItemKind | null, ctx: UseContext): Target | null {
   if (item === null || !Object.hasOwn(ITEM_KINDS, item)) return null;
   if (item === 'jerrycan' || item === 'toolbox') return vehicleNeeds(item, ctx) ? 'vehicle' : null;
+  if (item === 'tajine') return ctx.self.onFoot ? ctx.self.id : null;
   if (item !== 'healthKit') return null;
   // The smallest angle wins; the earlier join order keeps a tie.
   const nearest = (wanted: (player: UseContext['players'][number]) => boolean): string | null => {
@@ -90,7 +92,10 @@ export function pressTarget(item: ItemKind | null, ctx: UseContext): { id: Targe
 // Rule J7: range only, since the spec allows moving within range once the hold runs.
 export function holdTargetValid(hold: Hold, ctx: UseContext): boolean {
   if (hold.targetId === 'vehicle') return vehicleNeeds(hold.item, ctx);
-  if (hold.targetId === ctx.self.id) return hold.action === 'useItem' && ctx.self.health < PLAYER_MAX_HEALTH;
+  if (hold.targetId === ctx.self.id) {
+    if (hold.item === 'tajine') return hold.action === 'useItem' && ctx.self.onFoot;
+    return hold.action === 'useItem' && ctx.self.health < PLAYER_MAX_HEALTH;
+  }
   const target = ctx.players.find((player) => player.id === hold.targetId);
   if (!target || target.seated || !inRange(ctx, target.feet)) return false;
   if (hold.action === 'revive') return target.downed !== null;

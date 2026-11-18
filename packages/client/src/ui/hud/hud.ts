@@ -1,6 +1,6 @@
 import { clamp } from '@lodgy/shared';
 import { LOW_FRACTION, MAP_MARGIN, MAP_SIZE_DESKTOP, MAP_SIZE_TOUCH } from './constants';
-import { ICON_COIN, ICON_FUEL, ICON_HEALTHKIT, ICON_HEART, ICON_HULL, ICON_JERRYCAN, ICON_SEAT, ICON_TOOLBOX } from './icons';
+import { ICON_COIN, ICON_FUEL, ICON_HEALTHKIT, ICON_HEART, ICON_HULL, ICON_JERRYCAN, ICON_SEAT, ICON_TAJINE, ICON_TOOLBOX } from './icons';
 import { splitPrompt } from './splitPrompt';
 import { ownHealthFraction, type HudModel } from './hudModel';
 import { createMapPlan, mapScene } from './mapScene';
@@ -13,7 +13,7 @@ export interface Hud {
   dispose(): void;
 }
 
-const SLOT_ICONS: Record<string, string> = { jerrycan: ICON_JERRYCAN, toolbox: ICON_TOOLBOX, healthKit: ICON_HEALTHKIT };
+const SLOT_ICONS: Record<string, string> = { jerrycan: ICON_JERRYCAN, toolbox: ICON_TOOLBOX, healthKit: ICON_HEALTHKIT, tajine: ICON_TAJINE };
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const STYLE = `
@@ -44,6 +44,7 @@ const STYLE = `
 #hud-minimap .item.jerrycan { fill: #d9a21b; }
 #hud-minimap .item.toolbox { fill: #4a90d9; }
 #hud-minimap .item.healthKit { fill: #d94a4a; }
+#hud-minimap .item.tajine { fill: #c2662d; }
 #hud-minimap .finish { fill: #fff; stroke: #111; stroke-width: 1.5; }
 #hud-minimap .checkpoint { fill: none; stroke: #fff; stroke-width: 2; }
 #hud-minimap .checkpoint.reached { opacity: 0.3; }

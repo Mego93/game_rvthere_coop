@@ -26,7 +26,12 @@ export const CHAT_MAX_LENGTH = 120;
 export const CHAT_BURST = 4;
 export const CHAT_REFILL_SECONDS = 1.5;
 export const CHAT_HISTORY = 30;
-export const CHAT_PHRASES = Object.freeze(['Ready!', 'Wait for me', 'Go go go', 'Slow down', 'Need fuel', 'Need a repair', 'Use the winch', 'Thanks!'] as const);
+export const CHAT_PHRASES = Object.freeze(['Ready!', 'Wait for me', 'Go go go', 'Slow down', 'Need fuel', 'Need a repair', 'Use the winch', 'Thanks!', 'Le mal est fait'] as const);
+export const EMOTES = Object.freeze(['sixSeven', 'dab', 'wave', 'dance'] as const);
+export type Emote = (typeof EMOTES)[number];
+// s an emote plays on the client, and the least time between one player's emotes on the server.
+export const EMOTE_SECONDS = 2.5;
+export const EMOTE_COOLDOWN = 3;
 export const PLAYER_COLOURS = deepFreeze(['#e4572e', '#17bebb', '#ffc914', '#76b041', '#a05cdc', '#f28cb1'] as const);
 
 // Per-player input queue on the server.
@@ -273,6 +278,7 @@ export const ITEM_KINDS = deepFreeze({
   jerrycan: { halfExtents: vec3(0.12 * CHARACTER_SCALE, 0.25 * CHARACTER_SCALE, 0.2 * CHARACTER_SCALE), mass: 20, friction: 0.8 },
   toolbox: { halfExtents: vec3(0.25 * CHARACTER_SCALE, 0.12 * CHARACTER_SCALE, 0.12 * CHARACTER_SCALE), mass: 10, friction: 0.8 },
   healthKit: { halfExtents: vec3(0.18 * CHARACTER_SCALE, 0.08 * CHARACTER_SCALE, 0.14 * CHARACTER_SCALE), mass: 2, friction: 0.8 },
+  tajine: { halfExtents: vec3(0.2 * CHARACTER_SCALE, 0.12 * CHARACTER_SCALE, 0.2 * CHARACTER_SCALE), mass: 3, friction: 0.8 },
 } satisfies Record<string, ItemKindConfig>);
 export type ItemKind = keyof typeof ITEM_KINDS;
 
@@ -402,7 +408,10 @@ export const STOP_POST_HEIGHT = 1.4;
 // m, feet to the counter's box (3D).
 export const SHOP_RANGE = 2 * CHARACTER_SCALE;
 // Coins per item.
-export const SHOP_PRICES: Record<ItemKind, number> = deepFreeze({ jerrycan: 3, toolbox: 3, healthKit: 2 });
+// The items a counter sells; the tajine is found, not sold.
+export const SHOP_ITEMS = Object.freeze(['jerrycan', 'toolbox', 'healthKit'] as const satisfies readonly ItemKind[]);
+export type ShopItem = (typeof SHOP_ITEMS)[number];
+export const SHOP_PRICES: Record<ShopItem, number> = deepFreeze({ jerrycan: 3, toolbox: 3, healthKit: 2 });
 // Half extents of the counter box; it is centred 0.5 m above the counter point and unrotated.
 export const SHOP_COUNTER_HALF: Vec3 = deepFreeze(vec3(0.6, 0.5, 0.3));
 // m between consecutive snapshots of the local player beyond which the shop menu closes.
@@ -415,6 +424,18 @@ export const TIMES_OF_DAY = ['dawn', 'midday', 'sunset', 'night'] as const;
 export type TimeOfDay = (typeof TIMES_OF_DAY)[number];
 export const WEATHERS = ['clear', 'rain', 'sandstorm'] as const;
 export type Weather = (typeof WEATHERS)[number];
+export const WEATHER_SETTINGS = Object.freeze([...WEATHERS, 'random'] as const);
+export type WeatherSetting = (typeof WEATHER_SETTINGS)[number];
+// s between random weather changes, and the s a client takes to blend to the new look.
+export const WEATHER_CHANGE_MIN = 150;
+export const WEATHER_CHANGE_MAX = 300;
+export const WEATHER_BLEND = 10;
+// Chance of each weather when one is drawn.
+export const WEATHER_WEIGHTS: Readonly<Record<Weather, number>> = deepFreeze({ clear: 0.5, rain: 0.3, sandstorm: 0.2 });
+export const WEATHER_SEED_SALT = 0x57ea;
+// Walk and sprint speed factor while the tajine lasts, and its duration in s.
+export const TAJINE_SPEED = 1.35;
+export const TAJINE_SECONDS = 15;
 export const DEFAULT_TIME_OF_DAY: TimeOfDay = 'midday';
 export const DEFAULT_WEATHER: Weather = 'clear';
 // Multiplies tyre grip on every surface in rain; a starting value.
@@ -508,7 +529,7 @@ export const ITEM_DROP_LIFT = 0.05;
 export const ITEM_DROP_PROBE_UP = 120;
 export const ITEM_DROP_PROBE_LENGTH = 400;
 // Probability of each kind; sums to 1.
-export const ITEM_DROP_MIX = deepFreeze({ jerrycan: 0.2, toolbox: 0.35, healthKit: 0.45 } satisfies Record<ItemKind, number>);
+export const ITEM_DROP_MIX = deepFreeze({ jerrycan: 0.2, toolbox: 0.3, healthKit: 0.35, tajine: 0.15 } satisfies Record<ItemKind, number>);
 // Fraction of full health lost to one animal hit; health never falls below ANIMAL_HEALTH_FLOOR.
 export const ANIMAL_HIT_DAMAGE = 0.03;
 export const ANIMAL_HEALTH_FLOOR = 0.02;

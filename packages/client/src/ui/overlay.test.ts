@@ -429,6 +429,14 @@ describe('useHint', () => {
   const kit = (changes: Partial<PlayerSnapshot> = {}) => holding({ inventory: ['healthKit', null, null], ...changes });
   const mate = (changes: Partial<PlayerSnapshot> = {}) => ({ ...player('p2', nearDoor.pos.x, nearDoor.pos.z - 1.5), ...changes });
 
+  test('U2: a selected tajine says Hold F to eat on foot, and nothing seated or downed', () => {
+    const tajine = { inventory: ['tajine', null, null] } as Partial<PlayerSnapshot>;
+    expect(useHint(data([holding(tajine)]))).toBe('Hold F to eat');
+    expect(useHint(data([holding({ ...tajine, health: 40 })]))).toBe('Hold F to eat');
+    expect(useHint(data([holding({ ...tajine, downed: 5 })]))).toBeNull();
+    expect(useHint(data([holding({ ...tajine, seat: 'driver' })]))).toBeNull();
+  });
+
   test('names the jerrycan and toolbox actions without the line prefix', () => {
     expect(useHint(data([holding({ inventory: ['jerrycan', null, null] })], low))).toBe('Hold F to refuel');
     expect(useHint(data([holding({ inventory: ['toolbox', null, null] })], low))).toBe('Hold F to repair');
@@ -468,3 +476,14 @@ test('B6: a crouched player aims from the lower eye when the prompt is resolved'
   const crouched = { ...standing, stance: 'crouch' as const };
   expect(interactAction(rv, vehicle, crouched, [crouched], 0, 0, props, stowed, [])).toEqual({ kind: 'pickUpItem', itemId: 'low' });
 });
+
+test('W6: the weather line shows the weather in force, and marks a random room', () => {
+  const line = (weather: 'clear' | 'rain' | 'random', now?: 'rain' | 'sandstorm') =>
+    overlayText({ lobby: { ...lobby, weather }, config: rv, tick: 3, fps: 60, vehicle: null, players: [], localId: 'p1', predicted: null, server: null, ...noAim, ...(now ? { weather: now } : {}) })
+      .split('\n')
+      .find((text) => text.startsWith('weather'));
+  expect(line('rain')).toBe('weather  midday rain');
+  expect(line('random', 'sandstorm')).toBe('weather  midday sandstorm (random)');
+  expect(line('clear', 'rain')).toBe('weather  midday rain');
+});
+

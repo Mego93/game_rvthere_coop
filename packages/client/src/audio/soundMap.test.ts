@@ -23,6 +23,7 @@ test('E4: every row of the table maps to its sound', () => {
     goatHit: 'impact',
     scooterHit: 'impact',
     outOfBounds: null,
+    eat: 'use',
   };
   for (const kind of EVENT_KINDS) expect(soundFor(event(kind, { pos: POS, playerId: 'other' }), 'me')?.kind ?? null, kind).toBe(expected[kind]);
 });

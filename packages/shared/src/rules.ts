@@ -1,4 +1,4 @@
-import { FINAL_COIN_BONUS, FINAL_RESPAWN_PENALTY, FINAL_RESTART_PENALTY, TICK_DT, type TimeOfDay, type Weather } from './constants';
+import { FINAL_COIN_BONUS, FINAL_RESPAWN_PENALTY, FINAL_RESTART_PENALTY, TICK_DT, type TimeOfDay, type WeatherSetting } from './constants';
 import type { Box } from './course';
 import { insideBox } from './checkpoints';
 import type { Vec3 } from './math';
@@ -44,7 +44,7 @@ export const stars = (input: StarsInput): [boolean, boolean, boolean] =>
 export function resultsOf(
   status: WorldStatus,
   course: { id: string; targetTime: number },
-  config: { vehicleId: string; timeOfDay: TimeOfDay; weather: Weather },
+  config: { vehicleId: string; timeOfDay: TimeOfDay; weather: WeatherSetting },
 ): Omit<ResultsMessage, 'type' | 'campaignTotal'> {
   return {
     courseId: course.id,

@@ -1,4 +1,4 @@
-import { MAX_PLAYERS, vec3, type PlayerSnapshot, type TimeOfDay, type Vec3, type VehicleState, type Weather } from '@lodgy/shared';
+import { MAX_PLAYERS, WEATHER_BLEND, vec3, type PlayerSnapshot, type TimeOfDay, type Vec3, type VehicleState, type Weather } from '@lodgy/shared';
 import * as THREE from 'three';
 
 export const RAIN_DROPS = { desktop: 1500, touch: 600 };
@@ -39,6 +39,30 @@ const unit = (x: number, y: number, z: number): Vec3 => {
   const length = Math.hypot(x, y, z);
   return vec3(x / length, y / length, z / length);
 };
+
+const RAIN_OPACITY = 0.6;
+
+// 0 at the moment the weather changes, 1 once the look has settled.
+export const weatherBlend = (seconds: number): number => Math.min(1, Math.max(0, seconds / WEATHER_BLEND));
+
+const lerp = (from: number, to: number, amount: number) => from + (to - from) * amount;
+
+// The look between two: numbers and colours lerp, the discrete sky switch happens at the midpoint.
+export function blendLook(from: Look, to: Look, amount: number): Look {
+  if (amount <= 0) return from;
+  if (amount >= 1) return to;
+  const late = amount >= 0.5 ? to : from;
+  return {
+    ...late,
+    sky: mixColour(from.sky, to.sky, amount),
+    sunIntensity: lerp(from.sunIntensity, to.sunIntensity, amount),
+    ambient: lerp(from.ambient, to.ambient, amount),
+    fog: { colour: mixColour(from.fog.colour, to.fog.colour, amount), near: lerp(from.fog.near, to.fog.near, amount), far: lerp(from.fog.far, to.fog.far, amount) },
+    exposure: lerp(from.exposure, to.exposure, amount),
+    environmentIntensity: lerp(from.environmentIntensity, to.environmentIntensity, amount),
+    backgroundIntensity: lerp(from.backgroundIntensity, to.backgroundIntensity, amount),
+  };
+}
 
 export interface Look {
   sky: number;
@@ -136,6 +160,8 @@ export function toneMappedColour(hex: number, exposure: number): THREE.Color {
 }
 
 export interface Conditions {
+  // Shows `look` as `blend` (0 to 1) of the way from what was shown when it became the target; returns the look shown. A new target starts from what is shown now.
+  setLook(look: Look, blend: number): Look;
   update(cameraPos: Vec3, dt: number, focus: Vec3): void;
   setLights(vehicle: VehicleState | null, players: PlayerSnapshot[]): void;
   dispose(): void;
@@ -173,19 +199,31 @@ export function applyConditions(scene: THREE.Scene, look: Look, isTouch: boolean
   const lightRight = new THREE.Vector3(0, 1, 0).cross(lightDir).normalize();
   const lightUp = new THREE.Vector3().crossVectors(lightDir, lightRight);
 
-  let rain: { points: THREE.Points; positions: Float32Array } | null = null;
-  if (look.rain) {
-    const count = isTouch ? RAIN_DROPS.touch : RAIN_DROPS.desktop;
-    const positions = new Float32Array(count * 3);
-    for (let i = 0; i < positions.length; i++) positions[i] = (Math.random() * 2 - 1) * RAIN_RADIUS;
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const material = new THREE.PointsMaterial({ color: 0xaab4c0, size: 0.08, sizeAttenuation: true, opacity: 0.6, transparent: true, depthWrite: false });
-    const points = add(new THREE.Points(geometry, material));
-    points.frustumCulled = false;
-    disposables.push(geometry, material);
-    rain = { points, positions };
-  }
+  // Always built, so a weather change can fade it in; invisible and not stepped while the amount is zero.
+  const rainCount = isTouch ? RAIN_DROPS.touch : RAIN_DROPS.desktop;
+  const rainPositions = new Float32Array(rainCount * 3);
+  for (let i = 0; i < rainPositions.length; i++) rainPositions[i] = (Math.random() * 2 - 1) * RAIN_RADIUS;
+  const rainGeometry = new THREE.BufferGeometry();
+  rainGeometry.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+  const rainMaterial = new THREE.PointsMaterial({ color: 0xaab4c0, size: 0.08, sizeAttenuation: true, opacity: 0, transparent: true, depthWrite: false });
+  const rainPoints = add(new THREE.Points(rainGeometry, rainMaterial));
+  rainPoints.frustumCulled = false;
+  rainPoints.visible = false;
+  disposables.push(rainGeometry, rainMaterial);
+  const rain = { points: rainPoints, positions: rainPositions };
+  let rainAmount = 0;
+  const setRain = (amount: number) => {
+    rainAmount = amount;
+    rainMaterial.opacity = amount * RAIN_OPACITY;
+    rainPoints.visible = amount > 0;
+  };
+  setRain(look.rain ? 1 : 0);
+
+  let fromLook = look;
+  let toLook = look;
+  let fromRain = rainAmount;
+  let shown = look;
+  let lastBlend = 1;
 
   const headlights: THREE.SpotLight[] = [];
   if (look.headlights) {
@@ -208,6 +246,27 @@ export function applyConditions(scene: THREE.Scene, look: Look, isTouch: boolean
   };
 
   return {
+    setLook(target, blend) {
+      if (target === toLook && blend === lastBlend) return shown;
+      if (target !== toLook) {
+        fromLook = shown;
+        toLook = target;
+        fromRain = rainAmount;
+      }
+      lastBlend = blend;
+      shown = blendLook(fromLook, toLook, blend);
+      scene.fog = scene.fog ?? new THREE.Fog(shown.fog.colour, shown.fog.near, shown.fog.far);
+      const fog = scene.fog as THREE.Fog;
+      fog.color.setHex(shown.fog.colour);
+      fog.near = shown.fog.near;
+      fog.far = shown.fog.far;
+      sun.intensity = shown.sunIntensity;
+      scene.backgroundIntensity = shown.backgroundIntensity;
+      scene.environmentIntensity = shown.environmentIntensity;
+      if (scene.background instanceof THREE.Color) scene.background = toneMappedColour(shown.sky, shown.exposure);
+      setRain(lerp(fromRain, toLook.rain ? 1 : 0, blend));
+      return shown;
+    },
     update(cameraPos, dt, focus) {
       if (shadows) {
         // The shadow box follows the focus in whole texels of the light's own plane, so the shadows do not shimmer.
@@ -218,7 +277,7 @@ export function applyConditions(scene: THREE.Scene, look: Look, isTouch: boolean
         sun.target.position.copy(scratch);
         sun.position.copy(scratch).addScaledVector(lightDir, SUN_DISTANCE);
       }
-      if (!rain) return;
+      if (!rainPoints.visible) return;
       const p = rain.positions;
       for (let i = 0; i < p.length; i += 3) {
         p[i] = wrap(p[i]!, cameraPos.x);

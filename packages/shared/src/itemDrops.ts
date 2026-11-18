@@ -24,6 +24,18 @@ export function mixSeed(a: number, b: number): number {
   return h >>> 0;
 }
 
+// Kinds in the order of their cumulative share, so a kind added at the end leaves every earlier roll's kind alone.
+const MIX_ORDER = ['jerrycan', 'toolbox', 'healthKit', 'tajine'] as const satisfies readonly ItemKind[];
+
+export function kindOfRoll(r: number): ItemKind {
+  let upper = 0;
+  for (const kind of MIX_ORDER) {
+    upper += ITEM_DROP_MIX[kind];
+    if (r < upper) return kind;
+  }
+  return MIX_ORDER[MIX_ORDER.length - 1]!;
+}
+
 // Slots laid along the eligible route as one joined line, each jittered, as planAmbient does; course pickups block a span either side.
 export function planItemDrops(seed: number, routeLength: number, blocked: readonly Span[], pickupAlongs: readonly number[]): ItemDropEvent[] {
   const spans = [...blocked, ...pickupAlongs.map((a) => ({ from: a - ITEM_DROP_PICKUP_CLEAR, to: a + ITEM_DROP_PICKUP_CLEAR }))];
@@ -36,7 +48,7 @@ export function planItemDrops(seed: number, routeLength: number, blocked: readon
   for (let k = 0; (k + 0.5) * ITEM_DROP_SPACING - ITEM_DROP_JITTER < eligible; k++) {
     const virtual = (k + 0.5) * ITEM_DROP_SPACING + (rand() * 2 - 1) * ITEM_DROP_JITTER;
     const r = rand();
-    const kind: ItemKind = r < ITEM_DROP_MIX.jerrycan ? 'jerrycan' : r < ITEM_DROP_MIX.jerrycan + ITEM_DROP_MIX.toolbox ? 'toolbox' : 'healthKit';
+    const kind = kindOfRoll(r);
     const side: -1 | 1 = rand() < 0.5 ? -1 : 1;
     if (virtual >= eligible) continue;
     while (span < open.length - 1 && virtual >= spanStart + (open[span]!.to - open[span]!.from)) {

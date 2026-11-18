@@ -18,6 +18,7 @@ import {
   PLAYER_REVIVE_HEALTH,
   PLAYER_STEP_HEIGHT,
   PLAYER_WALK_SPEED,
+  TAJINE_SPEED,
   HOLD_OFFSET,
   SPAWN_WALL_RAY_HEIGHT,
   PUSH_HEIGHT,
@@ -79,6 +80,8 @@ export interface PlayerState {
   inventory: [ItemKind | null, ItemKind | null, ItemKind | null];
   slot: 0 | 1 | 2;
   hold: PlayerHold | null;
+  // Seconds of the tajine left, 0 when not eaten; it runs down while seated too.
+  tajine: number;
   // 0..100.
   health: number;
   // Seconds left before respawn while downed, else null.
@@ -501,8 +504,10 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         moveX,
         moveY,
         yaw: state.yaw,
+        speedScale: state.tajine > 0 ? TAJINE_SPEED : 1,
       },
     );
+    state.tajine = Math.max(0, state.tajine - TICK_DT);
     let standingOn: string | null = null;
     if (state.grounded) {
       if (collisions.some((hit) => hit.handle === vehicle.chassisHandle && hit.normalY >= MIN_UP_NORMAL)) {
@@ -575,6 +580,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         inventory: [null, null, null],
         slot: 0,
         hold: null,
+        tajine: 0,
         health: PLAYER_MAX_HEALTH,
         downed: null,
         hitCooldown: new Map(),
@@ -610,6 +616,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         state.yaw = finite(step.fields.yaw);
         state.pitch = finite(step.fields.pitch);
         if (state.seat !== null) {
+          state.tajine = Math.max(0, state.tajine - TICK_DT);
           placeSeated(state);
           continue;
         }
@@ -681,6 +688,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       clearSlide(state);
       placeCollider(id);
       state.hold = null;
+      state.tajine = 0;
       state.downed = DOWNED_TIMEOUT;
     },
     revive(id, health) {
@@ -694,6 +702,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       const state = entries.get(id)?.state;
       if (!state) return pos;
       state.hold = null;
+      state.tajine = 0;
       restAt(state, pos);
       state.seat = null;
       state.grounded = false;

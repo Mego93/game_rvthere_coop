@@ -74,6 +74,8 @@ export interface WalkInput {
   moveX: number;
   moveY: number;
   yaw: number;
+  // 1, or TAJINE_SPEED while the tajine lasts: multiplies the walk and sprint speeds, not the crouch or the slide.
+  speedScale: number;
 }
 
 export interface WalkResult {
@@ -214,7 +216,7 @@ export function stepWalk(env: StepEnv, state: WalkState, input: WalkInput): Walk
 
   // A slide, and a slide jump on its take-off tick, keep the slide velocity; from the next tick the air acceleration applies.
   if (!sliding) {
-    const stanceSpeed = state.crouched ? PLAYER_CROUCH_SPEED : wantSprint ? PLAYER_SPRINT_SPEED : PLAYER_WALK_SPEED;
+    const stanceSpeed = state.crouched ? PLAYER_CROUCH_SPEED : (wantSprint ? PLAYER_SPRINT_SPEED : PLAYER_WALK_SPEED) * input.speedScale;
     const speed = state.grounded ? stanceSpeed : Math.max(stanceSpeed, state.launch);
     const maxChange = (state.grounded ? PLAYER_GROUND_ACCEL : PLAYER_AIR_ACCEL) * TICK_DT;
     const dx = wish.x * speed - state.walk.x;

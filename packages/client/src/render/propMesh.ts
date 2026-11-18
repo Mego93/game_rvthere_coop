@@ -5,7 +5,7 @@ import { fitted, hasModel, instantiate, shadowed } from './models';
 const COLOURS: Record<PropKind, number> = { crate: 0xb5833f, barrier: 0xc0392b, cart: 0x8b5a2b, scooter: 0x8e1b1b };
 const UNKNOWN_HALF = 0.25;
 export const PROP_MODEL_KEYS: Record<PropKind, string> = { crate: 'prop.crate', cart: 'prop.cart', barrier: 'prop.barrier', scooter: 'prop.scooter' };
-export const ITEM_MODEL_KEYS: Record<ItemKind, string> = { jerrycan: 'item.jerrycan', toolbox: 'item.toolbox', healthKit: 'item.healthKit' };
+export const ITEM_MODEL_KEYS: Record<ItemKind, string> = { jerrycan: 'item.jerrycan', toolbox: 'item.toolbox', healthKit: 'item.healthKit', tajine: 'item.tajine' };
 // Turns that bring each file's long side onto the hit box's long side (x for the barrier, z for the cart) and the scooter's front to -z.
 const PROP_YAW: Record<PropKind, number> = { crate: 0, barrier: 0, cart: Math.PI / 2, scooter: Math.PI };
 
@@ -63,6 +63,21 @@ function healthKit(h: { x: number; y: number; z: number }): THREE.Group {
   return group;
 }
 
+// A terracotta tajine: a flat dish with a cone lid and a knob.
+function tajine(h: { x: number; y: number; z: number }): THREE.Group {
+  const group = new THREE.Group();
+  const clay = material(0xc2662d, { roughness: 0.8 });
+  const dark = material(0x8a4520, { roughness: 0.8 });
+  const dish = new THREE.Mesh(new THREE.CylinderGeometry(h.x, h.x * 0.85, h.y * 0.35, 12), dark);
+  dish.position.y = -h.y * 0.82;
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(h.x * 0.8, h.y * 1.45, 12), clay);
+  cone.position.y = -h.y * 0.05 + h.y * 0.1;
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(h.x * 0.14, 8, 6), dark);
+  knob.position.y = h.y * 0.95;
+  group.add(dish, cone, knob);
+  return group;
+}
+
 // A model stretched to a collision box and centred on the body's origin.
 export function fitToHalf(model: THREE.Object3D, h: { x: number; y: number; z: number }, yaw: number): THREE.Group {
   const fit = fitted(model, { x: h.x * 2, y: h.y * 2, z: h.z * 2 }, yaw);
@@ -83,7 +98,7 @@ function itemMesh(kind: ItemKind): THREE.Object3D {
   const model = loadedModel(ITEM_MODEL_KEYS[kind]);
   if (model) return fitItemModel(model, kind);
   const h = ITEM_KINDS[kind].halfExtents;
-  return kind === 'jerrycan' ? jerrycan(h) : kind === 'toolbox' ? toolbox(h) : healthKit(h);
+  return kind === 'jerrycan' ? jerrycan(h) : kind === 'toolbox' ? toolbox(h) : kind === 'tajine' ? tajine(h) : healthKit(h);
 }
 
 // A model of the prop's kind stretched to its collision box and centred on the body's origin, or null when it did not load.

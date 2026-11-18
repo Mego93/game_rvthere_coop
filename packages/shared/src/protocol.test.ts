@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ITEM_KINDS, PLAYER_COLOURS, PLAYER_COLOUR_PATTERN } from './constants';
+import { EMOTES, PLAYER_COLOURS, PLAYER_COLOUR_PATTERN, SHOP_ITEMS, WEATHER_SETTINGS } from './constants';
 import {
   ERROR_REASONS,
   EVENT_KINDS,
@@ -40,8 +40,10 @@ test('accepts pong', () => {
   expect(parseClientMessage('{"type":"pong"}')).toEqual({ type: 'pong' });
 });
 
-test('S14: accepts a buy message for each item kind', () => {
-  for (const item of Object.keys(ITEM_KINDS)) {
+test('S14: accepts a buy message for each shop item, and refuses the tajine, which is not for sale', () => {
+  expect([...SHOP_ITEMS]).toEqual(['jerrycan', 'toolbox', 'healthKit']);
+  expect(parseClientMessage(JSON.stringify({ type: 'buy', item: 'tajine' }))).toBeNull();
+  for (const item of SHOP_ITEMS) {
     expect(parseClientMessage(JSON.stringify({ type: 'buy', item }))).toEqual({ type: 'buy', item });
   }
 });
@@ -823,5 +825,75 @@ describe('animals on the wire (T7)', () => {
   test('T14: the out-of-bounds event parses and carries its player and position', () => {
     const parsed = parseServerMessage(JSON.stringify({ type: 'event', kind: 'outOfBounds', tick: 5, playerId: 'p', pos: { x: 1, y: 2, z: 3 } }));
     expect(parsed).toMatchObject({ type: 'event', kind: 'outOfBounds', playerId: 'p' });
+  });
+});
+
+describe('step 34: emotes, random weather, the tajine and the eat event', () => {
+  const parseClient = (message: unknown) => parseClientMessage(JSON.stringify(message));
+  const parseServer = (message: unknown) => parseServerMessage(JSON.stringify(message));
+
+  test('the lists', () => {
+    expect([...EMOTES]).toEqual(['sixSeven', 'dab', 'wave', 'dance']);
+    expect(Object.isFrozen(EMOTES)).toBe(true);
+    expect([...WEATHER_SETTINGS]).toEqual(['clear', 'rain', 'sandstorm', 'random']);
+    expect(EVENT_KINDS).toContain('eat');
+  });
+
+  test.each(EMOTES)('the client emote %s is accepted and extra keys are stripped', (emote) => {
+    expect(parseClient({ type: 'emote', emote })).toEqual({ type: 'emote', emote });
+    expect(parseClient({ type: 'emote', emote, playerId: 'p9', extra: 1 })).toEqual({ type: 'emote', emote });
+  });
+
+  test.each<[string, unknown]>([
+    ['an unknown emote', { type: 'emote', emote: 'floss' }],
+    ['no emote', { type: 'emote' }],
+    ['a number', { type: 'emote', emote: 6 }],
+    ['an inherited key', { type: 'emote', emote: 'toString' }],
+  ])('the client emote refuses %s', (_label, message) => {
+    expect(parseClient(message)).toBeNull();
+  });
+
+  test('the server emote message round-trips and refuses a bad emote or playerId', () => {
+    const message = { type: 'emote', playerId: 'p2', emote: 'dab' };
+    expect(parseServer(message)).toEqual(message);
+    expect(parseServer({ ...message, emote: 'floss' })).toBeNull();
+    expect(parseServer({ ...message, playerId: 7 })).toBeNull();
+    expect(parseServer({ type: 'emote', emote: 'dab' })).toBeNull();
+  });
+
+  test('configure accepts random, and still refuses an unknown weather', () => {
+    const configure = { type: 'configure', courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'random' };
+    expect(parseClient(configure)).toEqual(configure);
+    expect(parseClient({ ...configure, weather: 'fog' })).toBeNull();
+  });
+
+  test('the lobby and results messages accept random', () => {
+    expect(parseServer({ ...lobby, weather: 'random' })).toEqual({ ...lobby, weather: 'random' });
+    const results = { type: 'results', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'random', elapsed: 1, restarts: 0, respawns: 0, wallet: 0, coinsCollected: 0, coinsTotal: 1, finalTime: 1, stars: [true, true, false], assisted: false };
+    expect(parseServer(results)).toEqual(results);
+    expect(parseServer({ ...results, weather: 'fog' })).toBeNull();
+  });
+
+  test('a snapshot weather is optional and validated, and a concrete weather only', () => {
+    expect(parseServer(snapshot)).toEqual(snapshot);
+    for (const weather of ['clear', 'rain', 'sandstorm']) expect(parseServer({ ...snapshot, weather })).toEqual({ ...snapshot, weather });
+    expect(parseServer({ ...snapshot, weather: 'random' })).toBeNull();
+    expect(parseServer({ ...snapshot, weather: 'fog' })).toBeNull();
+    expect(parseServer({ ...snapshot, weather: 3 })).toBeNull();
+  });
+
+  test('a player tajine is optional, finite and above 0', () => {
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: 12.3 }] })).toEqual({ ...snapshot, players: [{ ...onFoot, tajine: 12.3 }] });
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: 0 }] })).toBeNull();
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: 15 }] })).not.toBeNull();
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: 15.1 }] })).toBeNull();
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: -1 }] })).toBeNull();
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: '5' }] })).toBeNull();
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, tajine: null }] })).toBeNull();
+  });
+
+  test('the eat event parses', () => {
+    const event = { type: 'event', kind: 'eat', tick: 5, playerId: 'p1', pos: { x: 1, y: 0, z: 2 } };
+    expect(parseServer(event)).toEqual(event);
   });
 });

@@ -1,6 +1,7 @@
-import { CHARACTER_SCALE, isCrouchedStance, PLAYER_COLOURS, PLAYER_COLOUR_PATTERN, PLAYER_HEIGHT, PLAYER_RADIUS, type Appearance, type PlayerSnapshot } from '@lodgy/shared';
+import { CHARACTER_SCALE, EMOTE_SECONDS, isCrouchedStance, PLAYER_COLOURS, PLAYER_COLOUR_PATTERN, PLAYER_HEIGHT, PLAYER_RADIUS, type Appearance, type Emote, type PlayerSnapshot } from '@lodgy/shared';
 import * as THREE from 'three';
 import { applyLook } from './characterRig';
+import { EMOTE_NODES, emotePose, emoteWeight, type PoseNode } from './emotePose';
 import { animationsOf, hasModel, instantiate, shadowed } from './models';
 
 export const HEAD_RADIUS = 0.2 * CHARACTER_SCALE;
@@ -38,7 +39,25 @@ const IDLE_SPEED = 0.3;
 const WALK_SPEED_FOR_CLIP = 1.6;
 const SPEED_SMOOTHING = 10;
 
+// Per driven node: `base` is the last rotation the clip (or the rest pose) gave it, `out` the last one the emote wrote.
+interface NodeOverlay {
+  base: THREE.Quaternion;
+  out: THREE.Quaternion;
+}
+// An emote's start on the caller's clock, where the player stood, and its driven nodes.
+interface EmoteRun {
+  emote: Emote;
+  start: number;
+  x: number;
+  z: number;
+  overlays: Map<PoseNode, NodeOverlay>;
+}
+const POSE_NODES: readonly PoseNode[] = ['torso', 'arm-left', 'arm-right', 'head'];
+const EMOTE_CANCEL_DISTANCE = 1;
+
 interface Animation {
+  nodes: Partial<Record<PoseNode, THREE.Object3D>>;
+  emote: EmoteRun | null;
   mixer: THREE.AnimationMixer;
   idle: THREE.AnimationAction;
   walk: THREE.AnimationAction;
@@ -98,7 +117,9 @@ function createCharacter(colour: string, appearance?: Appearance): THREE.Group |
   const idle = mixer.clipAction(idleClip).play();
   const walk = mixer.clipAction(walkClip).play();
   walk.setEffectiveWeight(0);
-  animations.set(group, { mixer, idle, walk, x: 0, z: 0, speed: 0, fresh: true });
+  const nodes: Animation['nodes'] = {};
+  for (const name of POSE_NODES) nodes[name] = model.getObjectByName(name) ?? undefined;
+  animations.set(group, { nodes, emote: null, mixer, idle, walk, x: 0, z: 0, speed: 0, fresh: true });
   return group;
 }
 
@@ -135,8 +156,61 @@ export function createPlayerMesh(name: string, colour: string, appearance?: Appe
   return group;
 }
 
+const scratchEuler = new THREE.Euler();
+const scratchQuat = new THREE.Quaternion();
+
+// A node the node's own value differs from `out` was rewritten by the mixer: that is the new base.
+function syncBase(overlay: NodeOverlay, node: THREE.Object3D): void {
+  if (!node.quaternion.equals(overlay.out)) overlay.base.copy(node.quaternion);
+}
+
+function endEmote(animation: Animation): void {
+  if (!animation.emote) return;
+  for (const [name, overlay] of animation.emote.overlays) {
+    const node = animation.nodes[name];
+    if (!node) continue;
+    syncBase(overlay, node);
+    node.quaternion.copy(overlay.base);
+  }
+  animation.emote = null;
+}
+
+// Starts an emote on a character mesh; `now` is in seconds on the clock placePlayerMesh is given. The capsule fallback has no nodes and ignores it.
+export function playEmote(mesh: THREE.Group, emote: Emote, now: number): void {
+  const animation = animations.get(mesh);
+  if (!animation) return;
+  endEmote(animation);
+  const overlays = new Map<PoseNode, NodeOverlay>();
+  for (const name of EMOTE_NODES[emote]) {
+    const node = animation.nodes[name];
+    if (node) overlays.set(name, { base: node.quaternion.clone(), out: node.quaternion.clone() });
+  }
+  animation.emote = { emote, start: now, x: animation.x, z: animation.z, overlays };
+}
+
+function applyEmote(animation: Animation, player: PlayerSnapshot, now: number): void {
+  const run = animation.emote;
+  if (!run) return;
+  const t = now - run.start;
+  const moved = Math.hypot(player.pos.x - run.x, player.pos.z - run.z) > EMOTE_CANCEL_DISTANCE;
+  if (t >= EMOTE_SECONDS || moved || player.seat !== null || player.downed !== null) {
+    endEmote(animation);
+    return;
+  }
+  const weight = emoteWeight(t);
+  const pose = emotePose(run.emote, t);
+  for (const [name, overlay] of run.overlays) {
+    const node = animation.nodes[name]!;
+    syncBase(overlay, node);
+    const { x, y, z } = pose[name];
+    node.quaternion.copy(overlay.base).slerp(scratchQuat.setFromEuler(scratchEuler.set(x, y, z)), weight);
+    overlay.out.copy(node.quaternion);
+  }
+}
+
 // A downed player lies on their back, rotated 90 degrees about the yaw-right axis; the capsule stays upright.
-export function placePlayerMesh(mesh: THREE.Group, player: PlayerSnapshot, seconds = 0): void {
+// `now` (seconds, the clock playEmote was given) drives a running emote.
+export function placePlayerMesh(mesh: THREE.Group, player: PlayerSnapshot, seconds = 0, now = 0): void {
   const downed = player.downed !== null;
   const animation = animations.get(mesh);
   if (animation && seconds > 0 && mesh.visible) {
@@ -150,6 +224,7 @@ export function placePlayerMesh(mesh: THREE.Group, player: PlayerSnapshot, secon
     animation.mixer.update(seconds);
   }
   if (animation) {
+    applyEmote(animation, player, now);
     animation.x = player.pos.x;
     animation.z = player.pos.z;
     animation.fresh = false;

@@ -1,8 +1,10 @@
 import { CHAT_LIMIT, CHAT_FORM_STYLE, createChatForm, renderChatLines, type ChatLine, type SubmitResult } from './chat';
-import { CHARACTER_IDS, CHARACTER_NAMES, TIMES_OF_DAY, VEHICLE_IDS, WEATHERS, courseIds, defaultAppearance, type Appearance, type LobbyMessage, type RoomSettings } from '@lodgy/shared';
+import { CHARACTER_IDS, CHARACTER_NAMES, TIMES_OF_DAY, VEHICLE_IDS, WEATHER_SETTINGS, courseIds, defaultAppearance, type Appearance, type LobbyMessage, type RoomSettings, type WeatherSetting } from '@lodgy/shared';
 import { OPTION_ROWS, createPickerState, optionText, portraitModel } from './characterPicker';
 
 export const VEHICLE_LABELS: Record<string, string> = { lodgy: 'Lodgy', rv: 'RV' };
+export const WEATHER_LABELS: Record<WeatherSetting, string> = { clear: 'Clear', rain: 'Rain', sandstorm: 'Sandstorm', random: 'Random' };
+export const weatherOptions = () => WEATHER_SETTINGS.map((id) => ({ value: id, text: WEATHER_LABELS[id] }));
 const vehicleLabel = (id: string) => (Object.hasOwn(VEHICLE_LABELS, id) ? VEHICLE_LABELS[id] : id);
 
 export interface LobbyPlayerView {
@@ -249,7 +251,7 @@ const SETTINGS = [
   { key: 'courseId', id: 'lobby-course', label: 'Course', options: () => courseIds().map((id) => ({ value: id, text: id })) },
   { key: 'vehicleId', id: 'lobby-vehicle', label: 'Vehicle', options: () => VEHICLE_IDS.map((id) => ({ value: id, text: vehicleLabel(id) })) },
   { key: 'timeOfDay', id: 'lobby-time', label: 'Time of day', options: () => TIMES_OF_DAY.map((id) => ({ value: id, text: id })) },
-  { key: 'weather', id: 'lobby-weather', label: 'Weather', options: () => WEATHERS.map((id) => ({ value: id, text: id })) },
+  { key: 'weather', id: 'lobby-weather', label: 'Weather', options: weatherOptions },
 ] as const;
 
 // A flat portrait of a character in CSS shapes, from portraitModel.

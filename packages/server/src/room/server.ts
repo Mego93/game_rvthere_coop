@@ -206,6 +206,11 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
         if (!session.room || !session.player) return;
         session.room.chat(session.player, message.text, now);
         return;
+      case 'emote':
+        // Like chat, ignored before joining.
+        if (!session.room || !session.player) return;
+        session.room.emote(session.player, message.emote, now);
+        return;
       case 'kick':
         return kick(session, message.playerId);
       default:

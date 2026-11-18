@@ -2,16 +2,23 @@ import { CHARACTER_IDS, CHARACTER_SCALE, PLAYER_HEIGHT, PLAYER_RADIUS, defaultAp
 import * as THREE from 'three';
 import { beforeAll, expect, test, vi } from 'vitest';
 import { CHARACTER_LOOKS } from './characterLooks';
-import { HEAD_RADIUS, NAME_TAG_OFFSET, createPlayerMesh, disposePlayerMesh, placePlayerMesh, setNameVisible } from './playerMesh';
+import { HEAD_RADIUS, NAME_TAG_OFFSET, createPlayerMesh, disposePlayerMesh, placePlayerMesh, playEmote, setNameVisible } from './playerMesh';
 
 const shared = { geometry: new THREE.BoxGeometry(1, 1, 1), material: new THREE.MeshStandardMaterial() };
 shared.geometry.userData.shared = true;
 shared.material.userData.shared = true;
 
+// A clip that rotates the right arm, for the tests of an emote over a clipped node.
+const clipped = { arm: false };
+const ARM_CLIP = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.3, 0, 0));
+
 vi.mock('./models', () => ({
   hasModel: () => true,
   animationsOf: () => [
-    new THREE.AnimationClip('idle', 1, [new THREE.NumberKeyframeTrack('leg-left.position[y]', [0, 1], [0, 0])]),
+    new THREE.AnimationClip('idle', 1, [
+      new THREE.NumberKeyframeTrack('leg-left.position[y]', [0, 1], [0, 0]),
+      ...(clipped.arm ? [new THREE.QuaternionKeyframeTrack('arm-right.quaternion', [0, 1], [...ARM_CLIP.toArray(), ...ARM_CLIP.toArray()])] : []),
+    ]),
     new THREE.AnimationClip('walk', 1, [new THREE.NumberKeyframeTrack('leg-left.rotation[x]', [0, 0.5, 1], [-1, 1, -1])]),
   ],
   instantiate: () => {
@@ -178,3 +185,100 @@ test('S31: the look goes on after shadowed, so glasses and facial hair keep cast
   expect((mesh.getObjectByName('look-facial') as THREE.Mesh).castShadow).toBe(false);
   expect((mesh.getObjectByName('torso') as THREE.Mesh).castShadow).toBe(true);
 });
+
+const emoting = (x = 0, z = 0, extra: Record<string, unknown> = {}) => ({ pos: { x, y: 0, z }, yaw: 0, downed: null, seat: null, ...extra }) as unknown as PlayerSnapshot;
+const armAngle = (mesh: THREE.Group, name: string) => new THREE.Euler().setFromQuaternion(mesh.getObjectByName(name)!.quaternion);
+
+test('E1: an emote turns its nodes to the pose, ramping in over 0.2 s, and the mesh frame is restored afterwards', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  placePlayerMesh(mesh, emoting(), 0.016, 10);
+  playEmote(mesh, 'wave', 10);
+  placePlayerMesh(mesh, emoting(), 0.016, 10.1);
+  const half = Math.abs(armAngle(mesh, 'arm-right').z);
+  expect(half).toBeGreaterThan(0.5);
+  expect(half).toBeLessThan(2.6);
+  placePlayerMesh(mesh, emoting(), 0.016, 11);
+  expect(armAngle(mesh, 'arm-right').z).toBeCloseTo(-2.6, 3);
+  expect(armAngle(mesh, 'arm-left').z).toBeCloseTo(0, 6);
+  placePlayerMesh(mesh, emoting(), 0.016, 12.6);
+  expect(armAngle(mesh, 'arm-right').z).toBeCloseTo(0, 6);
+});
+
+test('E2: moving more than 1 m cancels the emote at once, and a smaller step does not', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  placePlayerMesh(mesh, emoting(), 0.016, 10);
+  playEmote(mesh, 'wave', 10);
+  placePlayerMesh(mesh, emoting(0.5, 0), 0.016, 11);
+  expect(Math.abs(armAngle(mesh, 'arm-right').z)).toBeGreaterThan(2);
+  placePlayerMesh(mesh, emoting(1.2, 0), 0.016, 11.1);
+  expect(armAngle(mesh, 'arm-right').z).toBeCloseTo(0, 6);
+  placePlayerMesh(mesh, emoting(1.2, 0), 0.016, 11.2);
+  expect(armAngle(mesh, 'arm-right').z).toBeCloseTo(0, 6);
+});
+
+test('E3: boarding or going down cancels the emote', () => {
+  for (const extra of [{ seat: 'driver' }, { downed: 5 }]) {
+    const mesh = createPlayerMesh('Amal', '#e0a030');
+    placePlayerMesh(mesh, emoting(), 0.016, 10);
+    playEmote(mesh, 'dab', 10);
+    placePlayerMesh(mesh, emoting(0, 0), 0.016, 11);
+    expect(Math.abs(armAngle(mesh, 'arm-right').z)).toBeGreaterThan(2);
+    placePlayerMesh(mesh, emoting(0, 0, extra), 0.016, 11.1);
+    expect(armAngle(mesh, 'arm-right').z).toBeCloseTo(0, 6);
+  }
+});
+
+test('E4: a second emote replaces the first and only its own nodes move', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  placePlayerMesh(mesh, emoting(), 0.016, 10);
+  playEmote(mesh, 'dab', 10);
+  placePlayerMesh(mesh, emoting(), 0.016, 11);
+  expect(Math.abs(armAngle(mesh, 'head').y)).toBeGreaterThan(0.3);
+  playEmote(mesh, 'wave', 11);
+  placePlayerMesh(mesh, emoting(), 0.016, 12);
+  expect(armAngle(mesh, 'head').y).toBeCloseTo(0, 6);
+  expect(armAngle(mesh, 'arm-left').x).toBeCloseTo(0, 6);
+});
+
+test('E5: over a node the clip rotates, the arm returns to the clip value after the emote expires, is cancelled, or the mixer stands still', () => {
+  clipped.arm = true;
+  try {
+    for (const seconds of [0.05, 0]) {
+      for (const how of ['expire', 'move'] as const) {
+        const mesh = createPlayerMesh('Amal', '#e0a030');
+        placePlayerMesh(mesh, emoting(), 0.1, 10);
+        expect(armAngle(mesh, 'arm-right').x).toBeCloseTo(0.3, 5);
+        playEmote(mesh, 'wave', 10);
+        placePlayerMesh(mesh, emoting(), seconds, 11);
+        expect(armAngle(mesh, 'arm-right').z).toBeCloseTo(-2.6, 3);
+        placePlayerMesh(mesh, emoting(), seconds, 11.5);
+        placePlayerMesh(mesh, how === 'expire' ? emoting() : emoting(2, 0), seconds, how === 'expire' ? 12.6 : 12);
+        expect(armAngle(mesh, 'arm-right').x).toBeCloseTo(0.3, 5);
+        expect(armAngle(mesh, 'arm-right').z).toBeCloseTo(0, 5);
+        placePlayerMesh(mesh, emoting(), seconds, 13);
+        expect(armAngle(mesh, 'arm-right').x).toBeCloseTo(0.3, 5);
+      }
+    }
+  } finally {
+    clipped.arm = false;
+  }
+});
+
+test('E6: a clip value that changes during the emote becomes the new base the ramp returns to', () => {
+  clipped.arm = true;
+  try {
+    const mesh = createPlayerMesh('Amal', '#e0a030');
+    placePlayerMesh(mesh, emoting(), 0.1, 10);
+    playEmote(mesh, 'wave', 10);
+    const arm = mesh.getObjectByName('arm-right')!;
+    placePlayerMesh(mesh, emoting(), 0.05, 10.05);
+    arm.quaternion.setFromEuler(new THREE.Euler(0.8, 0, 0));
+    placePlayerMesh(mesh, emoting(), 0, 10.06);
+    arm.quaternion.setFromEuler(new THREE.Euler(0.8, 0, 0));
+    placePlayerMesh(mesh, emoting(), 0, 13);
+    expect(armAngle(mesh, 'arm-right').x).toBeCloseTo(0.8, 5);
+  } finally {
+    clipped.arm = false;
+  }
+});
+

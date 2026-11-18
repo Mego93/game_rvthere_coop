@@ -1,6 +1,6 @@
-import { CHAT_BURST, CHAT_REFILL_SECONDS } from '@lodgy/shared';
+import { CHAT_BURST, CHAT_PHRASES, CHAT_REFILL_SECONDS } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { CHAT_LIMIT, CLIENT_REFILL_SECONDS, TOAST_COUNT, TOAST_SECONDS, createChatLog, createChatSender, isChatKey, submitChat } from './chat';
+import { CHAT_LIMIT, CLIENT_REFILL_SECONDS, TOAST_COUNT, TOAST_SECONDS, createChatForm, createChatLog, createChatSender, isChatKey, submitChat } from './chat';
 
 const line = (id: number, playerId = 'p1', text = `line ${id}`) => ({ id, playerId, name: `Name ${playerId}`, text, at: id * 10 });
 
@@ -178,4 +178,28 @@ test('the version changes with every added line and every clear, not with a refu
   expect(log.version()).toBe(start + 1);
   log.clear();
   expect(log.version()).toBe(start + 2);
+});
+
+test('P9: the chat form shows a button for each of the nine phrases, the last being Le mal est fait, and a click sends it', () => {
+  class El {
+    className = '';
+    textContent = '';
+    children: El[] = [];
+    listeners = new Map<string, () => void>();
+    append(...nodes: El[]) {
+      this.children.push(...nodes);
+    }
+    setAttribute() {}
+    addEventListener(type: string, fn: () => void) {
+      this.listeners.set(type, fn);
+    }
+  }
+  const doc = { createElement: () => new El() } as unknown as Document;
+  const sent: string[] = [];
+  const form = createChatForm(doc, (text) => (sent.push(text), 'sent'));
+  const phrases = (form.element as unknown as El).children.find((child) => child.className === 'chat-phrases')!;
+  expect(phrases.children.map((button) => button.textContent)).toEqual([...CHAT_PHRASES]);
+  expect(phrases.children).toHaveLength(9);
+  phrases.children[8]!.listeners.get('click')!();
+  expect(sent).toEqual(['Le mal est fait']);
 });

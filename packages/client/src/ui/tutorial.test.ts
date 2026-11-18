@@ -149,3 +149,10 @@ test('B16c: one Escape closes the tutorial on top and leaves the controls panel 
   escape();
   expect(help.isOpen()).toBe(false);
 });
+
+test('E2: the help step mentions the emote wheel on desktop and the Emote button on a phone', () => {
+  const help = TUTORIAL_STEPS.find((step) => step.id === 'help')!;
+  expect(help.text).toContain('B to open the emote wheel');
+  expect(help.touchText).toContain('Emote');
+  expect(help.caps).toEqual(['H']);
+});

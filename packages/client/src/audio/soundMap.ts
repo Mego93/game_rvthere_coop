@@ -40,6 +40,7 @@ const SOUND_OF_EVENT: Record<EventMessage['kind'], SoundName | null> = {
   goatHit: 'impact',
   scooterHit: 'impact',
   outOfBounds: null,
+  eat: 'use',
 };
 
 // Events whose sound plays quieter than full.

@@ -13,7 +13,7 @@ export function buildUseContext(
     .filter((other) => other.playerId !== local.playerId)
     .map((other) => ({ id: other.playerId, feet: other.pos, health: other.health, downed: other.downed, seated: other.seat !== null }));
   return {
-    self: { id: local.playerId, feet: local.pos, eye: origin, aim: dir, health: local.health },
+    self: { id: local.playerId, feet: local.pos, eye: origin, aim: dir, health: local.health, onFoot: local.seat === null && local.downed === null },
     vehicle: { pos: vehicle.pos, rot: vehicle.rot, half: config.halfExtents, fuel: vehicle.fuel, health: vehicle.health },
     players: others,
   };

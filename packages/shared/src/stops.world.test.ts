@@ -601,6 +601,14 @@ describe('S11: shop', () => {
     refused(world, 'p1');
   });
 
+  test('the tajine is not for sale, whatever a client sends', () => {
+    const world = make('p1');
+    earn(world, 'p1', 3);
+    expect(world.buy('p1', 'tajine' as never)).toBe('cannot_buy');
+    expect(world.buy('p1', 'toString' as never)).toBe('cannot_buy');
+    expect(world.snapshot().wallet).toBe(3);
+  });
+
   test('an unknown player', () => {
     const world = make('p1');
     earn(world, 'p1', 3);

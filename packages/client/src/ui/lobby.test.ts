@@ -1,6 +1,7 @@
 import { defaultAppearance, type LobbyMessage, type LobbyPlayer } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { lobbyView, OSM_ATTRIBUTION, VEHICLE_LABELS } from './lobby';
+import { WEATHER_SETTINGS } from '@lodgy/shared';
+import { lobbyView, OSM_ATTRIBUTION, VEHICLE_LABELS, WEATHER_LABELS, weatherOptions } from './lobby';
 
 const player = (playerId: string, name: string, changes: Partial<LobbyPlayer> = {}): LobbyPlayer => ({
   playerId,
@@ -87,4 +88,18 @@ test('T13 the lobby view carries a one-line OpenStreetMap credit with a link', (
   expect(OSM_ATTRIBUTION.text).toBe('Route data © OpenStreetMap contributors (ODbL)');
   expect(OSM_ATTRIBUTION.href).toBe('https://www.openstreetmap.org/copyright');
   expect(OSM_ATTRIBUTION.text).not.toContain('\n');
+});
+
+test('L30: the weather select lists Clear, Rain, Sandstorm and Random, in that order, with the setting as value', () => {
+  expect(weatherOptions()).toEqual([
+    { value: 'clear', text: 'Clear' },
+    { value: 'rain', text: 'Rain' },
+    { value: 'sandstorm', text: 'Sandstorm' },
+    { value: 'random', text: 'Random' },
+  ]);
+  expect(Object.keys(WEATHER_LABELS).sort()).toEqual([...WEATHER_SETTINGS].sort());
+});
+
+test('L31: the lobby view carries the random weather setting', () => {
+  expect(lobbyView(message(trio, { weather: 'random' }), 'p1').settings.weather).toBe('random');
 });

@@ -25,11 +25,16 @@ test('L18: shows every field', () => {
   expect(resultsView(message(), true).lines).toEqual([
     'Final time 2:05.0',
     'Vehicle Lodgy',
-    'Course test, midday, clear',
+    'Course test, midday, Clear',
     'Restarts 1, respawns 2',
     'Coins 3 kept, 4/5 collected',
     'Stars ★☆★',
   ]);
+});
+
+test('L18: the weather line shows the room setting by its label, Random included', () => {
+  expect(resultsView(message({ weather: 'random' }), true).lines).toContain('Course test, midday, Random');
+  expect(resultsView(message({ weather: 'sandstorm' }), true).lines).toContain('Course test, midday, Sandstorm');
 });
 
 test('L18: the vehicle label, the raw id fallback, the assisted line and the campaign total', () => {

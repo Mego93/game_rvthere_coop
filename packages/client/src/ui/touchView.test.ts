@@ -52,6 +52,15 @@ test('a jerrycan near a vehicle with fuel below full shows the use button', () =
   expect(view({ inventory: [null, 'jerrycan', null] }, { ...vehicle, fuel: 0.3 }).useVisible).toBe(false);
 });
 
+test('U2: a selected tajine shows the use button on foot at any health, and not seated or downed', () => {
+  const tajine = { inventory: ['tajine', null, null] } as Partial<PlayerSnapshot>;
+  expect(view(tajine).useVisible).toBe(true);
+  expect(view({ ...tajine, health: 30 }).useVisible).toBe(true);
+  expect(view({ ...tajine, seat: 'driver' }).useVisible).toBe(false);
+  expect(view({ ...tajine, downed: 4 }).useVisible).toBe(false);
+  expect(view({ inventory: [null, null, null] }).useVisible).toBe(false);
+});
+
 test('a downed player sees no use or reel button', () => {
   const v = view({ inventory: ['jerrycan', null, null], downed: 4 }, { ...vehicle, fuel: 0.3 }, cable('attached'));
   expect([v.useVisible, v.reelVisible]).toEqual([false, false]);

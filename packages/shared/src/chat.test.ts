@@ -66,8 +66,8 @@ describe('server chat', () => {
   });
 });
 
-test('CHAT_PHRASES are the eight quick phrases, frozen and all valid', () => {
-  expect([...CHAT_PHRASES]).toEqual(['Ready!', 'Wait for me', 'Go go go', 'Slow down', 'Need fuel', 'Need a repair', 'Use the winch', 'Thanks!']);
+test('CHAT_PHRASES are the nine quick phrases, frozen and all valid', () => {
+  expect([...CHAT_PHRASES]).toEqual(['Ready!', 'Wait for me', 'Go go go', 'Slow down', 'Need fuel', 'Need a repair', 'Use the winch', 'Thanks!', 'Le mal est fait']);
   expect(Object.isFrozen(CHAT_PHRASES)).toBe(true);
   for (const phrase of CHAT_PHRASES) expect(parseClientMessage(chat(phrase))).toEqual({ type: 'chat', text: phrase });
 });

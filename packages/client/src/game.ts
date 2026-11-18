@@ -14,10 +14,12 @@ import {
   predictedFrom,
   vec3,
   type ClientMessage,
+  type Emote,
   type EventMessage,
   type InputFields,
   type InteractAction,
-  type ItemKind,
+  type ShopItem,
+  type Weather,
   type LobbyMessage,
   type PlayerSnapshot,
   type PropSnapshot,
@@ -37,12 +39,13 @@ import { createSnapshotBuffer } from './net/snapshotBuffer';
 import { predictionActive } from './prediction/gate';
 import { createReconciler } from './prediction/reconciler';
 import { updateFollowCamera } from './render/followCamera';
-import { createPlayerMesh, disposePlayerMesh, LABEL_RANGE, placePlayerMesh, setNameVisible } from './render/playerMesh';
+import { createPlayerMesh, disposePlayerMesh, LABEL_RANGE, placePlayerMesh, playEmote, setNameVisible } from './render/playerMesh';
 import { createCoinMeshes } from './render/coinMesh';
 import { createAnimalMeshes } from './render/animalMeshes';
 import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMesh';
-import { applyConditions, conditionsLook, configureRenderer } from './render/conditions';
-import { applySky, hasSky } from './render/environment';
+import { applyConditions, conditionsLook, configureRenderer, toneMappedColour, type Look } from './render/conditions';
+import { createWeatherTracker } from './render/weatherTracker';
+import { applySky, hasSky, prewarmEnvironment } from './render/environment';
 import { createCorridorTerrain } from './render/corridorMesh';
 import { DESKTOP_DECOR, SOFTWARE_DECOR, TOUCH_DECOR } from './render/decorChunks';
 import { createDecorRenderer } from './render/decorRenderer';
@@ -53,7 +56,7 @@ import { FIRST_PERSON_FOV, onFootPose, seatedPose } from './render/firstPersonCa
 import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createSeatRing, createVehicleMesh, disposeSeatRing, placeSeatRing, placeVehicleMesh } from './render/vehicleMesh';
-import { createEventToast } from './ui/hud/eventToast';
+import { createEventToast, toastFor } from './ui/hud/eventToast';
 import { createSeatAnnouncer } from './ui/hud/seatToast';
 import { interactAction, overlayText, type OverlayData } from './ui/overlay';
 import { createHud } from './ui/hud/hud';
@@ -62,6 +65,7 @@ import { projectMarker } from './ui/hud/downedMarkers';
 import { CLOSED, createShopMenu, gateControl, menuFeet, menuInput, shopMenuState, type ShopMenuState } from './ui/shopMenu';
 import { createRunMenu, inputFrozen, runMenuState, type RunMenuEvent, type RunMenuState } from './ui/runMenu';
 import { isChatKey } from './ui/chat';
+import { emoteWheelAllowed, isEmoteKey } from './ui/emoteWheel';
 import type { TouchUi } from './ui/touchUi';
 import { touchView } from './ui/touchView';
 
@@ -91,6 +95,12 @@ export interface Game {
   setChatOpen(open: boolean): void;
   // Opens the chat through the page when no menu or panel is open during a run; the touch Chat button uses it like T does.
   requestChat(): void;
+  // The server says a player did an emote: plays it on their figure.
+  onEmote(message: { playerId: string; emote: Emote }): void;
+  // The emote wheel opened or closed: the game stands still while it is open.
+  setEmoteOpen(open: boolean): void;
+  // Opens the emote wheel through the page when nothing blocks it; the touch Emote button uses it like B does.
+  requestEmote(): void;
   // Shows the mute state in the run menu.
   setMuted(muted: boolean): void;
   // Shows "Cannot buy" in the shop menu if it is open.
@@ -124,8 +134,14 @@ export interface GameView {
   controlsOpen: boolean;
   // Whether the chat panel is open when the game starts.
   chatOpen: boolean;
+  // Whether the emote wheel is open when the game starts.
+  emoteOpen: boolean;
   // T was pressed in a state where chat may open; the page opens its panel.
   onChat: () => void;
+  // B was pressed in a state where the wheel may open; the page opens it.
+  onEmoteWheel: () => void;
+  // The wheel must close: the local player was seated, downed or removed.
+  onEmoteWheelClose: () => void;
 }
 
 const stanceFields = (stance: PlayerSnapshot['stance']): Pick<PlayerSnapshot, 'stance'> | Record<string, never> => (stance === undefined ? {} : { stance });
@@ -154,13 +170,30 @@ export function createGame(
     corridorTerrain.update({ x: start[0], z: start[1] }, 0, true);
   }
   const vehicleConfig = getVehicleConfig(lobby.vehicleId);
-  const look = conditionsLook(firstLobby.timeOfDay, firstLobby.weather);
+  // Random weather starts clear and snaps to the first snapshot's weather; a fixed weather never changes.
+  const startWeather: Weather = firstLobby.weather === 'random' ? 'clear' : firstLobby.weather;
+  const looks = new Map<Weather, Look>();
+  const lookFor = (weather: Weather): Look => {
+    let found = looks.get(weather);
+    if (!found) {
+      found = conditionsLook(firstLobby.timeOfDay, weather);
+      looks.set(weather, found);
+    }
+    return found;
+  };
+  const look = lookFor(startWeather);
+  const weatherTracker = createWeatherTracker(startWeather);
   const isTouch = view.touchUi !== null;
   // Software GL cannot afford shadows or image-based light.
   const shadows = !isTouch && !view.softwareGl;
-  const imageLight = hasSky(firstLobby.timeOfDay, firstLobby.weather) && !view.softwareGl;
+  const imageLight = hasSky(firstLobby.timeOfDay, startWeather) && !view.softwareGl;
   const conditions = applyConditions(scene, look, isTouch, vehicleConfig.halfExtents, imageLight, shadows);
-  applySky(renderer, scene, look, firstLobby.timeOfDay, imageLight, firstLobby.weather);
+  applySky(renderer, scene, look, firstLobby.timeOfDay, imageLight, startWeather);
+  // A random room will meet the overcast sky later; build its light now rather than mid-run.
+  if (firstLobby.weather === 'random' && imageLight) {
+    prewarmEnvironment(renderer, firstLobby.timeOfDay, 'clear');
+    prewarmEnvironment(renderer, firstLobby.timeOfDay, 'rain');
+  }
   configureRenderer(renderer, look, shadows);
   const vehicleMesh = createVehicleMesh(vehicleConfig, view.softwareGl);
   vehicleMesh.visible = false;
@@ -211,7 +244,8 @@ export function createGame(
   let runState: RunMenuState = { open: false };
   let controlsOpen = view.controlsOpen;
   let chatOpen = view.chatOpen;
-  const anyOpen = () => menuState.open || runState.open || controlsOpen || chatOpen;
+  let emoteOpen = view.emoteOpen;
+  const anyOpen = () => menuState.open || runState.open || controlsOpen || chatOpen || emoteOpen;
   const frozen = () => inputFrozen(anyOpen(), lobby.phase);
   // The lock change this causes is not the player's Esc.
   let releasedByGame = false;
@@ -275,7 +309,7 @@ export function createGame(
   };
   // The corner button is only for the run.
   const showMenuButton = () => {
-    for (const id of ['touch-menu', 'touch-chat']) {
+    for (const id of ['touch-menu', 'touch-chat', 'touch-emote']) {
       const button = document.getElementById(id);
       if (button) button.hidden = lobby.phase !== 'playing';
     }
@@ -305,11 +339,15 @@ export function createGame(
     if (menuState.open) shopMenu.setWallet(buffer.latestStatus()?.wallet ?? 0);
   };
   const shopMenu = createShopMenu(document, {
-    onBuy: (item: ItemKind) => send({ type: 'buy', item }),
+    onBuy: (item: ShopItem) => send({ type: 'buy', item }),
     onClose: () => refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, true),
   });
   const requestChat = () => {
     if (lobby.phase === 'playing' && !anyOpen()) view.onChat();
+  };
+  const requestEmote = () => {
+    const entry = latestLocal;
+    if (emoteWheelAllowed({ phase: lobby.phase, seated: entry === null || entry.seat !== null, downed: entry === null || entry.downed !== null, carrying: entry !== null && entry.hands !== null, open: anyOpen() })) view.onEmoteWheel();
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.code === 'F3') {
@@ -322,6 +360,11 @@ export function createGame(
       // Without this the T would be typed into the input that opening focuses.
       event.preventDefault();
       requestChat();
+      return;
+    }
+    if (isEmoteKey(event, event.target instanceof Element ? event.target.tagName : null)) {
+      event.preventDefault();
+      requestEmote();
       return;
     }
     if (event.code !== 'Escape' || event.repeat) return;
@@ -373,7 +416,7 @@ export function createGame(
   });
 
   // Seated players are hidden, not removed; meshes are remade when a player's name, colour or look changes, and dropped when they leave.
-  const syncPlayerMeshes = (players: PlayerSnapshot[], seconds: number) => {
+  const syncPlayerMeshes = (players: PlayerSnapshot[], seconds: number, clock: number) => {
     const present = new Set<string>();
     for (const player of players) {
       const info = lobby.players.find((candidate) => candidate.playerId === player.playerId);
@@ -393,7 +436,7 @@ export function createGame(
         scene.add(entry.mesh);
       }
       entry.mesh.visible = player.seat === null && !(firstPerson && player.playerId === playerId);
-      placePlayerMesh(entry.mesh, player, seconds);
+      placePlayerMesh(entry.mesh, player, seconds, clock);
       setNameVisible(entry.mesh, player.playerId !== playerId && Math.hypot(player.pos.x - camera.position.x, player.pos.y - camera.position.y, player.pos.z - camera.position.z) <= LABEL_RANGE);
     }
     for (const [id, entry] of playerMeshes) {
@@ -466,7 +509,7 @@ export function createGame(
       vehicleMesh.visible = true;
       placeVehicleMesh(vehicleMesh, vehicle);
     }
-    syncPlayerMeshes(players, frameSeconds);
+    syncPlayerMeshes(players, frameSeconds, now / 1000);
     const cable = sampled?.cable;
     winchMesh.visible = vehicle !== null && cable !== undefined;
     if (vehicle && cable) {
@@ -517,6 +560,7 @@ export function createGame(
       stops: course.stops,
       targetTime: course.targetTime,
       touch: view.touchUi !== null,
+      weather: weatherTracker.weather(),
       ...(local && onFoot ? { eye: eyeHeight } : {}),
     };
     overlay.textContent = overlayText(overlayData);
@@ -543,8 +587,19 @@ export function createGame(
     } else audio.setLoop('engine', false);
     if (vehicle && winchOn(latestCable, lobby.phase)) audio.setLoop('winch', true, { at: add(vehicle.pos, rotate(vehicle.rot, vehicleConfig.winchMount)) });
     else audio.setLoop('winch', false);
-    audio.setLoop('rain', rainOn(lobby.weather), { volume: 0.3 });
+    audio.setLoop('rain', rainOn(weatherTracker.weather()), { volume: 0.3 });
     decor.update(camera.position, now / 1000);
+    const shownLook = conditions.setLook(lookFor(weatherTracker.weather()), weatherTracker.blend(now / 1000));
+    renderer.toneMappingExposure = shownLook.exposure;
+    const newSky = weatherTracker.takeSky(now / 1000);
+    if (newSky) {
+      const lighting = imageLight && hasSky(firstLobby.timeOfDay, newSky);
+      if (!applySky(renderer, scene, shownLook, firstLobby.timeOfDay, lighting, newSky)) {
+        scene.background = toneMappedColour(shownLook.sky, shownLook.exposure);
+        // The old sky's light would stay lit under a flat background.
+        if (imageLight) scene.environment = null;
+      }
+    }
     corridorTerrain?.update(camera.position, now / 1000);
     conditions.update(camera.position, frameSeconds, local && onFoot ? local.pos : vehicle ? vehicle.pos : camera.position);
     conditions.setLights(vehicle, players);
@@ -576,11 +631,13 @@ export function createGame(
       const won = buffer.latestStatus()?.won ?? false;
       if (wasWon === false && won) audio.play('win');
       wasWon = won;
+      weatherTracker.push(snapshot.weather, performance.now() / 1000);
       predictor.setVehicle(snapshot.vehicle.pos, snapshot.vehicle.rot);
       const held = new Set(snapshot.players.flatMap((player) => (player.hands === null || player.hands === 'hook' ? [] : [player.hands])));
       predictor.setProps(buffer.latestProps().filter((prop) => !held.has(prop.id)));
       const entry = snapshot.players.find((player) => player.playerId === playerId);
       latestLocal = entry ?? null;
+      if (emoteOpen && (!entry || entry.seat !== null || entry.downed !== null)) view.onEmoteWheelClose();
       refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, false);
       if (entry && predictionActive(entry)) reconciler.correct(predictedFrom(entry), snapshot.ackSeq);
       else reconciler.suspend();
@@ -588,8 +645,7 @@ export function createGame(
     onEvent(message) {
       const sound = soundFor(message, playerId);
       if (sound) audio.play(sound.kind, { ...(sound.positional ? { at: message.pos } : {}), ...(sound.volume === undefined ? {} : { volume: sound.volume }) });
-      // Only the player who was brought back sees that toast.
-      if (message.kind !== 'outOfBounds' || message.playerId === playerId) eventToast.show(message.kind, performance.now() / 1000);
+      if (toastFor(message, playerId)) eventToast.show(message.kind, performance.now() / 1000);
     },
     setControlsOpen(open) {
       controlsOpen = open;
@@ -597,6 +653,16 @@ export function createGame(
       gate.follow(frozen());
     },
     requestChat,
+    requestEmote,
+    onEmote(message) {
+      const entry = playerMeshes.get(message.playerId);
+      if (entry) playEmote(entry.mesh, message.emote, performance.now() / 1000);
+    },
+    setEmoteOpen(open) {
+      emoteOpen = open;
+      if (open) releaseLock();
+      gate.follow(frozen());
+    },
     setChatOpen(open) {
       chatOpen = open;
       // Before the lock is released the panel's focus would leave the pointer captured.

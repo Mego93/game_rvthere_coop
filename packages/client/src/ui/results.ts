@@ -1,5 +1,5 @@
 import { CAMPAIGN, type ResultsMessage } from '@lodgy/shared';
-import { VEHICLE_LABELS } from './lobby';
+import { VEHICLE_LABELS, WEATHER_LABELS } from './lobby';
 
 export interface ResultsView {
   lines: string[];
@@ -18,7 +18,7 @@ export function resultsView(message: ResultsMessage, isAdmin: boolean, campaign:
   const lines = [
     `Final time ${clock(message.finalTime)}`,
     `Vehicle ${Object.hasOwn(VEHICLE_LABELS, message.vehicleId) ? VEHICLE_LABELS[message.vehicleId] : message.vehicleId}`,
-    `Course ${message.courseId}, ${message.timeOfDay}, ${message.weather}`,
+    `Course ${message.courseId}, ${message.timeOfDay}, ${WEATHER_LABELS[message.weather]}`,
     `Restarts ${message.restarts}, respawns ${message.respawns}`,
     `Coins ${message.wallet} kept, ${message.coinsCollected}/${message.coinsTotal} collected`,
     `Stars ${message.stars.map((earned) => (earned ? '★' : '☆')).join('')}`,

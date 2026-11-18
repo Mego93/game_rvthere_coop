@@ -16,9 +16,9 @@ const half = vec3(1, 0.5, 2);
 const car = (fuel: number, health: number) => ({ pos: vec3(0, 0.5, 0), rot: IDENTITY, half, fuel, health });
 const TICKS = Math.round(HOLD_DURATION / TICK_DT);
 
-const ctxFor = (feet: Vec3, vehicle: UseContext['vehicle'], yaw = 0, pitch = 0, health = 100, players: UseContext['players'] = []): UseContext => {
+const ctxFor = (feet: Vec3, vehicle: UseContext['vehicle'], yaw = 0, pitch = 0, health = 100, players: UseContext['players'] = [], onFoot = true): UseContext => {
   const { origin, dir } = aimRay(feet, yaw, pitch);
-  return { self: { id: 'me', feet, eye: origin, aim: dir, health }, vehicle, players };
+  return { self: { id: 'me', feet, eye: origin, aim: dir, health, onFoot }, vehicle, players };
 };
 
 describe('useTarget', () => {
@@ -54,6 +54,24 @@ const VEHICLE = { id: 'vehicle', revive: false };
 const jerry: (ItemKind | null)[] = ['jerrycan', null, 'toolbox'];
 const press = { usePressed: true, useHeld: true, slot: 0 as const };
 const held = { usePressed: false, useHeld: true, slot: 0 as const };
+
+describe('tajine hold targets', () => {
+  const far = vec3(50, 0, 50);
+  test('a tajine targets its eater on foot at full health, and nobody when not on foot', () => {
+    expect(useTarget('tajine', ctxFor(far, car(1, 1)))).toBe('me');
+    expect(useTarget('tajine', ctxFor(far, car(1, 1), 0, 0, 100, [], false))).toBeNull();
+  });
+  test('a self-targeted tajine hold stays valid at any health and ends when not on foot', () => {
+    const hold = { action: 'useItem' as const, targetId: 'me', slot: 0 as const, item: 'tajine' as const, progress: 0.5 };
+    expect(holdTargetValid(hold, ctxFor(far, car(1, 1), 0, 0, 100))).toBe(true);
+    expect(holdTargetValid(hold, ctxFor(far, car(1, 1), 0, 0, 30))).toBe(true);
+    expect(holdTargetValid(hold, ctxFor(far, car(1, 1), 0, 0, 100, [], false))).toBe(false);
+  });
+  test('a health kit self hold still needs a hurt eater', () => {
+    const hold = { action: 'useItem' as const, targetId: 'me', slot: 0 as const, item: 'healthKit' as const, progress: 0.5 };
+    expect(holdTargetValid(hold, ctxFor(far, car(1, 1), 0, 0, 100))).toBe(false);
+  });
+});
 
 describe('stepHold', () => {
   test('a press with a valid target starts a hold on the selected slot\'s item', () => {

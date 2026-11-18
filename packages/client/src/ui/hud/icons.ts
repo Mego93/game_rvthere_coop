@@ -4,5 +4,6 @@ export const ICON_HEART = `<svg viewBox="0 0 24 24" fill="currentColor"><path d=
 export const ICON_JERRYCAN = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 2h6l2 3v2h2v15H5V7h3zM9 4v3h5V5l-1-1zM8 12v2h8v-2z"/></svg>`;
 export const ICON_TOOLBOX = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 4h6a1 1 0 0 1 1 1v2h4a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4V5a1 1 0 0 1 1-1zm1 2v1h4V6zM3 12h18v2H3z"/></svg>`;
 export const ICON_HEALTHKIT = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm5 3v3H7v2h3v3h2v-3h3v-2h-3V8z"/></svg>`;
+export const ICON_TAJINE = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 3h2v2l5.2 9H20a1 1 0 0 1 1 1v1a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-1a1 1 0 0 1 1-1h1.8L11 5z"/></svg>`;
 export const ICON_COIN = `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg>`;
 export const ICON_SEAT = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 3h6a2 2 0 0 1 2 2v7h3a2 2 0 0 1 2 2v4h-2v3h-2v-3H8v3H6v-3H4v-4a2 2 0 0 1 2-2h1z"/></svg>`;

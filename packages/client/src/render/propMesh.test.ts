@@ -38,7 +38,8 @@ const KEPT_STRETCH: Record<string, string> = {
   healthKit: 'the file is a kit with its drawer open, 1.61 against the 1.6 limit: kept',
 };
 // The long axis of the model after its turn, which must be the hit box long axis (a wrong yaw or a wrong file changes it).
-const NATIVE_LONG: Record<string, Axis> = { crate: 'z', barrier: 'x', cart: 'z', scooter: 'z', jerrycan: 'y', toolbox: 'x', healthKit: 'x' };
+// The tajine is exempt: its hit box is as long in x as in z, so no turn can be told wrong.
+const NATIVE_LONG: Partial<Record<string, Axis>> = { crate: 'z', barrier: 'x', cart: 'z', scooter: 'z', jerrycan: 'y', toolbox: 'x', healthKit: 'x' };
 
 // The per-axis scale a fit applied, and the size the model had along each axis before it, recovered from the hit box.
 function stretchOf(fit: THREE.Object3D, half: { x: number; y: number; z: number }) {
@@ -54,7 +55,7 @@ const checkStretch = (kind: string, fit: THREE.Object3D, half: { x: number; y: n
   const { stretch, native } = stretchOf(fit, half);
   if (kind in KEPT_STRETCH) expect(stretch, `${kind}: ${KEPT_STRETCH[kind]}`).toBeGreaterThan(0);
   else expect(stretch, kind).toBeLessThanOrEqual(STRETCH_LIMIT);
-  expect(longest(native), `${kind} long axis`).toBe(NATIVE_LONG[kind]);
+  if (kind in NATIVE_LONG) expect(longest(native), `${kind} long axis`).toBe(NATIVE_LONG[kind]);
 };
 
 test('T4: every prop model fits its hit box within 10 % on each axis, rests on its bottom and is stretched at most 1.6x between axes', async () => {

@@ -50,6 +50,8 @@ export interface Vehicle {
   wheelSurfaces(): (Surface | null)[];
   // Each wheel's friction slip as last set by step().
   wheelFrictionSlips(): number[];
+  // Multiplies tyre grip from the next step; the weather changes it.
+  setGripScale(scale: number): void;
   fuel(): number;
   health(): number;
   addFuel(amount: number): void;
@@ -76,7 +78,7 @@ export function createVehicle(
   surfaceOf: (colliderHandle: number) => Surface | null,
   options: { gripScale?: number } = {},
 ): Vehicle {
-  const gripScale = options.gripScale ?? 1;
+  let gripScale = options.gripScale ?? 1;
   const h = config.halfExtents;
   const pos = add(spawn.pos, rotate(spawn.rot, scale(AXIS_Y, config.rideHeight)));
   const inertia = {
@@ -146,6 +148,9 @@ export function createVehicle(
     config,
     body,
     chassisHandle: chassis.handle,
+    setGripScale(scale) {
+      gripScale = scale;
+    },
     forwardSpeed,
     wheelSurfaces,
     wheelFrictionSlips: () => Array.from({ length: WHEEL_COUNT }, (_, i) => controller.wheelFrictionSlip(i) ?? 0),

@@ -19,8 +19,8 @@ const dense: AmbientEvent[] = Array.from({ length: AMBIENT_MAX_GOATS + AMBIENT_M
   kind: i < AMBIENT_MAX_GOATS ? 'goat' : 'scooter',
 }));
 const SIX = 6;
-const KINDS = ['jerrycan', 'toolbox', 'healthKit'] as const;
-const drops: ItemDropEvent[] = Array.from({ length: SIX }, (_, i) => ({ id: i, along: 30 + i * 20, side: i % 2 === 0 ? 1 : -1, lateral: (i % 2 === 0 ? 1 : -1) * 6.5, kind: KINDS[i % 3]! }));
+const KINDS = ['jerrycan', 'toolbox', 'healthKit', 'tajine'] as const;
+const drops: ItemDropEvent[] = Array.from({ length: SIX }, (_, i) => ({ id: i, along: 30 + i * 20, side: i % 2 === 0 ? 1 : -1, lateral: (i % 2 === 0 ? 1 : -1) * 6.5, kind: KINDS[i % 4]! }));
 
 // Measured: 30055 bytes in all, six drops add 1264 bytes (26053 before the step 28d parkour props; limit raised per P2).
 test('T7: six live drops add at most 1.5 KB to the marrakech full snapshot with 6 players and 9 animals, which stays under 32 KB', () => {

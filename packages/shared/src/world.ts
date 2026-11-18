@@ -6,7 +6,8 @@ import { createAnimals, type Animals } from './animals';
 import { hashSeed, planAmbient, type AmbientEvent, type AnimalSnapshot } from './ambient';
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DEFAULT_WEATHER, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather } from './constants';
+import { DEFAULT_WEATHER, TAJINE_SECONDS, WEATHER_SEED_SALT, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather, type WeatherSetting, type ShopItem } from './constants';
+import { weatherAt, weatherSchedule } from './weather';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
@@ -31,8 +32,8 @@ import { canReel, createWinch, type CableSnapshot, type Winch } from './winch';
 export interface WorldOptions {
   courseId: string;
   vehicleId: string;
-  // Defaults to clear.
-  weather?: Weather;
+  // Defaults to clear. 'random' follows a seeded schedule that starts at the first step and changes every 150 to 300 s of the run.
+  weather?: WeatherSetting;
   // Ambient animals on a course that has `ambient` spans; off by default.
   ambient?: boolean;
   // Tests only: replaces the plan the director follows.
@@ -77,6 +78,8 @@ export interface WorldSnapshot {
   assisted: boolean;
   // Ambient animals alive; absent when there are none.
   animals?: AnimalSnapshot[];
+  // The weather in force; present only when the world's setting is random.
+  weather?: Weather;
 }
 
 export interface WorldStatus {
@@ -116,8 +119,10 @@ export interface World {
   // Applies at once; false when it did nothing (won, or no next checkpoint).
   adminTool(tool: 'skipCheckpoint' | 'refill'): boolean;
   teleportPlayer(id: string, pos: Vec3): void;
+  // Whether an emote may play: on foot, not downed, not respawning, nothing in the hands.
+  canEmote(playerId: string): boolean;
   // Applies at once; the buy event is returned by the next step.
-  buy(playerId: string, item: ItemKind): 'ok' | 'cannot_buy';
+  buy(playerId: string, item: ShopItem): 'ok' | 'cannot_buy';
   status(): WorldStatus;
   // Restarts at the last checkpoint on the next step; does nothing once the run is won.
   restartCheckpoint(): void;
@@ -138,6 +143,9 @@ export interface World {
   dispose(): void;
 }
 
+// The schedule is listed this far ahead; a run longer than two hours keeps the last weather.
+const WEATHER_HORIZON_TICKS = 2 * 3600 * TICK_RATE;
+
 // One non-finite number would stay in the physics state for good, so it is treated as no input.
 const finite = (value: number | undefined): number => (value !== undefined && Number.isFinite(value) ? value : 0);
 
@@ -151,9 +159,11 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const physics = new rapier.World({ x: 0, y: -GRAVITY, z: 0 });
   physics.timestep = TICK_DT;
   const statics = buildStatics(rapier, physics, course);
-  const vehicle = createVehicle(rapier, physics, vehicleConfig, start.spawn, statics.surfaceOf, {
-    gripScale: (options.weather ?? DEFAULT_WEATHER) === 'rain' ? RAIN_GRIP : 1,
-  });
+  const weatherSetting: WeatherSetting = options.weather ?? DEFAULT_WEATHER;
+  const schedule = weatherSetting === 'random' ? weatherSchedule(mixSeed(options.itemSeed ?? mixSeed(hashSeed(course.id), 1), WEATHER_SEED_SALT), WEATHER_HORIZON_TICKS) : null;
+  let weather: Weather = schedule ? weatherAt(schedule, 0) : (weatherSetting as Weather);
+  const gripOf = (current: Weather): number => (current === 'rain' ? RAIN_GRIP : 1);
+  const vehicle = createVehicle(rapier, physics, vehicleConfig, start.spawn, statics.surfaceOf, { gripScale: gripOf(weather) });
   // Queries see nothing until the broad phase has run once, and spawn rays are cast before the first tick.
   physics.timestep = 0;
   physics.step();
@@ -405,7 +415,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       // The aim is this tick's input, as for interact (R6).
       const { origin, dir } = aimRay(player.pos, fields?.yaw ?? player.yaw, fields?.pitch ?? player.pitch, player.crouched);
       const ctx: UseContext = {
-        self: { id: player.id, feet: player.pos, eye: origin, aim: dir, health: player.health },
+        self: { id: player.id, feet: player.pos, eye: origin, aim: dir, health: player.health, onFoot: !seated && player.downed === null && player.respawnIn === null },
         vehicle: vehicleView,
         players: players
           .all()
@@ -448,6 +458,11 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       player.hold = hold;
       if (completed === null) continue;
       player.inventory[completed.slot] = null;
+      if (completed.item === 'tajine') {
+        player.tajine = TAJINE_SECONDS;
+        events.push({ kind: 'eat', tick: tick + 1, playerId: player.id, pos: { ...player.pos } });
+        continue;
+      }
       if (completed.targetId === 'vehicle') {
         if (completed.item === 'jerrycan') vehicle.addFuel(ITEM_REFUEL);
         else vehicle.repair(ITEM_REPAIR);
@@ -617,7 +632,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     for (const player of players.all()) {
       if (player.seat !== null) continue;
       if (player.respawnIn === null) {
-        if (player.pos.y < course.killPlaneY) player.respawnIn = PLAYER_KILL_RESPAWN_DELAY;
+        if (player.pos.y < course.killPlaneY) {
+          player.respawnIn = PLAYER_KILL_RESPAWN_DELAY;
+          player.tajine = 0;
+        }
         continue;
       }
       player.respawnIn -= TICK_DT;
@@ -628,6 +646,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       players.setSeat(player.id, null, pos);
       player.health = PLAYER_REVIVE_HEALTH;
       player.downed = null;
+      player.tajine = 0;
       player.hitCooldown.clear();
       if (!won) respawns += 1;
       events.push({ kind: 'respawn', tick, playerId: player.id, pos });
@@ -679,6 +698,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       players.setHands(player.id, null);
       player.hold = null;
       player.respawnIn = null;
+      player.tajine = 0;
     }
     players.takePushIntents();
     for (const player of players.all()) players.setSeat(player.id, null);
@@ -810,6 +830,13 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     course,
     vehicleConfig,
     step(inputs) {
+      if (schedule) {
+        const next = weatherAt(schedule, runTicks);
+        if (next !== weather) {
+          weather = next;
+          vehicle.setGripScale(gripOf(weather));
+        }
+      }
       const onFoot = stepInputsFor(inputs);
       for (const player of players.all()) player.slot = slotOf(onFoot.get(player.id)?.fields.slot ?? 0) ?? player.slot;
       const events: WorldEvent[] = queuedEvents.splice(0);
@@ -886,6 +913,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         slot: player.slot,
         health: Math.floor(player.health),
         downed: player.downed,
+        ...(player.tajine > 1e-9 ? { tajine: Math.min(TAJINE_SECONDS, Math.ceil(player.tajine * 10 - 1e-9) / 10) } : {}),
         ...(player.slideTicks > 0 ? { stance: 'slide' as const } : player.crouched ? { stance: 'crouch' as const } : {}),
         ...(player.slideTicks > 0 || player.slideCooldown > 0 || player.launch > 0
           ? {
@@ -915,6 +943,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       coinsTotal: course.coins.length,
       assisted,
       ...animalField(),
+      ...(schedule ? { weather } : {}),
     }),
     restartCheckpoint() {
       if (!won) restartPending = true;
@@ -988,8 +1017,13 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       return true;
     },
     teleportPlayer: (id, pos) => players.teleport(id, pos),
+    canEmote(id) {
+      const player = players.get(id);
+      return player !== undefined && player.seat === null && player.downed === null && player.respawnIn === null && player.hands === null;
+    },
     buy(playerId, item) {
       const player = players.get(playerId);
+      if (!Object.hasOwn(SHOP_PRICES, item)) return 'cannot_buy';
       if (!player || player.seat !== null || player.downed !== null || player.respawnIn !== null || won) return 'cannot_buy';
       const stop = course.stops.find((candidate) => inShopRange(player.pos, candidate));
       const free = player.inventory.indexOf(null);
