@@ -210,22 +210,27 @@ export function renderChatLines(doc: Document, container: HTMLElement, lines: re
 }
 
 const STYLE = `${CHAT_FORM_STYLE}
-#chat-panel { position: fixed; z-index: 15; top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); width: min(440px, calc(100vw - 150px)); box-sizing: border-box; display: grid; gap: 8px; padding: 10px; background: rgba(255, 255, 255, 0.95); border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3); color: #222; }
+#chat-panel { position: fixed; z-index: 15; top: max(8px, var(--safe-top)); left: max(8px, var(--safe-left)); width: min(440px, calc(100vw - 180px - var(--safe-left) - var(--safe-right))); display: grid; gap: 8px; padding: 10px; animation: chat-rise var(--dur) var(--ease) both; }
 #chat-panel[hidden], #chat-toasts[hidden] { display: none; }
-#chat-panel .chat-lines { max-height: 9em; }
-#chat-head { display: flex; align-items: center; justify-content: space-between; font: 600 14px system-ui, sans-serif; }
-#chat-close { min-height: 44px; min-width: 44px; padding: 8px 12px; font: inherit; color: #1d3b52; background: #e3eef6; border: 1px solid #b9cddc; border-radius: 6px; cursor: pointer; }
+#chat-panel .chat-lines { max-height: 9em; padding: 4px 8px; background: var(--paper); border-radius: var(--radius-ctl); }
+#chat-head { display: flex; align-items: center; justify-content: space-between; font: 700 18px/1.2 var(--font-display); color: var(--teal); }
+#chat-close { padding: 8px 12px; font-size: 14px; }
 @media (max-height: 500px) {
   #chat-panel { gap: 4px; }
   #chat-panel .chat-lines { max-height: 3.5em; order: 3; }
 }
 #chat-panel .chat-lines:empty { display: none; }
-#chat-toasts { position: fixed; z-index: 15; left: max(8px, env(safe-area-inset-left)); bottom: 30%; width: min(360px, 50vw); display: grid; gap: 4px; pointer-events: none; }
-.chat-toast { padding: 4px 8px; font: 14px/1.35 system-ui, sans-serif; color: #fff; background: rgba(0, 0, 0, 0.55); border-radius: 6px; overflow-wrap: anywhere; animation: chat-fade ${TOAST_SECONDS}s linear forwards; }
-.chat-toast .chat-name { font-weight: 600; margin-right: 6px; }
-.chat-toast.own .chat-name { color: #ffd34e; }
+#chat-toasts { position: fixed; z-index: 15; left: max(8px, var(--safe-left)); top: 50%; transform: translateY(-50%); width: max-content; max-width: min(360px, 30vw); display: grid; gap: 4px; pointer-events: none; }
+.chat-toast { padding: 4px 10px; font: 500 14px/1.35 var(--font-text); color: var(--on-glass); background: var(--glass); border: 1px solid var(--glass-line); border-radius: 10px; text-shadow: var(--glass-text-shadow); overflow-wrap: anywhere; animation: chat-fade ${TOAST_SECONDS}s linear forwards; }
+.chat-toast .chat-name { font-weight: 700; margin-right: 6px; color: var(--glass-info); }
+.chat-toast.own .chat-name { color: var(--glass-accent); }
+@media (pointer: coarse) {
+  #chat-toasts { top: calc(150px + var(--safe-top)); transform: none; max-width: 40vw; max-height: 64px; overflow: hidden; gap: 2px; }
+  .chat-toast { padding: 2px 8px; font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
 @keyframes chat-fade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .chat-toast { animation: none; } }
+@keyframes chat-rise { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .chat-toast, #chat-panel { animation: none; } }
 `;
 
 export interface ChatPanelHandlers {
@@ -251,6 +256,7 @@ export function createChatPanel(doc: Document, handlers: ChatPanelHandlers): Cha
   style.textContent = STYLE;
   const root = doc.createElement('div');
   root.id = 'chat-panel';
+  root.className = 'ui-panel';
   root.hidden = true;
   root.setAttribute('role', 'dialog');
   root.setAttribute('aria-label', 'Chat');
@@ -265,6 +271,7 @@ export function createChatPanel(doc: Document, handlers: ChatPanelHandlers): Cha
   const closeButton = doc.createElement('button');
   closeButton.id = 'chat-close';
   closeButton.type = 'button';
+  closeButton.className = 'ui-btn';
   closeButton.textContent = 'Close';
   closeButton.addEventListener('click', () => set(false));
   head.append(doc.createTextNode('Chat'), closeButton);

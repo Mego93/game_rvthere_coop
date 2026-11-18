@@ -115,19 +115,17 @@ export function markTutorialDone(store: Store | null): void {
 }
 
 const STYLE = `
-#tutorial { position: fixed; inset: 0; z-index: 50; display: grid; background: rgba(0, 0, 0, 0.45); }
+#tutorial { position: fixed; inset: 0; z-index: 50; display: grid; background: var(--scrim); }
 #tutorial[hidden] { display: none; }
-#tutorial-panel { display: grid; gap: 12px; width: min(460px, 92vw); max-height: 90vh; margin: auto; padding: 18px; box-sizing: border-box; overflow-y: auto; color: rgba(255, 255, 255, 0.92); background: rgba(12, 16, 24, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 12px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55); font: 14px/1.45 system-ui, sans-serif; }
-#tutorial-count { color: rgba(255, 255, 255, 0.6); font-size: 12px; }
-#tutorial-title { margin: 0; font-size: 20px; }
+#tutorial-panel { display: grid; gap: 12px; width: min(460px, 92vw); max-height: 90vh; margin: auto; padding: 18px; overflow-y: auto; font: 15px/1.45 var(--font-text); }
+#tutorial-count { color: var(--ink-soft); font-size: 12px; font-weight: 600; }
+#tutorial-title { margin: 0; font-size: 22px; color: var(--teal); }
 #tutorial-text { margin: 0; }
 #tutorial-caps { display: flex; flex-wrap: wrap; gap: 6px; }
 #tutorial-caps[hidden] { display: none; }
-#tutorial-caps kbd { padding: 2px 8px; border: 1px solid rgba(255, 255, 255, 0.5); border-bottom-width: 3px; border-radius: 5px; background: rgba(255, 255, 255, 0.12); font: 13px ui-monospace, Menlo, monospace; }
+#tutorial-caps kbd { padding: 2px 8px; color: var(--ink); background: var(--paper); border: 1px solid var(--ink-soft); border-bottom-width: 3px; border-radius: 6px; font-size: 13px; }
 #tutorial-nav { display: flex; gap: 8px; justify-content: space-between; }
-#tutorial-nav button { padding: 10px 14px; font: inherit; color: #fff; background: #2f6f9f; border: 1px solid #9ab; border-radius: 6px; touch-action: manipulation; }
 #tutorial-nav button[hidden] { display: none; }
-#tutorial-skip { background: transparent !important; }
 `;
 
 export interface Tutorial {
@@ -146,6 +144,7 @@ export function createTutorial(doc: Document, options: { touch: boolean; store: 
   style.textContent = STYLE;
   const panel = doc.createElement('div');
   panel.id = 'tutorial-panel';
+  panel.className = 'ui-panel';
   const count = doc.createElement('div');
   count.id = 'tutorial-count';
   const title = doc.createElement('h2');
@@ -160,6 +159,7 @@ export function createTutorial(doc: Document, options: { touch: boolean; store: 
     const element = doc.createElement('button');
     element.id = id;
     element.type = 'button';
+    element.className = id === 'tutorial-next' ? 'ui-btn ui-btn-primary' : 'ui-btn';
     element.textContent = label;
     return element;
   };

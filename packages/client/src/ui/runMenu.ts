@@ -45,15 +45,22 @@ export interface RunMenu {
 }
 
 const STYLE = `
-#run-menu { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; display: grid; gap: 8px; min-width: 240px; max-height: 90vh; overflow-y: auto; padding: 14px; color: #fff; background: rgba(0, 0, 0, 0.8); border-radius: 8px; font: 14px/1.3 system-ui, sans-serif; pointer-events: auto; touch-action: manipulation; }
+#run-menu { position: fixed; inset: 0; width: min(320px, calc(100vw - 32px)); height: fit-content; max-height: calc(100vh - 32px); margin: auto; z-index: 20; display: grid; gap: 8px; padding: 14px; overflow-y: auto; pointer-events: auto; touch-action: manipulation; }
 #run-menu[hidden] { display: none; }
-#run-menu button { padding: 12px; font: inherit; color: #fff; background: #2f6f9f; border: 1px solid #9ab; border-radius: 6px; touch-action: manipulation; }
-#run-menu .run-kick { background: #8a3a2f; }
+#run-menu h2 { margin: 0 0 2px; font-size: 22px; color: var(--teal); text-align: center; }
+#run-menu .ui-btn { width: 100%; }
+#run-menu .run-kick { color: var(--white); background: var(--terracotta-strong); }
+#run-menu .run-kick:hover:not(:disabled) { background: var(--terracotta-deep); }
+@media (max-height: 500px) {
+  #run-menu { width: min(520px, calc(100vw - 32px)); grid-template-columns: 1fr 1fr; padding: 10px; }
+  #run-menu h2 { grid-column: 1 / -1; }
+}
 `;
 
 export function createRunMenu(doc: Document, handlers: RunMenuHandlers): RunMenu {
   const root = doc.createElement('div');
   root.id = 'run-menu';
+  root.className = 'ui-panel';
   root.hidden = true;
   const style = doc.createElement('style');
   style.textContent = STYLE;
@@ -64,7 +71,7 @@ export function createRunMenu(doc: Document, handlers: RunMenuHandlers): RunMenu
     element.id = id;
     element.type = 'button';
     element.textContent = label;
-    if (className) element.className = className;
+    element.className = className ? `ui-btn ${className}` : 'ui-btn';
     element.addEventListener('click', onClick);
     return element;
   };
@@ -88,9 +95,9 @@ export function createRunMenu(doc: Document, handlers: RunMenuHandlers): RunMenu
       muteButton.textContent = muted ? 'Unmute sound' : 'Mute sound';
     },
     update(isAdmin, kickable) {
-      const title = doc.createElement('strong');
+      const title = doc.createElement('h2');
       title.textContent = 'Menu';
-      const items = runMenuItems(isAdmin).map((label) => button(actions[label]![0], label, actions[label]![1]));
+      const items = runMenuItems(isAdmin).map((label) => button(actions[label]![0], label, actions[label]![1], label === 'Resume' ? 'ui-btn-primary' : ''));
       const kicks = isAdmin ? kickable.map((entry) => button(`run-kick-${entry.playerId}`, `Kick ${entry.name}`, () => handlers.onKick(entry.playerId), 'run-kick')) : [];
       root.replaceChildren(style, title, ...items, muteButton, helpButton, tutorialButton, ...kicks);
     },

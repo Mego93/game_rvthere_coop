@@ -26,6 +26,7 @@ import { createEmoteWheel } from './ui/emoteWheel';
 import { createHome, errorText } from './ui/home';
 import { createLobby } from './ui/lobby';
 import { createResults } from './ui/results';
+import { hudTestMode, startHudTest } from './ui/hudTest';
 import { installTheme } from './ui/theme';
 import { createTouchUi } from './ui/touchUi';
 import { createTutorial, shouldAutoShowTutorial } from './ui/tutorial';
@@ -626,6 +627,9 @@ canvas.addEventListener('webglcontextlost', () => {
 // Back and forward change the address without loading the page; reloading puts the page in step with it.
 window.addEventListener('popstate', () => location.reload());
 
-const rejoin = takeRejoin(sessionStore, roomFromPath(location.pathname));
-if (rejoin) autoJoin(roomFromPath(location.pathname)!, rejoin.name, rejoin.playerId);
+// ?hudtest is the layout check's and the screenshots' way in: the HUD on a fixed sample, no room.
+const hudTest = hudTestMode(location.search);
+const rejoin = hudTest ? null : takeRejoin(sessionStore, roomFromPath(location.pathname));
+if (hudTest) startHudTest(hudTest, { touch: touchDevice, chatPanel, emoteWheel, helpPanel, tutorial, results });
+else if (rejoin) autoJoin(roomFromPath(location.pathname)!, rejoin.name, rejoin.playerId);
 else home.show({ room: roomFromPath(location.pathname), name });

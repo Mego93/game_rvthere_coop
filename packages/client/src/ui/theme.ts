@@ -20,6 +20,18 @@ export const TOKENS: Readonly<Record<string, string>> = {
   '--glass-good': '#7ee28a',
   '--glass-bad': '#ff8a75',
   '--glass-info': '#8fc4ff',
+  '--glass-track': 'rgba(255, 255, 255, 0.2)',
+  '--glass-faint': 'rgba(255, 255, 255, 0.12)',
+  '--glass-press': 'rgba(255, 255, 255, 0.45)',
+  '--glass-line-strong': 'rgba(255, 255, 255, 0.7)',
+  '--glass-route': 'rgba(255, 255, 255, 0.55)',
+  '--glass-halo': 'rgba(0, 0, 0, 0.6)',
+  '--glass-text-shadow': '0 1px 2px rgba(0, 0, 0, 0.55)',
+  // Safe-area insets as tokens, so a layout check can stand in for a notched phone.
+  '--safe-top': 'env(safe-area-inset-top, 0px)',
+  '--safe-right': 'env(safe-area-inset-right, 0px)',
+  '--safe-bottom': 'env(safe-area-inset-bottom, 0px)',
+  '--safe-left': 'env(safe-area-inset-left, 0px)',
   // Semantic text colours, each at least 4.5:1 on --sand
   '--danger': '#9e2a1f',
   '--ok': '#1d6b35',

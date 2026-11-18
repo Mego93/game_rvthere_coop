@@ -44,16 +44,16 @@ export const missingFromControls = (): string[] => {
 };
 
 const STYLE = `
-#controls { position: fixed; inset: 0; z-index: 45; display: grid; background: rgba(0, 0, 0, 0.5); }
+#controls { position: fixed; inset: 0; z-index: 45; display: grid; background: var(--scrim); }
 #controls[hidden] { display: none; }
-#controls-panel { display: grid; grid-template-rows: auto 1fr auto; gap: 12px; width: min(560px, 92vw); max-height: 86vh; margin: auto; padding: 20px; box-sizing: border-box; background: #fff; color: #222; border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3); font: 14px/1.4 system-ui, sans-serif; }
-#controls-panel h2 { margin: 0; font-size: 20px; }
+#controls-panel { display: grid; grid-template-rows: auto 1fr auto; gap: 12px; width: min(560px, 92vw); max-height: 86vh; margin: auto; padding: 18px 20px; font: 15px/1.4 var(--font-text); }
+#controls-panel h2 { margin: 0; font-size: 24px; color: var(--teal); }
 #controls-list { margin: 0; overflow: auto; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-content: start; }
 #controls-list dt { font-weight: 600; white-space: nowrap; }
 #controls-list dd { margin: 0; }
-#controls-list kbd { padding: 1px 6px; border: 1px solid #999; border-radius: 4px; background: #f3f3f3; font: 12px ui-monospace, Menlo, monospace; }
-#controls-credits { justify-self: center; color: #2f6f9f; }
-#controls-close { padding: 10px; font: inherit; font-size: 16px; color: #fff; background: #2f6f9f; border: 1px solid #2f6f9f; border-radius: 6px; }
+#controls-list kbd { padding: 1px 7px; color: var(--ink); background: var(--paper); border: 1px solid var(--ink-soft); border-bottom-width: 3px; border-radius: 6px; font-size: 12px; }
+#controls-footer { display: grid; gap: 8px; }
+#controls-credits { justify-self: center; font-weight: 600; color: var(--info); }
 `;
 
 export interface ControlsPanel {
@@ -73,6 +73,7 @@ export function createControlsPanel(doc: Document, onChange: (open: boolean) => 
   style.textContent = STYLE;
   const panel = doc.createElement('div');
   panel.id = 'controls-panel';
+  panel.className = 'ui-panel';
   const title = doc.createElement('h2');
   title.textContent = 'Controls';
   const list = doc.createElement('dl');
@@ -90,8 +91,7 @@ export function createControlsPanel(doc: Document, onChange: (open: boolean) => 
     list.append(keys, action);
   }
   const footer = doc.createElement('div');
-  footer.style.display = 'grid';
-  footer.style.gap = '8px';
+  footer.id = 'controls-footer';
   const credits = doc.createElement('a');
   credits.id = 'controls-credits';
   credits.href = '/CREDITS.md';
@@ -105,6 +105,7 @@ export function createControlsPanel(doc: Document, onChange: (open: boolean) => 
   });
   const close = doc.createElement('button');
   close.id = 'controls-close';
+  close.className = 'ui-btn ui-btn-primary';
   close.type = 'button';
   close.textContent = 'Close';
   footer.append(credits, close);

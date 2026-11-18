@@ -20,23 +20,25 @@ export interface TouchUi {
 }
 
 const STYLE = `
-#touch-ui { position: fixed; inset: 0; z-index: 10; pointer-events: none; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; font: 600 14px/1 system-ui, sans-serif; }
+#touch-ui { position: fixed; inset: 0; z-index: 10; pointer-events: none; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; font: 600 14px/1 var(--font-text); }
 #touch-ui[hidden], #touch-ui [hidden] { display: none; }
-#touch-ui button { pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; color: #fff; background: rgba(0, 0, 0, 0.45); border: 2px solid rgba(255, 255, 255, 0.7); border-radius: 50%; font: inherit; padding: 0; }
-#touch-ui button.down { background: rgba(255, 255, 255, 0.45); }
-#touch-ui button.on { border-color: #ffd34e; box-shadow: 0 0 0 2px #ffd34e; }
-#touch-actions { position: absolute; right: calc(12px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(2, 64px); gap: 10px; }
+#touch-ui button { pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; color: var(--on-glass); background: var(--glass); border: 2px solid var(--glass-line-strong); border-radius: 50%; font: inherit; padding: 0; text-shadow: var(--glass-text-shadow); transition: background-color 0.12s var(--ease); }
+#touch-ui button.down { background: var(--glass-press); }
+#touch-ui button.on { border-color: var(--glass-accent); box-shadow: 0 0 0 2px var(--glass-accent); }
+#touch-actions { position: absolute; right: calc(12px + var(--safe-right)); bottom: calc(12px + var(--safe-bottom)); display: grid; grid-template-columns: repeat(2, 64px); gap: 10px; }
 #touch-actions button { width: 64px; height: 64px; }
-#touch-menu { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); width: 56px; height: 36px; border-radius: 10px; font-size: 12px; }
-#touch-chat { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + 56px + 8px + env(safe-area-inset-right)); width: 56px; height: 44px; border-radius: 10px; font-size: 12px; }
-#touch-emote { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + 2 * (56px + 8px) + env(safe-area-inset-right)); width: 56px; height: 44px; border-radius: 10px; font-size: 12px; }
-#touch-slots { position: absolute; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 8px; }
-#touch-slots button { width: 56px; height: 56px; border-radius: 10px; font-size: 11px; }
-#touch-slots button.selected { border-color: #ffd34e; box-shadow: 0 0 0 2px #ffd34e; }
-#touch-joystick { position: absolute; border: 2px solid rgba(255, 255, 255, 0.6); border-radius: 50%; background: rgba(255, 255, 255, 0.12); pointer-events: none; }
-#touch-joystick-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); }
-#rotate-prompt { position: absolute; inset: 0; display: none; place-items: center; padding: 24px; text-align: center; font-size: 20px; color: #fff; background: #1d3b52; pointer-events: auto; touch-action: none; }
+#touch-menu, #touch-chat, #touch-emote { position: absolute; top: calc(8px + var(--safe-top)); width: 44px; height: 44px; border-radius: 12px; font-size: 11px; }
+#touch-menu { right: calc(12px + var(--safe-right)); }
+#touch-chat { right: calc(12px + 52px + var(--safe-right)); }
+#touch-emote { right: calc(12px + 2 * 52px + var(--safe-right)); }
+#touch-slots { position: absolute; left: 50%; bottom: calc(12px + var(--safe-bottom)); transform: translateX(-50%); display: flex; gap: 8px; }
+#touch-slots button { width: 56px; height: 56px; border-radius: 12px; font-size: 12px; }
+#touch-slots button.selected { border-color: var(--glass-accent); box-shadow: 0 0 0 2px var(--glass-accent); }
+#touch-joystick { position: absolute; border: 2px solid var(--glass-line-strong); border-radius: 50%; background: var(--glass-faint); pointer-events: none; }
+#touch-joystick-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: var(--glass-line-strong); }
+#rotate-prompt { position: absolute; inset: 0; display: none; place-items: center; padding: 24px; text-align: center; font: 600 22px/1.3 var(--font-display); color: var(--on-glass); background: var(--teal); pointer-events: auto; touch-action: none; }
 @media (orientation: portrait) { #rotate-prompt { display: grid; } }
+@media (prefers-reduced-motion: reduce) { #touch-ui button { transition: none; } }
 `;
 
 const ITEM_LABELS: Record<ItemKind, string> = { jerrycan: 'Fuel', toolbox: 'Tools', healthKit: 'Heal', tajine: 'Tajine' };

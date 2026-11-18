@@ -65,11 +65,14 @@ const ITEMS: { kind: ShopItem; label: string }[] = [
 ];
 
 const STYLE = `
-#shop-menu { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; display: grid; gap: 8px; min-width: 220px; padding: 14px; color: #fff; background: rgba(0, 0, 0, 0.8); border-radius: 8px; font: 14px/1.3 system-ui, sans-serif; pointer-events: auto; touch-action: manipulation; }
+#shop-menu { position: fixed; inset: 0; width: min(300px, calc(100vw - 32px)); height: fit-content; max-height: calc(100vh - 32px); margin: auto; z-index: 20; display: grid; gap: 8px; padding: 14px; overflow-y: auto; pointer-events: auto; touch-action: manipulation; }
 #shop-menu[hidden] { display: none; }
-#shop-menu button { padding: 12px; font: inherit; color: #fff; background: #2f6f9f; border: 1px solid #9ab; border-radius: 6px; touch-action: manipulation; }
+#shop-menu h2 { margin: 0; font-size: 22px; color: var(--teal); text-align: center; }
+#shop-menu .ui-btn { width: 100%; justify-content: space-between; }
 #shop-wallet, #shop-error { margin: 0; }
-#shop-error { min-height: 1.3em; color: #ffb4a9; }
+#shop-wallet { padding: 6px 10px; text-align: center; font-weight: 600; color: var(--ink); background: var(--paper); border-radius: var(--radius-ctl); }
+#shop-error { min-height: 1.3em; text-align: center; font-weight: 600; color: var(--danger); }
+@media (max-height: 420px) { #shop-menu { gap: 4px; padding: 10px; } #shop-error { min-height: 0; } }
 `;
 
 export interface ShopMenu {
@@ -83,10 +86,11 @@ export interface ShopMenu {
 export function createShopMenu(doc: Document, handlers: { onBuy(item: ShopItem): void; onClose(): void }): ShopMenu {
   const root = doc.createElement('div');
   root.id = 'shop-menu';
+  root.className = 'ui-panel';
   root.hidden = true;
   const style = doc.createElement('style');
   style.textContent = STYLE;
-  const title = doc.createElement('strong');
+  const title = doc.createElement('h2');
   title.textContent = 'Shop';
   const wallet = doc.createElement('p');
   wallet.id = 'shop-wallet';
@@ -97,6 +101,7 @@ export function createShopMenu(doc: Document, handlers: { onBuy(item: ShopItem):
   for (const { kind, label } of ITEMS) {
     const button = doc.createElement('button');
     button.id = `shop-${kind}`;
+    button.className = 'ui-btn';
     button.type = 'button';
     button.textContent = `${label}   ${SHOP_PRICES[kind]} coins`;
     button.addEventListener('click', () => handlers.onBuy(kind));
@@ -104,6 +109,7 @@ export function createShopMenu(doc: Document, handlers: { onBuy(item: ShopItem):
   }
   const close = doc.createElement('button');
   close.id = 'shop-close';
+  close.className = 'ui-btn';
   close.type = 'button';
   close.textContent = 'Close';
   close.addEventListener('click', () => handlers.onClose());

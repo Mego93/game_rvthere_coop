@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import type { RunStatus } from '../../net/snapshotBuffer';
 import type { OverlayData } from '../overlay';
 import { ITEM_LABELS } from './itemLabels';
-import { buildHudModel, ownHealthFraction } from './hudModel';
+import { buildHudModel, gaugePercent, ownHealthFraction, ownHealthPoints } from './hudModel';
 
 const lobby: LobbyMessage = {
   type: 'lobby',
@@ -279,5 +279,28 @@ describe('item map entities (28c I1)', () => {
   });
   test('no vehicle, no entities', () => {
     expect(build({ vehicle: null, propPoses: [prop('item-2', 'toolbox', 5, 6)] }).mapEntities).toEqual([]);
+  });
+});
+
+describe('gaugePercent', () => {
+  test('V6: floors, clamps to 0-100 and prints a percent', () => {
+    expect(gaugePercent(0)).toBe('0%');
+    expect(gaugePercent(0.004)).toBe('0%');
+    expect(gaugePercent(0.5)).toBe('50%');
+    expect(gaugePercent(0.999)).toBe('99%');
+    expect(gaugePercent(1)).toBe('100%');
+    expect(gaugePercent(-0.1)).toBe('0%');
+    expect(gaugePercent(1.2)).toBe('100%');
+    expect(gaugePercent(Number.NaN)).toBe('0%');
+  });
+});
+
+describe('ownHealthPoints', () => {
+  test('V6: an integer from 0 to 100', () => {
+    expect(ownHealthPoints(64.4)).toBe(64);
+    expect(ownHealthPoints(100)).toBe(100);
+    expect(ownHealthPoints(130)).toBe(100);
+    expect(ownHealthPoints(-5)).toBe(0);
+    expect(ownHealthPoints(Number.NaN)).toBe(0);
   });
 });
