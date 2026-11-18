@@ -19,7 +19,7 @@ const RED_EARTH = 0xa65a3a;
 export const FAR_RAMP = 100;
 export const FAR_ROLL = 10;
 // Inside the tiles the far mesh lies this far under the corridor, hidden by the tile meshes and shown (lower) where they are not loaded.
-export const FAR_SUNK = 4;
+export const FAR_SUNK = 9;
 
 // Distance to the route's centre line and the route's ground height at the nearest point.
 export function routeDistance(course: BuiltCourse, x: number, z: number): { distance: number; y: number; smooth: number } {

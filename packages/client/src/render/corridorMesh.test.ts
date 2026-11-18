@@ -69,6 +69,7 @@ describe('tile meshes', () => {
       const [a, b, c] = [at(data.indices[t * 3]!), at(data.indices[t * 3 + 1]!), at(data.indices[t * 3 + 2]!)];
       const normal = new THREE.Triangle(a, b, c).getNormal(new THREE.Vector3());
       if (t < surfaceTriangles) expect(normal.y).toBeGreaterThan(0);
+      else if (normal.y > 0.5) continue; // the flange strip faces up
       else {
         expect(Math.abs(normal.y)).toBeLessThan(1e-6);
         const centre = new THREE.Vector3(tile.x0 + (tile.cols * tile.cell) / 2, 0, tile.z0 + (tile.rows * tile.cell) / 2);

@@ -50,7 +50,7 @@ export const STALL_ZONE: readonly [number, number] = [FAR_MIN + 1, 37];
 export const STALL_REACH = 24;
 export const ROADSIDE_ZONE: readonly [number, number] = [FAR_MIN + 0.5, 36];
 export const CLIFFS_ZONE: readonly [number, number] = [CORRIDOR_OUTER + 12, 210];
-export const MOUNTAINS_ZONE: readonly [number, number] = [280, 520];
+export const MOUNTAINS_ZONE: readonly [number, number] = [450, 800];
 // Rocks on the berms around obstacles: lateral band and how far past the berm they continue.
 export const BERM_ROCK_ZONE: readonly [number, number] = [33.5, 38.5];
 export const BERM_ROCK_REACH = CORRIDOR_BERM_MARGIN + CORRIDOR_BERM_FADE;
@@ -466,7 +466,7 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
           }
         }
         scatter(['decor.cliffs'], 0.8, CLIFFS_ZONE, [1.5, 3], 8, 0.3);
-        scatter(['decor.mountains'], 0.7, MOUNTAINS_ZONE, [3, 6], 40, 4);
+        scatter(['decor.mountains'], 0.5, MOUNTAINS_ZONE, [7, 12], 120, 8);
       }
     }
   }

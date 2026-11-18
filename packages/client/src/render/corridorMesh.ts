@@ -6,6 +6,8 @@ import { terrainShade } from './terrain';
 
 // Metres a tile's edge skirt hangs below its surface, so a crack to a missing neighbour or the far land shows no gap.
 export const SKIRT = 3;
+// A flat strip this wide past each tile edge overlaps the neighbour's, so no hairline crack shows between tiles.
+export const FLANGE = 0.15;
 const SAND = 0xd9b77a;
 const ROCK: readonly [number, number, number] = [0.55, 0.46, 0.4];
 const UPDATE_SECONDS = 0.25;
@@ -32,7 +34,7 @@ export function buildTileGeometry(course: BuiltCourse, corridor: Corridor, tile:
   const stride = tile.rows + 1;
   const surface = stride * (tile.cols + 1);
   const ring = 2 * (tile.cols + tile.rows);
-  const vertices = surface + ring;
+  const vertices = surface + 2 * ring;
   const positions = new Float32Array(vertices * 3);
   const normals = new Float32Array(vertices * 3);
   const uvs = new Float32Array(vertices * 2);
@@ -74,13 +76,18 @@ export function buildTileGeometry(course: BuiltCourse, corridor: Corridor, tile:
   for (let zi = tile.rows; zi > 0; zi--) edge.push(zi + 0 * stride);
   for (let k = 0; k < ring; k++) {
     const top = edge[k]!;
-    const low = surface + k;
-    positions.set([positions[top * 3]!, positions[top * 3 + 1]! - SKIRT, positions[top * 3 + 2]!], low * 3);
-    normals.set([normals[top * 3]!, normals[top * 3 + 1]!, normals[top * 3 + 2]!], low * 3);
-    uvs.set([uvs[top * 2]!, uvs[top * 2 + 1]!], low * 2);
-    colours.set([colours[top * 3]!, colours[top * 3 + 1]!, colours[top * 3 + 2]!], low * 3);
+    const xi = Math.floor(top / stride);
+    const zi = top % stride;
+    const outX = xi === 0 ? -1 : xi === tile.cols ? 1 : 0;
+    const outZ = zi === 0 ? -1 : zi === tile.rows ? 1 : 0;
+    for (const [slot, drop] of [[surface + k, 0], [surface + ring + k, SKIRT]] as const) {
+      positions.set([positions[top * 3]! + outX * FLANGE, positions[top * 3 + 1]! - drop, positions[top * 3 + 2]! + outZ * FLANGE], slot * 3);
+      normals.set([normals[top * 3]!, normals[top * 3 + 1]!, normals[top * 3 + 2]!], slot * 3);
+      uvs.set([uvs[top * 2]!, uvs[top * 2 + 1]!], slot * 2);
+      colours.set([colours[top * 3]!, colours[top * 3 + 1]!, colours[top * 3 + 2]!], slot * 3);
+    }
   }
-  const indices = new Uint16Array(tile.cols * tile.rows * 6 + ring * 6);
+  const indices = new Uint16Array(tile.cols * tile.rows * 6 + ring * 12);
   let n = 0;
   for (let xi = 0; xi < tile.cols; xi++) {
     for (let zi = 0; zi < tile.rows; zi++) {
@@ -97,10 +104,12 @@ export function buildTileGeometry(course: BuiltCourse, corridor: Corridor, tile:
     const next = (k + 1) % ring;
     const p = edge[k]!;
     const q = edge[next]!;
-    const lp = surface + k;
-    const lq = surface + next;
-    indices.set([p, q, lp, q, lq, lp], n);
-    n += 6;
+    const fp = surface + k;
+    const fq = surface + next;
+    const lp = surface + ring + k;
+    const lq = surface + ring + next;
+    indices.set([p, q, fp, q, fq, fp, fp, fq, lp, fq, lq, lp], n);
+    n += 12;
   }
   return { positions, normals, uvs, colours, indices, vertices };
 }
