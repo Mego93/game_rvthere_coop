@@ -66,6 +66,11 @@ const hazardOf = (i: number): string | undefined => {
   const s = def.segments[i]!;
   return s.type === 'road' ? s.hazards?.[0]?.kind : undefined;
 };
+// Mud and rocks have their own drive tests (marrakech.mud.drive.test.ts) and stay out of the sample.
+const sampledHazardOf = (i: number): string | undefined => {
+  const kind = hazardOf(i);
+  return kind === 'mud' || kind === 'rocks' ? undefined : kind;
+};
 
 // The curves the sample must hold: the sharpest (most yaw per metre) and the most stretched (length beyond the 10 degrees per 10 m rule).
 export function curveExtremes(): { sharpest: number; stretched: number; curves: number[] } {
@@ -84,7 +89,7 @@ const terrainIndexes = new Set([...groups.flatMap((g) => g.indexes), ...sectionI
 export function sampleSegments(): number[] {
   const { sharpest, stretched, curves } = curveExtremes();
   const spread = [0.25, 0.5, 0.75].map((f) => curves[Math.floor(f * curves.length)]!);
-  const hazards = def.segments.flatMap((_, i) => (hazardOf(i) ? [i] : []));
+  const hazards = def.segments.flatMap((_, i) => (sampledHazardOf(i) ? [i] : []));
   const all = [0, segmentCount - 1, ...MARRAKECH_INSERTED.filter((i) => !terrainIndexes.has(i)), ...sampledTerrain(), ...hazards, sharpest, stretched, ...spread];
   return [...new Set(all)].sort((a, b) => a - b);
 }

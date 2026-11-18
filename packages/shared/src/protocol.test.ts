@@ -821,6 +821,11 @@ describe('animals on the wire (T7)', () => {
     expect(oldParse(JSON.stringify({ type: 'event', kind: 'scooterHit', tick: 1 }))).toBeNull();
     expect(oldParse(JSON.stringify({ type: 'event', kind: 'impact', tick: 1 }))).not.toBeNull();
   });
+
+  test('T14: the out-of-bounds event parses and carries its player and position', () => {
+    const parsed = parseServerMessage(JSON.stringify({ type: 'event', kind: 'outOfBounds', tick: 5, playerId: 'p', pos: { x: 1, y: 2, z: 3 } }));
+    expect(parsed).toMatchObject({ type: 'event', kind: 'outOfBounds', playerId: 'p' });
+  });
 });
 
 describe('step 34: emotes, random weather, the tajine and the eat event', () => {

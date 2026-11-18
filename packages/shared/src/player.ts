@@ -138,6 +138,8 @@ export interface Players {
   restoreInventory(id: string, inventory: readonly (ItemKind | null)[]): void;
   // Rule S1.
   findSpawn(forId: string | null): Vec3;
+  // The feet for the ground under (x, z) found by a ray from `fromY`, or null if there is none or the capsule would overlap something.
+  standAt(x: number, z: number, fromY: number): Vec3 | null;
   // Where findSpawn falls back to when no slot is valid; the last checkpoint's spawn.
   setFallbackSpawn(pos: Vec3): void;
   findExit(seat: SeatConfig): Vec3 | null;
@@ -752,6 +754,12 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       for (let i = 0; i < state.inventory.length; i++) state.inventory[i] = inventory[i] ?? null;
     },
     findSpawn,
+    standAt(x, z, fromY) {
+      const groundY = groundBelow(x, z, fromY);
+      if (groundY === null) return null;
+      const feet = vec3(x, groundY + PLAYER_CONTROLLER_OFFSET, z);
+      return overlapsAnything(feet) ? null : feet;
+    },
     setFallbackSpawn(pos) {
       fallbackSpawn = vec3(pos.x, pos.y, pos.z);
     },

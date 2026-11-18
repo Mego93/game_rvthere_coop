@@ -64,6 +64,15 @@ describe('ambient spans (R2)', () => {
     expect(covers(blocked, r[8]!.from + 100, r[8]!.from + 100)).toBe(false);
   });
 
+  it('blocks around rocks but not around mud', () => {
+    const d = def(true, road(400), road(400, { hazards: [{ kind: 'rocks', along: 200, side: 1 }] }), road(400, { hazards: [{ kind: 'mud', along: 200, length: 16 }] }), road(400));
+    const blocked = buildCourse(d).ambient!.blocked;
+    const r = segmentRanges(d);
+    const [a, b] = hazardSpan({ kind: 'rocks', along: 200, side: 1 });
+    expect(covers(blocked, r[1]!.from + a - AMBIENT_MARGIN, r[1]!.from + b + AMBIENT_MARGIN)).toBe(true);
+    for (const along of [200, 208, 216]) expect(covers(blocked, r[2]!.from + along, r[2]!.from + along)).toBe(false);
+  });
+
   it('exports the hazard extent including prop depth', () => {
     const [a, b] = hazardSpan({ kind: 'gates', along: 100, count: 3 });
     expect(a).toBeLessThan(100);
@@ -79,6 +88,7 @@ describe('ambient spans (R2)', () => {
     d.segments.forEach((s, i) => {
       if (s.type !== 'road') return;
       for (const h of s.hazards ?? []) {
+        if (h.kind === 'mud') continue;
         if (h.kind === 'gates') gates++;
         const [a, b] = hazardSpan(h);
         expect(covers(blocked, r[i]!.from + a - AMBIENT_MARGIN, r[i]!.from + b + AMBIENT_MARGIN)).toBe(true);

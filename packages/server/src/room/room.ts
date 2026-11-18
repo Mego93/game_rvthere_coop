@@ -15,6 +15,7 @@ import {
   SNAPSHOT_EVERY_TICKS,
   TICK_DT,
   TICK_RATE,
+  corridorOf,
   createWorld,
   defaultAppearance,
   firstFreeCharacter,
@@ -164,6 +165,12 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   // Runs started in this room; a course restart keeps its number, so the item drop layout stays.
   let runNumber = 0;
   let emptySince: number | null = createdAt;
+  // The land beside the road of a course that has one is built when the room or its lobby picks the course, not at the first start.
+  const warm = (courseId: string) => {
+    const course = config.courses?.[courseId] ?? getCourse(courseId);
+    corridorOf(course);
+  };
+  warm(settings.courseId);
   // The first token to join is the creator's.
   let creatorToken: string | null = null;
   let joinedByOthers = false;
@@ -402,6 +409,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       const changed = settings.courseId !== next.courseId || settings.vehicleId !== next.vehicleId || settings.timeOfDay !== next.timeOfDay || settings.weather !== next.weather;
       if (!changed) return null;
       settings = { courseId: next.courseId, vehicleId: next.vehicleId, timeOfDay: next.timeOfDay, weather: next.weather };
+      warm(settings.courseId);
       broadcastLobby();
       return null;
     },

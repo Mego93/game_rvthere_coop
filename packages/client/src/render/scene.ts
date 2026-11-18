@@ -1,4 +1,4 @@
-import { ANCHOR_HEIGHT, ROAD_WIDTH, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type BuiltCourse, type ServiceStop, type Surface } from '@lodgy/shared';
+import { ANCHOR_HEIGHT, ROAD_WIDTH, ROCK_HALF, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type BuiltCourse, type ServiceStop, type Surface } from '@lodgy/shared';
 import * as THREE from 'three';
 import { fitted, hasModel, instantiate, shadowed, type FitSize } from './models';
 import { groupBySurface, mergeBoxes, toGeometry } from './groundMerge';
@@ -11,7 +11,11 @@ const SURFACE_COLOURS: Record<Surface, number> = {
   gravel: 0xa39a8c,
   riverbed: 0x7d8a8f,
   sand: 0xd9b77a,
+  mud: 0x4a3a2a,
 };
+
+// The riverbed texture darkened to the flat colour.
+const MUD_TINT = 0x4a3a2a;
 
 function boxMesh(box: Box, material: THREE.Material): THREE.Mesh {
   const mesh = new THREE.Mesh(
@@ -32,9 +36,11 @@ const ghost = (colour: number) =>
 function groundMaterial(surface: Surface, { lite = false, flat = false }: SceneOptions): THREE.MeshStandardMaterial {
   const set = SURFACE_TEXTURE[surface];
   const map = flat ? null : groundTexture(set, 'diffuse');
-  if (!map) return new THREE.MeshStandardMaterial({ color: SURFACE_COLOURS[surface], roughness: 1, metalness: 0 });
+  // Mud lies 1 cm above the road: the offset keeps it from z-fighting with the road far away.
+  const offset = surface === 'mud' ? { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 } : {};
+  if (!map) return new THREE.MeshStandardMaterial({ color: SURFACE_COLOURS[surface], roughness: 1, metalness: 0, ...offset });
   map.anisotropy = lite ? 1 : 4;
-  return new THREE.MeshStandardMaterial({ color: 0xffffff, map, normalMap: lite ? null : groundTexture(set, 'normal'), roughness: 1, metalness: 0 });
+  return new THREE.MeshStandardMaterial({ color: surface === 'mud' ? MUD_TINT : 0xffffff, map, normalMap: lite ? null : groundTexture(set, 'normal'), roughness: 1, metalness: 0, ...offset });
 }
 
 function mergedMesh(boxes: readonly Box[], material: THREE.Material, bottom: boolean): THREE.Mesh | null {
@@ -85,6 +91,11 @@ function stopScenery(stop: ServiceStop): THREE.Group | null {
   return group;
 }
 
+// The walls to draw: the walls beside obstacles on a corridor course (they start at `corridor.wallsFrom`) are invisible, the berms show them; a rock is drawn as its boulder.
+export function visibleWalls(course: BuiltCourse): readonly Box[] {
+  return (course.corridor ? course.walls.slice(0, course.corridor.wallsFrom) : course.walls).filter((box) => !box.rock);
+}
+
 export function createScene(course: BuiltCourse, options: SceneOptions = {}): THREE.Scene {
   const scene = new THREE.Scene();
   const groups = groupBySurface(course.ground);
@@ -92,7 +103,7 @@ export function createScene(course: BuiltCourse, options: SceneOptions = {}): TH
     const mesh = mergedMesh(groups[surface]!, groundMaterial(surface, options), false);
     if (mesh) scene.add(mesh);
   }
-  const walls = mergedMesh(course.walls, solid(0xc98a5a), true);
+  const walls = mergedMesh(visibleWalls(course), solid(0xc98a5a), true);
   if (walls) scene.add(walls);
   scene.add(createTerrainMesh(course, options));
   scene.add(...createSouleymanMeshes(souleymanPlacements(course.checkpoints)));
@@ -123,8 +134,12 @@ export function createScene(course: BuiltCourse, options: SceneOptions = {}): TH
     }
   }
 
+  const rocks = course.walls.filter((box) => box.rock);
   for (const anchor of course.anchors) {
-    const { x, y, z } = anchor.pose.pos;
+    // The anchor of a rock sits on its top (for the hook); the boulder is drawn on the ground.
+    const onRock = anchor.kind === 'boulder' && rocks.some((box) => Math.hypot(box.center.x - anchor.pose.pos.x, box.center.z - anchor.pose.pos.z) < 0.01);
+    const { x, z } = anchor.pose.pos;
+    const y = onRock ? anchor.pose.pos.y - 2 * ROCK_HALF.y : anchor.pose.pos.y;
     const quarter = new THREE.Quaternion(anchor.pose.rot.x, anchor.pose.rot.y, anchor.pose.rot.z, anchor.pose.rot.w);
     const yaw = new THREE.Euler().setFromQuaternion(quarter, 'YXZ').y;
     const modelled =

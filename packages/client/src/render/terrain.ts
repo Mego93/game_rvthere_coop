@@ -1,7 +1,9 @@
-import type { Box, BuiltCourse } from '@lodgy/shared';
+import { CORRIDOR_CELL, CORRIDOR_RELIEF, CORRIDOR_RIDGE_HEIGHT, CORRIDOR_TILE_CELLS, corridorHeightAt, corridorOf, corridorReliefAt, routeFrame, routeHeights, surfaceYAt, type BuiltCourse, type Corridor } from '@lodgy/shared';
 import * as THREE from 'three';
 import { nearestSegment } from './routeIndex';
 import { groundTexture, type SceneOptions } from './groundTextures';
+
+export { surfaceYAt };
 
 export const TERRAIN_CELL = 40;
 export const TERRAIN_MARGIN = 1000;
@@ -13,109 +15,24 @@ const FAR_DROP = 1.2;
 const FALL_PER_METRE = 0.004;
 const NEAR_ROUTE = 80;
 const RED_EARTH = 0xa65a3a;
-
-const EPS = 1e-9;
-const FROM_Y = 10000;
-
-const q = new THREE.Quaternion();
-const o = new THREE.Vector3();
-const d = new THREE.Vector3();
-const GROUND_CELL = 64;
-interface GroundIndex {
-  grid: Map<string, Box[]>;
-  // Boxes too large to register in every cell they cover; they are tested for every point.
-  big: Box[];
-}
-const groundGrids = new WeakMap<readonly Box[], GroundIndex>();
-const BIG_REACH = 1000;
-
-// The ground boxes whose bounding square can reach the point's grid cell.
-function groundNear(course: BuiltCourse, x: number, z: number): readonly Box[] {
-  let index = groundGrids.get(course.ground);
-  if (!index) {
-    index = { grid: new Map(), big: [] };
-    for (const box of course.ground) {
-      const h = box.halfExtents;
-      const reach = Math.hypot(h.x, h.y, h.z);
-      if (reach > BIG_REACH) {
-        index.big.push(box);
-        continue;
-      }
-      for (let i = Math.floor((box.center.x - reach) / GROUND_CELL); i <= Math.floor((box.center.x + reach) / GROUND_CELL); i++) {
-        for (let j = Math.floor((box.center.z - reach) / GROUND_CELL); j <= Math.floor((box.center.z + reach) / GROUND_CELL); j++) {
-          const key = `${i},${j}`;
-          const list = index.grid.get(key);
-          if (list) list.push(box);
-          else index.grid.set(key, [box]);
-        }
-      }
-    }
-    groundGrids.set(course.ground, index);
-  }
-  const near = index.grid.get(`${Math.floor(x / GROUND_CELL)},${Math.floor(z / GROUND_CELL)}`);
-  if (index.big.length === 0) return near ?? [];
-  return near ? [...near, ...index.big] : index.big;
-}
-
-// Height of the top of the highest ground box under (x, z), or null off the ground.
-export function surfaceYAt(course: BuiltCourse, x: number, z: number): number | null {
-  let best: number | null = null;
-  for (const box of groundNear(course, x, z)) {
-    const h = box.halfExtents;
-    const reach = Math.hypot(h.x, h.y, h.z);
-    if (Math.abs(x - box.center.x) > reach || Math.abs(z - box.center.z) > reach) continue;
-    q.set(-box.rot.x, -box.rot.y, -box.rot.z, box.rot.w);
-    o.set(x - box.center.x, FROM_Y - box.center.y, z - box.center.z).applyQuaternion(q);
-    d.set(0, -1, 0).applyQuaternion(q);
-    let tmin = 0;
-    let tmax = Infinity;
-    for (const axis of ['x', 'y', 'z'] as const) {
-      const half = h[axis] + (axis === 'y' ? 0 : EPS);
-      const da = d[axis];
-      const oa = o[axis];
-      if (Math.abs(da) < 1e-12) {
-        if (Math.abs(oa) > half) {
-          tmax = -1;
-          break;
-        }
-      } else {
-        const t1 = (-half - oa) / da;
-        const t2 = (half - oa) / da;
-        tmin = Math.max(tmin, Math.min(t1, t2));
-        tmax = Math.min(tmax, Math.max(t1, t2));
-      }
-    }
-    if (tmax >= tmin && (best === null || FROM_Y - tmin > best)) best = FROM_Y - tmin;
-  }
-  return best;
-}
-
-const heightCache = new WeakMap<BuiltCourse, number[]>();
-
-// The ground-top height at each route point, computed once; a point off the ground takes its neighbour's.
-function routeHeights(course: BuiltCourse): number[] {
-  let heights = heightCache.get(course);
-  if (heights) return heights;
-  const raw = course.route.map(([x, z]) => surfaceYAt(course, x, z));
-  heights = raw.map((height, i) => {
-    if (height !== null) return height;
-    for (let step = 1; step < raw.length; step++) {
-      const near = raw[i - step] ?? raw[i + step];
-      if (near !== undefined && near !== null) return near;
-    }
-    return 0;
-  });
-  heightCache.set(course, heights);
-  return heights;
-}
+// Beyond the tile set the land keeps the ridge-top height and rolls down gently over FAR_RAMP m; it never rises above the ridge top.
+export const FAR_RAMP = 100;
+export const FAR_ROLL = 10;
+// Inside the tiles the far mesh lies under the corridor, hidden by the tile meshes and shown (lower) where they are not loaded: FAR_SUNK_EDGE m under it at the tile set's boundary, deepening to FAR_SUNK_DEEP m under the lowest corridor within FAR_SUNK_REACH m, once that far inside.
+export const FAR_SUNK_EDGE = 0.5;
+export const FAR_SUNK_DEEP = 2;
+export const FAR_SUNK_REACH = 40;
+const FAR_SUNK_STEP = 10;
+export const FAR_OUTSIDE_SINK = 5;
 
 // Distance to the route's centre line and the route's ground height at the nearest point.
-export function routeDistance(course: BuiltCourse, x: number, z: number): { distance: number; y: number } {
+export function routeDistance(course: BuiltCourse, x: number, z: number): { distance: number; y: number; smooth: number } {
   const heights = routeHeights(course);
   const route = course.route;
   let best = Infinity;
   let y = heights[0] ?? 0;
-  if (route.length === 1) return { distance: Math.hypot(x - route[0]![0], z - route[0]![1]), y };
+  let tAt = 0;
+  if (route.length === 1) return { distance: Math.hypot(x - route[0]![0], z - route[0]![1]), y, smooth: y };
   const along = (i: number) => {
     const x0 = route[i]![0];
     const z0 = route[i]![1];
@@ -132,8 +49,11 @@ export function routeDistance(course: BuiltCourse, x: number, z: number): { dist
     const hit = along(i);
     best = hit.squared;
     y = heights[i]! + (heights[i + 1]! - heights[i]!) * hit.t;
+    tAt = hit.t;
   }
-  return { distance: Math.sqrt(best), y };
+  // The smoothed route height is only needed by corridor courses.
+  const smooth = course.corridor && i >= 0 ? routeFrame(course).smoothedAt({ i, t: tAt }) : y;
+  return { distance: Math.sqrt(best), y, smooth };
 }
 
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
@@ -145,10 +65,126 @@ function drop(distance: number): number {
   return FAR_DROP + FALL_PER_METRE * (distance - ESCARPMENT_END);
 }
 
-// Visual only: the terrain hides under the collision shoulders, then falls away as an escarpment.
+const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
+
+// The ridge top at (x, z): the smoothed route height plus the relief there plus the ridge.
+export function ridgeTopAt(course: BuiltCourse, x: number, z: number, smooth: number): number {
+  return smooth + corridorReliefAt(course.id, x, z) + CORRIDOR_RIDGE_HEIGHT;
+}
+
+const TILE_SIZE = CORRIDOR_TILE_CELLS * CORRIDOR_CELL;
+
+// Distance from (x, z) to the nearest tile of the corridor, FAR_RAMP and more when none is within a tile's reach.
+function tileGap(corridor: Corridor, x: number, z: number): number {
+  const ix = Math.floor(x / TILE_SIZE);
+  const iz = Math.floor(z / TILE_SIZE);
+  let best = FAR_RAMP;
+  for (let i = ix - 1; i <= ix + 1; i++) {
+    for (let j = iz - 1; j <= iz + 1; j++) {
+      const tile = corridor.index.get((i + 32768) * 65536 + (j + 32768));
+      if (!tile) continue;
+      best = Math.min(best, Math.hypot(Math.max(tile.x0 - x, 0, x - tile.x0 - TILE_SIZE), Math.max(tile.z0 - z, 0, z - tile.z0 - TILE_SIZE)));
+    }
+  }
+  return best;
+}
+
+// Corridor courses: the land beyond the tiles, the ridge top rolling lower by up to FAR_ROLL m over the FAR_RAMP m beyond the tile set (never higher).
+export function farLandHeight(course: BuiltCourse, corridor: Corridor, x: number, z: number, smooth: number): number {
+  const wave = Math.max(-1, Math.min(1, corridorReliefAt(course.id, x * 0.35 + 7000, z * 0.35 - 5000) / CORRIDOR_RELIEF));
+  const gap = tileGap(corridor, x, z);
+  // Just outside the tile set the land dips by up to FAR_OUTSIDE_SINK m, fading over FAR_SUNK_REACH m, so it stays under the corridor's relief where cells straddle the boundary.
+  const dip = FAR_OUTSIDE_SINK * (1 - smoothstep(clamp01(gap / FAR_SUNK_REACH)));
+  return ridgeTopAt(course, x, z, smooth) + (FAR_ROLL * (wave - 1)) / 2 * smoothstep(clamp01(gap / FAR_RAMP)) - dip;
+}
+
+function sunkHeight(corridor: Corridor, x: number, z: number, base: number): number {
+  const seen: { reach: number; h: number }[] = [];
+  let inside = FAR_SUNK_REACH;
+  for (let dx = -FAR_SUNK_REACH; dx <= FAR_SUNK_REACH; dx += FAR_SUNK_STEP) {
+    for (let dz = -FAR_SUNK_REACH; dz <= FAR_SUNK_REACH; dz += FAR_SUNK_STEP) {
+      if (dx === 0 && dz === 0) continue;
+      const reach = Math.hypot(dx, dz);
+      const h = corridorHeightAt(corridor, x + dx, z + dz);
+      if (h === null) inside = Math.min(inside, reach);
+      else seen.push({ reach, h });
+    }
+  }
+  const t = smoothstep(inside / FAR_SUNK_REACH);
+  // The lowest corridor within a window that grows from one step at the boundary to the whole neighbourhood once FAR_SUNK_REACH m inside.
+  const window = FAR_SUNK_STEP * 1.5 + (FAR_SUNK_REACH * 1.5 - FAR_SUNK_STEP * 1.5) * t;
+  let lowest = base;
+  for (const sample of seen) if (sample.reach <= window) lowest = Math.min(lowest, sample.h);
+  return lowest - (FAR_SUNK_EDGE + (FAR_SUNK_DEEP - FAR_SUNK_EDGE) * t);
+}
+
+// Visual only. Other courses: the terrain hides under the collision shoulders, then falls away as an escarpment. Corridor courses: the far land, sunk under the tiles.
 export function terrainHeight(course: BuiltCourse, x: number, z: number): number {
-  const { distance, y } = routeDistance(course, x, z);
-  return y - drop(distance);
+  const { distance, y, smooth } = routeDistance(course, x, z);
+  const corridor = corridorOf(course);
+  if (!corridor) return y - drop(distance);
+  const tile = corridorHeightAt(corridor, x, z);
+  return tile !== null ? sunkHeight(corridor, x, z, tile) : farLandHeight(course, corridor, x, z, smooth);
+}
+
+interface GridShape {
+  minX: number;
+  minZ: number;
+  cols: number;
+  rows: number;
+}
+const shapes = new WeakMap<BuiltCourse, GridShape>();
+const vertexHeights = new WeakMap<BuiltCourse, Map<number, number>>();
+
+function gridShape(course: BuiltCourse): GridShape {
+  let shape = shapes.get(course);
+  if (!shape) {
+    const xs = course.route.map((p) => p[0]);
+    const zs = course.route.map((p) => p[1]);
+    const minX = Math.min(...xs) - TERRAIN_MARGIN;
+    const minZ = Math.min(...zs) - TERRAIN_MARGIN;
+    shape = { minX, minZ, cols: Math.ceil((Math.max(...xs) + TERRAIN_MARGIN - minX) / TERRAIN_CELL), rows: Math.ceil((Math.max(...zs) + TERRAIN_MARGIN - minZ) / TERRAIN_CELL) };
+    shapes.set(course, shape);
+  }
+  return shape;
+}
+
+// The far mesh's vertex (i, j) of a corridor course, remembered.
+function farVertex(course: BuiltCourse, i: number, j: number): number {
+  const { minX, minZ, cols } = gridShape(course);
+  let cache = vertexHeights.get(course);
+  if (!cache) {
+    cache = new Map();
+    vertexHeights.set(course, cache);
+  }
+  const key = j * (cols + 1) + i;
+  let h = cache.get(key);
+  if (h === undefined) {
+    h = terrainHeight(course, minX + i * TERRAIN_CELL, minZ + j * TERRAIN_CELL);
+    cache.set(key, h);
+  }
+  return h;
+}
+
+// The far mesh's own surface at (x, z) on a corridor course: its cells split along the (0,0)-(1,1) diagonal.
+export function farMeshHeight(course: BuiltCourse, x: number, z: number): number {
+  const { minX, minZ, cols, rows } = gridShape(course);
+  const fx = (x - minX) / TERRAIN_CELL;
+  const fz = (z - minZ) / TERRAIN_CELL;
+  const i = Math.max(0, Math.min(cols - 1, Math.floor(fx)));
+  const j = Math.max(0, Math.min(rows - 1, Math.floor(fz)));
+  const u = fx - i;
+  const v = fz - j;
+  const h00 = farVertex(course, i, j);
+  const h11 = farVertex(course, i + 1, j + 1);
+  return u >= v ? h00 + (farVertex(course, i + 1, j) - h00) * u + (h11 - farVertex(course, i + 1, j)) * v : h00 + (h11 - farVertex(course, i, j + 1)) * u + (farVertex(course, i, j + 1) - h00) * v;
+}
+
+// The ground the decor stands on: the shared corridor where there is one, else the far mesh as drawn.
+export function landHeight(course: BuiltCourse, x: number, z: number): number {
+  const corridor = corridorOf(course);
+  if (!corridor) return terrainHeight(course, x, z);
+  return corridorHeightAt(corridor, x, z) ?? farMeshHeight(course, x, z);
 }
 
 // A slow, deterministic brightness swing so the 8 m texture does not read as stripes from afar.
@@ -182,22 +218,21 @@ export interface TerrainGrid {
 }
 
 export function buildTerrainGrid(course: BuiltCourse): TerrainGrid {
-  const xs = course.route.map((p) => p[0]);
-  const zs = course.route.map((p) => p[1]);
-  const minX = Math.min(...xs) - TERRAIN_MARGIN;
-  const minZ = Math.min(...zs) - TERRAIN_MARGIN;
-  const cols = Math.ceil((Math.max(...xs) + TERRAIN_MARGIN - minX) / TERRAIN_CELL);
-  const rows = Math.ceil((Math.max(...zs) + TERRAIN_MARGIN - minZ) / TERRAIN_CELL);
+  const { minX, minZ, cols, rows } = gridShape(course);
   const positions = new Float32Array((cols + 1) * (rows + 1) * 3);
   const uvs = new Float32Array((cols + 1) * (rows + 1) * 2);
   const shades = new Float32Array((cols + 1) * (rows + 1) * 3);
   const normals = new Float32Array((cols + 1) * (rows + 1) * 3);
   const heights = new Float32Array((cols + 1) * (rows + 1));
   const distances = new Float32Array((cols + 1) * (rows + 1));
+  const corridor = corridorOf(course);
   for (let j = 0; j <= rows; j++) {
     for (let i = 0; i <= cols; i++) {
-      const { distance, y } = routeDistance(course, minX + i * TERRAIN_CELL, minZ + j * TERRAIN_CELL);
-      heights[j * (cols + 1) + i] = y - drop(distance);
+      const x = minX + i * TERRAIN_CELL;
+      const z = minZ + j * TERRAIN_CELL;
+      const { distance, y } = routeDistance(course, x, z);
+      if (corridor) heights[j * (cols + 1) + i] = farVertex(course, i, j);
+      else heights[j * (cols + 1) + i] = y - drop(distance);
       distances[j * (cols + 1) + i] = distance;
     }
   }
@@ -208,7 +243,7 @@ export function buildTerrainGrid(course: BuiltCourse): TerrainGrid {
       const at = j * (cols + 1) + i;
       // Linear cells over a curved road would poke through it: near the route each vertex takes its neighbours' lowest height.
       let y = heights[at]!;
-      if (distances[at]! < NEAR_ROUTE) {
+      if (!corridor && distances[at]! < NEAR_ROUTE) {
         for (let dj = Math.max(0, j - 1); dj <= Math.min(rows, j + 1); dj++) {
           for (let di = Math.max(0, i - 1); di <= Math.min(cols, i + 1); di++) y = Math.min(y, heights[dj * (cols + 1) + di]!);
         }

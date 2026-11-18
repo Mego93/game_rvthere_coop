@@ -77,7 +77,7 @@ export const REPORT_INTERVAL = 10;
 // Seconds the server waits for a peer to answer a close frame before dropping the socket.
 export const SOCKET_CLOSE_TIMEOUT = 1;
 
-export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel';
+export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel' | 'mud';
 
 // grip multiplies the vehicle's tyre grip; rolling is resistance as a fraction of the vehicle's weight.
 export const SURFACES: Record<Surface, { grip: number; rolling: number }> = deepFreeze({
@@ -85,6 +85,7 @@ export const SURFACES: Record<Surface, { grip: number; rolling: number }> = deep
   gravel: { grip: 0.8, rolling: 0.05 },
   riverbed: { grip: 0.7, rolling: 0.15 },
   sand: { grip: 0.6, rolling: 0.15 },
+  mud: { grip: 0.55, rolling: 0.22 },
 });
 
 export const REFERENCE_SLOPES_DEG = deepFreeze({ gentle: 8, medium: 15, steep: 25 } as const);
@@ -462,6 +463,19 @@ export const HAZARD_MIN_GAP = 20;
 export const HAZARD_DEBRIS_GAP = 10;
 // m of lateral centre of the three crates across the right half of the lane, each a crate width plus 0.02 apart.
 export const CRATE_WALL_LATERALS: readonly number[] = Object.freeze([0, 1, 2].map((i) => 2.0 + i * (2 * PROP_KINDS.crate.halfExtents.x + 0.02)));
+// m, the shortest and longest mud patch (a ground box over the road and both shoulders, `STOP_PAD_LIFT` above the road top).
+export const MUD_MIN_LENGTH = 12;
+export const MUD_MAX_LENGTH = 20;
+// Half extents of one rock of a rocks hazard (the drawn boulder); each is a wall box.
+export const ROCK_HALF: Vec3 = deepFreeze(vec3(0.8, 0.6, 0.7));
+// m from the centre line to the inner and outer rock, on the hazard's side.
+export const ROCK_LATERALS: readonly number[] = Object.freeze([2.5, 4.2]);
+// m along the road between the two rocks.
+export const ROCK_SPACING = 3;
+// m, the least a mud patch or rocks group sits from a stop pad.
+export const STOP_HAZARD_CLEAR = 30;
+// m, the least a rocks group sits from a mud patch.
+export const ROCK_CLEAR = 40;
 // m, lateral offset of the outer barriers of a roadblock row (barriers at -3, 0, 3).
 export const ROADBLOCK_LATERAL = 3;
 
@@ -533,3 +547,55 @@ export const ANIMAL_PROBE_UP = 20;
 export const ANIMAL_PROBE_LENGTH = 60;
 // m, peak height of the hop a hit animal makes while it lingers.
 export const ANIMAL_KNOCK_HOP = 0.4;
+
+// Corridor: the solid, uneven land beside the road. `d` is the horizontal distance to the route.
+// m, the solid terrain starts 1 m under the shoulder edge.
+export const CORRIDOR_INNER = 29;
+// m, the relief ramps in from the shoulder edge zone to here.
+export const CORRIDOR_BLEND_START = 34;
+export const CORRIDOR_BLEND_END = 40;
+// m, the largest relief height, reached at CORRIDOR_RELIEF_FULL.
+export const CORRIDOR_RELIEF = 5;
+export const CORRIDOR_RELIEF_FULL = 60;
+export const CORRIDOR_RIDGE_START = 100;
+export const CORRIDOR_RIDGE_END = 116;
+export const CORRIDOR_RIDGE_HEIGHT = 16;
+// m, the solid terrain ends here for gameplay; the tiles go on to CORRIDOR_LAND_END at the ridge-top height.
+export const CORRIDOR_OUTER = 124;
+// m, beyond this a player or the vehicle is out of bounds.
+export const OUT_OF_BOUNDS = 126;
+export const CORRIDOR_LAND_END = OUT_OF_BOUNDS + 4;
+export const CORRIDOR_CELL = 4;
+export const CORRIDOR_TILE_CELLS = 32;
+// m, half the window of the smoothed route height used as the terrain base.
+export const CORRIDOR_SMOOTH = 60;
+// m under the route height beside the road, so the shoulder always wins the wheel ray.
+export const CORRIDOR_UNDER = 0.05;
+// Relief lattice spacings (m) and weights; the weights sum to 1.
+export const CORRIDOR_NOISE = deepFreeze([
+  { spacing: 70, weight: 0.7 },
+  { spacing: 22, weight: 0.3 },
+] as const);
+// Scales the noise; with the 70 m and 22 m lattices the full relief keeps the steepest sampled slope under 20 degrees.
+export const CORRIDOR_NOISE_SCALE = 1;
+// m, vertices out to here take the under-the-road height, so a point on the shoulder edge never interpolates up to a raised vertex (a cell corner is at most a cell diagonal away).
+export const CORRIDOR_UNDER_UNTIL = 30 + CORRIDOR_CELL * Math.SQRT2 + 0.1;
+// Berm around an obstacle (a visual embankment; the wall below is what stops walkers): it rises between these distances, stands CORRIDOR_BERM_HEIGHT above the road top, and falls back by CORRIDOR_BLEND_END.
+export const CORRIDOR_BERM_START = CORRIDOR_UNDER_UNTIL;
+export const CORRIDOR_BERM_CREST_START = CORRIDOR_BERM_START + 1.5;
+export const CORRIDOR_BERM_CREST_END = 38.5;
+export const CORRIDOR_BERM_HEIGHT = 3;
+// m along the route each side of an obstacle's span at full height, then the same again fading out.
+export const CORRIDOR_BERM_MARGIN = 20;
+export const CORRIDOR_BERM_FADE = 20;
+// m to the side of the route a player lands at when brought back from out of bounds, from the road edge.
+export const CORRIDOR_OOB_LANDING_OFFSET = ROAD_WIDTH / 2 + 8;
+// m, a landing this close to a stop's zone goes to the vehicle instead.
+export const CORRIDOR_OOB_STOP_CLEAR = 10;
+// m above the route height the landing probe starts.
+export const CORRIDOR_OOB_PROBE_UP = 3;
+// Wall beside the road along each obstacle span (plus the berm margin), both sides: lateral centre, thickness and height above the road, and the piece length along the route.
+export const OBSTACLE_WALL_LATERAL = 31.5;
+export const OBSTACLE_WALL_THICKNESS = 1;
+export const OBSTACLE_WALL_HEIGHT = 8;
+export const OBSTACLE_WALL_PIECE = 4;

@@ -1,6 +1,6 @@
-import { rotate, segmentRanges, type BuiltCourse, type Box, type CourseDef, type Placed, type SegmentDef } from '@lodgy/shared';
+import { CORRIDOR_BERM_FADE, CORRIDOR_BERM_MARGIN, CORRIDOR_OUTER, corridorOf, rotate, routeFrame, segmentRanges, type BuiltCourse, type Box, type CourseDef, type Placed, type SegmentDef } from '@lodgy/shared';
 import { MODEL_MANIFEST, type ModelKey } from './modelManifest';
-import { routeDistance, surfaceYAt, terrainHeight } from './terrain';
+import { landHeight, routeDistance, surfaceYAt, terrainHeight } from './terrain';
 
 export interface DecorPlacement {
   model: ModelKey;
@@ -23,6 +23,8 @@ const FAR_MIN = 31;
 const STOP_MARGIN = 3;
 const OBJECT_CLEARANCE = 3;
 const WATER_MARGIN = 2;
+const MUD_MARGIN = 1;
+const WALL_MARGIN = 1;
 const LIGHT_OFFSET = 7;
 const BUILDING_MAX = 45;
 // Near items are the only decor a vehicle drives over: nothing taller than this (metres, longest side).
@@ -35,6 +37,24 @@ const HILL_RISE: readonly [number, number] = [8, 20];
 // Height of each cliff model relative to its longest side.
 const CLIFF_HEIGHT: Partial<Record<ModelKey, number>> = { 'decor.cliff.half': 0.5, 'decor.cliff.corner': 1 };
 const SIGNATURE_MIN = 2;
+// Corridor courses (step 32): the land beside the road is drawn from the shared heights; the hills move out beyond the ridge.
+// Share of the table's scrub density the band adds beyond the shoulders.
+export const BAND_SHRUBS = 0.12;
+export const HILL_BEYOND = CORRIDOR_OUTER + 10;
+export const BAND: readonly [number, number] = [FAR_MIN + 3, CORRIDOR_OUTER];
+// Step 33 decor on corridor courses (distances from the centre line, metres).
+export const VILLAGE_SPACING: readonly [number, number] = [1500, 2300];
+export const VILLAGE_HALF = 120;
+export const KASBAH_ZONE: readonly [number, number] = [48, 84];
+export const MOSQUE_ZONE: readonly [number, number] = [50, 95];
+export const STALL_ZONE: readonly [number, number] = [32.6, 37];
+export const STALL_REACH = 24;
+export const ROADSIDE_ZONE: readonly [number, number] = [32.6, 36];
+export const CLIFFS_ZONE: readonly [number, number] = [CORRIDOR_OUTER + 12, 210];
+export const MOUNTAINS_ZONE: readonly [number, number] = [450, 800];
+// Rocks on the berms around obstacles: lateral band and how far past the berm they continue.
+export const BERM_ROCK_ZONE: readonly [number, number] = [33.5, 38.5];
+export const BERM_ROCK_REACH = CORRIDOR_BERM_MARGIN + CORRIDOR_BERM_FADE;
 
 // Per 100 m of route per side; lights and poles alternate, 2 each = one structure per 25 m.
 export const DECOR_DENSITY = {
@@ -147,6 +167,7 @@ function localBox(box: Box, x: number, z: number): { x: number; z: number } {
 
 export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: number, options: ScatterOptions = {}): DecorPlacement[] {
   if (!def || course.route.length < 2) return [];
+  const corridor = corridorOf(course);
   const rng = prng(seed);
   const between = (a: number, b: number) => a + (b - a) * rng();
 
@@ -186,6 +207,25 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
 
   const blockers: { x: number; z: number }[] = [...course.props, ...course.pickups, ...course.anchors, ...course.coins].map((p: Placed) => ({ x: p.pose.pos.x, z: p.pose.pos.z }));
   const water = course.decor.filter((d) => d.kind === 'water' && d.size).map((d): Box => ({ center: d.pose.pos, halfExtents: d.size!, rot: d.pose.rot }));
+
+  // Mud patches (decor stays 1 m clear of them) and the hidden obstacle walls (1 m clear), the walls bucketed by 32 m cells.
+  const mud = course.ground.filter((g) => g.surface === 'mud');
+  const WALL_CELL = 32;
+  const wallCells = new Map<string, Box[]>();
+  for (const box of course.corridor ? course.walls.slice(course.corridor.wallsFrom) : []) {
+    const reach = Math.hypot(box.halfExtents.x, box.halfExtents.z) + 1;
+    for (let i = Math.floor((box.center.x - reach) / WALL_CELL); i <= Math.floor((box.center.x + reach) / WALL_CELL); i++) {
+      for (let j = Math.floor((box.center.z - reach) / WALL_CELL); j <= Math.floor((box.center.z + reach) / WALL_CELL); j++) {
+        const list = wallCells.get(`${i},${j}`);
+        if (list) list.push(box);
+        else wallCells.set(`${i},${j}`, [box]);
+      }
+    }
+  }
+  const inBox = (box: Box, x: number, z: number, margin: number): boolean => {
+    const local = localBox(box, x, z);
+    return Math.abs(local.x) <= box.halfExtents.x + margin && Math.abs(local.z) <= box.halfExtents.z + margin;
+  };
 
   const out: DecorPlacement[] = [];
   const taken: { x: number; z: number; r: number }[] = [];
@@ -233,9 +273,12 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
       const local = localBox(w, x, z);
       if (Math.abs(local.x) <= w.halfExtents.x + WATER_MARGIN && Math.abs(local.z) <= w.halfExtents.z + WATER_MARGIN) return false;
     }
+    for (const box of mud) if (inBox(box, x, z, MUD_MARGIN)) return false;
+    for (const box of wallCells.get(`${Math.floor(x / WALL_CELL)},${Math.floor(z / WALL_CELL)}`) ?? []) if (inBox(box, x, z, WALL_MARGIN)) return false;
     if (crowded(x, z, radius)) return false;
     const near = distance <= NEAR_MAX;
-    const y = near ? (surfaceYAt(course, x, z) ?? terrainHeight(course, x, z)) : terrainHeight(course, x, z);
+    const ground = corridor ? landHeight(course, x, z) : terrainHeight(course, x, z);
+    const y = near ? (surfaceYAt(course, x, z) ?? ground) : ground;
     out.push({ model: key, x, y, z, yaw, scale });
     claim(x, z, radius);
     return true;
@@ -291,6 +334,11 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
             low = Math.max(HILL_MIN, half + HILL_CLEARANCE);
             high = Math.max(low, HILL_MAX);
             reach = [low - 5, Infinity];
+            if (corridor) {
+              low = HILL_BEYOND + half;
+              high = low + HILL_MAX - HILL_MIN;
+              reach = [HILL_BEYOND, Infinity];
+            }
             radius = half * 0.8;
           }
           const p = at(along, between(low, high));
@@ -336,5 +384,111 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
       }
     }
   }
+  if (corridor) scatterCorridor();
   return out;
+
+  // The step 32 and 33 decor of a corridor course, from its own random stream so the rest of the scatter is unchanged.
+  function scatterCorridor() {
+    const rc = prng((seed ^ 0x5bd1e995) >>> 0);
+    const betweenC = (a: number, b: number) => a + (b - a) * rc();
+    const pickC = (list: readonly ModelKey[]) => list[Math.floor(rc() * list.length)]!;
+    const countC = (expected: number) => Math.floor(expected + rc());
+    const side = [-1, 1] as const;
+    const spot = (along: number, lateral: number, s: number) => {
+      const f = frameAt(Math.min(total, Math.max(0, along)));
+      return { x: f.x - f.tz * lateral * s, z: f.z + f.tx * lateral * s, f };
+    };
+    const face = (f: Frame, s: number) => Math.atan2(f.tz * s, -f.tx * s);
+    const sink = (placed: boolean, amount: number) => {
+      if (placed) out[out.length - 1]!.y -= amount;
+    };
+    // Plain road, with neighbouring road segments joined into one run.
+    const roadZones: { from: number; to: number }[] = [];
+    for (const z of zones) {
+      if (z.type !== 'road' || z.city) continue;
+      const last = roadZones[roadZones.length - 1];
+      if (last && z.from <= last.to + 0.5) last.to = z.to;
+      else roadZones.push({ from: z.from, to: z.to });
+    }
+    const cityZones = zones.filter((z) => z.city);
+
+    // Villages: clusters of kasbahs and a mosque on the plain road, and in the city stretch.
+    const village = (from: number, to: number, mosques: number, kasbahs: number) => {
+      for (let m = 0; m < mosques; m++) {
+        const s = side[Math.floor(rc() * 2)]!;
+        const p = spot(betweenC(from, to), betweenC(MOSQUE_ZONE[0], MOSQUE_ZONE[1]), s);
+        sink(place('decor.mosque', p.x, p.z, face(p.f, s) + (rc() - 0.5) * 0.4, betweenC(0.8, 1.1), [FAR_MIN, Infinity], 17), 1);
+      }
+      for (const s of side) {
+        for (let k = 0; k < kasbahs; k++) {
+          const p = spot(betweenC(from, to), betweenC(KASBAH_ZONE[0], KASBAH_ZONE[1]), s);
+          sink(place('decor.kasbah', p.x, p.z, face(p.f, s) + (rc() - 0.5) * 0.6, betweenC(0.8, 1.25), [FAR_MIN, Infinity], 14), 1);
+        }
+      }
+    };
+    let along = betweenC(800, 1400);
+    while (along < total) {
+      const zone = roadZones.find((z) => along - VILLAGE_HALF >= z.from && along + VILLAGE_HALF <= z.to);
+      if (zone) {
+        village(along - VILLAGE_HALF, along + VILLAGE_HALF, 1, 2 + Math.floor(rc() * 2));
+        along += betweenC(VILLAGE_SPACING[0], VILLAGE_SPACING[1]);
+      } else along += 150;
+    }
+    for (const zone of cityZones) village(zone.from, zone.to, 2, 2);
+
+    // Stalls near each fuel stop, on its side of the road, behind the shoulders.
+    const frame = routeFrame(course);
+    for (const stop of course.stops) {
+      if (stop.kind !== 'fuel') continue;
+      const hit = frame.nearest(stop.operatePoint.x, stop.operatePoint.z);
+      const f = frameAt(hit.along);
+      const s = Math.sign(-f.tz * (stop.operatePoint.x - f.x) + f.tx * (stop.operatePoint.z - f.z)) || 1;
+      for (const offset of [-STALL_REACH, -STALL_REACH / 2.5, STALL_REACH / 2.5, STALL_REACH]) {
+        const p = spot(hit.along + offset + betweenC(-2, 2), betweenC(STALL_ZONE[0], STALL_ZONE[1]), s);
+        place('decor.stall', p.x, p.z, face(p.f, s) + (rc() - 0.5) * 0.5, betweenC(0.9, 1.2), [FAR_MIN, Infinity], 2.6);
+      }
+    }
+
+    // Rocks on the berms beside each obstacle.
+    for (const span of course.corridor!.obstacles) {
+      for (let a = Math.max(0, span.from - BERM_ROCK_REACH); a <= Math.min(total, span.to + BERM_ROCK_REACH); a += 5) {
+        for (const s of side) {
+          if (rc() > 0.75) continue;
+          const p = spot(a + betweenC(-2, 2), betweenC(BERM_ROCK_ZONE[0], BERM_ROCK_ZONE[1]), s);
+          place(pickC(MODELS.rocks), p.x, p.z, rc() * Math.PI * 2, betweenC(0.9, 1.7), [FAR_MIN, Infinity], 1.6);
+        }
+      }
+    }
+
+    // Per zone and side: the corridor band's own shrubs, rocks, palms and cacti (the table's density again, doubling the decor beyond the shoulders), agaves and tyres by the road edge, cliffs and mountains beyond the ridge.
+    for (const zone of zones) {
+      const table: Density = zone.city ? DECOR_DENSITY.city : (DECOR_DENSITY[zone.type as keyof typeof DECOR_DENSITY] ?? DECOR_DENSITY.road);
+      const length = zone.to - zone.from;
+      for (const s of side) {
+        const scatter = (keys: readonly ModelKey[], density: number, zoneLateral: readonly [number, number], scale: readonly [number, number], radius: number, sunk = 0) => {
+          for (let i = countC((density * length) / 100); i > 0; i--) {
+            const p = spot(betweenC(zone.from, zone.to), betweenC(zoneLateral[0], zoneLateral[1]), s);
+            sink(place(pickC(keys), p.x, p.z, rc() * Math.PI * 2, betweenC(scale[0], scale[1]), [zoneLateral[0] - 0.5, Infinity], radius), sunk);
+          }
+        };
+        scatter(MODELS.rocks, table.rocks ?? 0, [BAND[0], 130], [0.8, 1.8], 2);
+        scatter(MODELS.palms, table.palms ?? 0, [BAND[0], 110], [0.85, 1.25], 2.2);
+        scatter(MODELS.cactus, table.cactus ?? 0, [BAND[0], 90], [0.8, 1.3], 1);
+        scatter(MODELS.scrub, (table.scrub ?? 0) * BAND_SHRUBS, BAND, [0.9, 1.8], 1);
+        if (!zone.city) {
+          scatter(['decor.agave'], 0.8, ROADSIDE_ZONE, [0.9, 1.4], 0.8);
+          for (let i = countC((0.35 * length) / 100); i > 0; i--) {
+            const base = betweenC(zone.from, zone.to);
+            const lateral = betweenC(ROADSIDE_ZONE[0], ROADSIDE_ZONE[1] - 1);
+            for (let k = 0, stack = 1 + Math.floor(rc() * 3); k < stack; k++) {
+              const p = spot(base + k * 1.1, lateral + (rc() - 0.5) * 0.4, s);
+              place('decor.tyres', p.x, p.z, rc() * Math.PI * 2, betweenC(0.9, 1.2), [FAR_MIN, Infinity], 0.5);
+            }
+          }
+        }
+        scatter(['decor.cliffs'], 0.8, CLIFFS_ZONE, [1.5, 3], 8, 0.3);
+        scatter(['decor.mountains'], 0.5, MOUNTAINS_ZONE, [7, 12], 120, 8);
+      }
+    }
+  }
 }

@@ -46,6 +46,8 @@ import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMes
 import { applyConditions, conditionsLook, configureRenderer, toneMappedColour, type Look } from './render/conditions';
 import { createWeatherTracker } from './render/weatherTracker';
 import { applySky, hasSky, prewarmEnvironment } from './render/environment';
+import { createCorridorTerrain } from './render/corridorMesh';
+import { DESKTOP_DECOR, SOFTWARE_DECOR, TOUCH_DECOR } from './render/decorChunks';
 import { createDecorRenderer } from './render/decorRenderer';
 import { scatterDecor, seedFromId } from './render/decorScatter';
 import { createScene } from './render/scene';
@@ -160,6 +162,13 @@ export function createGame(
   const scene = createScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true });
   const decor = createDecorRenderer(scatterDecor(course, getCourseDef(course.id), seedFromId(course.id)), course.route, { touch: view.touchUi !== null, softwareGl: view.softwareGl === true });
   scene.add(decor.group);
+  const decorLimits = view.softwareGl === true ? SOFTWARE_DECOR : view.touchUi !== null ? TOUCH_DECOR : DESKTOP_DECOR;
+  const corridorTerrain = createCorridorTerrain(course, decorLimits.radius, { lite: view.touchUi !== null, flat: view.softwareGl === true });
+  if (corridorTerrain) {
+    scene.add(corridorTerrain.group);
+    const start = course.route[0]!;
+    corridorTerrain.update({ x: start[0], z: start[1] }, 0, true);
+  }
   const vehicleConfig = getVehicleConfig(lobby.vehicleId);
   // Random weather starts clear and snaps to the first snapshot's weather; a fixed weather never changes.
   const startWeather: Weather = firstLobby.weather === 'random' ? 'clear' : firstLobby.weather;
@@ -591,6 +600,7 @@ export function createGame(
         if (imageLight) scene.environment = null;
       }
     }
+    corridorTerrain?.update(camera.position, now / 1000);
     conditions.update(camera.position, frameSeconds, local && onFoot ? local.pos : vehicle ? vehicle.pos : camera.position);
     conditions.setLights(vehicle, players);
     renderer.render(scene, camera);
@@ -688,6 +698,7 @@ export function createGame(
       disposeWinchMesh(winchMesh);
       conditions.dispose();
       decor.dispose();
+      corridorTerrain?.dispose();
       disposeScene(scene);
     },
   };

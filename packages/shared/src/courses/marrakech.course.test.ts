@@ -63,15 +63,16 @@ describe('stops (T7)', () => {
       expect(s.slope).toBeUndefined();
       expect(s.length).toBeGreaterThanOrEqual(60);
       expect(Math.abs(s.stop!.along - s.length / 2)).toBeLessThanOrEqual(0.06);
-      expect(s.hazards).toBeUndefined();
+      // A stop segment of 150 m or more may carry mud or rocks, clear of the pad.
+      for (const h of s.hazards ?? []) expect(['mud', 'rocks']).toContain(h.kind);
     }
     expect(getCourse('marrakech').stops).toHaveLength(fuel.length + garages.length);
   });
 });
 
 describe('hazards (T6)', () => {
-  // The parkour sections carry their own hazards; the plan's five sit on ordinary segments.
-  const hazards = roads.filter(({ i }) => !MARRAKECH_INSERTED.includes(i)).flatMap(({ s, i }) => (s.hazards ?? []).map((h) => ({ kind: h.kind, i, at: mid(i) })));
+  // The parkour sections carry their own hazards; the plan's five sit on ordinary segments (mud and rocks are counted in marrakech.mud.drive.test.ts).
+  const hazards = roads.filter(({ i }) => !MARRAKECH_INSERTED.includes(i)).flatMap(({ s, i }) => (s.hazards ?? []).filter((h) => h.kind !== 'mud' && h.kind !== 'rocks').map((h) => ({ kind: h.kind, i, at: mid(i) })));
 
   it('has the five of the plan near their fractions (A5: up to 1.3 km)', () => {
     expect(hazards.map((h) => h.kind)).toEqual(['crateWall', 'gates', 'roadblock', 'crateWall', 'roadblock']);

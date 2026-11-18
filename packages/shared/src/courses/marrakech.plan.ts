@@ -1,6 +1,6 @@
 import { buildSegment, type SegmentDef } from '../segments';
 import { BIG_HILL_SLOPE, HILL_SLOPE } from '../constants';
-import { planExtras, TERRAIN_HAZARD_CLEAR, TERRAIN_DEEP_CLEAR, type ExtrasReport, type TerrainSpan } from './marrakech.extras';
+import { MUD_PLAN, planExtras, ROCKS_PLAN, TERRAIN_HAZARD_CLEAR, TERRAIN_DEEP_CLEAR, type ExtrasReport, type TerrainSpan } from './marrakech.extras';
 import { DEEP_PIT, hillSegments, SHALLOW_PIT } from './terrain';
 import { fitRoute, planInserts, type FitReport, type InsertPlacement, type InsertSpec, type Route } from './fit';
 import { MARRAKECH_ROUTE } from './marrakech.route';
@@ -79,6 +79,6 @@ export function placeTerrain(fitted: readonly SegmentDef[], shifts: readonly num
 export function planMarrakech(route: Route = MARRAKECH_ROUTE, shifts: readonly number[] = MARRAKECH_TERRAIN_SHIFTS): { segments: SegmentDef[]; report: FitReport; placements: InsertPlacement[]; inserted: number[]; extras: ExtrasReport } {
   const fit = fitRoute(route);
   const planned = placeTerrain(fit.segments, shifts);
-  const extras = planExtras(planned.segments, planned.inserted, { terrain: planned.spans });
+  const extras = planExtras(planned.segments, planned.inserted, { terrain: planned.spans, mud: MUD_PLAN, rocks: ROCKS_PLAN });
   return { segments: extras.segments, report: fit.report, placements: planned.placements, inserted: planned.inserted, extras: extras.report };
 }

@@ -158,7 +158,7 @@ export interface PlayerSnapshot {
   slide?: { ticks: number; cooldown: number; air: number; dirX: number; dirZ: number; launch?: number };
 }
 
-export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit', 'eat'] as const;
+export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit', 'outOfBounds', 'eat'] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
 export interface EventMessage {
