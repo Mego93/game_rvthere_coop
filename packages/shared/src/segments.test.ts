@@ -1032,12 +1032,12 @@ describe('hazards', () => {
 describe('mud and rocks', () => {
   const spawnClear = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z;
 
-  test('a mud patch is a road-wide ground box of the road thickness, STOP_PAD_LIFT above the road top, surface mud', () => {
+  test('a mud patch is a ground box covering the road and both shoulders, of the road thickness, STOP_PAD_LIFT above the road top, surface mud', () => {
     const seg = buildSegment(road(100, { hazards: [{ kind: 'mud', along: 30, length: 16 }] }));
     const mud = seg.ground.filter((g) => g.surface === 'mud');
     expect(mud).toHaveLength(1);
     const box = mud[0]!;
-    expect(box.halfExtents.x).toBeCloseTo(ROAD_WIDTH / 2, 9);
+    expect(box.halfExtents.x).toBeCloseTo(ROAD_WIDTH / 2 + SHOULDER_WIDTH, 9);
     expect(box.halfExtents.y).toBeCloseTo(ROAD_THICKNESS / 2, 9);
     expect(box.halfExtents.z).toBeCloseTo(8, 9);
     expect(box.center.y + box.halfExtents.y).toBeCloseTo(STOP_PAD_LIFT, 9);
@@ -1083,6 +1083,7 @@ describe('mud and rocks', () => {
         expect(wall.center.y).toBeCloseTo(ROCK_HALF.y, 9);
         expect(wall.center.z).toBeCloseTo(-(50 + i * ROCK_SPACING), 9);
         const anchor = seg.anchors[i]!;
+        expect(anchor.pose.pos.y).toBeCloseTo(2 * ROCK_HALF.y, 9);
         expect(anchor.pose.pos.x).toBeCloseTo(side * lateral, 9);
         expect(anchor.pose.pos.z).toBeCloseTo(-(50 + i * ROCK_SPACING), 9);
       });
@@ -1096,6 +1097,20 @@ describe('mud and rocks', () => {
       const free = side === 1 ? inner + ROAD_WIDTH / 2 : ROAD_WIDTH / 2 + inner;
       expect(free).toBeGreaterThanOrEqual(2 * VEHICLES.rv.halfExtents.x + 1.2);
     }
+  });
+
+  test('a stop rejects the other hazards but takes mud or rocks at least 30 m from its pad', () => {
+    const pad = STOP_PAD.z;
+    const stop = { kind: 'fuel' as const, side: 1 as const, along: 100 };
+    const mud = (along: number) => buildSegment(road(200, { stop, hazards: [{ kind: 'mud', along, length: 12 }] }));
+    expect(() => mud(100 - pad - 30 - 12)).not.toThrow();
+    expect(() => mud(100 - pad - 30 - 12 + 0.1)).toThrow(/stop/);
+    expect(() => mud(100 + pad + 30)).not.toThrow();
+    expect(() => mud(100 + pad + 30 - 0.1)).toThrow(/stop/);
+    const rocks = (along: number) => buildSegment(road(200, { stop, hazards: [{ kind: 'rocks', along, side: 1 }] }));
+    expect(() => rocks(100 + pad + 30 + ROCK_HALF.z)).not.toThrow();
+    expect(() => rocks(100 + pad + 30 + ROCK_HALF.z - 0.1)).toThrow(/stop/);
+    expect(() => buildSegment(road(200, { stop, hazards: [{ kind: 'crateWall', along: 40 }] }))).toThrow(/stop/);
   });
 
   test('rocks follow the spawn and end clearances and the hazard gap', () => {

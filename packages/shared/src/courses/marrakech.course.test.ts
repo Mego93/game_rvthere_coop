@@ -63,7 +63,8 @@ describe('stops (T7)', () => {
       expect(s.slope).toBeUndefined();
       expect(s.length).toBeGreaterThanOrEqual(60);
       expect(Math.abs(s.stop!.along - s.length / 2)).toBeLessThanOrEqual(0.06);
-      expect(s.hazards).toBeUndefined();
+      // A stop segment of 150 m or more may carry mud or rocks, clear of the pad.
+      for (const h of s.hazards ?? []) expect(['mud', 'rocks']).toContain(h.kind);
     }
     expect(getCourse('marrakech').stops).toHaveLength(fuel.length + garages.length);
   });

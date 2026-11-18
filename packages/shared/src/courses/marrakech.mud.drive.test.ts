@@ -81,6 +81,10 @@ describe('plan test 6: mud', () => {
     const edge = { x: middle.x - middle.tz * (ROAD_WIDTH / 2 - 0.1), z: middle.z + middle.tx * (ROAD_WIDTH / 2 - 0.1) };
     const before = frame.pointAt(p.from - 6);
     expect(surfaceYAt(course, edge.x, edge.z)! - surfaceYAt(course, before.x, before.z)!).toBeCloseTo(STOP_PAD_LIFT, 3);
+    // The patch covers the shoulders too.
+    const shoulder = { x: middle.x - middle.tz * 25, z: middle.z + middle.tx * 25 };
+    const shoulderBefore = { x: before.x - before.tz * 25, z: before.z + before.tx * 25 };
+    expect(surfaceYAt(course, shoulder.x, shoulder.z)! - surfaceYAt(course, shoulderBefore.x, shoulderBefore.z)!).toBeCloseTo(STOP_PAD_LIFT, 3);
     const run = crossing('lodgy', p.from - 15, p.to + 6, 0.5);
     expect(run.mudWheels).toBeGreaterThan(0);
   }, 60000);

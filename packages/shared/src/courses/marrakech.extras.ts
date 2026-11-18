@@ -1,4 +1,4 @@
-import { GATES_SPACING, HAZARD_END_CLEARANCE, MUD_MAX_LENGTH, MUD_MIN_LENGTH, PROP_KINDS, ROADBLOCK_FENCE_HALF, ROCK_CLEAR, ROCK_HALF, ROCK_LATERALS, ROCK_SPACING, SEGMENT_SPAWN_INSET } from '../constants';
+import { GATES_SPACING, HAZARD_END_CLEARANCE, MUD_MAX_LENGTH, MUD_MIN_LENGTH, PROP_KINDS, ROADBLOCK_FENCE_HALF, ROCK_CLEAR, ROCK_HALF, ROCK_LATERALS, ROCK_SPACING, SEGMENT_SPAWN_INSET, STOP_HAZARD_CLEAR, STOP_PAD } from '../constants';
 import { buildSegment, hazardSpan, type Hazard, type Placement, type SegmentDef } from '../segments';
 import { VEHICLES } from '../vehicles';
 
@@ -37,10 +37,13 @@ export interface RocksPlan {
 }
 
 // Ten mud patches (lengths alternating 12, 16, 20 m) and twelve rock groups, by route fraction; the planner picks the nearest fitting straight, after coins and pickups.
-export const MUD_PLAN: readonly MudPlan[] = [0.06, 0.17, 0.26, 0.36, 0.5, 0.58, 0.64, 0.76, 0.84, 0.97].map((fraction, i) => ({ fraction, length: [12, 16, 20][i % 3]! }));
-export const ROCKS_PLAN: readonly RocksPlan[] = [0.05, 0.12, 0.2, 0.28, 0.34, 0.42, 0.52, 0.6, 0.69, 0.8, 0.88, 0.95].map((fraction, i) => ({ fraction, side: i % 2 === 0 ? -1 : 1 }));
-// m a coin keeps from a rocks group sharing its segment.
+export const MUD_PLAN: readonly MudPlan[] = Array.from({ length: 10 }, (_, i) => ({ fraction: Math.round((0.05 + 0.1 * i) * 1000) / 1000, length: [12, 16, 20][i % 3]! }));
+export const ROCKS_PLAN: readonly RocksPlan[] = [0.042, 0.125, 0.208, 0.292, 0.375, 0.458, 0.542, 0.625, 0.708, 0.792, 0.875, 0.958].map((fraction, i) => ({ fraction, side: i % 2 === 0 ? -1 : 1 }));
+// m a coin keeps from a rocks group sharing its segment, and a pickup from a mud patch or rocks group.
 const ROCK_COIN_CLEAR = 5;
+const PICKUP_HAZARD_CLEAR = 10;
+// A segment with a stop takes mud or rocks only from this length.
+const STOP_SEGMENT_MIN_LENGTH = 150;
 const GATES_COUNT = 4;
 const PICKUP_KINDS = ['jerrycan', 'toolbox', 'healthKit'] as const;
 
@@ -279,12 +282,14 @@ export function planExtras(input: readonly SegmentDef[], inserted: readonly numb
   });
   report.coins = 2 + counts.reduce((a, b) => a + b, 0);
 
-  // Mud patches, then rock groups: after everything else so nothing above moves. Straights only, never on a stop, a hazard, a pickup or debris (rocks also not with coins).
+  // Mud patches, then rock groups: after everything else so nothing above moves. Straights only, never on another hazard or debris; a pickup must be PICKUP_HAZARD_CLEAR m from the span and a stop segment (150 m or longer) STOP_HAZARD_CLEAR m from the pad; rocks also keep clear of coins and mud.
+  // Mud may share a segment with coins (a coin over mud is harmless).
   const used = new Set<number>();
-  const spans: { kind: 'mud' | 'rocks'; from: number; to: number }[] = [];
+  const mudSpans: { from: number; to: number }[] = [];
   const plainStraight = (i: number): RoadDef | null => {
     const def = roadAt(i);
-    if (!def || !inner(i) || !straight(i) || used.has(i) || def.stop || def.hazards || def.pickups || def.debris) return null;
+    if (!def || !inner(i) || !straight(i) || used.has(i) || def.hazards || def.debris) return null;
+    if (def.stop && def.length < STOP_SEGMENT_MIN_LENGTH) return null;
     return nearTerrain(i, (span) => (span.deep ? TERRAIN_DEEP_CLEAR : TERRAIN_HAZARD_CLEAR)) ? null : def;
   };
   const nearest = (target: number, fits: (i: number) => boolean): number => {
@@ -292,43 +297,45 @@ export function planExtras(input: readonly SegmentDef[], inserted: readonly numb
     for (let i = 0; i < segments.length; i++) if (fits(i) && (pick < 0 || Math.abs(mid(i) - target) < Math.abs(mid(pick) - target))) pick = i;
     return pick;
   };
-  for (const plan of options.mud ?? []) {
-    const target = plan.fraction * total;
-    const pick = nearest(target, (i) => plainStraight(i) !== null && hazardRange('mud', roadAt(i)!.length, plan.length) !== null);
-    if (pick < 0) throw new Error(`No segment for the mud near ${Math.round(target)} m`);
-    const def = roadAt(pick)!;
-    const range = hazardRange('mud', def.length, plan.length)!;
-    const along = round1((range.lo + range.hi) / 2);
-    def.hazards = [{ kind: 'mud', along, length: plan.length }];
-    used.add(pick);
-    spans.push({ kind: 'mud', from: start[pick]! + along, to: start[pick]! + along + plan.length });
-    report.mud.push({ index: pick, at: mid(pick), length: plan.length, target, distance: Math.abs(mid(pick) - target) });
-  }
-  const rocksClearOfMud = (i: number, along: number, side: -1 | 1): boolean => {
-    const [a, b] = hazardSpan({ kind: 'rocks', along, side });
-    return spans.every((m) => m.kind !== 'mud' || Math.max(m.from - (start[i]! + b), start[i]! + a - m.to, 0) >= ROCK_CLEAR);
-  };
-  // Rocks may share a straight with coins only when every coin is ROCK_COIN_CLEAR m outside the group (strict reading of T12 leaves 11 segments for 12 groups).
-  const rocksAlong = (i: number, side: -1 | 1): number | null => {
-    const def = roadAt(i)!;
-    const range = hazardRange('rocks', def.length);
-    if (!range) return null;
+  // The along nearest the middle of the allowed range where `hazardAt(along)` keeps clear of pickups, the stop pad, coins (rocks) and mud (rocks); null when none.
+  const findAlong = (i: number, kind: 'mud' | 'rocks', hazardAt: (along: number) => Hazard): number | null => {
+    const def = plainStraight(i);
+    const range = def && hazardRange(kind, def.length, kind === 'mud' ? (hazardAt(0) as { length: number }).length : undefined);
+    if (!def || !range) return null;
     const centre = (range.lo + range.hi) / 2;
     for (let step = 0; centre - step >= range.lo - 1e-9 || centre + step <= range.hi + 1e-9; step += 1) {
       for (const along of step === 0 ? [centre] : [centre - step, centre + step]) {
         if (along < range.lo - 1e-9 || along > range.hi + 1e-9) continue;
         const at = round1(along);
-        const [a, b] = hazardSpan({ kind: 'rocks', along: at, side });
-        if ((def.coins ?? []).every((c) => c.along < a - ROCK_COIN_CLEAR || c.along > b + ROCK_COIN_CLEAR) && rocksClearOfMud(i, at, side)) return at;
+        const [a, b] = hazardSpan(hazardAt(at));
+        if (!(def.pickups ?? []).every((p) => p.along < a - PICKUP_HAZARD_CLEAR || p.along > b + PICKUP_HAZARD_CLEAR)) continue;
+        if (def.stop && a < def.stop.along + STOP_PAD.z + STOP_HAZARD_CLEAR && b > def.stop.along - STOP_PAD.z - STOP_HAZARD_CLEAR) continue;
+        if (kind === 'rocks') {
+          if (!(def.coins ?? []).every((c) => c.along < a - ROCK_COIN_CLEAR || c.along > b + ROCK_COIN_CLEAR)) continue;
+          if (!mudSpans.every((m) => Math.max(m.from - (start[i]! + b), start[i]! + a - m.to, 0) >= ROCK_CLEAR)) continue;
+        }
+        return at;
       }
     }
     return null;
   };
+  for (const plan of options.mud ?? []) {
+    const target = plan.fraction * total;
+    const hazardAt = (along: number): Hazard => ({ kind: 'mud', along, length: plan.length });
+    const pick = nearest(target, (i) => findAlong(i, 'mud', hazardAt) !== null);
+    if (pick < 0) throw new Error(`No segment for the mud near ${Math.round(target)} m`);
+    const along = findAlong(pick, 'mud', hazardAt)!;
+    roadAt(pick)!.hazards = [hazardAt(along)];
+    used.add(pick);
+    mudSpans.push({ from: start[pick]! + along, to: start[pick]! + along + plan.length });
+    report.mud.push({ index: pick, at: mid(pick), length: plan.length, target, distance: Math.abs(mid(pick) - target) });
+  }
   for (const plan of options.rocks ?? []) {
     const target = plan.fraction * total;
-    const pick = nearest(target, (i) => plainStraight(i) !== null && rocksAlong(i, plan.side) !== null);
+    const hazardAt = (along: number): Hazard => ({ kind: 'rocks', along, side: plan.side });
+    const pick = nearest(target, (i) => findAlong(i, 'rocks', hazardAt) !== null);
     if (pick < 0) throw new Error(`No segment for the rocks near ${Math.round(target)} m`);
-    roadAt(pick)!.hazards = [{ kind: 'rocks', along: rocksAlong(pick, plan.side)!, side: plan.side }];
+    roadAt(pick)!.hazards = [hazardAt(findAlong(pick, 'rocks', hazardAt)!)];
     used.add(pick);
     report.rocks.push({ index: pick, at: mid(pick), side: plan.side, target, distance: Math.abs(mid(pick) - target) });
   }

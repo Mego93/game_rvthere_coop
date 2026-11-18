@@ -298,23 +298,25 @@ describe('T10: obstacles stay obstacles', () => {
           return true;
         }),
       );
-    const tested = reaches.filter(sealed);
+    // The walk starts 45 m before the run; a neighbouring run closer than that would wall the walker in on the road side first.
+    const tested = reaches.filter((span, i) => sealed(span) && span.from - 50 > (reaches[i - 1]?.to ?? -Infinity));
     console.info(`go-round walk: ${tested.length} of ${reaches.length} wall runs have full caps`);
     expect(tested.length).toBeGreaterThan(5);
     for (const span of tested) {
       for (const side of [-1, 1] as const) {
         const start = span.from - 45;
         const at = place(start, side * (ROAD_WIDTH / 2 + 3));
-        const forward = frame.pointAt(start);
         world.teleportPlayer('p', vec3(at.x, at.y + 0.5, at.z));
         // Out to 45 m, then along the route's direction at that point.
         for (let i = 0; i < 12 * TICK_RATE && distance(me(world).pos.x, me(world).pos.z) < 45; i++) run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(at.nx, at.nz) });
+        expect(distance(me(world).pos.x, me(world).pos.z), `span ${span.from} side ${side} reaches 45 m`).toBeGreaterThanOrEqual(45);
         let furthest = 0;
         for (let i = 0; i < 12 * TICK_RATE; i++) {
-          run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(forward.tx, forward.tz), jump: i % 30 < 3 });
-          // Back on the road side of the wall (d < 31) is not going round it: the road is open to walkers.
-          const hit = frame.nearest(me(world).pos.x, me(world).pos.z);
-          if (hit.d >= 31) furthest = Math.max(furthest, hit.along);
+          // Walks along the route's direction at the nearest route point each tick.
+          const here = frame.nearest(me(world).pos.x, me(world).pos.z);
+          const tangent = frame.pointAt(here.along);
+          run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(tangent.tx, tangent.tz), jump: i % 30 < 3 });
+          furthest = Math.max(furthest, frame.nearest(me(world).pos.x, me(world).pos.z).along);
         }
         expect(furthest, `span ${span.from} side ${side}`).toBeLessThan(span.from + 5);
       }

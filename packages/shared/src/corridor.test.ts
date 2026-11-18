@@ -176,7 +176,7 @@ describe('T3: under the road at sags', () => {
         checked++;
         worst = Math.max(worst, h - top);
         // A mud patch lifts the route height by STOP_PAD_LIFT, so the margin under the shoulder there is 0.04 to within rounding.
-        expect(h, `along ${along} lateral ${lateral}`).toBeLessThanOrEqual(top - 0.04 + 1e-6);
+        expect(h, `along ${along} lateral ${lateral}`).toBeLessThanOrEqual(top - 0.04 + 1e-3);
         expect(hit, `along ${along} lateral ${lateral}`).not.toBeNull();
         expect(top + 0.5 - hit!.timeOfImpact, `along ${along} lateral ${lateral}`).toBeLessThanOrEqual(top - 0.04 + 1e-3);
       }

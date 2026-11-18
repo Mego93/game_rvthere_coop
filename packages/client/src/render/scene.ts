@@ -14,8 +14,8 @@ const SURFACE_COLOURS: Record<Surface, number> = {
   mud: 0x4a3a2a,
 };
 
-// The riverbed texture darkened.
-const MUD_TINT = 0x6b5a48;
+// The riverbed texture darkened to the flat colour.
+const MUD_TINT = 0x4a3a2a;
 
 function boxMesh(box: Box, material: THREE.Material): THREE.Mesh {
   const mesh = new THREE.Mesh(
@@ -36,9 +36,11 @@ const ghost = (colour: number) =>
 function groundMaterial(surface: Surface, { lite = false, flat = false }: SceneOptions): THREE.MeshStandardMaterial {
   const set = SURFACE_TEXTURE[surface];
   const map = flat ? null : groundTexture(set, 'diffuse');
-  if (!map) return new THREE.MeshStandardMaterial({ color: SURFACE_COLOURS[surface], roughness: 1, metalness: 0 });
+  // Mud lies 1 cm above the road: the offset keeps it from z-fighting with the road far away.
+  const offset = surface === 'mud' ? { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 } : {};
+  if (!map) return new THREE.MeshStandardMaterial({ color: SURFACE_COLOURS[surface], roughness: 1, metalness: 0, ...offset });
   map.anisotropy = lite ? 1 : 4;
-  return new THREE.MeshStandardMaterial({ color: surface === 'mud' ? MUD_TINT : 0xffffff, map, normalMap: lite ? null : groundTexture(set, 'normal'), roughness: 1, metalness: 0 });
+  return new THREE.MeshStandardMaterial({ color: surface === 'mud' ? MUD_TINT : 0xffffff, map, normalMap: lite ? null : groundTexture(set, 'normal'), roughness: 1, metalness: 0, ...offset });
 }
 
 function mergedMesh(boxes: readonly Box[], material: THREE.Material, bottom: boolean): THREE.Mesh | null {

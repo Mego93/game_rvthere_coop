@@ -39,6 +39,7 @@ import {
   WALL_THICKNESS,
   WATER_HALF_THICKNESS,
   ROAD_JOINT_OVERLAP,
+  STOP_HAZARD_CLEAR,
   MUD_MAX_LENGTH,
   MUD_MIN_LENGTH,
   ROCK_HALF,
@@ -81,7 +82,7 @@ export type Hazard =
   | { kind: 'gates'; along: number; count: number }
   | { kind: 'crateWall'; along: number }
   | { kind: 'roadblock'; along: number }
-  // A ground patch the road's width wide that slows vehicles; static, never in a snapshot.
+  // A ground patch covering the road and both shoulders that slows vehicles; static, never in a snapshot.
   | { kind: 'mud'; along: number; length: number }
   // Two boulders (wall boxes that also take the winch hook) on one side of the lane.
   | { kind: 'rocks'; along: number; side: -1 | 1 };
@@ -313,7 +314,8 @@ export function obstacleSpans(def: SegmentDef, routeLength: number): [from: numb
 function checkHazards(def: Extract<SegmentDef, { type: 'road' }>, routeLength: number, debrisAlong: number[]): Hazard[] {
   const hazards = def.hazards ?? [];
   if (hazards.length === 0) return hazards;
-  if (def.stop) throw new Error('A segment with a stop takes no hazards');
+  // A stop takes only mud and rocks, kept STOP_HAZARD_CLEAR m from its pad.
+  if (def.stop && hazards.some((h) => h.kind !== 'mud' && h.kind !== 'rocks')) throw new Error('A segment with a stop takes no hazards');
   const spawnClear = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z;
   for (const h of hazards) {
     if (!Number.isFinite(h.along)) throw new Error('A hazard needs a finite along');
@@ -325,6 +327,9 @@ function checkHazards(def: Extract<SegmentDef, { type: 'road' }>, routeLength: n
       throw new Error(`Gates count must be a whole number from ${GATES_MIN_COUNT} to ${GATES_MAX_COUNT}`);
     }
     const [start, end] = hazardSpan(h);
+    if (def.stop && start < def.stop.along + STOP_PAD.z + STOP_HAZARD_CLEAR - 1e-9 && end > def.stop.along - STOP_PAD.z - STOP_HAZARD_CLEAR + 1e-9) {
+      throw new Error(`Hazard at ${h.along} m is less than ${STOP_HAZARD_CLEAR} m from the stop pad`);
+    }
     if (start < spawnClear - 1e-9) throw new Error(`Hazard at ${h.along} m starts before the spawn clearance (${spawnClear} m)`);
     // A mud patch keeps the spawn clearance at both ends: the next segment's checkpoint spawn lies just past this one's end.
     const endClear = h.kind === 'mud' ? spawnClear : HAZARD_END_CLEARANCE;
@@ -360,7 +365,7 @@ function placeHazard(h: Hazard, surfaceAt: (along: number) => SurfacePoint, id: 
     const s = surfaceAt(h.along + h.length / 2);
     ground.push({
       center: offsetFrom(s, 0, STOP_PAD_LIFT - ROAD_THICKNESS / 2),
-      halfExtents: vec3(ROAD_WIDTH / 2, ROAD_THICKNESS / 2, h.length / 2),
+      halfExtents: vec3(ROAD_WIDTH / 2 + SHOULDER_WIDTH, ROAD_THICKNESS / 2, h.length / 2),
       rot: yawPitchQuat(s.yaw, s.pitch),
       surface: 'mud',
     });
@@ -369,7 +374,7 @@ function placeHazard(h: Hazard, surfaceAt: (along: number) => SurfacePoint, id: 
       const s = surfaceAt(h.along + i * ROCK_SPACING);
       const rot = yawPitchQuat(s.yaw, s.pitch);
       walls.push({ center: offsetFrom(s, h.side * lateral, ROCK_HALF.y), halfExtents: ROCK_HALF, rot });
-      anchors.push({ id: id('boulder'), kind: 'boulder', pose: { pos: offsetFrom(s, h.side * lateral), rot } });
+      anchors.push({ id: id('boulder'), kind: 'boulder', pose: { pos: offsetFrom(s, h.side * lateral, 2 * ROCK_HALF.y), rot } });
     });
   } else if (h.kind === 'crateWall') {
     const s = surfaceAt(h.along);

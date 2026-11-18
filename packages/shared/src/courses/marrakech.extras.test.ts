@@ -60,7 +60,11 @@ describe('MUD_PLAN and ROCKS_PLAN', () => {
   it('place 10 patches alternating 12, 16, 20 m and 12 rock groups, by fraction', () => {
     expect(MUD_PLAN).toHaveLength(10);
     expect(ROCKS_PLAN).toHaveLength(12);
-    MUD_PLAN.forEach((p, i) => expect(p.length).toBe([12, 16, 20][i % 3]));
+    MUD_PLAN.forEach((p, i) => {
+      expect(p.length).toBe([12, 16, 20][i % 3]);
+      expect(p.fraction).toBeCloseTo(0.05 + 0.1 * i, 9);
+    });
+    expect(ROCKS_PLAN.map((p) => p.fraction)).toEqual([0.042, 0.125, 0.208, 0.292, 0.375, 0.458, 0.542, 0.625, 0.708, 0.792, 0.875, 0.958]);
     for (const p of [...MUD_PLAN, ...ROCKS_PLAN]) {
       expect(p.fraction).toBeGreaterThan(0);
       expect(p.fraction).toBeLessThan(1);
@@ -181,7 +185,7 @@ describe('planExtras mud and rocks', () => {
     for (const def of out.segments) expect(() => buildSegment(def)).not.toThrow();
   });
 
-  it('puts them on straights only, never on a stop, a pickup, another hazard or an inserted segment, and rocks keep 5 m from every coin', () => {
+  it('puts them on straights only, never on another hazard, debris or an inserted segment; keep 10 m from a pickup, 30 m from a stop pad (stop segments 150 m or longer) and rocks 5 m from every coin', () => {
     const inserted = [5, 6, 7, 8];
     const r = planExtras(base, inserted, options);
     for (const kind of ['mud', 'rocks']) {
@@ -190,9 +194,13 @@ describe('planExtras mud and rocks', () => {
         expect(inserted).not.toContain(i);
         expect(d.curve, `${kind} ${i}`).toBeUndefined();
         expect(d.slope).toBeUndefined();
-        expect(d.stop).toBeUndefined();
-        expect(d.pickups).toBeUndefined();
         expect(d.hazards).toHaveLength(1);
+        const [a, b] = hazardSpan(d.hazards![0]!);
+        for (const p of d.pickups ?? []) expect(p.along < a - 10 || p.along > b + 10).toBe(true);
+        if (d.stop) {
+          expect(d.length).toBeGreaterThanOrEqual(150);
+          expect(a >= d.stop.along + 8 + 30 - 1e-9 || b <= d.stop.along - 8 - 30 + 1e-9).toBe(true);
+        }
         expect(d.debris).toBeUndefined();
         if (kind === 'rocks') {
           const [a, b] = hazardSpan(d.hazards![0]!);
@@ -232,6 +240,26 @@ describe('planExtras mud and rocks', () => {
     for (const i of [...kindsIn(r.segments, 'mud'), ...kindsIn(r.segments, 'rocks')]) {
       const gap = Math.max(starts[20]! - (starts[i]! + advance(base[i]!)), starts[i]! - (starts[22]! + advance(base[22]!)), 0);
       expect(gap, `segment ${i}`).toBeGreaterThanOrEqual(120);
+    }
+  });
+});
+
+describe('planExtras mud and rocks beside stops and pickups', () => {
+  const base = Array.from({ length: 80 }, (_, i) => (i % 5 === 3 ? road(60, { curve: 0.2 }) : road(170)));
+  const mud = Array.from({ length: 30 }, (_, i) => ({ fraction: 0.02 + 0.03 * i, length: [12, 16, 20][i % 3]! }));
+  const out = planExtras(base, [], { garageEvery: 1200, mud });
+  type Road = Extract<SegmentDef, { type: 'road' }>;
+  const shared = out.segments.flatMap((d, i) => (d.type === 'road' && d.hazards?.[0]?.kind === 'mud' && (d.stop || d.pickups) ? [i] : []));
+
+  it('shares segments with stops and pickups, clear of them', () => {
+    expect(shared.some((i) => (out.segments[i] as Road).stop)).toBe(true);
+    expect(shared.some((i) => (out.segments[i] as Road).pickups)).toBe(true);
+    for (const i of shared) {
+      const d = out.segments[i] as Road;
+      const [a, b] = hazardSpan(d.hazards![0]!);
+      if (d.stop) expect(a >= d.stop.along + 38 - 1e-6 || b <= d.stop.along - 38 + 1e-6).toBe(true);
+      for (const p of d.pickups ?? []) expect(p.along < a - 10 || p.along > b + 10).toBe(true);
+      expect(() => buildSegment(d)).not.toThrow();
     }
   });
 });
