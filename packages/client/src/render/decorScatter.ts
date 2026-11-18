@@ -23,6 +23,8 @@ const FAR_MIN = 31;
 const STOP_MARGIN = 3;
 const OBJECT_CLEARANCE = 3;
 const WATER_MARGIN = 2;
+const MUD_MARGIN = 1;
+const WALL_MARGIN = 1;
 const LIGHT_OFFSET = 7;
 const BUILDING_MAX = 45;
 // Near items are the only decor a vehicle drives over: nothing taller than this (metres, longest side).
@@ -206,6 +208,25 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
   const blockers: { x: number; z: number }[] = [...course.props, ...course.pickups, ...course.anchors, ...course.coins].map((p: Placed) => ({ x: p.pose.pos.x, z: p.pose.pos.z }));
   const water = course.decor.filter((d) => d.kind === 'water' && d.size).map((d): Box => ({ center: d.pose.pos, halfExtents: d.size!, rot: d.pose.rot }));
 
+  // Mud patches (decor stays 1 m clear of them) and the hidden obstacle walls (1 m clear), the walls bucketed by 32 m cells.
+  const mud = course.ground.filter((g) => g.surface === 'mud');
+  const WALL_CELL = 32;
+  const wallCells = new Map<string, Box[]>();
+  for (const box of course.corridor ? course.walls.slice(course.corridor.wallsFrom) : []) {
+    const reach = Math.hypot(box.halfExtents.x, box.halfExtents.z) + 1;
+    for (let i = Math.floor((box.center.x - reach) / WALL_CELL); i <= Math.floor((box.center.x + reach) / WALL_CELL); i++) {
+      for (let j = Math.floor((box.center.z - reach) / WALL_CELL); j <= Math.floor((box.center.z + reach) / WALL_CELL); j++) {
+        const list = wallCells.get(`${i},${j}`);
+        if (list) list.push(box);
+        else wallCells.set(`${i},${j}`, [box]);
+      }
+    }
+  }
+  const inBox = (box: Box, x: number, z: number, margin: number): boolean => {
+    const local = localBox(box, x, z);
+    return Math.abs(local.x) <= box.halfExtents.x + margin && Math.abs(local.z) <= box.halfExtents.z + margin;
+  };
+
   const out: DecorPlacement[] = [];
   const taken: { x: number; z: number; r: number }[] = [];
   const grid = new Map<string, { x: number; z: number; r: number }[]>();
@@ -252,6 +273,8 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
       const local = localBox(w, x, z);
       if (Math.abs(local.x) <= w.halfExtents.x + WATER_MARGIN && Math.abs(local.z) <= w.halfExtents.z + WATER_MARGIN) return false;
     }
+    for (const box of mud) if (inBox(box, x, z, MUD_MARGIN)) return false;
+    for (const box of wallCells.get(`${Math.floor(x / WALL_CELL)},${Math.floor(z / WALL_CELL)}`) ?? []) if (inBox(box, x, z, WALL_MARGIN)) return false;
     if (crowded(x, z, radius)) return false;
     const near = distance <= NEAR_MAX;
     const ground = corridor ? landHeight(course, x, z) : terrainHeight(course, x, z);

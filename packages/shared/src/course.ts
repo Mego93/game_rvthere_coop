@@ -5,6 +5,8 @@ export interface Box {
   center: Vec3;
   halfExtents: Vec3;
   rot: Quat;
+  // A rock of a rocks hazard: a wall box the client draws as its boulder, not as a wall.
+  rock?: true;
 }
 
 export interface GroundBox extends Box {

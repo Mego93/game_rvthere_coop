@@ -1,4 +1,4 @@
-import { ANCHOR_HEIGHT, ROAD_WIDTH, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type BuiltCourse, type ServiceStop, type Surface } from '@lodgy/shared';
+import { ANCHOR_HEIGHT, ROAD_WIDTH, ROCK_HALF, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type BuiltCourse, type ServiceStop, type Surface } from '@lodgy/shared';
 import * as THREE from 'three';
 import { fitted, hasModel, instantiate, shadowed, type FitSize } from './models';
 import { groupBySurface, mergeBoxes, toGeometry } from './groundMerge';
@@ -91,9 +91,9 @@ function stopScenery(stop: ServiceStop): THREE.Group | null {
   return group;
 }
 
-// The walls to draw: the walls beside obstacles on a corridor course (they start at `corridor.wallsFrom`) are invisible; the berms show them.
+// The walls to draw: the walls beside obstacles on a corridor course (they start at `corridor.wallsFrom`) are invisible, the berms show them; a rock is drawn as its boulder.
 export function visibleWalls(course: BuiltCourse): readonly Box[] {
-  return course.corridor ? course.walls.slice(0, course.corridor.wallsFrom) : course.walls;
+  return (course.corridor ? course.walls.slice(0, course.corridor.wallsFrom) : course.walls).filter((box) => !box.rock);
 }
 
 export function createScene(course: BuiltCourse, options: SceneOptions = {}): THREE.Scene {
@@ -134,8 +134,12 @@ export function createScene(course: BuiltCourse, options: SceneOptions = {}): TH
     }
   }
 
+  const rocks = course.walls.filter((box) => box.rock);
   for (const anchor of course.anchors) {
-    const { x, y, z } = anchor.pose.pos;
+    // The anchor of a rock sits on its top (for the hook); the boulder is drawn on the ground.
+    const onRock = anchor.kind === 'boulder' && rocks.some((box) => Math.hypot(box.center.x - anchor.pose.pos.x, box.center.z - anchor.pose.pos.z) < 0.01);
+    const { x, z } = anchor.pose.pos;
+    const y = onRock ? anchor.pose.pos.y - 2 * ROCK_HALF.y : anchor.pose.pos.y;
     const quarter = new THREE.Quaternion(anchor.pose.rot.x, anchor.pose.rot.y, anchor.pose.rot.z, anchor.pose.rot.w);
     const yaw = new THREE.Euler().setFromQuaternion(quarter, 'YXZ').y;
     const modelled =

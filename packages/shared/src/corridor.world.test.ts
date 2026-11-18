@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
-import { BIG_HILL_SLOPE, CORRIDOR_OUTER, OUT_OF_BOUNDS, PLAYER_MAX_HEALTH, ROAD_WIDTH, TICK_DT, TICK_RATE } from './constants';
+import { BIG_HILL_SLOPE, CORRIDOR_OUTER, CORRIDOR_RIDGE_END, OUT_OF_BOUNDS, PLAYER_MAX_HEALTH, ROAD_WIDTH, TICK_DT, TICK_RATE } from './constants';
 import { corridorHeightAt, corridorOf, routeFrame } from './corridor';
 import { segmentStarts } from './courses/driveRig';
 import { getCourse, getCourseDef } from './courses/index';
@@ -291,7 +291,7 @@ describe('T10: obstacles stay obstacles', () => {
     const sealed = (span: { from: number; to: number }): boolean =>
       [span.from, span.to].every((end) =>
         ([-1, 1] as const).every((side) => {
-          for (let l = 31.5; l <= 100; l += 4) {
+          for (let l = 31.5; l <= CORRIDOR_RIDGE_END; l += 4) {
             const p = place(Math.min(frame.total, Math.max(0, end)), side * l);
             if (distance(p.x, p.z) < l - 2) return false;
           }
@@ -302,26 +302,29 @@ describe('T10: obstacles stay obstacles', () => {
     const tested = reaches.filter((span, i) => sealed(span) && span.from - 50 > (reaches[i - 1]?.to ?? -Infinity));
     console.info(`go-round walk: ${tested.length} of ${reaches.length} wall runs have full caps`);
     expect(tested.length).toBeGreaterThan(5);
+    // One walker leaves the road and walks out to 45 m first; the other stands at d = 102, on the foot of the ridge.
     for (const span of tested) {
       for (const side of [-1, 1] as const) {
-        const start = span.from - 45;
-        const at = place(start, side * (ROAD_WIDTH / 2 + 3));
-        world.teleportPlayer('p', vec3(at.x, at.y + 0.5, at.z));
-        // Out to 45 m, then along the route's direction at that point.
-        for (let i = 0; i < 12 * TICK_RATE && distance(me(world).pos.x, me(world).pos.z) < 45; i++) run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(at.nx, at.nz) });
-        expect(distance(me(world).pos.x, me(world).pos.z), `span ${span.from} side ${side} reaches 45 m`).toBeGreaterThanOrEqual(45);
-        let furthest = 0;
-        for (let i = 0; i < 12 * TICK_RATE; i++) {
-          // Walks along the route's direction at the nearest route point each tick.
-          const here = frame.nearest(me(world).pos.x, me(world).pos.z);
-          const tangent = frame.pointAt(here.along);
-          run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(tangent.tx, tangent.tz), jump: i % 30 < 3 });
-          furthest = Math.max(furthest, frame.nearest(me(world).pos.x, me(world).pos.z).along);
+        for (const ridge of [false, true]) {
+          const start = span.from - (ridge ? 20 : 45);
+          const at = place(start, side * (ridge ? 102 : ROAD_WIDTH / 2 + 3));
+          world.teleportPlayer('p', vec3(at.x, at.y + 0.5, at.z));
+          // Out to 45 m, then along the route's direction at that point.
+          for (let i = 0; !ridge && i < 12 * TICK_RATE && distance(me(world).pos.x, me(world).pos.z) < 45; i++) run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(at.nx, at.nz) });
+          expect(distance(me(world).pos.x, me(world).pos.z), `span ${span.from} side ${side} reaches ${ridge ? 100 : 45} m`).toBeGreaterThanOrEqual(ridge ? 100 : 45);
+          let furthest = 0;
+          for (let i = 0; i < 12 * TICK_RATE; i++) {
+            // Walks along the route's direction at the nearest route point each tick.
+            const here = frame.nearest(me(world).pos.x, me(world).pos.z);
+            const tangent = frame.pointAt(here.along);
+            run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(tangent.tx, tangent.tz), jump: i % 30 < 3 });
+            furthest = Math.max(furthest, frame.nearest(me(world).pos.x, me(world).pos.z).along);
+          }
+          expect(furthest, `span ${span.from} side ${side}${ridge ? ' at d = 102' : ''}`).toBeLessThan(span.from + 5);
         }
-        expect(furthest, `span ${span.from} side ${side}`).toBeLessThan(span.from + 5);
       }
     }
-  }, 600000);
+  }, 900000);
 
   test.each(firsts)('the Lodgy driven at the land beside the %s stays on the road side of the berm', (_name, along) => {
     for (const side of [-1, 1] as const) {

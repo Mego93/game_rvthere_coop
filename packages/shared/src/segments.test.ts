@@ -1079,6 +1079,7 @@ describe('mud and rocks', () => {
       ROCK_LATERALS.forEach((lateral, i) => {
         const wall = seg.walls[i]!;
         expect(wall.halfExtents).toEqual(ROCK_HALF);
+        expect(wall.rock).toBe(true);
         expect(wall.center.x).toBeCloseTo(side * lateral, 9);
         expect(wall.center.y).toBeCloseTo(ROCK_HALF.y, 9);
         expect(wall.center.z).toBeCloseTo(-(50 + i * ROCK_SPACING), 9);

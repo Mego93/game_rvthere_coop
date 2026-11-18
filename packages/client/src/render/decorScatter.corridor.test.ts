@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { buildCourse, CORRIDOR_OUTER, corridorHeightAt, corridorOf, getCourse, getCourseDef, routeFrame, segmentRanges, type CourseDef } from '@lodgy/shared';
+import { buildCourse, type Box, rotate, CORRIDOR_OUTER, corridorHeightAt, corridorOf, getCourse, getCourseDef, routeFrame, segmentRanges, type CourseDef } from '@lodgy/shared';
 import { describe, expect, test } from 'vitest';
 import { buildCells, DESKTOP_DECOR, TOUCH_DECOR, visibleCells } from './decorChunks';
 import { scatterDecor, seedFromId, type DecorPlacement } from './decorScatter';
@@ -27,6 +27,23 @@ describe('scatterDecor on a corridor course', () => {
       expect(p.y).toBeCloseTo(tile, 6);
     }
     expect(checked).toBeGreaterThan(5000);
+  });
+
+  test('nothing stands inside a mud patch (plus 1 m) or within 1 m of an obstacle wall', () => {
+    const local = (box: Box, x: number, z: number) => rotate({ x: -box.rot.x, y: -box.rot.y, z: -box.rot.z, w: box.rot.w }, { x: x - box.center.x, y: 0, z: z - box.center.z });
+    const inside = (box: Box, x: number, z: number, margin: number) => {
+      const l = local(box, x, z);
+      return Math.abs(l.x) <= box.halfExtents.x + margin && Math.abs(l.z) <= box.halfExtents.z + margin;
+    };
+    const mud = course.ground.filter((g) => g.surface === 'mud');
+    const walls = course.walls.slice(course.corridor!.wallsFrom);
+    expect(mud.length).toBe(10);
+    expect(walls.length).toBeGreaterThan(300);
+    for (const p of placements) {
+      if (distanceOf(p) > 130) continue;
+      for (const box of mud) if (Math.abs(p.x - box.center.x) < 60 && Math.abs(p.z - box.center.z) < 60) expect(inside(box, p.x, p.z, 1), `${p.model} in mud`).toBe(false);
+      for (const box of walls) if (Math.abs(p.x - box.center.x) < 90 && Math.abs(p.z - box.center.z) < 90) expect(inside(box, p.x, p.z, 1), `${p.model} by a wall`).toBe(false);
+    }
   });
 
   test('the hills moved beyond CORRIDOR_OUTER + 10', () => {

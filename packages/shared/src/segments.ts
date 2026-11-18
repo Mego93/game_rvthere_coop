@@ -373,7 +373,7 @@ function placeHazard(h: Hazard, surfaceAt: (along: number) => SurfacePoint, id: 
     ROCK_LATERALS.forEach((lateral, i) => {
       const s = surfaceAt(h.along + i * ROCK_SPACING);
       const rot = yawPitchQuat(s.yaw, s.pitch);
-      walls.push({ center: offsetFrom(s, h.side * lateral, ROCK_HALF.y), halfExtents: ROCK_HALF, rot });
+      walls.push({ center: offsetFrom(s, h.side * lateral, ROCK_HALF.y), halfExtents: ROCK_HALF, rot, rock: true });
       anchors.push({ id: id('boulder'), kind: 'boulder', pose: { pos: offsetFrom(s, h.side * lateral, 2 * ROCK_HALF.y), rot } });
     });
   } else if (h.kind === 'crateWall') {

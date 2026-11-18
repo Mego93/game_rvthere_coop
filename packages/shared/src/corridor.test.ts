@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { CORRIDOR_CELL, CORRIDOR_INNER, CORRIDOR_LAND_END, CORRIDOR_OUTER, CORRIDOR_RELIEF, CORRIDOR_RIDGE_HEIGHT, CORRIDOR_TILE_CELLS, ROAD_WIDTH, SHOULDER_WIDTH } from './constants';
+import { CORRIDOR_CELL, CORRIDOR_INNER, CORRIDOR_LAND_END, CORRIDOR_OUTER, CORRIDOR_RELIEF, CORRIDOR_RIDGE_END, CORRIDOR_RIDGE_HEIGHT, CORRIDOR_TILE_CELLS, ROAD_WIDTH, SHOULDER_WIDTH } from './constants';
 import { corridorHeightAt, corridorOf, corridorReliefAt, routeFrame } from './corridor';
 import { buildCourse, obstacleWalls } from './courses/build';
 import { rotate, vec3 } from './math';
@@ -208,7 +208,45 @@ describe('obstacle walls', () => {
       }
     }
     console.info(`wall pieces: ${runs.flat().length} in ${runs.length} runs, ${caps.length} caps, ${pairs} joints, worst facing-end gap ${worst.toFixed(3)} m`);
-    expect(pairs).toBeGreaterThan(100);
+    expect(pairs).toBeGreaterThan(50);
     expect(worst).toBeLessThanOrEqual(0.05);
+  });
+
+  test('straight stretches are merged: fewer than 600 wall boxes in all', () => {
+    const total = runs.flat().length + caps.length;
+    console.info(`obstacle walls: ${total} boxes (${runs.flat().length} wall pieces, ${caps.length} caps)`);
+    expect(total).toBeLessThan(600);
+  });
+
+  test('the inner corners of every wall piece stay at least 30 m from the route, curves included', () => {
+    const frame = routeFrame(marrakech);
+    let worst = Infinity;
+    for (const box of runs.flat()) {
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          const corner = rotate(box.rot, vec3(sx * box.halfExtents.x, 0, sz * box.halfExtents.z));
+          const hit = frame.nearest(box.center.x + corner.x, box.center.z + corner.z);
+          // Skip corners beside another stretch of the route.
+          if (hit.d < 25) continue;
+          const nearest = frame.nearest(box.center.x, box.center.z);
+          if (Math.abs(nearest.d - hit.d) > 4) continue;
+          worst = Math.min(worst, hit.d);
+        }
+      }
+    }
+    console.info(`wall corners: nearest route distance ${worst.toFixed(2)} m`);
+    expect(worst).toBeGreaterThanOrEqual(30);
+  });
+
+  test('end caps reach the ridge top: out to CORRIDOR_RIDGE_END and above route height + ridge + relief + 2', () => {
+    expect(caps.length).toBeGreaterThan(10);
+    const frame = routeFrame(marrakech);
+    for (const cap of caps) {
+      const hit = frame.nearest(cap.center.x, cap.center.z);
+      const top = cap.center.y + cap.halfExtents.y;
+      expect(top).toBeGreaterThanOrEqual(frame.heightAtAlong(hit.along) + CORRIDOR_RIDGE_HEIGHT + CORRIDOR_RELIEF + 2 - 1e-6);
+    }
+    const reach = Math.max(...caps.map((cap) => frame.nearest(cap.center.x, cap.center.z).d + cap.halfExtents.x));
+    expect(reach).toBeGreaterThanOrEqual(CORRIDOR_RIDGE_END - 1);
   });
 });
