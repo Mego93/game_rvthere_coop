@@ -43,7 +43,7 @@ The story mode (days, stats, traits, minigames); new vehicles; Paris and Dubai (
 4. **No coins from inside the car**: a seated player never collects coins; only players on foot do.
 5. **Admin mode**: the room admin can toggle a mode that lets them fly (free movement up/down, no gravity, no collisions with the world while flying), have infinite ammo and infinite items (using an item does not consume it) and refuel/repair at will. Server-authoritative; other players see the admin flying. (My call: it is off by default, shown with a badge, and never counted in results.)
 6. **First/third person toggle**: a key (V on desktop, a button on phones) switches the camera between first person and third person, on foot and in the vehicle. Reuses the step 26 first-person camera.
-7. **Faster, livelier Lodgy**: higher top speed and acceleration (my call: about +40 % top speed, tuned so it still handles the stages), a dashboard with a speedometer and a rev counter with gears (simulated automatic gearbox from wheel speed), suspension bobbing of the body and a little camera shake at speed.
+7. **Faster, livelier Lodgy**: 0 to 100 km/h in about 10 s on flat asphalt (owner), with a top speed above 100 km/h, tuned so it still handles the stages, a dashboard with a speedometer and a rev counter with gears (simulated automatic gearbox from wheel speed), suspension bobbing of the body and a little camera shake at speed.
 
 ## Part B: five stages
 
@@ -71,7 +71,7 @@ Owner's answers: players shoot, on foot; enemies are people on foot who attack w
 
 ## Assets
 
-For every new model, prop, character, decor and texture (bridge, river, forest trees, mountain village houses, Kasbah Bab Ourika, city cars, scooter riders, enemies, knife, handgun, Trident gum, fromage blanc, Coke Zero, tajine, ammo box, dashboard), search Sketchfab and pick the most downloaded or viewed model that is CC0 or CC BY (owner: most downloaded/viewed; licence and the phone size budget still apply), optimised like step 33 and credited.
+For every new model, prop, character, decor and texture (bridge, river, forest trees, mountain village houses, Kasbah Bab Ourika, city cars, scooter riders, enemies, knife, handgun, Trident gum, fromage blanc, Coke Zero, tajine, ammo box, dashboard), search Sketchfab and pick the most downloaded or viewed model that is CC0 or CC BY (owner: most downloaded/viewed; licence and the phone size budget still apply), optimised like step 33 and credited. Where the most downloaded one is not usable, the most reliable usable one is taken (owner: "take the most reliable").
 
 ## What is left to the builder (the plans)
 
@@ -80,9 +80,13 @@ Exact constants (speeds, grip, densities), segment lists per stage, the Ourika r
 ## Owner decisions (2026-11-18)
 
 - Keep the 22 km `marrakech` course as an extra "Full route" course; stages 1, 4 and 5 are new short courses cut from fitting parts of the route.
-- Stage 3 follows the real road to Kasbah Bab Ourika; heights from a public elevation service if reachable (one network approval), otherwise shaped by hand to match.
+- Stage 3 follows the real road to Kasbah Bab Ourika: fetched from OSRM (Tnine Ourika centre → Kasbah Bab Ourika, 6.7 km) with SRTM 30 m heights from OpenTopoData (848 → 952 m, flat for 3 km then climbing, steepest about 15 % near the kasbah). The stage uses the last 3.5 km, with the climb stretched about ×3 (to about +200 m, grades of about 10–20 %) so it reads as mountains (owner's choice); stored as local metres like the main route, credited (OpenStreetMap, SRTM/OpenTopoData).
 - Chained run: one timer and one restart count across the five stages, one results screen at the airport; fuel, health and coins carry over; props and items reset per stage; a failure restarts at the last checkpoint.
 - Combat as in Part C; power-ups as listed.
+
+## Process (owner)
+
+No heavy reviews: each step gets one short Sonnet review of its tasks; the Opus plan and whole-branch reviews are skipped unless a step is risky.
 
 ## Builder's calls already made
 
