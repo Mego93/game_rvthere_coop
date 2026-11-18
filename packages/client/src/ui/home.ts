@@ -31,6 +31,8 @@ const STYLE = `
 #home-room-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
 #home-link, #home-credits { justify-self: center; display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 600; color: var(--info); }
 #home-error { margin: 0; min-height: 1.4em; color: var(--danger); font-size: 14px; font-weight: 600; }
+#home-error:empty { min-height: 0; }
+#home-credits { margin-top: 4px; }
 @keyframes home-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { #home-form { animation: none; } }
 `;

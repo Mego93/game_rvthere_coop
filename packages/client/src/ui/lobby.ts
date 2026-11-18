@@ -126,7 +126,7 @@ export interface LobbyScreen {
 // Scenery is drawn with gradients, so the page carries no images; each layer ends at zero height on the tile's edge so the tiles join.
 const DUNES = 'radial-gradient(ellipse 300px 80px at 300px 120px, var(--dune-near) 98%, transparent 100%), radial-gradient(ellipse 200px 48px at 0 120px, var(--dune-near) 98%, transparent 100%), radial-gradient(ellipse 200px 48px at 600px 120px, var(--dune-near) 98%, transparent 100%)';
 const DUNES_FAR = 'radial-gradient(ellipse 400px 76px at 400px 140px, var(--dune-far) 98%, transparent 100%), radial-gradient(ellipse 260px 44px at 0 140px, var(--dune-far) 98%, transparent 100%), radial-gradient(ellipse 260px 44px at 800px 140px, var(--dune-far) 98%, transparent 100%)';
-const SILHOUETTE = 'radial-gradient(circle at 28px 42px, var(--sky) 0 3px, var(--silhouette) 3.5px 8px, transparent 8.5px), radial-gradient(circle at 92px 42px, var(--sky) 0 3px, var(--silhouette) 3.5px 8px, transparent 8.5px), linear-gradient(var(--silhouette), var(--silhouette)) 24px 12px / 62px 16px no-repeat, linear-gradient(var(--silhouette), var(--silhouette)) 6px 26px / 108px 16px no-repeat';
+const SILHOUETTE = 'radial-gradient(circle at 28px 42px, var(--sky) 0 3px, var(--silhouette) 3.5px 8px, transparent 8.5px), radial-gradient(circle at 92px 42px, var(--sky) 0 3px, var(--silhouette) 3.5px 8px, transparent 8.5px), linear-gradient(var(--silhouette), var(--silhouette)) 24px 12px / 62px 16px no-repeat, linear-gradient(135deg, transparent 0 50%, var(--silhouette) 50%) 16px 12px / 8px 16px no-repeat, linear-gradient(225deg, transparent 0 50%, var(--silhouette) 50%) 86px 12px / 8px 16px no-repeat, linear-gradient(var(--silhouette), var(--silhouette)) 6px 26px / 108px 16px no-repeat';
 
 const STYLE = `${CHAT_FORM_STYLE}
 #lobby { position: fixed; inset: 0; z-index: 20; display: grid; overflow-x: hidden; overflow-y: auto; background: linear-gradient(var(--sky-top), var(--sky) 55%, var(--sky-bottom)); }
@@ -237,10 +237,10 @@ const STYLE = `${CHAT_FORM_STYLE}
 @keyframes lobby-bob { from { translate: 0 0; } to { translate: 0 -3px; } }
 @keyframes lobby-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes lobby-join { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
-@keyframes lobby-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--majorelle) 55%, transparent); } 100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--majorelle) 0%, transparent); } }
+@keyframes lobby-pulse { 0% { box-shadow: 0 0 0 0 var(--pulse-a); } 100% { box-shadow: 0 0 0 10px var(--pulse-b); } }
 @keyframes lobby-leave { to { opacity: 0; transform: translateX(24px); } }
-@keyframes lobby-flash { 0% { background-color: color-mix(in srgb, var(--saffron) 90%, transparent); } 100% { background-color: transparent; } }
-@keyframes lobby-go { 0%, 100% { box-shadow: 0 3px 0 var(--ink), 0 0 0 0 color-mix(in srgb, var(--terracotta) 60%, transparent); } 50% { box-shadow: 0 3px 0 var(--ink), 0 0 0 10px color-mix(in srgb, var(--terracotta) 0%, transparent); } }
+@keyframes lobby-flash { 0% { background-color: var(--flash); } 100% { background-color: transparent; } }
+@keyframes lobby-go { 0%, 100% { box-shadow: 0 3px 0 var(--ink), 0 0 0 0 var(--go-glow); } 50% { box-shadow: 0 3px 0 var(--ink), 0 0 0 10px var(--go-glow-off); } }
 @media (prefers-reduced-motion: reduce) {
   #lobby *, #lobby *::before, #lobby *::after { animation: none !important; transition: none !important; }
   #lobby-vehicle-sil { left: 12%; }

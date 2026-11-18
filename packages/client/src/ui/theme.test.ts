@@ -78,6 +78,7 @@ describe('V7 contrast pairs (WCAG, at least 4.5:1)', () => {
   const pairs: [string, Rgb, Rgb][] = [
     ['white on glass over white', solid('--white'), over(TOKENS['--glass']!, '#ffffff')],
     ['white on terracotta-strong', solid('--white'), solid('--terracotta-strong')],
+    ['white on terracotta-deep (primary hover)', solid('--white'), solid('--terracotta-deep')],
     ['ink on sand', solid('--ink'), solid('--sand')],
     ['danger on sand', solid('--danger'), solid('--sand')],
     ['ok on sand', solid('--ok'), solid('--sand')],
@@ -107,6 +108,13 @@ describe('installTheme', () => {
     };
     return { doc: doc as unknown as Document, appended };
   };
+
+  it('skips when the page already carries #lodgy-theme', () => {
+    const { doc, appended } = fakeDoc();
+    appended.push({ id: 'lodgy-theme', textContent: 'from the build' });
+    installTheme(doc);
+    expect(appended).toHaveLength(1);
+  });
 
   it('adds one style element with THEME_CSS, and a second call adds nothing', () => {
     const { doc, appended } = fakeDoc();
