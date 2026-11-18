@@ -91,6 +91,11 @@ function stopScenery(stop: ServiceStop): THREE.Group | null {
   return group;
 }
 
+// The walls to draw: the walls beside obstacles on a corridor course (they start at `corridor.wallsFrom`) are invisible; the berms show them.
+export function visibleWalls(course: BuiltCourse): readonly Box[] {
+  return course.corridor ? course.walls.slice(0, course.corridor.wallsFrom) : course.walls;
+}
+
 export function createScene(course: BuiltCourse, options: SceneOptions = {}): THREE.Scene {
   const scene = new THREE.Scene();
   const groups = groupBySurface(course.ground);
@@ -98,7 +103,7 @@ export function createScene(course: BuiltCourse, options: SceneOptions = {}): TH
     const mesh = mergedMesh(groups[surface]!, groundMaterial(surface, options), false);
     if (mesh) scene.add(mesh);
   }
-  const walls = mergedMesh(course.walls, solid(0xc98a5a), true);
+  const walls = mergedMesh(visibleWalls(course), solid(0xc98a5a), true);
   if (walls) scene.add(walls);
   scene.add(createTerrainMesh(course, options));
   scene.add(...createSouleymanMeshes(souleymanPlacements(course.checkpoints)));

@@ -215,7 +215,7 @@ export function buildCourse(def: CourseDef): BuiltCourse {
     course.ambient = { blocked };
   }
   if (def.corridor) {
-    course.corridor = { obstacles: mergeSpans(obstacles) };
+    course.corridor = { obstacles: mergeSpans(obstacles), wallsFrom: course.walls.length };
     const { runs, caps } = obstacleWalls(course);
     course.walls.push(...runs.flat(), ...caps);
   }
