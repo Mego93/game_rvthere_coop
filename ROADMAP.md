@@ -57,8 +57,8 @@ Status values: `todo`, `planned` (plan written), `in progress`, `done`, `needs s
 | 33 | Sketchfab art pass: several rotating Moroccan/Arabian figures as Souleyman, models for items and obstacles, sky and sprites | planned | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
 | 34 | Emotes (the 67 gesture, dab and more), the quick phrase "Le mal est fait", a tajine item that speeds the player on foot, random weather that changes during the run | needs sign-off | `docs/superpowers/plans/step-34-fun.md` | [owner feedback](#owner-feedback-2026-11-17) | Owner |
 | 35 | UI redesign (home, lobby, HUD, menus, results) | planned | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
-| 36 | Paris course: from Rue Gutenberg (15th arrondissement) to the Eiffel Tower, real route, with an Audi TT as its vehicle (Sketchfab model) | planned (last) | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
-| 37 | Dubai course: from Dubai International Airport to the Burj Khalifa, real route, with a Lamborghini Urus as its vehicle (Sketchfab model) | planned (last) | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
+| 36 | Paris course: from Rue Gutenberg (15th arrondissement) to the Eiffel Tower, real route, with an Audi TT as its vehicle (Sketchfab model) | later (set aside by the owner) | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
+| 37 | Dubai course: from Dubai International Airport to the Burj Khalifa, real route, with a Lamborghini Urus as its vehicle (Sketchfab model) | later (set aside by the owner) | | [owner feedback](#owner-feedback-2026-11-17) | Owner |
 
 ## Owner feedback 2026-11-15
 
