@@ -497,6 +497,10 @@ Tajine: a fourth item, dropped at random (15 % of item drops; the jerrycan share
 
 Random weather: the lobby's weather setting may be `random`. The run then follows a seeded schedule (the run's item seed mixed with a constant): the first weather is clear (50 %), rain (30 %) or sandstorm (20 %), and it changes every 150 to 300 s to a different one; it pauses with the room and stops at the win, and a checkpoint restart keeps the current weather. Rain grip follows the current weather. The snapshot carries `weather` while the setting is random; clients blend fog, light and rain over 10 s and switch the sky at the midpoint; the results screen shows "Random".
 
+### Interface look
+
+Every screen and overlay uses one theme (`packages/client/src/ui/theme.ts`): a Marrakech road-trip palette (sand, terracotta, saffron, majorelle blue, teal, ink, a dark glass for HUD panels) as CSS custom properties, Rubik for titles and Inter for text and numbers (self-hosted, latin only), rounded panels with a small zellige border, short ease-out motion that respects reduced motion, 44 px touch targets and safe-area insets. Text meets WCAG AA contrast (tested). The theme is injected into the page at build time, so nothing renders unstyled. HUD placements are fixed per size (desktop and phone landscape) and a browser test checks that no HUD element overlaps another at 667×375, 844×390, 1280×720 and 1920×1080. The course's terrain, corridor and decor start building while the lobby shows the course, so a run starts faster. The 3D name tags and the debug overlay keep their own look.
+
 ### Protocol
 
 JSON over WebSocket.
