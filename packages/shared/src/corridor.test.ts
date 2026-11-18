@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { CORRIDOR_CELL, CORRIDOR_INNER, CORRIDOR_LAND_END, CORRIDOR_OUTER, CORRIDOR_RELIEF, CORRIDOR_RIDGE_END, CORRIDOR_RIDGE_HEIGHT, CORRIDOR_TILE_CELLS, ROAD_WIDTH, SHOULDER_WIDTH } from './constants';
-import { corridorHeightAt, corridorOf, corridorReliefAt, routeFrame } from './corridor';
+import { buildCorridor, corridorHeightAt, corridorSteps, warmCorridor, corridorOf, corridorReliefAt, routeFrame } from './corridor';
 import { buildCourse, obstacleWalls } from './courses/build';
 import { rotate, vec3 } from './math';
 import { getCourse, getCourseDef } from './courses/index';
@@ -248,5 +248,33 @@ describe('obstacle walls', () => {
     }
     const reach = Math.max(...caps.map((cap) => frame.nearest(cap.center.x, cap.center.z).d + cap.halfExtents.x));
     expect(reach).toBeGreaterThanOrEqual(CORRIDOR_RIDGE_END - 1);
+  });
+});
+
+describe('corridorSteps and warmCorridor', () => {
+  test('builds the same corridor in steps as in one go, and takes many steps', () => {
+    const steps = corridorSteps(marrakech);
+    let count = 0;
+    let result = steps.next();
+    while (!result.done) {
+      count += 1;
+      result = steps.next();
+    }
+    expect(count).toBeGreaterThan(100);
+    expect(result.value).toEqual(buildCorridor(marrakech));
+  });
+
+  test('fills what corridorOf returns, without a second build', () => {
+    const copy = { ...marrakech };
+    for (const _ of warmCorridor(copy));
+    const warmed = corridorOf(copy)!;
+    expect(warmed).toEqual(corridor);
+    expect(corridorOf(copy)).toBe(warmed);
+  });
+
+  test('leaves a course without a corridor alone', () => {
+    const airport = getCourse('airport');
+    expect([...warmCorridor(airport)]).toEqual([]);
+    expect(corridorOf(airport)).toBeNull();
   });
 });

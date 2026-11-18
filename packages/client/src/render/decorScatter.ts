@@ -165,7 +165,8 @@ function localBox(box: Box, x: number, z: number): { x: number; z: number } {
   return { x: local.x, z: local.z };
 }
 
-export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: number, options: ScatterOptions = {}): DecorPlacement[] {
+// The scatter as steps (one per placement attempt), so a caller can spread it over time; scatterDecor drains it.
+export function* scatterDecorSteps(course: BuiltCourse, def: CourseDef | null, seed: number, options: ScatterOptions = {}): Generator<void, DecorPlacement[]> {
   if (!def || course.route.length < 2) return [];
   const corridor = corridorOf(course);
   const rng = prng(seed);
@@ -309,6 +310,7 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
         if (n === 0 && SIGNATURE[zone.type] === name && !zone.city) n = SIGNATURE_MIN;
         else if (SIGNATURE[zone.type] === name && !zone.city) n = Math.max(n, SIGNATURE_MIN);
         for (let i = 0; i < n; i++) {
+          yield;
           if (name === 'fences') {
             const start = between(zone.from, Math.max(zone.from, zone.to - FENCE_RUN * 3));
             const lateral = between(spec.zone[0], spec.zone[1]);
@@ -384,11 +386,11 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
       }
     }
   }
-  if (corridor) scatterCorridor();
+  if (corridor) yield* scatterCorridor();
   return out;
 
   // The step 32 and 33 decor of a corridor course, from its own random stream so the rest of the scatter is unchanged.
-  function scatterCorridor() {
+  function* scatterCorridor(): Generator<void> {
     const rc = prng((seed ^ 0x5bd1e995) >>> 0);
     const betweenC = (a: number, b: number) => a + (b - a) * rc();
     const pickC = (list: readonly ModelKey[]) => list[Math.floor(rc() * list.length)]!;
@@ -452,6 +454,7 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
     // Rocks on the berms beside each obstacle.
     for (const span of course.corridor!.obstacles) {
       for (let a = Math.max(0, span.from - BERM_ROCK_REACH); a <= Math.min(total, span.to + BERM_ROCK_REACH); a += 5) {
+        yield;
         for (const s of side) {
           if (rc() > 0.75) continue;
           const p = spot(a + betweenC(-2, 2), betweenC(BERM_ROCK_ZONE[0], BERM_ROCK_ZONE[1]), s);
@@ -465,19 +468,21 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
       const table: Density = zone.city ? DECOR_DENSITY.city : (DECOR_DENSITY[zone.type as keyof typeof DECOR_DENSITY] ?? DECOR_DENSITY.road);
       const length = zone.to - zone.from;
       for (const s of side) {
-        const scatter = (keys: readonly ModelKey[], density: number, zoneLateral: readonly [number, number], scale: readonly [number, number], radius: number, sunk = 0) => {
+        const scatter = function* (keys: readonly ModelKey[], density: number, zoneLateral: readonly [number, number], scale: readonly [number, number], radius: number, sunk = 0): Generator<void> {
           for (let i = countC((density * length) / 100); i > 0; i--) {
+            yield;
             const p = spot(betweenC(zone.from, zone.to), betweenC(zoneLateral[0], zoneLateral[1]), s);
             sink(place(pickC(keys), p.x, p.z, rc() * Math.PI * 2, betweenC(scale[0], scale[1]), [zoneLateral[0] - 0.5, Infinity], radius), sunk);
           }
         };
-        scatter(MODELS.rocks, table.rocks ?? 0, [BAND[0], 130], [0.8, 1.8], 2);
-        scatter(MODELS.palms, table.palms ?? 0, [BAND[0], 110], [0.85, 1.25], 2.2);
-        scatter(MODELS.cactus, table.cactus ?? 0, [BAND[0], 90], [0.8, 1.3], 1);
-        scatter(MODELS.scrub, (table.scrub ?? 0) * BAND_SHRUBS, BAND, [0.9, 1.8], 1);
+        yield* scatter(MODELS.rocks, table.rocks ?? 0, [BAND[0], 130], [0.8, 1.8], 2);
+        yield* scatter(MODELS.palms, table.palms ?? 0, [BAND[0], 110], [0.85, 1.25], 2.2);
+        yield* scatter(MODELS.cactus, table.cactus ?? 0, [BAND[0], 90], [0.8, 1.3], 1);
+        yield* scatter(MODELS.scrub, (table.scrub ?? 0) * BAND_SHRUBS, BAND, [0.9, 1.8], 1);
         if (!zone.city) {
-          scatter(['decor.agave'], 0.8, ROADSIDE_ZONE, [0.9, 1.4], 0.8);
+          yield* scatter(['decor.agave'], 0.8, ROADSIDE_ZONE, [0.9, 1.4], 0.8);
           for (let i = countC((0.35 * length) / 100); i > 0; i--) {
+            yield;
             const base = betweenC(zone.from, zone.to);
             const lateral = betweenC(ROADSIDE_ZONE[0], ROADSIDE_ZONE[1] - 1);
             for (let k = 0, stack = 1 + Math.floor(rc() * 3); k < stack; k++) {
@@ -486,9 +491,17 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
             }
           }
         }
-        scatter(['decor.cliffs'], 0.8, CLIFFS_ZONE, [1.5, 3], 8, 0.3);
-        scatter(['decor.mountains'], 0.5, MOUNTAINS_ZONE, [7, 12], 120, 8);
+        yield* scatter(['decor.cliffs'], 0.8, CLIFFS_ZONE, [1.5, 3], 8, 0.3);
+        yield* scatter(['decor.mountains'], 0.5, MOUNTAINS_ZONE, [7, 12], 120, 8);
       }
     }
+  }
+}
+
+export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: number, options: ScatterOptions = {}): DecorPlacement[] {
+  const steps = scatterDecorSteps(course, def, seed, options);
+  for (;;) {
+    const next = steps.next();
+    if (next.done) return next.value;
   }
 }

@@ -325,7 +325,8 @@ const BLOCK = 8;
 const LOW_HALF = CORRIDOR_CELL * Math.SQRT2 + 1;
 const TILE_REACH = CORRIDOR_LAND_END + 8 + Math.SQRT2 * TILE_SIZE;
 
-export function buildCorridor(course: BuiltCourse): Corridor {
+// The corridor build as steps (one per column of blocks within a tile), so a caller can spread it over time; the result is the same as buildCorridor's.
+export function* corridorSteps(course: BuiltCourse): Generator<void, Corridor> {
   const frame = routeFrame(course);
   const obstacles = course.corridor?.obstacles ?? [];
   const { minX, maxX, minZ, maxZ, count } = frame.segment;
@@ -361,6 +362,7 @@ export function buildCorridor(course: BuiltCourse): Corridor {
     let hint: number | undefined;
     // Blocks of BLOCK cells: the segments that can be nearest to a point in a block are those within its centre's nearest distance plus the block's half diagonal.
     for (let bx = 0; bx < CORRIDOR_TILE_CELLS; bx += BLOCK) {
+      yield;
       for (let bz = 0; bz < CORRIDOR_TILE_CELLS; bz += BLOCK) {
         const x1 = x0 + bx * CORRIDOR_CELL;
         const z1 = z0 + bz * CORRIDOR_CELL;
@@ -400,6 +402,14 @@ export function buildCorridor(course: BuiltCourse): Corridor {
   return { tiles, minY, index };
 }
 
+export function buildCorridor(course: BuiltCourse): Corridor {
+  const steps = corridorSteps(course);
+  for (;;) {
+    const next = steps.next();
+    if (next.done) return next.value;
+  }
+}
+
 const corridors = new WeakMap<BuiltCourse, Corridor>();
 
 // The land beside the road of a course that opted in, or null. Built once per course and shared by every world, the predictor and the renderer.
@@ -411,6 +421,14 @@ export function corridorOf(course: BuiltCourse): Corridor | null {
     corridors.set(course, corridor);
   }
   return corridor;
+}
+
+// Builds a course's corridor in steps and stores it where corridorOf finds it, which stays synchronous. Nothing happens for a course without one or one already built.
+export function* warmCorridor(course: BuiltCourse): Generator<void, void> {
+  if (!course.corridor || corridors.has(course)) return;
+  const built = yield* corridorSteps(course);
+  // A synchronous corridorOf call during a pause may have built it first; that one stays.
+  if (!corridors.has(course)) corridors.set(course, built);
 }
 
 // The height at (x, z) on the triangulation Rapier uses (each cell splits along its (x1, z0)-(x0, z1) diagonal), or null outside every tile.
