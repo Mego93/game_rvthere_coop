@@ -4,6 +4,13 @@ Most of what is here is CC0 1.0 (public domain dedication); no attribution is re
 
 Route geometry derives from OpenStreetMap data: © OpenStreetMap contributors, available under the Open Database Licence (ODbL). See https://www.openstreetmap.org/copyright .
 
+# Fonts
+
+Both fonts are licensed under the SIL Open Font License 1.1 (https://openfontlicense.org), are used unmodified (Latin subset, variable woff2) and are served from the game's own files, from the npm packages `@fontsource-variable/rubik` and `@fontsource-variable/inter`.
+
+- "Rubik" by Hubert & Fischer and Meir Sadan, used for titles and numbers. Source: https://fontsource.org/fonts/rubik (https://fonts.google.com/specimen/Rubik). Licence: SIL Open Font License 1.1.
+- "Inter" by Rasmus Andersson, used for text. Source: https://fontsource.org/fonts/inter (https://rsms.me/inter/). Licence: SIL Open Font License 1.1.
+
 ## models/real
 
 Both models are licensed CC BY 4.0 (Creative Commons Attribution 4.0 International, http://creativecommons.org/licenses/by/4.0/). Each was modified: simplified geometry and resized textures for real-time use. The licence text and these notes also sit in the folder's `License.txt`.
