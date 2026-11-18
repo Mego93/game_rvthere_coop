@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { ClientMessage, LobbyMessage, Phase, ResultsMessage, ServerMessage } from '@lodgy/shared';
 import * as THREE from 'three';
+import './ui/fonts.css';
 import { createAudio } from './audio/audio';
 import { isMuteKey } from './audio/soundMap';
 import { createGame, type Game } from './game';
@@ -25,6 +26,7 @@ import { createEmoteWheel } from './ui/emoteWheel';
 import { createHome, errorText } from './ui/home';
 import { createLobby } from './ui/lobby';
 import { createResults } from './ui/results';
+import { installTheme } from './ui/theme';
 import { createTouchUi } from './ui/touchUi';
 import { createTutorial, shouldAutoShowTutorial } from './ui/tutorial';
 import { firstPersonEnabled } from './render/firstPersonCamera';
@@ -157,6 +159,9 @@ let closeReason = CONNECTION_LOST;
 const credits = createCredits(document);
 // The tutorial first: both close on Escape in the capture phase, and the one on top (the tutorial) must take it.
 const tutorial = createTutorial(document, { touch: touchDevice, store: nameStore, onChange: () => game?.setControlsOpen(menuPanelOpen()) });
+// The theme goes in before any screen is built, so every component can use its tokens and shared classes.
+installTheme(document);
+
 const helpPanel = createControlsPanel(document, () => game?.setControlsOpen(menuPanelOpen()), () => credits.open());
 const menuPanelOpen = () => helpPanel.isOpen() || tutorial.isOpen();
 // Shown on its own the first time the lobby appears on this page load, unless it was finished or skipped before.

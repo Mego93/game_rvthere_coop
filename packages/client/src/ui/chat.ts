@@ -109,20 +109,23 @@ export const isChatKey = (event: KeyFacts, targetTag: string | null): boolean =>
   event.code === 'KeyT' && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey && !['INPUT', 'SELECT', 'TEXTAREA'].includes(targetTag?.toUpperCase() ?? '');
 
 export const CHAT_FORM_STYLE = `
-.chat-lines { display: grid; gap: 2px; align-content: start; overflow-y: auto; overflow-wrap: anywhere; font: 14px/1.35 system-ui, sans-serif; }
+.chat-lines { display: grid; gap: 2px; align-content: start; overflow-y: auto; overflow-wrap: anywhere; font: 14px/1.35 var(--font-text); }
 .chat-line .chat-name { font-weight: 600; margin-right: 6px; }
-.chat-line.own .chat-name { color: #2f6f9f; }
+.chat-line.own .chat-name { color: var(--info); }
 .chat-form { display: grid; gap: 8px; }
 .chat-row { display: flex; gap: 8px; }
-.chat-form input { flex: 1; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 8px 10px; font: inherit; font-size: 16px; color: #222; background: #fff; border: 1px solid #9ab; border-radius: 6px; }
-.chat-form button { min-height: 44px; padding: 8px 12px; font: inherit; font-size: 14px; color: #fff; background: #2f6f9f; border: 1px solid #2f6f9f; border-radius: 6px; cursor: pointer; }
+.chat-form input { flex: 1; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 8px 12px; font: inherit; font-size: 16px; color: var(--ink); background: var(--paper); border: 2px solid var(--ink-soft); border-radius: var(--radius-ctl); }
+.chat-form input:focus { border-color: var(--majorelle); }
+.chat-form button { min-height: 44px; padding: 8px 14px; font: inherit; font-size: 14px; font-weight: 600; color: var(--white); background: var(--terracotta-strong); border: 2px solid var(--ink); border-radius: var(--radius-ctl); box-shadow: 0 2px 0 var(--ink); cursor: pointer; transition: transform var(--dur) var(--ease), background-color var(--dur) var(--ease); }
+.chat-form button:active { transform: translateY(1px); }
 .chat-phrases { display: flex; flex-wrap: wrap; gap: 6px; }
-.chat-phrases button { color: #1d3b52; background: #e3eef6; border-color: #b9cddc; }
-.chat-note { min-height: 1.3em; margin: 0; font-size: 13px; color: #b3261e; }
+.chat-phrases button { color: var(--ink); background: var(--sand-deep); border-color: var(--ink-soft); box-shadow: none; }
+.chat-note { min-height: 1.3em; margin: 0; font-size: 13px; font-weight: 500; color: var(--danger); }
 @media (max-height: 500px) {
   .chat-phrases { flex-wrap: nowrap; overflow-x: auto; }
   .chat-phrases button { flex: none; }
 }
+@media (prefers-reduced-motion: reduce) { .chat-form button { transition: none; } }
 `;
 
 export interface ChatForm {

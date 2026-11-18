@@ -15,6 +15,26 @@ const ERROR_TEXT: Record<ErrorReason, string> = {
   character_taken: 'Another player already has that character.',
 };
 
+const STYLE = `
+#home { position: fixed; inset: 0; z-index: 10; display: grid; box-sizing: border-box; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  /* With the keyboard open on a phone in landscape the form is taller than the screen, so it must scroll. */
+  overflow-x: hidden; overflow-y: auto;
+  background: radial-gradient(circle at 80% 20%, var(--sun) 0 44px, transparent 45px), radial-gradient(ellipse 75% 34% at 18% 100%, var(--dune-near) 0 98%, transparent 100%), radial-gradient(ellipse 85% 26% at 88% 100%, var(--dune-far) 0 98%, transparent 100%), linear-gradient(var(--sky-top), var(--sky-bottom)); }
+#home[hidden], #home [hidden] { display: none; }
+#home-form { display: grid; gap: 12px; width: min(380px, 100%); /* Centres the form, and unlike centring on the container keeps its top reachable when it overflows. */ margin: auto; padding: 24px 22px; animation: home-rise 240ms var(--ease) both; }
+#home-form h1 { margin: 0; font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--teal); overflow-wrap: anywhere; }
+#home-tagline { margin: -4px 0 4px; font-size: 14px; color: var(--ink-soft); }
+#home-form label { display: grid; gap: 4px; min-width: 0; font-size: 14px; font-weight: 600; }
+#home-form input { /* iOS Safari zooms the page when a focused field's text is smaller than 16px. */ font-size: 16px; }
+#home-form input::placeholder { color: var(--ink-soft); opacity: 1; }
+#home-primary { width: 100%; }
+#home-room-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+#home-link, #home-credits { justify-self: center; display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 600; color: var(--info); }
+#home-error { margin: 0; min-height: 1.4em; color: var(--danger); font-size: 14px; font-weight: 600; }
+@keyframes home-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #home-form { animation: none; } }
+`;
+
 export const errorText = (reason: ErrorReason): string => ERROR_TEXT[reason];
 
 export interface HomeHandlers {
@@ -33,8 +53,11 @@ export interface HomeView {
   setBusy(busy: boolean, progress?: string): void;
 }
 
-// The home page and the "join this room" page. The markup is in index.html; this wires it up.
+// The home page and the "join this room" page. The markup is in index.html; this wires it up and adds the styles.
 export function createHome(root: HTMLElement, handlers: HomeHandlers): HomeView {
+  const style = root.ownerDocument.createElement('style');
+  style.textContent = STYLE;
+  root.append(style);
   const find = <T extends HTMLElement>(id: string) => root.querySelector<T>(`#${id}`)!;
   const form = find<HTMLFormElement>('home-form');
   const title = find('home-title');
