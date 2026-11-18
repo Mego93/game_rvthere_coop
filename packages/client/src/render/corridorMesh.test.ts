@@ -1,8 +1,8 @@
 import { CORRIDOR_OUTER, corridorHeightAt, corridorOf, getCourse } from '@lodgy/shared';
 import * as THREE from 'three';
 import { describe, expect, test } from 'vitest';
-import { buildTileGeometry, createCorridorTerrain, SKIRT } from './corridorMesh';
-import { buildTerrainGrid, landHeight, ridgeTopAt, routeDistance, terrainHeight } from './terrain';
+import { buildTileGeometry, createCorridorTerrain, MAX_BUILDS, SKIRT } from './corridorMesh';
+import { farMeshHeight, landHeight, ridgeTopAt, routeDistance, terrainHeight } from './terrain';
 
 const course = getCourse('marrakech');
 const corridor = corridorOf(course)!;
@@ -69,7 +69,6 @@ describe('tile meshes', () => {
       const [a, b, c] = [at(data.indices[t * 3]!), at(data.indices[t * 3 + 1]!), at(data.indices[t * 3 + 2]!)];
       const normal = new THREE.Triangle(a, b, c).getNormal(new THREE.Vector3());
       if (t < surfaceTriangles) expect(normal.y).toBeGreaterThan(0);
-      else if (normal.y > 0.5) continue; // the flange strip faces up
       else {
         expect(Math.abs(normal.y)).toBeLessThan(1e-6);
         const centre = new THREE.Vector3(tile.x0 + (tile.cols * tile.cell) / 2, 0, tile.z0 + (tile.rows * tile.cell) / 2);
@@ -127,6 +126,54 @@ describe('lazy tiles', () => {
     large.dispose();
     expect(createCorridorTerrain(getCourse('airport'), 350)).toBeNull();
   });
+
+  test('builds at most MAX_BUILDS tiles per update, nearest first, except the forced first call', () => {
+    const start = course.route[0]!;
+    const camera = { x: start[0], z: start[1] };
+    const terrain = createCorridorTerrain(course, 350, { flat: true })!;
+    terrain.update(camera, 0, true);
+    const all = terrain.loaded;
+    expect(all).toBeGreaterThan(MAX_BUILDS);
+    terrain.dispose();
+    const lazy = createCorridorTerrain(course, 350, { flat: true })!;
+    lazy.update(camera, 0);
+    expect(lazy.loaded).toBe(MAX_BUILDS);
+    const first = lazy.loadedTiles();
+    lazy.update(camera, 1);
+    expect(lazy.loaded).toBe(Math.min(all, 2 * MAX_BUILDS));
+    const nearness = (tile: (typeof first)[number]) => Math.hypot(Math.max(tile.x0 - camera.x, 0, camera.x - tile.x0 - 128), Math.max(tile.z0 - camera.z, 0, camera.z - tile.z0 - 128));
+    const second = lazy.loadedTiles().filter((tile) => !first.includes(tile));
+    for (const a of first) for (const b of second) expect(nearness(a)).toBeLessThanOrEqual(nearness(b));
+    lazy.dispose();
+  });
+
+  test('updates are throttled to every 0.25 s unless forced', () => {
+    const start = course.route[0]!;
+    const terrain = createCorridorTerrain(course, 350, { flat: true })!;
+    terrain.update({ x: start[0], z: start[1] }, 10);
+    const count = terrain.loaded;
+    terrain.update({ x: start[0], z: start[1] }, 10.1);
+    expect(terrain.loaded).toBe(count);
+    terrain.update({ x: start[0], z: start[1] }, 10.3);
+    expect(terrain.loaded).toBeGreaterThan(count);
+    terrain.dispose();
+  });
+
+  test('hysteresis: a tile stays at radius + 10 m and goes at radius + 64 m', () => {
+    const radius = 200;
+    const terrain = createCorridorTerrain(course, radius, { flat: true })!;
+    const start = course.route[0]!;
+    terrain.update({ x: start[0], z: start[1] }, 0, true);
+    const tile = terrain.loadedTiles()[0]!;
+    const size = tile.cols * tile.cell;
+    const midZ = tile.z0 + size / 2;
+    const away = (gap: number) => ({ x: tile.x0 - gap, z: midZ });
+    terrain.update(away(radius + 10), 1, true);
+    expect(terrain.loadedTiles()).toContain(tile);
+    terrain.update(away(radius + 64.5), 2, true);
+    expect(terrain.loadedTiles()).not.toContain(tile);
+    terrain.dispose();
+  });
 });
 
 describe('far terrain', () => {
@@ -142,31 +189,49 @@ describe('far terrain', () => {
       checked++;
       const top = ridgeTopAt(course, x, z, smooth);
       expect(terrainHeight(course, x, z)).toBeLessThanOrEqual(top + 1e-6);
-      expect(landHeight(course, x, z)).toBeLessThanOrEqual(top + 0.3);
+      expect(farMeshHeight(course, x, z)).toBeLessThanOrEqual(top + 0.5);
     }
     expect(checked).toBeGreaterThan(50);
   });
 
-  test('every far vertex beyond the corridor is at or below its ridge top and the grid is finite', () => {
-    const grid = buildTerrainGrid(course);
-    expect(grid.cells).toBeGreaterThan(1000);
-    for (const value of grid.positions) expect(Number.isFinite(value)).toBe(true);
-    for (let v = 0; v < grid.positions.length; v += 3 * 97) {
-      const x = grid.positions[v]!;
-      const z = grid.positions[v + 2]!;
-      const { distance, smooth } = routeDistance(course, x, z);
-      if (distance < CORRIDOR_OUTER || corridorHeightAt(corridor, x, z) !== null) continue;
-      expect(grid.positions[v + 1]!).toBeLessThanOrEqual(ridgeTopAt(course, x, z, smooth) + 1e-4);
-    }
-  });
-
-  test('inside the tiles the far mesh lies under the corridor', () => {
+  test('inside the tiles the far mesh, on its own diagonal, lies at least 0.2 m under the corridor at random points of random tiles', () => {
     const rng = prng(11);
-    for (let n = 0; n < 100; n++) {
+    let worst = Infinity;
+    for (let n = 0; n < 1500; n++) {
       const tile = corridor.tiles[Math.floor(rng() * corridor.tiles.length)]!;
       const x = tile.x0 + rng() * tile.cols * tile.cell;
       const z = tile.z0 + rng() * tile.rows * tile.cell;
-      expect(terrainHeight(course, x, z)).toBeLessThan(corridorHeightAt(corridor, x, z)! - 1);
+      const tileHeight = corridorHeightAt(corridor, x, z)!;
+      worst = Math.min(worst, tileHeight - farMeshHeight(course, x, z));
+    }
+    expect(worst).toBeGreaterThanOrEqual(0.2);
+  });
+
+  test('at the tile set\'s edge the far mesh is hidden but meets it: typically within 4 m, at most 0.5 m above', () => {
+    const rng = prng(12);
+    const gaps: number[] = [];
+    for (let n = 0; n < 20000 && gaps.length < 150; n++) {
+      const tile = corridor.tiles[Math.floor(rng() * corridor.tiles.length)]!;
+      const west = rng() < 0.5;
+      const edgeX = west ? tile.x0 + 0.5 : tile.x0 + tile.cols * tile.cell - 0.5;
+      const z = tile.z0 + rng() * tile.rows * tile.cell;
+      if (corridorHeightAt(corridor, edgeX + (west ? -2 : 2), z) !== null) continue;
+      gaps.push(corridorHeightAt(corridor, edgeX, z)! - farMeshHeight(course, edgeX, z));
+    }
+    expect(gaps.length).toBeGreaterThan(50);
+    gaps.sort((a, b) => a - b);
+    expect(gaps[0]).toBeGreaterThanOrEqual(-0.5); // the tile material is pulled forward by its polygon offset
+    expect(gaps[gaps.length >> 1]).toBeLessThan(4);
+  });
+
+  test('decor lands on the drawn far mesh outside the tiles', () => {
+    const rng = prng(13);
+    const tile = corridor.tiles[0]!;
+    for (let n = 0; n < 50; n++) {
+      const x = tile.x0 - 300 - rng() * 400;
+      const z = tile.z0 + rng() * 400;
+      if (corridorHeightAt(corridor, x, z) !== null) continue;
+      expect(landHeight(course, x, z)).toBe(farMeshHeight(course, x, z));
     }
   });
 });

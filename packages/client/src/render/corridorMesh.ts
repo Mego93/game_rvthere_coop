@@ -5,14 +5,13 @@ import { groundTexture, type SceneOptions } from './groundTextures';
 import { terrainShade } from './terrain';
 
 // Metres a tile's edge skirt hangs below its surface, so a crack to a missing neighbour or the far land shows no gap.
-export const SKIRT = 3;
-// A flat strip this wide past each tile edge overlaps the neighbour's, so no hairline crack shows between tiles.
-export const FLANGE = 0.15;
+export const SKIRT = 2;
 const SAND = 0xd9b77a;
 const ROCK: readonly [number, number, number] = [0.55, 0.46, 0.4];
 const UPDATE_SECONDS = 0.25;
 // A loaded tile is kept until it is this much farther than the radius.
 const KEEP_MARGIN = 64;
+export const MAX_BUILDS = 3;
 
 export interface TileGeometry {
   positions: Float32Array;
@@ -34,7 +33,7 @@ export function buildTileGeometry(course: BuiltCourse, corridor: Corridor, tile:
   const stride = tile.rows + 1;
   const surface = stride * (tile.cols + 1);
   const ring = 2 * (tile.cols + tile.rows);
-  const vertices = surface + 2 * ring;
+  const vertices = surface + ring;
   const positions = new Float32Array(vertices * 3);
   const normals = new Float32Array(vertices * 3);
   const uvs = new Float32Array(vertices * 2);
@@ -76,18 +75,13 @@ export function buildTileGeometry(course: BuiltCourse, corridor: Corridor, tile:
   for (let zi = tile.rows; zi > 0; zi--) edge.push(zi + 0 * stride);
   for (let k = 0; k < ring; k++) {
     const top = edge[k]!;
-    const xi = Math.floor(top / stride);
-    const zi = top % stride;
-    const outX = xi === 0 ? -1 : xi === tile.cols ? 1 : 0;
-    const outZ = zi === 0 ? -1 : zi === tile.rows ? 1 : 0;
-    for (const [slot, drop] of [[surface + k, 0], [surface + ring + k, SKIRT]] as const) {
-      positions.set([positions[top * 3]! + outX * FLANGE, positions[top * 3 + 1]! - drop, positions[top * 3 + 2]! + outZ * FLANGE], slot * 3);
-      normals.set([normals[top * 3]!, normals[top * 3 + 1]!, normals[top * 3 + 2]!], slot * 3);
-      uvs.set([uvs[top * 2]!, uvs[top * 2 + 1]!], slot * 2);
-      colours.set([colours[top * 3]!, colours[top * 3 + 1]!, colours[top * 3 + 2]!], slot * 3);
-    }
+    const low = surface + k;
+    positions.set([positions[top * 3]!, positions[top * 3 + 1]! - SKIRT, positions[top * 3 + 2]!], low * 3);
+    normals.set([normals[top * 3]!, normals[top * 3 + 1]!, normals[top * 3 + 2]!], low * 3);
+    uvs.set([uvs[top * 2]!, uvs[top * 2 + 1]!], low * 2);
+    colours.set([colours[top * 3]!, colours[top * 3 + 1]!, colours[top * 3 + 2]!], low * 3);
   }
-  const indices = new Uint16Array(tile.cols * tile.rows * 6 + ring * 12);
+  const indices = new Uint16Array(tile.cols * tile.rows * 6 + ring * 6);
   let n = 0;
   for (let xi = 0; xi < tile.cols; xi++) {
     for (let zi = 0; zi < tile.rows; zi++) {
@@ -104,12 +98,10 @@ export function buildTileGeometry(course: BuiltCourse, corridor: Corridor, tile:
     const next = (k + 1) % ring;
     const p = edge[k]!;
     const q = edge[next]!;
-    const fp = surface + k;
-    const fq = surface + next;
-    const lp = surface + ring + k;
-    const lq = surface + ring + next;
-    indices.set([p, q, fp, q, fq, fp, fp, fq, lp, fq, lq, lp], n);
-    n += 12;
+    const lp = surface + k;
+    const lq = surface + next;
+    indices.set([p, q, lp, q, lq, lp], n);
+    n += 6;
   }
   return { positions, normals, uvs, colours, indices, vertices };
 }
@@ -117,7 +109,8 @@ export function buildTileGeometry(course: BuiltCourse, corridor: Corridor, tile:
 export interface CorridorTerrain {
   readonly group: THREE.Group;
   readonly loaded: number;
-  // Loads the tiles within the radius of the camera and drops the ones far away; acts at most every UPDATE_SECONDS unless `force`.
+  loadedTiles(): CorridorTile[];
+  // Drops the tiles far from the camera and builds up to MAX_BUILDS of those within the radius, nearest first (all of them when `force`); acts at most every UPDATE_SECONDS unless `force`.
   update(camera: { x: number; z: number }, nowSeconds: number, force?: boolean): void;
   dispose(): void;
 }
@@ -125,7 +118,7 @@ export interface CorridorTerrain {
 function sandMaterial({ lite = false, flat = false }: SceneOptions): THREE.MeshStandardMaterial {
   const map = flat ? null : groundTexture('sand', 'diffuse');
   if (map) map.anisotropy = lite ? 1 : 4;
-  return new THREE.MeshStandardMaterial({ color: map ? 0xffffff : SAND, map, normalMap: map && !lite ? groundTexture('sand', 'normal') : null, roughness: 1, metalness: 0, vertexColors: true });
+  return new THREE.MeshStandardMaterial({ color: map ? 0xffffff : SAND, map, normalMap: map && !lite ? groundTexture('sand', 'normal') : null, roughness: 1, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });
 }
 
 // The land beside the road, one mesh per tile, built when the camera comes within `radius` and disposed when it leaves; null for a course without a corridor.
@@ -151,12 +144,17 @@ export function createCorridorTerrain(course: BuiltCourse, radius: number, optio
     get loaded() {
       return loaded.size;
     },
+    loadedTiles: () => [...loaded.keys()],
     update(camera, nowSeconds, force = false) {
       if (!force && nowSeconds - last < UPDATE_SECONDS) return;
       last = nowSeconds;
-      for (const tile of [...loaded.keys()]) if (distance(tile, camera.x, camera.z) > radius + KEEP_MARGIN) drop(tile);
-      for (const tile of corridor.tiles) {
-        if (loaded.has(tile) || distance(tile, camera.x, camera.z) > radius) continue;
+      for (const tile of [...loaded.keys()]) if (distance(tile, camera.x, camera.z) > radius + KEEP_MARGIN - 1e-6) drop(tile);
+      const wanted = corridor.tiles
+        .filter((tile) => !loaded.has(tile))
+        .map((tile) => ({ tile, d: distance(tile, camera.x, camera.z) }))
+        .filter((entry) => entry.d <= radius)
+        .sort((p, q) => p.d - q.d);
+      for (const { tile } of wanted.slice(0, force ? wanted.length : MAX_BUILDS)) {
         const data = buildTileGeometry(course, corridor, tile);
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));

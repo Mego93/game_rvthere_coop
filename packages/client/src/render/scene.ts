@@ -1,4 +1,4 @@
-import { ANCHOR_HEIGHT, obstacleWalls, ROAD_WIDTH, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type BuiltCourse, type ServiceStop, type Surface } from '@lodgy/shared';
+import { ANCHOR_HEIGHT, ROAD_WIDTH, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type BuiltCourse, type ServiceStop, type Surface } from '@lodgy/shared';
 import * as THREE from 'three';
 import { fitted, hasModel, instantiate, shadowed, type FitSize } from './models';
 import { groupBySurface, mergeBoxes, toGeometry } from './groundMerge';
@@ -85,11 +85,9 @@ function stopScenery(stop: ServiceStop): THREE.Group | null {
   return group;
 }
 
-// The walls to draw: the walls beside obstacles on a corridor course (appended last by the course builder) are invisible, the berms show them.
+// The walls to draw: the walls beside obstacles on a corridor course (they start at `corridor.wallsFrom`) are invisible; the berms show them.
 export function visibleWalls(course: BuiltCourse): readonly Box[] {
-  if (!course.corridor) return course.walls;
-  const { runs, caps } = obstacleWalls(course);
-  return course.walls.slice(0, course.walls.length - runs.flat().length - caps.length);
+  return course.corridor ? course.walls.slice(0, course.corridor.wallsFrom) : course.walls;
 }
 
 export function createScene(course: BuiltCourse, options: SceneOptions = {}): THREE.Scene {

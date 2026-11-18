@@ -1,8 +1,9 @@
-import { buildCourse, CORRIDOR_OUTER, corridorHeightAt, corridorOf, getCourse, getCourseDef, type CourseDef } from '@lodgy/shared';
+import { createHash } from 'node:crypto';
+import { buildCourse, CORRIDOR_OUTER, corridorHeightAt, corridorOf, getCourse, getCourseDef, routeFrame, segmentRanges, type CourseDef } from '@lodgy/shared';
 import { describe, expect, test } from 'vitest';
 import { buildCells, DESKTOP_DECOR, TOUCH_DECOR, visibleCells } from './decorChunks';
 import { scatterDecor, seedFromId, type DecorPlacement } from './decorScatter';
-import { routeDistance } from './terrain';
+import { farMeshHeight, routeDistance } from './terrain';
 
 const course = getCourse('marrakech');
 const def = getCourseDef('marrakech')!;
@@ -42,18 +43,23 @@ describe('scatterDecor on a corridor course', () => {
     expect(band(placements, course)).toBeGreaterThanOrEqual(1.9 * band(old, plain));
   });
 
-  test('the visible set stays under the caps: 3000 within 350 m on desktop, 1200 within 200 m on touch', () => {
+  test('the caps: desktop never needs one; on touch the doubled band can pass 1200 at the densest places, and the cap then drops only cells farther than 30 m', () => {
     const cells = buildCells(placements, course.route);
     let worstDesktop = 0;
-    let worstTouch = 0;
-    for (let i = 0; i < course.route.length; i += 150) {
+    let overTouch = 0;
+    for (let i = 0; i < course.route.length; i += 20) {
       const [x, z] = course.route[i]!;
-      const sum = (radius: number) => visibleCells(cells, { x, z }, radius, Infinity).reduce((n, c) => n + c.placements.length, 0);
-      worstDesktop = Math.max(worstDesktop, sum(DESKTOP_DECOR.radius));
-      worstTouch = Math.max(worstTouch, sum(TOUCH_DECOR.radius));
+      const all = (radius: number) => visibleCells(cells, { x, z }, radius, Infinity);
+      worstDesktop = Math.max(worstDesktop, all(DESKTOP_DECOR.radius).reduce((n, c) => n + c.placements.length, 0));
+      const touch = all(TOUCH_DECOR.radius);
+      if (touch.reduce((n, c) => n + c.placements.length, 0) <= TOUCH_DECOR.cap) continue;
+      overTouch++;
+      const kept = new Set(visibleCells(cells, { x, z }, TOUCH_DECOR.radius, TOUCH_DECOR.cap));
+      const nearDistance = (cell: (typeof touch)[number]) => Math.hypot(Math.max(cell.minX - x, 0, x - cell.maxX), Math.max(cell.minZ - z, 0, z - cell.maxZ));
+      for (const cell of touch) if (nearDistance(cell) <= 30) expect(kept.has(cell)).toBe(true);
     }
     expect(worstDesktop).toBeLessThanOrEqual(DESKTOP_DECOR.cap);
-    expect(worstTouch).toBeLessThanOrEqual(TOUCH_DECOR.cap);
+    expect(overTouch).toBeLessThan(course.route.length / 20 / 4);
   });
 
   test('kasbahs and mosques stand 40 m or more out, only on plain road or in the city, and there are many', () => {
@@ -95,6 +101,58 @@ describe('scatterDecor on a corridor course', () => {
     expect(obstacles.length).toBeGreaterThan(5);
     const berm = placements.filter((p) => /^decor\.(rock|stone)\./.test(p.model) && distanceOf(p) >= 33 && distanceOf(p) <= 39);
     expect(berm.length).toBeGreaterThan(30);
+  });
+});
+
+describe('the corridor decor is placed with some sense', () => {
+  const frame = routeFrame(course);
+  const alongOf = (p: DecorPlacement) => frame.nearest(p.x, p.z).along;
+
+  test('kasbahs and mosques stand on plain road or in the city stretch, never beside sand, pits, the alley, the ford or roadworks', () => {
+    const special = segmentRanges(def).filter((r) => r.type !== 'road');
+    const cityFrom = frame.total - 600;
+    for (const p of [...of('decor.kasbah'), ...of('decor.mosque')]) {
+      const along = alongOf(p);
+      for (const r of special) if (along < cityFrom) expect(along < r.from - 30 || along > r.to + 30).toBe(true);
+    }
+  });
+
+  test('kasbahs and mosques never overlap each other', () => {
+    const big = [...of('decor.kasbah'), ...of('decor.mosque')];
+    for (let i = 0; i < big.length; i++) {
+      for (let j = i + 1; j < big.length; j++) expect(Math.hypot(big[i]!.x - big[j]!.x, big[i]!.z - big[j]!.z)).toBeGreaterThan(14);
+    }
+  });
+
+  test('every kasbah and mosque lies behind the shoulders and its base is on the land (within 4 m of the corridor)', () => {
+    for (const p of [...of('decor.kasbah'), ...of('decor.mosque')]) {
+      expect(distanceOf(p)).toBeGreaterThanOrEqual(48);
+      const land = corridorHeightAt(corridor, p.x, p.z);
+      if (land !== null) expect(Math.abs(p.y - land)).toBeLessThan(4);
+    }
+  });
+
+  test('cliffs and mountains stand on the drawn land, tile or far mesh', () => {
+    for (const p of [...of('decor.cliffs'), ...of('decor.mountains')]) {
+      const land = corridorHeightAt(corridor, p.x, p.z) ?? farMeshHeight(course, p.x, p.z);
+      expect(p.y).toBeLessThanOrEqual(land + 1e-6);
+      expect(p.y).toBeGreaterThan(land - 20);
+    }
+  });
+
+  test('hills clear the ridge by their own half size', () => {
+    for (const p of placements.filter((q) => q.model.startsWith('decor.cliff.'))) expect(distanceOf(p)).toBeGreaterThanOrEqual(CORRIDOR_OUTER + 10);
+  });
+});
+
+// The scatter of the courses without a corridor must not change: these hashes are of the output of 4daded2.
+const hash = (list: DecorPlacement[]) => createHash('sha256').update(JSON.stringify(list.map((p) => [p.model, p.x, p.y, p.z, p.yaw, p.scale]))).digest('hex');
+describe('courses without a corridor keep their scatter', () => {
+  test.each([
+    ['airport', 'd5f0c65f2b4d40b9ca62490cff57e9026279f9dac76061860633d27ab8ca88c9'],
+    ['segment-demo', '920c8e86ec79d609433d9e2c59fbcfc9407105ac155045f3baf7915a95989f42'],
+  ])('%s', (id, expected) => {
+    expect(hash(scatterDecor(getCourse(id), getCourseDef(id), seedFromId(id)))).toBe(expected);
   });
 });
 

@@ -51,9 +51,13 @@ test('the walls beside obstacles on a corridor course are not drawn', () => {
   const marrakech = getCourse('marrakech');
   const drawn = visibleWalls(marrakech);
   const { runs, caps } = obstacleWalls(marrakech);
-  expect(drawn.length).toBe(marrakech.walls.length - runs.flat().length - caps.length);
-  expect(runs.flat().length + caps.length).toBeGreaterThan(20);
-  expect(drawn.every((box, i) => box === marrakech.walls[i])).toBe(true);
+  const hidden = [...runs.flat(), ...caps];
+  expect(hidden.length).toBeGreaterThan(20);
+  expect(drawn.length).toBe(marrakech.walls.length - hidden.length);
+  const key = (box: { center: object; halfExtents: object; rot: object }) => JSON.stringify([box.center, box.halfExtents, box.rot]);
+  const hiddenKeys = new Set(hidden.map(key));
+  expect(drawn.some((box) => hiddenKeys.has(key(box)))).toBe(false);
+  expect(marrakech.walls.slice(marrakech.corridor!.wallsFrom).every((box) => hiddenKeys.has(key(box)))).toBe(true);
   const airport = getCourse('airport');
   expect(visibleWalls(airport)).toBe(airport.walls);
 });

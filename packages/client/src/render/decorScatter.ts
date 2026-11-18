@@ -36,19 +36,18 @@ const HILL_RISE: readonly [number, number] = [8, 20];
 const CLIFF_HEIGHT: Partial<Record<ModelKey, number>> = { 'decor.cliff.half': 0.5, 'decor.cliff.corner': 1 };
 const SIGNATURE_MIN = 2;
 // Corridor courses (step 32): the land beside the road is drawn from the shared heights; the hills move out beyond the ridge.
-export const GRASS_THINNING = 0.25;
 // Share of the table's scrub density the band adds beyond the shoulders.
-export const BAND_SHRUBS = 0.25;
+export const BAND_SHRUBS = 0.12;
 export const HILL_BEYOND = CORRIDOR_OUTER + 10;
 export const BAND: readonly [number, number] = [FAR_MIN + 3, CORRIDOR_OUTER];
 // Step 33 decor on corridor courses (distances from the centre line, metres).
 export const VILLAGE_SPACING: readonly [number, number] = [1500, 2300];
 export const VILLAGE_HALF = 120;
-export const KASBAH_ZONE: readonly [number, number] = [42, 95];
+export const KASBAH_ZONE: readonly [number, number] = [48, 84];
 export const MOSQUE_ZONE: readonly [number, number] = [50, 95];
-export const STALL_ZONE: readonly [number, number] = [FAR_MIN + 1, 37];
+export const STALL_ZONE: readonly [number, number] = [32.6, 37];
 export const STALL_REACH = 24;
-export const ROADSIDE_ZONE: readonly [number, number] = [FAR_MIN + 0.5, 36];
+export const ROADSIDE_ZONE: readonly [number, number] = [32.6, 36];
 export const CLIFFS_ZONE: readonly [number, number] = [CORRIDOR_OUTER + 12, 210];
 export const MOUNTAINS_ZONE: readonly [number, number] = [450, 800];
 // Rocks on the berms around obstacles: lateral band and how far past the berm they continue.
@@ -282,8 +281,7 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
 
       for (const name of ORDER) {
         const spec = SPECS[name]!;
-        // Corridor courses: the grass thins out so the doubled band fits the instance caps.
-        const density = (table[name] ?? 0) * (corridor && name === 'grass' ? GRASS_THINNING : 1);
+        const density = table[name] ?? 0;
         let n = count((density * length) / 100);
         if (n === 0 && SIGNATURE[zone.type] === name && !zone.city) n = SIGNATURE_MIN;
         else if (SIGNATURE[zone.type] === name && !zone.city) n = Math.max(n, SIGNATURE_MIN);
@@ -455,8 +453,8 @@ export function scatterDecor(course: BuiltCourse, def: CourseDef | null, seed: n
         scatter(MODELS.cactus, table.cactus ?? 0, [BAND[0], 90], [0.8, 1.3], 1);
         scatter(MODELS.scrub, (table.scrub ?? 0) * BAND_SHRUBS, BAND, [0.9, 1.8], 1);
         if (!zone.city) {
-          scatter(['decor.agave'], 1.2, ROADSIDE_ZONE, [0.9, 1.4], 0.8);
-          for (let i = countC((0.5 * length) / 100); i > 0; i--) {
+          scatter(['decor.agave'], 0.8, ROADSIDE_ZONE, [0.9, 1.4], 0.8);
+          for (let i = countC((0.35 * length) / 100); i > 0; i--) {
             const base = betweenC(zone.from, zone.to);
             const lateral = betweenC(ROADSIDE_ZONE[0], ROADSIDE_ZONE[1] - 1);
             for (let k = 0, stack = 1 + Math.floor(rc() * 3); k < stack; k++) {
