@@ -4,7 +4,8 @@ import { tutorialDone } from './tutorialDone';
 // The iPhone's landscape insets; a browser has none, so the page's own --safe-* tokens stand in for them.
 const INSETS = { left: 47, right: 47, bottom: 21 };
 
-const COMMON = ['hud-compass', 'hud-minimap', 'hud-vehicle', 'hud-health', 'hud-prompt', 'hud-seat-toast', 'hud-downed', 'chat-toasts'];
+// The prompt's text and its hold bar are measured as two boxes; the prompt itself wraps both.
+const COMMON = ['hud-compass', 'hud-minimap', 'hud-vehicle', 'hud-health', 'hud-prompt-text', 'hud-prompt-hold', 'hud-seat-toast', 'hud-downed', 'chat-toasts'];
 const DESKTOP = [...COMMON, 'hud-slots'];
 const TOUCH = [...COMMON, 'touch-menu', 'touch-chat', 'touch-emote', 'touch-actions', 'touch-slots'];
 
@@ -65,6 +66,15 @@ test.describe('HUD layout (V8)', () => {
         expect(seat.y + seat.h).toBeLessThanOrEqual(by('hud-vehicle').y + by('hud-vehicle').h + 0.5);
         if (size.touch) {
           expect(by('hud-compass').h).toBeLessThanOrEqual(36);
+          expect(by('touch-emote').x - (by('hud-compass').x + by('hud-compass').w)).toBeGreaterThanOrEqual(8);
+          // Three chat toasts fit their box without clipping, and every touch slot is a real target.
+          expect(await page.evaluate(() => { const box = document.getElementById('chat-toasts')!; return box.scrollHeight <= box.clientHeight; })).toBe(true);
+          const slotSizes = await page.evaluate(() => [...document.querySelectorAll('#touch-slots button')].map((b) => { const r = b.getBoundingClientRect(); return [r.width, r.height]; }));
+          expect(slotSizes).toHaveLength(3);
+          for (const [w, h] of slotSizes) {
+            expect(w).toBeGreaterThanOrEqual(44);
+            expect(h).toBeGreaterThanOrEqual(44);
+          }
           for (const id of ['touch-menu', 'touch-chat', 'touch-emote']) {
             expect(by(id).w).toBe(44);
             expect(by(id).h).toBe(44);
@@ -82,11 +92,24 @@ test.describe('HUD layout (V8)', () => {
           expect(by('touch-actions').y).toBeGreaterThanOrEqual(by('touch-menu').y + by('touch-menu').h);
         } else {
           // Prompt directly above the slots, toast under the compass.
-          expect(by('hud-prompt').y + by('hud-prompt').h).toBeLessThanOrEqual(by('hud-slots').y + 0.5);
+          expect(by('hud-prompt-hold').y + by('hud-prompt-hold').h).toBeLessThanOrEqual(by('hud-slots').y + 0.5);
           expect(by('hud-seat-toast').y).toBeGreaterThanOrEqual(by('hud-compass').y + by('hud-compass').h);
         }
         await context.close();
       });
     }
   }
+
+  test('the results actions are visible without scrolling at 667x375', async ({ browser }, info) => {
+    test.skip(info.project.name !== 'desktop', 'sizes and touch are set here, once');
+    const context = await browser.newContext({ viewport: { width: 667, height: 375 }, hasTouch: true, storageState: tutorialDone('http://localhost:3100') });
+    const page = await context.newPage();
+    await page.goto('/?hudtest=results');
+    await page.addStyleTag({ content: `:root { --safe-left: ${INSETS.left}px; --safe-right: ${INSETS.right}px; --safe-bottom: ${INSETS.bottom}px; }` });
+    await expect(page.locator('#results-lobby')).toBeVisible();
+    const box = (await page.locator('#results-lobby').boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(375 - INSETS.bottom + 0.5);
+    expect(await page.evaluate(() => { const r = document.getElementById('results')!; return r.scrollHeight <= r.clientHeight; })).toBe(true);
+    await context.close();
+  });
 });

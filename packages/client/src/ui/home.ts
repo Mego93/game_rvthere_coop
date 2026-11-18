@@ -16,7 +16,7 @@ const ERROR_TEXT: Record<ErrorReason, string> = {
 };
 
 const STYLE = `
-#home { position: fixed; inset: 0; z-index: 10; display: grid; box-sizing: border-box; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+#home { position: fixed; inset: 0; z-index: 10; display: grid; box-sizing: border-box; padding: max(16px, var(--safe-top)) max(16px, var(--safe-right)) max(16px, var(--safe-bottom)) max(16px, var(--safe-left));
   /* With the keyboard open on a phone in landscape the form is taller than the screen, so it must scroll. */
   overflow-x: hidden; overflow-y: auto;
   background: radial-gradient(circle at 80% 20%, var(--sun) 0 44px, transparent 45px), radial-gradient(ellipse 75% 34% at 18% 100%, var(--dune-near) 0 98%, transparent 100%), radial-gradient(ellipse 85% 26% at 88% 100%, var(--dune-far) 0 98%, transparent 100%), linear-gradient(var(--sky-top), var(--sky-bottom)); }

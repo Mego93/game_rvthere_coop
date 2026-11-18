@@ -26,6 +26,7 @@ const STYLE = `
 #hud .panel { padding: 6px 10px; }
 #hud #hud-compass { position: absolute; top: calc(8px + var(--safe-top)); left: 50%; transform: translateX(-50%); width: min(320px, 40vw); height: 24px; overflow: hidden; border-radius: 12px; }
 #hud.touch #hud-compass { width: min(240px, 36vw); }
+@media (max-width: 700px) { #hud.touch #hud-compass { width: min(240px, 34vw); } }
 #hud-compass-marker { position: absolute; top: 5px; width: 0; height: 0; }
 #hud-compass-marker::before { content: ''; position: absolute; left: -5px; top: 0; width: 10px; height: 7px; background: var(--glass-accent); clip-path: polygon(0 0, 50% 100%, 100% 0, 50% 45%); }
 #hud-compass-label { position: absolute; top: 4px; white-space: nowrap; font-size: 11px; line-height: 16px; }

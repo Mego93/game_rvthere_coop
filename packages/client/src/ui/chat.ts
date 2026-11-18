@@ -226,10 +226,10 @@ const STYLE = `${CHAT_FORM_STYLE}
 .chat-toast.own .chat-name { color: var(--glass-accent); }
 @media (pointer: coarse) {
   #chat-toasts { top: calc(150px + var(--safe-top)); transform: none; max-width: 40vw; max-height: 64px; overflow: hidden; gap: 2px; }
-  .chat-toast { padding: 2px 8px; font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chat-toast { padding: 1px 8px; font-size: 12px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 @keyframes chat-fade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes chat-rise { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes chat-rise { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .chat-toast, #chat-panel { animation: none; } }
 `;
 

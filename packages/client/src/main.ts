@@ -26,6 +26,7 @@ import { createEmoteWheel } from './ui/emoteWheel';
 import { createHome, errorText } from './ui/home';
 import { createLobby } from './ui/lobby';
 import { createResults } from './ui/results';
+import { warmCourse } from './render/warm';
 import { hudTestMode, startHudTest } from './ui/hudTest';
 import { installTheme } from './ui/theme';
 import { createTouchUi } from './ui/touchUi';
@@ -268,6 +269,7 @@ function onLobby(message: LobbyMessage) {
     stopGame();
     results.hide();
     lobby.show(message, playerId);
+    warmCourse(message.courseId);
     chatLog.markRead();
     if (shouldAutoShowTutorial(nameStore, tutorialOffered)) tutorial.open();
     tutorialOffered = true;

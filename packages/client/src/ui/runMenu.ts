@@ -49,8 +49,7 @@ const STYLE = `
 #run-menu[hidden] { display: none; }
 #run-menu h2 { margin: 0 0 2px; font-size: 22px; color: var(--teal); text-align: center; }
 #run-menu .ui-btn { width: 100%; }
-#run-menu .run-kick { color: var(--white); background: var(--terracotta-strong); }
-#run-menu .run-kick:hover:not(:disabled) { background: var(--terracotta-deep); }
+#run-menu .run-kick { color: var(--danger); background: var(--paper); border-color: var(--danger); box-shadow: 0 3px 0 var(--danger); }
 @media (max-height: 500px) {
   #run-menu { width: min(520px, calc(100vw - 32px)); grid-template-columns: 1fr 1fr; padding: 10px; }
   #run-menu h2 { grid-column: 1 / -1; }

@@ -7,7 +7,6 @@ import {
   rotate,
   createPredictor,
   getCourse,
-  getCourseDef,
   getVehicleConfig,
   holdPoseAt,
   isCrouchedStance,
@@ -49,7 +48,7 @@ import { applySky, hasSky, prewarmEnvironment } from './render/environment';
 import { createCorridorTerrain } from './render/corridorMesh';
 import { DESKTOP_DECOR, SOFTWARE_DECOR, TOUCH_DECOR } from './render/decorChunks';
 import { createDecorRenderer } from './render/decorRenderer';
-import { scatterDecor, seedFromId } from './render/decorScatter';
+import { decorFor } from './render/warm';
 import { createScene } from './render/scene';
 import { disposeScene } from './render/disposeScene';
 import { FIRST_PERSON_FOV, onFootPose, seatedPose } from './render/firstPersonCamera';
@@ -160,7 +159,7 @@ export function createGame(
   const course = getCourse(lobby.courseId);
   const cameraBoxes = [...course.ground, ...course.walls];
   const scene = createScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true });
-  const decor = createDecorRenderer(scatterDecor(course, getCourseDef(course.id), seedFromId(course.id)), course.route, { touch: view.touchUi !== null, softwareGl: view.softwareGl === true });
+  const decor = createDecorRenderer(decorFor(course.id), course.route, { touch: view.touchUi !== null, softwareGl: view.softwareGl === true });
   scene.add(decor.group);
   const decorLimits = view.softwareGl === true ? SOFTWARE_DECOR : view.touchUi !== null ? TOUCH_DECOR : DESKTOP_DECOR;
   const corridorTerrain = createCorridorTerrain(course, decorLimits.radius, { lite: view.touchUi !== null, flat: view.softwareGl === true });

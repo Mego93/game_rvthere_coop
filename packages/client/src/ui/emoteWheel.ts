@@ -37,7 +37,7 @@ const STYLE = `
 #emote-ring button[data-emote="wave"] { left: 50%; top: 80%; }
 #emote-ring button[data-emote="dance"] { left: 20%; top: 50%; }
 #emote-ring #emote-close { left: 50%; top: 50%; width: 64px; min-width: 0; min-height: 44px; margin: -22px 0 0 -32px; padding: 4px; font-size: 14px; font-weight: 500; }
-@keyframes emote-pop { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes emote-pop { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { #emote-ring { animation: none; } }
 `;
 

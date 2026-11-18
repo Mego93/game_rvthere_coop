@@ -136,7 +136,7 @@ const STYLE = `${CHAT_FORM_STYLE}
 #lobby-dunes-far { width: calc(100% + 800px); background-image: ${DUNES_FAR}; background-size: 800px 140px; height: 140px; opacity: 0.85; animation: lobby-drift-far 133s linear infinite; }
 #lobby-dunes-near { background-image: ${DUNES}; background-size: 600px 120px; animation: lobby-drift-near 67s linear infinite; }
 #lobby-vehicle-sil { will-change: transform; position: absolute; left: 0; bottom: 52px; width: 120px; height: 50px; background: ${SILHOUETTE}; opacity: 0.6; animation: lobby-cross 28s linear infinite, lobby-bob 0.9s ease-in-out infinite alternate; }
-#lobby-layout { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "chat"; gap: 16px; justify-content: center; align-content: center; width: 100%; box-sizing: border-box; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+#lobby-layout { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "chat"; gap: 16px; justify-content: center; align-content: center; width: 100%; box-sizing: border-box; padding: max(16px, var(--safe-top)) max(16px, var(--safe-right)) max(16px, var(--safe-bottom)) max(16px, var(--safe-left)); }
 #lobby-panel { grid-area: main; justify-self: center; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; width: min(440px, 100%); padding: 18px; animation: lobby-rise 0.45s var(--ease) both; }
 #lobby-chat { grid-area: chat; justify-self: center; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; width: min(440px, 100%); min-width: 0; padding: 14px 16px 16px; animation: lobby-rise 0.45s var(--ease) both; }
 #lobby-chat h2 { margin: 0; font-size: 20px; color: var(--teal); }
@@ -237,6 +237,7 @@ const STYLE = `${CHAT_FORM_STYLE}
 @keyframes lobby-bob { from { translate: 0 0; } to { translate: 0 -3px; } }
 @keyframes lobby-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes lobby-join { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+#lobby.starting .lobby-dunes, #lobby.starting #lobby-vehicle-sil, #lobby.starting #lobby-start { animation-play-state: paused; }
 @keyframes lobby-pulse { 0% { box-shadow: 0 0 0 0 var(--pulse-a); } 100% { box-shadow: 0 0 0 10px var(--pulse-b); } }
 @keyframes lobby-leave { to { opacity: 0; transform: translateX(24px); } }
 @keyframes lobby-flash { 0% { background-color: var(--flash); } 100% { background-color: transparent; } }
@@ -580,11 +581,14 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   });
   start.addEventListener('click', () => {
     error.textContent = '';
+    // The run is being built; the scenery stops moving until the lobby shows again.
+    root.className = 'starting';
     handlers.onStart();
   });
 
   return {
     show(message, id) {
+      root.className = '';
       view = lobbyView(message, id);
       lastMessage = message;
       localId = id;
