@@ -6,6 +6,7 @@ export type { ItemDirectorInput, ItemDirectorState, ItemDropEvent, OwnedDrop } f
 export * from './animals';
 export * from './checkpoints';
 export * from './coins';
+export * from './corridor';
 export * from './course';
 export * from './courses/build';
 export * from './courses/index';
@@ -26,6 +27,7 @@ export * from './seats';
 export * from './segments';
 export * from './statics';
 export * from './stops';
+export * from './surfaceHeight';
 export * from './vehicle';
 export * from './vehicles';
 export * from './walk';

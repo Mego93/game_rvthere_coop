@@ -3,7 +3,7 @@ import type { EventMessage } from '@lodgy/shared';
 export const EVENT_TOAST_SECONDS = 1.5;
 export const SOULEYMAN_GREETING = 'Souleyman: Saved. Bonne route!';
 
-const TEXT: Partial<Record<EventMessage['kind'], string>> = { checkpoint: SOULEYMAN_GREETING, goatHit: 'Goat!', scooterHit: 'Scooter!' };
+const TEXT: Partial<Record<EventMessage['kind'], string>> = { checkpoint: SOULEYMAN_GREETING, goatHit: 'Goat!', scooterHit: 'Scooter!', outOfBounds: 'Back to the road' };
 
 // The toast text for a server event, or null when the kind has none.
 export const eventToastText = (kind: EventMessage['kind']): string | null => TEXT[kind] ?? null;

@@ -42,4 +42,6 @@ const gaps = extras.fuel.map((f, i) => f.at - (i === 0 ? 0 : extras.fuel[i - 1]!
 console.log(`fuel stops: ${extras.fuel.length}; gaps (m): ${gaps.map((g) => g.toFixed(0)).join(' ')}`);
 console.log(`garages at (m): ${extras.garages.map((g) => g.at.toFixed(0)).join(' ')}`);
 for (const h of extras.hazards) console.log(`hazard ${h.kind}: segment ${h.index}, at ${h.at.toFixed(0)} m, ${h.distance.toFixed(0)} m from target`);
+for (const m of extras.mud) console.log(`mud ${m.length} m: segment ${m.index}, at ${m.at.toFixed(0)} m, ${m.distance.toFixed(0)} m from target`);
+for (const r of extras.rocks) console.log(`rocks side ${r.side}: segment ${r.index}, at ${r.at.toFixed(0)} m, ${r.distance.toFixed(0)} m from target`);
 console.log(`pickups: ${extras.pickups.length}; coins: ${extras.coins}`);

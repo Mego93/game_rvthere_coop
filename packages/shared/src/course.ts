@@ -5,6 +5,8 @@ export interface Box {
   center: Vec3;
   halfExtents: Vec3;
   rot: Quat;
+  // A rock of a rocks hazard: a wall box the client draws as its boulder, not as a wall.
+  rock?: true;
 }
 
 export interface GroundBox extends Box {
@@ -52,4 +54,6 @@ export interface BuiltCourse {
   targetTime: number;
   // Along-route spans (m) with no ambient animals, sorted and disjoint; only on courses that opt in.
   ambient?: { blocked: { from: number; to: number }[] };
+  // Present on courses that opt in to the solid land beside the road: the along-route spans (m) of the obstacles that get a berm, sorted and disjoint, and the index in `walls` where the obstacle walls and caps start (they are not drawn).
+  corridor?: { obstacles: { from: number; to: number }[]; wallsFrom: number };
 }

@@ -13,7 +13,7 @@ export interface SceneOptions {
 export type TextureSet = 'asphalt' | 'gravel' | 'sand' | 'pebbles' | 'red-earth';
 export type TextureKind = 'diffuse' | 'normal';
 
-export const SURFACE_TEXTURE: Record<Surface, TextureSet> = { road: 'asphalt', gravel: 'gravel', sand: 'sand', riverbed: 'pebbles' };
+export const SURFACE_TEXTURE: Record<Surface, TextureSet> = { road: 'asphalt', gravel: 'gravel', sand: 'sand', riverbed: 'pebbles', mud: 'pebbles' };
 export const TEXTURE_SETS: readonly TextureSet[] = ['asphalt', 'gravel', 'sand', 'pebbles', 'red-earth'];
 
 const textures = new Map<string, THREE.Texture>();
