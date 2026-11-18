@@ -296,10 +296,15 @@ describe('gaugePercent', () => {
 });
 
 describe('ownHealthPoints', () => {
-  test('V6: an integer from 0 to 100', () => {
+  test('an integer from 0 to 100, with 100 only at full health and 0 only at none', () => {
     expect(ownHealthPoints(64.4)).toBe(64);
     expect(ownHealthPoints(100)).toBe(100);
     expect(ownHealthPoints(130)).toBe(100);
+    expect(ownHealthPoints(99.6)).toBe(99);
+    expect(ownHealthPoints(99.99)).toBe(99);
+    expect(ownHealthPoints(0.2)).toBe(1);
+    expect(ownHealthPoints(0.001)).toBe(1);
+    expect(ownHealthPoints(0)).toBe(0);
     expect(ownHealthPoints(-5)).toBe(0);
     expect(ownHealthPoints(Number.NaN)).toBe(0);
   });

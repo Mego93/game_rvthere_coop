@@ -14,6 +14,7 @@ export const TOKENS: Readonly<Record<string, string>> = {
   '--white': '#ffffff',
   // Dark glass for panels over the 3D scene
   '--glass': 'rgba(20, 16, 12, 0.62)',
+  '--glass-strong': 'rgba(20, 16, 12, 0.8)',
   '--glass-line': 'rgba(255, 255, 255, 0.22)',
   '--on-glass': '#ffffff',
   '--glass-accent': '#f2a541',

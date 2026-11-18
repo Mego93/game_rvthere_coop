@@ -34,8 +34,12 @@ export interface HudModel {
 
 export const ownHealthFraction = (health: number): number => (Number.isFinite(health) ? clamp(health / PLAYER_MAX_HEALTH, 0, 1) : 0);
 
-// Hit points as a whole number from 0 to the maximum, for the number beside the bar.
-export const ownHealthPoints = (health: number): number => (Number.isFinite(health) ? Math.round(clamp(health, 0, PLAYER_MAX_HEALTH)) : 0);
+// Hit points as a whole number for the number beside the bar: the maximum only at full health, 0 only at none.
+export const ownHealthPoints = (health: number): number => {
+  if (!Number.isFinite(health) || health <= 0) return 0;
+  if (health >= PLAYER_MAX_HEALTH) return PLAYER_MAX_HEALTH;
+  return clamp(Math.round(health), 1, PLAYER_MAX_HEALTH - 1);
+};
 
 // Whole percent, rounded down so a gauge never reads full while it is not.
 export const gaugePercent = (fraction: number): string => `${Number.isFinite(fraction) ? Math.floor(clamp(fraction, 0, 1) * 100 + 1e-9) : 0}%`;

@@ -177,6 +177,7 @@ const STYLE = `${CHAT_FORM_STYLE}
 #lobby-panel .pick-seg[aria-pressed='true'] { color: var(--white); background: var(--teal); border-color: var(--teal); }
 #lobby-panel .pick-seg.swatch { min-width: 44px; background: var(--swatch); border-color: var(--ink-soft); color: transparent; }
 #lobby-panel .pick-seg.swatch[aria-pressed='true'] { background: var(--swatch); border-color: var(--ink); outline: 3px solid var(--teal); outline-offset: -5px; }
+#lobby-panel .pick-seg.swatch:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 #lobby-picker-note { margin: 0; min-height: 1.2em; color: var(--danger); font-size: 14px; font-weight: 500; }
 .pt { position: relative; width: 44px; height: 56px; flex: none; overflow: hidden; }
 .pt > * { position: absolute; display: none; }
