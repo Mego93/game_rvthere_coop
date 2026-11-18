@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import {
   ROADBLOCK_LATERAL,
+  MUD_MAX_LENGTH,
+  MUD_MIN_LENGTH,
+  ROAD_THICKNESS,
+  ROCK_HALF,
+  ROCK_LATERALS,
+  ROCK_SPACING,
   ALLEY_CLUTTER_SPACING,
   ALLEY_WALL_HEIGHT,
   ALLEY_WIDTH,
@@ -42,7 +48,7 @@ import { distanceToBox } from './seats';
 import { VEHICLES } from './vehicles';
 import { groundHeightAt } from './groundProbe';
 import { add, degToRad, rotate, vec3, type Quat, type Vec3 } from './math';
-import { buildSegment, offsetFrom, yawQuat, type LocalSegment, type SegmentDef } from './segments';
+import { buildSegment, hazardSpan, obstacleSpans, offsetFrom, yawQuat, type LocalSegment, type SegmentDef } from './segments';
 
 const LATERALS = [-1, -0.5, 0, 0.5, 1].map((f) => f * (ROAD_WIDTH / 2 - 0.5));
 
@@ -1020,5 +1026,84 @@ describe('hazards', () => {
       expect(() => buildSegment(road(200, { hazards: [{ kind: 'roadblock', along: 200 - ROADBLOCK_FENCE_HALF + 1 }] }))).toThrow(/fences/);
       expect(() => buildSegment(road(200, { hazards: [{ kind: 'roadblock', along: 200 - ROADBLOCK_FENCE_HALF - 8 }] }))).not.toThrow();
     });
+  });
+});
+
+describe('mud and rocks', () => {
+  const spawnClear = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z;
+
+  test('a mud patch is a road-wide ground box of the road thickness, STOP_PAD_LIFT above the road top, surface mud', () => {
+    const seg = buildSegment(road(100, { hazards: [{ kind: 'mud', along: 30, length: 16 }] }));
+    const mud = seg.ground.filter((g) => g.surface === 'mud');
+    expect(mud).toHaveLength(1);
+    const box = mud[0]!;
+    expect(box.halfExtents.x).toBeCloseTo(ROAD_WIDTH / 2, 9);
+    expect(box.halfExtents.y).toBeCloseTo(ROAD_THICKNESS / 2, 9);
+    expect(box.halfExtents.z).toBeCloseTo(8, 9);
+    expect(box.center.y + box.halfExtents.y).toBeCloseTo(STOP_PAD_LIFT, 9);
+    expect(box.center.z).toBeCloseTo(-(30 + 8), 9);
+    expect(seg.props).toHaveLength(0);
+    expect(seg.walls).toHaveLength(0);
+  });
+
+  test('mud takes lengths from 12 to 20 m, and fits only with the spawn clearance each end', () => {
+    const at = (length: number, segment = 200) => () => buildSegment(road(segment, { hazards: [{ kind: 'mud', along: spawnClear, length }] }));
+    expect(at(MUD_MIN_LENGTH)).not.toThrow();
+    expect(at(MUD_MAX_LENGTH)).not.toThrow();
+    expect(at(MUD_MIN_LENGTH - 0.1)).toThrow(/mud length/i);
+    expect(at(MUD_MAX_LENGTH + 0.1)).toThrow(/mud length/i);
+    expect(() => buildSegment(road(200, { hazards: [{ kind: 'mud', along: spawnClear - 0.01, length: 12 }] }))).toThrow(/spawn/);
+    expect(() => buildSegment(road(100, { hazards: [{ kind: 'mud', along: 100 - spawnClear - 12, length: 12 }] }))).not.toThrow();
+    expect(() => buildSegment(road(100, { hazards: [{ kind: 'mud', along: 100 - spawnClear - 12 + 0.01, length: 12 }] }))).toThrow(/end of the segment/);
+  });
+
+  test('obstacleSpans lists mud and rocks, so the corridor raises a berm beside each', () => {
+    const def = road(200, { hazards: [{ kind: 'mud', along: 30, length: 16 }, { kind: 'rocks', along: 100, side: -1 }] });
+    expect(obstacleSpans(def, 200)).toEqual([hazardSpan({ kind: 'mud', along: 30, length: 16 }), hazardSpan({ kind: 'rocks', along: 100, side: -1 })]);
+  });
+
+  test('hazardSpan: mud from along for its length, rocks from 0.7 before to 3.7 after along', () => {
+    expect(hazardSpan({ kind: 'mud', along: 40, length: 16 })).toEqual([40, 56]);
+    const [a, b] = hazardSpan({ kind: 'rocks', along: 40, side: 1 });
+    expect(a).toBeCloseTo(40 - ROCK_HALF.z, 9);
+    expect(b).toBeCloseTo(40 + ROCK_SPACING + ROCK_HALF.z, 9);
+  });
+
+  test('rocks are two wall boxes of ROCK_HALF at side x 2.5 and side x 4.2, 3 m apart, each with a boulder anchor', () => {
+    for (const side of [-1, 1] as const) {
+      const seg = buildSegment(road(150, { hazards: [{ kind: 'rocks', along: 50, side }] }));
+      expect(seg.walls).toHaveLength(2);
+      expect(seg.anchors.map((a) => a.kind)).toEqual(['boulder', 'boulder']);
+      expect(seg.anchors.map((a) => a.id)).toEqual(['boulder-1', 'boulder-2']);
+      expect(seg.props).toHaveLength(0);
+      ROCK_LATERALS.forEach((lateral, i) => {
+        const wall = seg.walls[i]!;
+        expect(wall.halfExtents).toEqual(ROCK_HALF);
+        expect(wall.center.x).toBeCloseTo(side * lateral, 9);
+        expect(wall.center.y).toBeCloseTo(ROCK_HALF.y, 9);
+        expect(wall.center.z).toBeCloseTo(-(50 + i * ROCK_SPACING), 9);
+        const anchor = seg.anchors[i]!;
+        expect(anchor.pose.pos.x).toBeCloseTo(side * lateral, 9);
+        expect(anchor.pose.pos.z).toBeCloseTo(-(50 + i * ROCK_SPACING), 9);
+      });
+    }
+  });
+
+  test('rocks leave a free lane of at least twice the RV half width plus 1.2 m', () => {
+    for (const side of [-1, 1] as const) {
+      const seg = buildSegment(road(150, { hazards: [{ kind: 'rocks', along: 50, side }] }));
+      const inner = Math.min(...seg.walls.map((w) => Math.abs(w.center.x) - w.halfExtents.x));
+      const free = side === 1 ? inner + ROAD_WIDTH / 2 : ROAD_WIDTH / 2 + inner;
+      expect(free).toBeGreaterThanOrEqual(2 * VEHICLES.rv.halfExtents.x + 1.2);
+    }
+  });
+
+  test('rocks follow the spawn and end clearances and the hazard gap', () => {
+    const edge = spawnClear + ROCK_HALF.z;
+    expect(() => buildSegment(road(150, { hazards: [{ kind: 'rocks', along: edge, side: 1 }] }))).not.toThrow();
+    expect(() => buildSegment(road(150, { hazards: [{ kind: 'rocks', along: edge - 0.01, side: 1 }] }))).toThrow(/spawn/);
+    expect(() => buildSegment(road(150, { hazards: [{ kind: 'rocks', along: 150 - 8 - ROCK_SPACING - ROCK_HALF.z + 0.01, side: 1 }] }))).toThrow(/end of the segment/);
+    expect(() => buildSegment(road(300, { hazards: [{ kind: 'rocks', along: 40, side: 1 }, { kind: 'mud', along: 40 + ROCK_SPACING + ROCK_HALF.z + 19, length: 12 }] }))).toThrow(/20 m apart/);
+    expect(() => buildSegment(road(300, { hazards: [{ kind: 'rocks', along: 40, side: 1 }, { kind: 'mud', along: 40 + ROCK_SPACING + ROCK_HALF.z + 20, length: 12 }] }))).not.toThrow();
   });
 });

@@ -29,7 +29,7 @@ const blocked = marrakech.ambient!.blocked;
 const seed = hashSeed('marrakech');
 const plan = planAmbient(seed, routeLength, blocked);
 // Measured on the real course: route length minus the blocked spans.
-const ELIGIBLE_LENGTH = 14904.7;
+const ELIGIBLE_LENGTH = 13557.98;
 
 describe('hashSeed and the PRNG', () => {
   it('is stable and differs by id', () => {

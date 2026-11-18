@@ -72,7 +72,7 @@ export const REPORT_INTERVAL = 10;
 // Seconds the server waits for a peer to answer a close frame before dropping the socket.
 export const SOCKET_CLOSE_TIMEOUT = 1;
 
-export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel';
+export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel' | 'mud';
 
 // grip multiplies the vehicle's tyre grip; rolling is resistance as a fraction of the vehicle's weight.
 export const SURFACES: Record<Surface, { grip: number; rolling: number }> = deepFreeze({
@@ -80,6 +80,7 @@ export const SURFACES: Record<Surface, { grip: number; rolling: number }> = deep
   gravel: { grip: 0.8, rolling: 0.05 },
   riverbed: { grip: 0.7, rolling: 0.15 },
   sand: { grip: 0.6, rolling: 0.15 },
+  mud: { grip: 0.55, rolling: 0.22 },
 });
 
 export const REFERENCE_SLOPES_DEG = deepFreeze({ gentle: 8, medium: 15, steep: 25 } as const);
@@ -441,6 +442,17 @@ export const HAZARD_MIN_GAP = 20;
 export const HAZARD_DEBRIS_GAP = 10;
 // m of lateral centre of the three crates across the right half of the lane, each a crate width plus 0.02 apart.
 export const CRATE_WALL_LATERALS: readonly number[] = Object.freeze([0, 1, 2].map((i) => 2.0 + i * (2 * PROP_KINDS.crate.halfExtents.x + 0.02)));
+// m, the shortest and longest mud patch (a ground box the road's width wide, `STOP_PAD_LIFT` above the road top).
+export const MUD_MIN_LENGTH = 12;
+export const MUD_MAX_LENGTH = 20;
+// Half extents of one rock of a rocks hazard (the drawn boulder); each is a wall box.
+export const ROCK_HALF: Vec3 = deepFreeze(vec3(0.8, 0.6, 0.7));
+// m from the centre line to the inner and outer rock, on the hazard's side.
+export const ROCK_LATERALS: readonly number[] = Object.freeze([2.5, 4.2]);
+// m along the road between the two rocks.
+export const ROCK_SPACING = 3;
+// m, the least a rocks group sits from a mud patch.
+export const ROCK_CLEAR = 40;
 // m, lateral offset of the outer barriers of a roadblock row (barriers at -3, 0, 3).
 export const ROADBLOCK_LATERAL = 3;
 

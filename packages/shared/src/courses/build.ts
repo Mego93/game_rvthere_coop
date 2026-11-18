@@ -186,7 +186,7 @@ export function buildCourse(def: CourseDef): BuiltCourse {
       if (terrain) raw.push({ from: from - AMBIENT_MARGIN, to: routeAt + AMBIENT_MARGIN });
       const marks: [number, number][] = [];
       if (segmentDef.stop) marks.push([segmentDef.stop.along, segmentDef.stop.along]);
-      if (segmentDef.type === 'road') for (const h of segmentDef.hazards ?? []) marks.push(hazardSpan(h));
+      if (segmentDef.type === 'road') for (const h of segmentDef.hazards ?? []) if (h.kind !== 'mud') marks.push(hazardSpan(h));
       for (const d of local.debrisAlong ?? []) marks.push([d, d]);
       for (const [a, b] of marks) raw.push({ from: from + a - AMBIENT_MARGIN, to: from + b + AMBIENT_MARGIN });
     }

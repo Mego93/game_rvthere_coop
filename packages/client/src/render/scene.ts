@@ -11,7 +11,11 @@ const SURFACE_COLOURS: Record<Surface, number> = {
   gravel: 0xa39a8c,
   riverbed: 0x7d8a8f,
   sand: 0xd9b77a,
+  mud: 0x4a3a2a,
 };
+
+// The riverbed texture darkened.
+const MUD_TINT = 0x6b5a48;
 
 function boxMesh(box: Box, material: THREE.Material): THREE.Mesh {
   const mesh = new THREE.Mesh(
@@ -34,7 +38,7 @@ function groundMaterial(surface: Surface, { lite = false, flat = false }: SceneO
   const map = flat ? null : groundTexture(set, 'diffuse');
   if (!map) return new THREE.MeshStandardMaterial({ color: SURFACE_COLOURS[surface], roughness: 1, metalness: 0 });
   map.anisotropy = lite ? 1 : 4;
-  return new THREE.MeshStandardMaterial({ color: 0xffffff, map, normalMap: lite ? null : groundTexture(set, 'normal'), roughness: 1, metalness: 0 });
+  return new THREE.MeshStandardMaterial({ color: surface === 'mud' ? MUD_TINT : 0xffffff, map, normalMap: lite ? null : groundTexture(set, 'normal'), roughness: 1, metalness: 0 });
 }
 
 function mergedMesh(boxes: readonly Box[], material: THREE.Material, bottom: boolean): THREE.Mesh | null {

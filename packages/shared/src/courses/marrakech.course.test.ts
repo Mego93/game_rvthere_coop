@@ -70,8 +70,8 @@ describe('stops (T7)', () => {
 });
 
 describe('hazards (T6)', () => {
-  // The parkour sections carry their own hazards; the plan's five sit on ordinary segments.
-  const hazards = roads.filter(({ i }) => !MARRAKECH_INSERTED.includes(i)).flatMap(({ s, i }) => (s.hazards ?? []).map((h) => ({ kind: h.kind, i, at: mid(i) })));
+  // The parkour sections carry their own hazards; the plan's five sit on ordinary segments (mud and rocks are counted in marrakech.mud.drive.test.ts).
+  const hazards = roads.filter(({ i }) => !MARRAKECH_INSERTED.includes(i)).flatMap(({ s, i }) => (s.hazards ?? []).filter((h) => h.kind !== 'mud' && h.kind !== 'rocks').map((h) => ({ kind: h.kind, i, at: mid(i) })));
 
   it('has the five of the plan near their fractions (A5: up to 1.3 km)', () => {
     expect(hazards.map((h) => h.kind)).toEqual(['crateWall', 'gates', 'roadblock', 'crateWall', 'roadblock']);

@@ -237,7 +237,7 @@ describe('T10: obstacles stay obstacles', () => {
   const firsts = kinds.filter(([name], i) => kinds.findIndex(([other]) => other.split(' ')[0] === name.split(' ')[0]) === i);
 
   test('every kind of obstacle on marrakech is covered', () => {
-    expect(firsts.map(([name]) => name.split(' ')[0]).sort()).toEqual(['alley', 'bank', 'crateWall', 'deep', 'ford', 'gates', 'roadblock', 'roadworks']);
+    expect(firsts.map(([name]) => name.split(' ')[0]).sort()).toEqual(['alley', 'bank', 'crateWall', 'deep', 'ford', 'gates', 'mud', 'roadblock', 'roadworks', 'rocks']);
   });
 
   const drive = (along: number, side: -1 | 1): number => {
@@ -312,7 +312,9 @@ describe('T10: obstacles stay obstacles', () => {
         let furthest = 0;
         for (let i = 0; i < 12 * TICK_RATE; i++) {
           run(world, 1, { moveY: 1, sprint: true, yaw: yawOf(forward.tx, forward.tz), jump: i % 30 < 3 });
-          furthest = Math.max(furthest, frame.nearest(me(world).pos.x, me(world).pos.z).along);
+          // Back on the road side of the wall (d < 31) is not going round it: the road is open to walkers.
+          const hit = frame.nearest(me(world).pos.x, me(world).pos.z);
+          if (hit.d >= 31) furthest = Math.max(furthest, hit.along);
         }
         expect(furthest, `span ${span.from} side ${side}`).toBeLessThan(span.from + 5);
       }

@@ -39,6 +39,11 @@ import {
   WALL_THICKNESS,
   WATER_HALF_THICKNESS,
   ROAD_JOINT_OVERLAP,
+  MUD_MAX_LENGTH,
+  MUD_MIN_LENGTH,
+  ROCK_HALF,
+  ROCK_LATERALS,
+  ROCK_SPACING,
   ROAD_MAX_PIECE_YAW,
   ROAD_PIECE_LENGTH,
   ROAD_THICKNESS,
@@ -72,7 +77,14 @@ export interface SegmentExtras {
   stop?: { kind: 'fuel' | 'garage'; side: -1 | 1; along: number };
 }
 
-export type Hazard = { kind: 'gates'; along: number; count: number } | { kind: 'crateWall'; along: number } | { kind: 'roadblock'; along: number };
+export type Hazard =
+  | { kind: 'gates'; along: number; count: number }
+  | { kind: 'crateWall'; along: number }
+  | { kind: 'roadblock'; along: number }
+  // A ground patch the road's width wide that slows vehicles; static, never in a snapshot.
+  | { kind: 'mud'; along: number; length: number }
+  // Two boulders (wall boxes that also take the winch hook) on one side of the lane.
+  | { kind: 'rocks'; along: number; side: -1 | 1 };
 
 export type SegmentDef =
   | ({ type: 'road'; length: number; curve?: number; slope?: number; debris?: number; hazards?: Hazard[] } & SegmentExtras)
@@ -276,6 +288,8 @@ export function hazardSpan(h: Hazard): [start: number, end: number] {
   const barrierZ = PROP_KINDS.barrier.halfExtents.z;
   if (h.kind === 'crateWall') return [h.along - PROP_KINDS.crate.halfExtents.z, h.along + PROP_KINDS.crate.halfExtents.z];
   if (h.kind === 'roadblock') return [h.along - barrierZ, h.along + barrierZ];
+  if (h.kind === 'mud') return [h.along, h.along + h.length];
+  if (h.kind === 'rocks') return [h.along - ROCK_HALF.z, h.along + (ROCK_LATERALS.length - 1) * ROCK_SPACING + ROCK_HALF.z];
   return [h.along - barrierZ, h.along + (h.count - 1) * GATES_SPACING + barrierZ];
 }
 
@@ -303,12 +317,18 @@ function checkHazards(def: Extract<SegmentDef, { type: 'road' }>, routeLength: n
   const spawnClear = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z;
   for (const h of hazards) {
     if (!Number.isFinite(h.along)) throw new Error('A hazard needs a finite along');
+    if (h.kind === 'mud' && !(h.length >= MUD_MIN_LENGTH && h.length <= MUD_MAX_LENGTH)) {
+      throw new Error(`Mud length must be from ${MUD_MIN_LENGTH} to ${MUD_MAX_LENGTH} m`);
+    }
+    if (h.kind === 'rocks' && h.side !== -1 && h.side !== 1) throw new Error('Rocks need a side of -1 or 1');
     if (h.kind === 'gates' && !(Number.isInteger(h.count) && h.count >= GATES_MIN_COUNT && h.count <= GATES_MAX_COUNT)) {
       throw new Error(`Gates count must be a whole number from ${GATES_MIN_COUNT} to ${GATES_MAX_COUNT}`);
     }
     const [start, end] = hazardSpan(h);
     if (start < spawnClear - 1e-9) throw new Error(`Hazard at ${h.along} m starts before the spawn clearance (${spawnClear} m)`);
-    if (end > routeLength - HAZARD_END_CLEARANCE + 1e-9) throw new Error(`Hazard at ${h.along} m ends less than ${HAZARD_END_CLEARANCE} m before the end of the segment`);
+    // A mud patch keeps the spawn clearance at both ends: the next segment's checkpoint spawn lies just past this one's end.
+    const endClear = h.kind === 'mud' ? spawnClear : HAZARD_END_CLEARANCE;
+    if (end > routeLength - endClear + 1e-9) throw new Error(`Hazard at ${h.along} m ends less than ${endClear} m before the end of the segment`);
     if (h.kind === 'roadblock' && (h.along - ROADBLOCK_FENCE_HALF < 0 || h.along + ROADBLOCK_FENCE_HALF > routeLength)) {
       throw new Error(`The roadblock fences at ${h.along} m leave the segment`);
     }
@@ -328,7 +348,7 @@ function checkHazards(def: Extract<SegmentDef, { type: 'road' }>, routeLength: n
   return sorted;
 }
 
-function placeHazard(h: Hazard, surfaceAt: (along: number) => SurfacePoint, id: (kind: string) => string, props: Placed[], walls: Box[]): void {
+function placeHazard(h: Hazard, surfaceAt: (along: number) => SurfacePoint, id: (kind: string) => string, props: Placed[], walls: Box[], anchors: Placed[], ground: GroundBox[]): void {
   const barrier = (s: SurfacePoint, lateral: number): Placed => ({
     id: id('barrier'),
     kind: 'barrier',
@@ -336,6 +356,21 @@ function placeHazard(h: Hazard, surfaceAt: (along: number) => SurfacePoint, id: 
   });
   if (h.kind === 'gates') {
     for (let i = 0; i < h.count; i++) props.push(barrier(surfaceAt(h.along + i * GATES_SPACING), (i % 2 === 0 ? -1 : 1) * GATES_OFFSET));
+  } else if (h.kind === 'mud') {
+    const s = surfaceAt(h.along + h.length / 2);
+    ground.push({
+      center: offsetFrom(s, 0, STOP_PAD_LIFT - ROAD_THICKNESS / 2),
+      halfExtents: vec3(ROAD_WIDTH / 2, ROAD_THICKNESS / 2, h.length / 2),
+      rot: yawPitchQuat(s.yaw, s.pitch),
+      surface: 'mud',
+    });
+  } else if (h.kind === 'rocks') {
+    ROCK_LATERALS.forEach((lateral, i) => {
+      const s = surfaceAt(h.along + i * ROCK_SPACING);
+      const rot = yawPitchQuat(s.yaw, s.pitch);
+      walls.push({ center: offsetFrom(s, h.side * lateral, ROCK_HALF.y), halfExtents: ROCK_HALF, rot });
+      anchors.push({ id: id('boulder'), kind: 'boulder', pose: { pos: offsetFrom(s, h.side * lateral), rot } });
+    });
   } else if (h.kind === 'crateWall') {
     const s = surfaceAt(h.along);
     for (const height of [0, 2 * PROP_KINDS.crate.halfExtents.y]) {
@@ -384,13 +419,15 @@ function buildRoad(def: Extract<SegmentDef, { type: 'road' }>): LocalSegment {
     props.push({ id: id('crate'), kind: 'crate', pose: { pos: offsetFrom(s, (slot.side * ROAD_WIDTH) / 4), rot: yawPitchQuat(s.yaw, s.pitch) } });
   }
   const walls: Box[] = [];
-  for (const h of hazards) placeHazard(h, surfaceAt, id, props, walls);
+  const anchors: Placed[] = [];
+  const patches: GroundBox[] = [];
+  for (const h of hazards) placeHazard(h, surfaceAt, id, props, walls, anchors, patches);
   const seg: LocalSegment = {
-    ground: [...roadBoxes(pieces, curve !== 0), ...shoulderBoxes(pieces, curve / pieces.length)],
+    ground: [...roadBoxes(pieces, curve !== 0), ...shoulderBoxes(pieces, curve / pieces.length), ...patches],
     walls,
     props,
     pickups: [],
-    anchors: [],
+    anchors,
     stops: [],
     coins: [],
     decor: [],
