@@ -1,5 +1,6 @@
-import { getCourse, getCourseDef } from '@lodgy/shared';
+import { corridorOf, getCourse, getCourseDef } from '@lodgy/shared';
 import { expect, test } from 'vitest';
+import { createCorridorTerrain } from './corridorMesh';
 import { buildCells } from './decorChunks';
 import { scatterDecor, seedFromId } from './decorScatter';
 import { groupBySurface, mergeBoxes } from './groundMerge';
@@ -16,7 +17,22 @@ test('T9: merging the 22 km ground takes under 2 s', () => {
   expect(ms).toBeLessThan(2000);
 });
 
+test('T15: the corridor and the first tile meshes take under 3 s', () => {
+  const start = performance.now();
+  const corridor = corridorOf(course)!;
+  const terrain = createCorridorTerrain(course, 350, { flat: true })!;
+  const [x, z] = course.route[0]!;
+  terrain.update({ x, z }, 0, true);
+  const ms = performance.now() - start;
+  console.info(`T15 corridor(marrakech): ${ms.toFixed(0)} ms for ${corridor.tiles.length} tiles, ${terrain.loaded} meshes`);
+  expect(terrain.loaded).toBeGreaterThan(0);
+  expect(ms).toBeLessThan(3000);
+  terrain.dispose();
+}, 20_000);
+
 test('T9: scattering the decor of the 22 km course takes under 1.5 s and its cells under 1.5 s', () => {
+  // The corridor is built once per course (timed above), not by the scatter.
+  corridorOf(course);
   const start = performance.now();
   const placements = scatterDecor(course, getCourseDef('marrakech'), seedFromId('marrakech'));
   const scatter = performance.now() - start;

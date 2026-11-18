@@ -1,4 +1,4 @@
-import { ANCHOR_HEIGHT, ROAD_WIDTH, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type BuiltCourse, type ServiceStop, type Surface } from '@lodgy/shared';
+import { ANCHOR_HEIGHT, obstacleWalls, ROAD_WIDTH, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type BuiltCourse, type ServiceStop, type Surface } from '@lodgy/shared';
 import * as THREE from 'three';
 import { fitted, hasModel, instantiate, shadowed, type FitSize } from './models';
 import { groupBySurface, mergeBoxes, toGeometry } from './groundMerge';
@@ -85,6 +85,13 @@ function stopScenery(stop: ServiceStop): THREE.Group | null {
   return group;
 }
 
+// The walls to draw: the walls beside obstacles on a corridor course (appended last by the course builder) are invisible, the berms show them.
+export function visibleWalls(course: BuiltCourse): readonly Box[] {
+  if (!course.corridor) return course.walls;
+  const { runs, caps } = obstacleWalls(course);
+  return course.walls.slice(0, course.walls.length - runs.flat().length - caps.length);
+}
+
 export function createScene(course: BuiltCourse, options: SceneOptions = {}): THREE.Scene {
   const scene = new THREE.Scene();
   const groups = groupBySurface(course.ground);
@@ -92,7 +99,7 @@ export function createScene(course: BuiltCourse, options: SceneOptions = {}): TH
     const mesh = mergedMesh(groups[surface]!, groundMaterial(surface, options), false);
     if (mesh) scene.add(mesh);
   }
-  const walls = mergedMesh(course.walls, solid(0xc98a5a), true);
+  const walls = mergedMesh(visibleWalls(course), solid(0xc98a5a), true);
   if (walls) scene.add(walls);
   scene.add(createTerrainMesh(course, options));
   scene.add(...createSouleymanMeshes(souleymanPlacements(course.checkpoints)));

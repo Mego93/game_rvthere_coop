@@ -1,8 +1,8 @@
-import { getCourse } from '@lodgy/shared';
+import { getCourse, obstacleWalls } from '@lodgy/shared';
 import * as THREE from 'three';
 import { expect, test, vi } from 'vitest';
 import { disposeScene } from './disposeScene';
-import { createScene } from './scene';
+import { createScene, visibleWalls } from './scene';
 
 const course = getCourse('segment-demo');
 const OLD_CHECKPOINT_BLUE = 0x3b82f6;
@@ -45,4 +45,15 @@ test('T4: disposeScene frees his geometry and materials', () => {
   disposeScene(scene);
   for (const spy of spies) expect(spy).toHaveBeenCalled();
   expect(scene.children).toHaveLength(0);
+});
+
+test('the walls beside obstacles on a corridor course are not drawn', () => {
+  const marrakech = getCourse('marrakech');
+  const drawn = visibleWalls(marrakech);
+  const { runs, caps } = obstacleWalls(marrakech);
+  expect(drawn.length).toBe(marrakech.walls.length - runs.flat().length - caps.length);
+  expect(runs.flat().length + caps.length).toBeGreaterThan(20);
+  expect(drawn.every((box, i) => box === marrakech.walls[i])).toBe(true);
+  const airport = getCourse('airport');
+  expect(visibleWalls(airport)).toBe(airport.walls);
 });
