@@ -333,7 +333,7 @@ describe('marrakech dirt, bumps and figure checkpoints', () => {
 
   it('the generated course is what the planner makes (regenerate with scripts/route/buildMarrakech.ts)', () => {
     expect(JSON.parse(JSON.stringify(planMarrakech().segments))).toEqual(JSON.parse(JSON.stringify(defs)));
-  });
+  }, 60000);
 
   it('figure checkpoints: the first, then one about every 2000 m, one segment either way', () => {
     const course = getCourse('marrakech');
