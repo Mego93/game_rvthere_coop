@@ -19,7 +19,7 @@ const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floo
 // Six goats and three scooters all within the spawn window of the start line, so the maxima are alive at once.
 const dense: AmbientEvent[] = Array.from({ length: AMBIENT_MAX_GOATS + AMBIENT_MAX_SCOOTERS }, (_, i) => ({
   id: i,
-  along: 40 + i * 8,
+  along: 40 + i * 3,
   side: i % 2 === 0 ? 1 : -1,
   kind: i < AMBIENT_MAX_GOATS ? 'goat' : 'scooter',
 }));
