@@ -457,6 +457,35 @@ export const GUN_RANGE = 60;
 export const GUN_AMMO_START = 12;
 export const AMMO_BOX_ROUNDS = 12;
 export const AMMO_MAX = 48;
+// Enemies on foot with knives. Health, run speed in m/s, knife damage, reach in m (between centres on the ground) and s between stabs.
+export const ENEMY_HEALTH = 100;
+export const ENEMY_RUN_SPEED = 5.5;
+export const ENEMY_KNIFE_DAMAGE = 10;
+export const ENEMY_KNIFE_RANGE = 1.3;
+export const ENEMY_KNIFE_COOLDOWN = 1.0;
+// s a slipped enemy lies, the chance per second of slipping while running (certain the first time on mud or dirt).
+export const ENEMY_SLIP_SECONDS = 1.2;
+export const ENEMY_SLIP_CHANCE = 0.15;
+export const ENEMY_MAX_ALIVE = 8;
+// m of route per event (half as many in the last ENEMY_CITY_SHARE of marrakech), jitter either side, and the m ahead of and behind the vehicle where an enemy appears and is removed.
+export const ENEMY_SPACING = 250;
+export const ENEMY_JITTER = 40;
+export const ENEMY_CITY_SHARE = 0.3;
+export const ENEMY_SPAWN_AHEAD = 110;
+export const ENEMY_DESPAWN_BEHIND = 80;
+// m beyond the road edge where an enemy appears.
+export const ENEMY_EDGE_OFFSET = 1.5;
+// m, an on-foot player this near is chased.
+export const ENEMY_SIGHT = 40;
+// m, the stab needs the player within this height of the enemy.
+export const ENEMY_KNIFE_REACH_Y = 1.5;
+// m/s of the vehicle above which it knocks an enemy down, the fraction of full health that costs, and the s a downed or dead enemy stays.
+export const ENEMY_KNOCK_SPEED = 3;
+export const ENEMY_VEHICLE_DAMAGE = 0.02;
+export const ENEMY_REMOVE_AFTER = 2;
+// m, half extents of an enemy's hit box (its centre is reported as its position).
+export const ENEMY_HALF = vec3(PLAYER_RADIUS, PLAYER_HEIGHT / 2, PLAYER_RADIUS);
+export const ENEMY_SEED_SALT = 0xe4e1;
 // Items eaten, drunk or loaded by the player himself on foot, with the self hold.
 export const SELF_ITEMS = Object.freeze(['tajine', 'treedent', 'fromageBlanc', 'kokeZero', 'ammo'] as const satisfies readonly ItemKind[]);
 export const DEFAULT_TIME_OF_DAY: TimeOfDay = 'midday';

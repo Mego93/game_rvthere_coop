@@ -922,3 +922,31 @@ describe('step 39: power-up fields', () => {
     expect(parseServer({ type: 'event', kind: 'eat', tick: 3, item: 4 })).toBeNull();
   });
 });
+
+describe('step 39: gun, ammo and shot fields', () => {
+  const parseServer = (message: unknown) => parseServerMessage(JSON.stringify(message));
+
+  test('gun is only true and ammo a count of at most AMMO_MAX', () => {
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, gun: true, ammo: 12 }] })).not.toBeNull();
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, gun: true, ammo: 48 }] })).not.toBeNull();
+    for (const bad of [{ gun: false }, { gun: 1 }, { ammo: -1 }, { ammo: 49 }, { ammo: 1.5 }, { ammo: '3' }]) expect(parseServer({ ...snapshot, players: [{ ...onFoot, ...bad }] })).toBeNull();
+  });
+
+  test('a shot event carries the end point and the hit flag', () => {
+    const shot = { type: 'event', kind: 'shot', tick: 4, playerId: 'p', pos: { x: 0, y: 1, z: 0 }, to: { x: 0, y: 1, z: -9 }, hit: true };
+    expect(parseServer(shot)).not.toBeNull();
+    expect(parseServer({ ...shot, to: { x: 'a', y: 1, z: 0 } })).toBeNull();
+    expect(parseServer({ ...shot, hit: 'yes' })).toBeNull();
+    expect(parseServer({ type: 'event', kind: 'stab', tick: 2, playerId: 'p' })).not.toBeNull();
+  });
+
+  test('enemies are optional, bounded and need a known state', () => {
+    const enemy = { id: 1, x: 1, y: 2, z: 3, yaw: 0, state: 'run' };
+    expect(parseServer({ ...snapshot, enemies: [enemy] })).not.toBeNull();
+    expect(parseServer({ ...snapshot, enemies: [] })).not.toBeNull();
+    expect(parseServer({ ...snapshot, enemies: [{ ...enemy, state: 'flying' }] })).toBeNull();
+    expect(parseServer({ ...snapshot, enemies: [{ ...enemy, x: null }] })).toBeNull();
+    expect(parseServer({ ...snapshot, enemies: Array.from({ length: 33 }, () => enemy) })).toBeNull();
+    expect(parseServer({ ...snapshot, enemies: 'none' })).toBeNull();
+  });
+});

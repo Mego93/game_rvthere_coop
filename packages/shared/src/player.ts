@@ -121,7 +121,7 @@ function tickPowerUps(state: PlayerState): void {
 
 export interface PendingDamage {
   playerId: string;
-  source: 'fall' | 'vehicle' | 'prop' | 'debug';
+  source: 'fall' | 'vehicle' | 'prop' | 'knife' | 'debug';
   amount: number;
 }
 

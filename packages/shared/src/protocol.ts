@@ -437,6 +437,11 @@ const isAnimalSnapshot = (value: unknown): boolean =>
   finite(value.z) &&
   finite(value.yaw) &&
   (value.hit === undefined || value.hit === true);
+const ENEMY_STATES = ['idle', 'run', 'attack', 'slip', 'down', 'dead'];
+// Far above the most the director keeps alive (ENEMY_MAX_ALIVE).
+const MAX_ENEMIES = 32;
+const isEnemySnapshot = (value: unknown): boolean =>
+  isRecord(value) && isCount(value.id) && finite(value.x) && finite(value.y) && finite(value.z) && finite(value.yaw) && typeof value.state === 'string' && ENEMY_STATES.includes(value.state);
 const isCableSnapshot = (value: unknown): value is CableSnapshot =>
   isRecord(value) &&
   (value.state === 'stowed' || value.state === 'held' || value.state === 'ground' || value.state === 'attached') &&
@@ -518,6 +523,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         data.props.every(isPropSnapshot) &&
         (data.weather === undefined || isWeather(data.weather)) &&
         (data.animals === undefined || (Array.isArray(data.animals) && data.animals.length <= MAX_ANIMALS && data.animals.every(isAnimalSnapshot))) &&
+        (data.enemies === undefined || (Array.isArray(data.enemies) && data.enemies.length <= MAX_ENEMIES && data.enemies.every(isEnemySnapshot))) &&
         isCableSnapshot(data.cable)
         ? message
         : null;
