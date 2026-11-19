@@ -309,3 +309,17 @@ describe('ownHealthPoints', () => {
     expect(ownHealthPoints(Number.NaN)).toBe(0);
   });
 });
+
+describe('dashboard', () => {
+  const moving = { ...vehicle, linvel: vec3(0, 0, -10), throttle: 1 };
+  test('shown in the driver seat with the speed in km/h, a gear and the revs', () => {
+    const { dashboard } = build({ vehicle: moving, players: [player('p1', 0, 0, { seat: 'driver' }), player('p2', 50, 50)] });
+    expect(dashboard).toMatchObject({ kmh: 36, gear: 2 });
+    expect(dashboard!.rpm).toBeGreaterThan(1500);
+  });
+
+  test('hidden on foot and in another seat', () => {
+    expect(build({ vehicle: moving }).dashboard).toBeNull();
+    expect(build({ vehicle: moving, players: [player('p1', 0, 0, { seat: 'passenger' })] }).dashboard).toBeNull();
+  });
+});

@@ -125,8 +125,36 @@ function buildPropMesh(kind: string): THREE.Object3D {
   return mesh;
 }
 
+const RIDER_TOP = 0x4a5a6a;
+const RIDER_TROUSERS = 0x3a3a40;
+const RIDER_SKIN = 0xd9a877;
+const RIDER_HELMET = 0x2b2b2b;
+
+// A seated blocky rider in a neutral outfit on a scooter's box: hips on the seat, hands on the bars; -z is forward.
+export function createRider(h: { x: number; y: number; z: number }): THREE.Group {
+  const rider = new THREE.Group();
+  rider.name = 'rider';
+  const top = material(RIDER_TOP);
+  const trousers = material(RIDER_TROUSERS);
+  const skin = material(RIDER_SKIN);
+  const helmet = material(RIDER_HELMET);
+  rider.add(box(h.x * 1.3, h.y * 0.85, h.z * 0.3, top, 0, h.y * 1.25, h.z * 0.15));
+  const head = box(h.x * 0.8, h.y * 0.45, h.x * 0.8, skin, 0, h.y * 2.0, h.z * 0.12);
+  rider.add(head, box(h.x * 0.9, h.y * 0.2, h.x * 0.9, helmet, 0, h.y * 2.2, h.z * 0.12));
+  for (const side of [-1, 1]) {
+    rider.add(box(h.x * 0.5, h.y * 0.25, h.z * 0.55, trousers, side * h.x * 0.4, h.y * 0.85, -h.z * 0.1));
+    rider.add(box(h.x * 0.45, h.y * 0.7, h.z * 0.2, trousers, side * h.x * 0.4, h.y * 0.5, -h.z * 0.45));
+    rider.add(box(h.x * 0.35, h.y * 0.25, h.z * 0.6, top, side * h.x * 0.8, h.y * 1.3, -h.z * 0.3));
+  }
+  rider.traverse((object) => {
+    object.castShadow = true;
+  });
+  return rider;
+}
+
 export function createPropMesh(kind: string): THREE.Object3D {
   const mesh = buildPropMesh(kind);
+  if (kind === 'scooter') mesh.add(createRider(PROP_KINDS.scooter.halfExtents));
   mesh.traverse((object) => {
     object.castShadow = true;
     object.receiveShadow = true;

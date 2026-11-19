@@ -64,6 +64,8 @@ import { projectMarker } from './ui/hud/downedMarkers';
 import { CLOSED, createShopMenu, gateControl, menuFeet, menuInput, shopMenuState, type ShopMenuState } from './ui/shopMenu';
 import { createRunMenu, inputFrozen, runMenuState, type RunMenuEvent, type RunMenuState } from './ui/runMenu';
 import { isChatKey } from './ui/chat';
+import { isViewKey } from './ui/controls';
+import { bodyBob, cameraShake } from './render/bodyBob';
 import { emoteWheelAllowed, isEmoteKey } from './ui/emoteWheel';
 import type { TouchUi } from './ui/touchUi';
 import { touchView } from './ui/touchView';
@@ -79,6 +81,9 @@ let debugShown = (() => {
 
 // A frame longer than this (a background tab, a debugger pause) is treated as this long.
 const MAX_FRAME_SECONDS = 0.25;
+const THIRD_PERSON_FOV = 60;
+// How fast the body's bob follows the acceleration, per second; the velocity difference between frames is noisy.
+const BOB_RATE = 10;
 // The camera eye eases to a new stance's height in about this long.
 const EYE_EASE_SECONDS = 0.1;
 const LOOPS = ['engine', 'winch', 'rain'] as const;
@@ -104,6 +109,9 @@ export interface Game {
   setMuted(muted: boolean): void;
   // Shows "Cannot buy" in the shop menu if it is open.
   showShopError(): void;
+  // Switches the camera between first and third person; V and the touch View button call it through the page.
+  setFirstPerson(on: boolean): void;
+  isFirstPerson(): boolean;
   // Stops drawing and listening for input.
   stop(): void;
 }
@@ -124,8 +132,10 @@ export interface GameView {
   audio: GameAudio;
   muted: boolean;
   softwareGl?: boolean;
-  // The first-person camera prototype (?fp); off by default.
+  // Whether the run starts in first person; V or the View button changes it at any time.
   firstPerson?: boolean;
+  // The view was switched by V or the View button; the page remembers it for the next run.
+  onViewChange?: (firstPerson: boolean) => void;
   onMute: () => void;
   onHelp: () => void;
   onTutorial: () => void;
@@ -197,6 +207,14 @@ export function createGame(
   const vehicleMesh = createVehicleMesh(vehicleConfig, view.softwareGl);
   vehicleMesh.visible = false;
   scene.add(vehicleMesh);
+  const bobVelocity = new THREE.Vector3();
+  const bobPrev = new THREE.Vector3();
+  const bobInverse = new THREE.Quaternion();
+  const bobTilt = new THREE.Quaternion();
+  const bobEuler = new THREE.Euler();
+  const bobState = { pitch: 0, roll: 0, lift: 0 };
+  let bobFresh = true;
+  const forwardSpeedOf = (state: VehicleState) => dot(state.linvel, rotate(state.rot, vec3(0, 0, -1)));
   const seatRing = createSeatRing();
   const seatAnnouncer = createSeatAnnouncer();
   const eventToast = createEventToast();
@@ -205,8 +223,8 @@ export function createGame(
   scene.add(winchMesh);
   const coinMeshes = createCoinMeshes(scene, course.coins);
   const animalMeshes = createAnimalMeshes(scene);
-  const firstPerson = view.firstPerson === true;
-  const camera = new THREE.PerspectiveCamera(firstPerson ? FIRST_PERSON_FOV : 60, 1, 0.1, 1000);
+  let firstPerson = view.firstPerson === true;
+  const camera = new THREE.PerspectiveCamera(firstPerson ? FIRST_PERSON_FOV : THIRD_PERSON_FOV, 1, 0.1, 1000);
   camera.position.set(0, 6, 14);
 
   const predictor = createPredictor(rapier, course, vehicleConfig);
@@ -348,7 +366,18 @@ export function createGame(
     const entry = latestLocal;
     if (emoteWheelAllowed({ phase: lobby.phase, seated: entry === null || entry.seat !== null, downed: entry === null || entry.downed !== null, carrying: entry !== null && entry.hands !== null, open: anyOpen() })) view.onEmoteWheel();
   };
+  const setFirstPerson = (on: boolean) => {
+    if (on === firstPerson) return;
+    firstPerson = on;
+    camera.fov = on ? FIRST_PERSON_FOV : THIRD_PERSON_FOV;
+    camera.updateProjectionMatrix();
+    view.onViewChange?.(on);
+  };
   const onKeyDown = (event: KeyboardEvent) => {
+    if (isViewKey(event, event.target instanceof Element ? event.target.tagName : null)) {
+      setFirstPerson(!firstPerson);
+      return;
+    }
     if (event.code === 'F3') {
       event.preventDefault();
       if (!event.repeat) overlay.hidden = debugShown = !debugShown;
@@ -507,7 +536,18 @@ export function createGame(
     if (vehicle) {
       vehicleMesh.visible = true;
       placeVehicleMesh(vehicleMesh, vehicle);
-    }
+      // The body bobs on its own frame: wheel spin above used the plain pose.
+      bobVelocity.set(vehicle.linvel.x, vehicle.linvel.y, vehicle.linvel.z).applyQuaternion(bobInverse.copy(vehicleMesh.quaternion).invert());
+      const raw = bobFresh ? { pitch: 0, roll: 0, lift: 0 } : bodyBob(bobPrev, bobVelocity, frameSeconds, forwardSpeedOf(vehicle));
+      const follow = 1 - Math.exp(-BOB_RATE * frameSeconds);
+      bobState.pitch += (raw.pitch - bobState.pitch) * follow;
+      bobState.roll += (raw.roll - bobState.roll) * follow;
+      bobState.lift += (raw.lift - bobState.lift) * follow;
+      bobPrev.copy(bobVelocity);
+      bobFresh = false;
+      vehicleMesh.quaternion.multiply(bobTilt.setFromEuler(bobEuler.set(bobState.pitch, 0, bobState.roll)));
+      vehicleMesh.position.y += bobState.lift;
+    } else bobFresh = true;
     syncPlayerMeshes(players, frameSeconds, now / 1000);
     const cable = sampled?.cable;
     winchMesh.visible = vehicle !== null && cable !== undefined;
@@ -538,6 +578,11 @@ export function createGame(
         camera.lookAt(seatedEye.target.x, seatedEye.target.y, seatedEye.target.z);
       } else {
         updateFollowCamera(camera, vehicle, frameSeconds);
+      }
+      if (local?.seat) {
+        const shake = cameraShake(now / 1000, forwardSpeedOf(vehicle));
+        camera.translateX(shake.x);
+        camera.translateY(shake.y);
       }
     }
     const latestCable = buffer.latestCable();
@@ -668,6 +713,8 @@ export function createGame(
       if (open) releaseLock();
       gate.follow(frozen());
     },
+    setFirstPerson,
+    isFirstPerson: () => firstPerson,
     setMuted: (muted) => runMenu.setMuted(muted),
     showShopError: () => shopMenu.showError(),
     stop() {

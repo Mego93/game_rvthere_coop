@@ -5,9 +5,9 @@ import { tutorialDone } from './tutorialDone';
 const INSETS = { left: 47, right: 47, bottom: 21 };
 
 // The prompt's text and its hold bar are measured as two boxes; the prompt itself wraps both.
-const COMMON = ['hud-compass', 'hud-minimap', 'hud-vehicle', 'hud-health', 'hud-prompt-text', 'hud-prompt-hold', 'hud-seat-toast', 'hud-downed', 'chat-toasts'];
+const COMMON = ['hud-compass', 'hud-minimap', 'hud-vehicle', 'hud-health', 'hud-dashboard', 'hud-prompt-text', 'hud-prompt-hold', 'hud-seat-toast', 'hud-downed', 'chat-toasts'];
 const DESKTOP = [...COMMON, 'hud-slots'];
-const TOUCH = [...COMMON, 'touch-menu', 'touch-chat', 'touch-emote', 'touch-actions', 'touch-slots'];
+const TOUCH = [...COMMON, 'touch-menu', 'touch-chat', 'touch-emote', 'touch-view', 'touch-actions', 'touch-slots'];
 
 interface Box { id: string; x: number; y: number; w: number; h: number }
 
@@ -75,7 +75,7 @@ test.describe('HUD layout (V8)', () => {
             expect(w).toBeGreaterThanOrEqual(44);
             expect(h).toBeGreaterThanOrEqual(44);
           }
-          for (const id of ['touch-menu', 'touch-chat', 'touch-emote']) {
+          for (const id of ['touch-menu', 'touch-chat', 'touch-emote', 'touch-view']) {
             expect(by(id).w).toBe(44);
             expect(by(id).h).toBe(44);
           }
@@ -88,12 +88,17 @@ test.describe('HUD layout (V8)', () => {
           expect(by('chat-toasts').y).toBeCloseTo(150, 0);
           expect(by('chat-toasts').h).toBeLessThanOrEqual(64);
           expect(by('chat-toasts').w).toBeLessThanOrEqual(size.width * 0.4 + 0.5);
+          // The dashboard sits under the minimap, clear of the vehicle panel and the Menu row.
+          expect(by('hud-dashboard').y).toBeGreaterThanOrEqual(by('hud-minimap').y + by('hud-minimap').h);
           // Smoke B13: the action column sits fully below the Menu button.
           expect(by('touch-actions').y).toBeGreaterThanOrEqual(by('touch-menu').y + by('touch-menu').h);
         } else {
           // Prompt directly above the slots, toast under the compass.
           expect(by('hud-prompt-hold').y + by('hud-prompt-hold').h).toBeLessThanOrEqual(by('hud-slots').y + 0.5);
           expect(by('hud-seat-toast').y).toBeGreaterThanOrEqual(by('hud-compass').y + by('hud-compass').h);
+          // The dashboard is in the bottom right corner.
+          expect(by('hud-dashboard').x + by('hud-dashboard').w).toBeGreaterThan(size.width - 24);
+          expect(by('hud-dashboard').y + by('hud-dashboard').h).toBeGreaterThan(size.height - 24);
         }
         await context.close();
       });
