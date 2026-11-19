@@ -1,7 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
-import { vec3, type Vec3 } from './math';
+import { IDENTITY, vec3, type Vec3 } from './math';
+import { testGround } from './courses/testGround';
 import type { VehicleId } from './vehicles';
 import { createWorld, type World, type WorldEvent } from './world';
 
@@ -41,17 +42,26 @@ describe('step 38: coins only on foot', () => {
     expect(coinEvents(world.step(new Map()))).toHaveLength(1);
   });
 
-  test('a player inside the vehicle bounds does not collect, even with the coin at the centre', () => {
-    for (const id of ['lodgy', 'rv'] as const) {
-      const world = make(id);
-      parkOnCoin(world);
-      const c = coin(world);
-      world.teleportPlayer('p1', vec3(c.x, c.y - 0.2, c.z));
-      const events: WorldEvent[] = [];
-      for (let i = 0; i < 20; i++) events.push(...world.step(new Map()));
-      expect(coinEvents(events)).toEqual([]);
-      expect(world.snapshot().wallet).toBe(0);
-    }
+  test('a player riding on the vehicle does not collect a coin within reach', () => {
+    // The coin sits at roof height; the push-out cannot move a player standing on the roof, so only the rule keeps the coin.
+    const high = { ...testGround, coins: [{ id: 'coin-1', kind: 'coin' as const, pose: { pos: vec3(4, 3.1, -12), rot: IDENTITY } }] };
+    const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'rv' }, high);
+    worlds.push(world);
+    world.addPlayer('p1');
+    const body = world.debugBody('vehicle')!;
+    body.setTranslation({ x: 3, y: 1.5, z: -12 }, true);
+    body.setLinvel(vec3(0, 0, 0), true);
+    for (let i = 0; i < 60; i++) world.step(new Map());
+    world.teleportPlayer('p1', vec3(3, 3.2, -12));
+    const events: WorldEvent[] = [];
+    for (let i = 0; i < 60; i++) events.push(...world.step(new Map()));
+    expect(world.snapshot().players[0]!.ground?.bodyId).toBe('vehicle');
+    for (let i = 0; i < 20; i++) events.push(...world.step(new Map([['p1', input({ moveX: 1, yaw: 0 })]])));
+    const me = world.snapshot().players[0]!;
+    expect(me.pos.x).toBeGreaterThan(3.3);
+    expect(me.pos.y).toBeGreaterThan(2);
+    expect(coinEvents(events)).toEqual([]);
+    expect(world.snapshot().wallet).toBe(0);
   });
 
   test('a seated player does not collect while the vehicle drives through the coin', () => {

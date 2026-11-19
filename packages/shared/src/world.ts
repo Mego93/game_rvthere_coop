@@ -599,7 +599,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     const q = vehicle.body.rotation();
     const local = rotate({ ...q, x: -q.x, y: -q.y, z: -q.z }, vec3(feet.x - centre.x, feet.y - centre.y, feet.z - centre.z));
     const half = vehicleConfig.halfExtents;
-    return Math.abs(local.x) <= half.x && Math.abs(local.y) <= half.y && Math.abs(local.z) <= half.z;
+    // A little slack above and around, so feet on the roof or the sill count as riding.
+    const slack = 0.25;
+    return Math.abs(local.x) <= half.x + slack && Math.abs(local.y) <= half.y + slack && Math.abs(local.z) <= half.z + slack;
   };
 
   // Rule V1: the first player in join order to touch a coin takes it.
@@ -607,7 +609,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     if (won) return;
     for (const player of players.all()) {
       if (player.seat !== null || player.downed !== null || player.respawnIn !== null || player.flying) continue;
-      if (insideVehicle(player.pos)) continue;
+      if (player.ground?.bodyId === 'vehicle' || insideVehicle(player.pos)) continue;
       for (const id of coinsLeft) {
         const coin = course.coins.find((candidate) => candidate.id === id)!;
         if (!coinTouched(player.pos, coin.pose.pos)) continue;
