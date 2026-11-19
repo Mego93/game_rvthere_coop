@@ -33,6 +33,7 @@ export const sampleModel = (touch: boolean): HudModel => ({
   wallet: 120,
   ownHealth: 55,
   ownSeat: { id: 'driver', label: 'Driver' },
+  dashboard: { kmh: 64, gear: 3, rpm: 4200 },
   slots: [
     { kind: 'jerrycan', label: 'Fuel', selected: true },
     { kind: 'toolbox', label: 'Tools', selected: false },

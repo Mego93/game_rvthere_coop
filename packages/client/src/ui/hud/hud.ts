@@ -4,6 +4,7 @@ import { ICON_COIN, ICON_FUEL, ICON_HEALTHKIT, ICON_HEART, ICON_HULL, ICON_JERRY
 import { splitPrompt } from './splitPrompt';
 import { gaugePercent, ownHealthFraction, ownHealthPoints, type HudModel } from './hudModel';
 import { createMapPlan, mapScene } from './mapScene';
+import { REDLINE_RPM } from './dashboard';
 
 export interface HudMarker { id: string; name: string; seconds: number; x: number; y: number; behind: boolean }
 
@@ -95,6 +96,14 @@ const STYLE = `
 #hud.touch #hud-downed { top: 44%; }
 #hud .marker { position: absolute; transform: translate(-50%, -100%); display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; font-size: 12px; white-space: nowrap; border-radius: 999px; }
 #hud .marker::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--glass-bad); }
+#hud #hud-dashboard { position: absolute; right: calc(8px + var(--safe-right)); bottom: calc(8px + var(--safe-bottom)); box-sizing: border-box; width: 150px; padding: 6px 10px; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: baseline; }
+#hud-dashboard .speed { font: 700 28px/1 var(--font-display); text-align: right; }
+#hud-dashboard .unit { font-size: 11px; }
+#hud-dashboard .gear { grid-row: 1; grid-column: 2; justify-self: end; min-width: 22px; text-align: center; font-size: 15px; color: var(--glass-accent); }
+#hud-dashboard .rev { grid-column: 1 / -1; height: 6px; margin-top: 4px; }
+#hud-dashboard .rev.red > i { background: var(--glass-bad); }
+#hud.touch #hud-dashboard { right: auto; bottom: auto; left: calc(8px + var(--safe-left)); top: calc(222px + var(--safe-top)); width: 104px; padding: 4px 8px; }
+#hud.touch #hud-dashboard .speed { font-size: 22px; }
 @media (prefers-reduced-motion: reduce) { #hud .bar.low > i { animation: none; } #hud #hud-health { transition: none; } }
 `;
 
@@ -181,6 +190,15 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
   const wallet = el('span', meta, undefined, 'wallet');
   icon(wallet, ICON_COIN);
   const walletText = el('span', wallet);
+
+  const dash = el('div', root, 'hud-dashboard', 'glass');
+  const dashSpeed = el('span', dash, undefined, 'speed');
+  const dashGear = el('span', dash, undefined, 'gear');
+  const dashUnit = el('span', dash, undefined, 'unit');
+  dashUnit.textContent = 'km/h';
+  const dashRev = el('div', dash, undefined, 'bar rev');
+  const dashRevFill = el('i', dashRev);
+  dash.hidden = true;
 
   const health = el('div', root, 'hud-health', 'glass');
   icon(el('span', health), ICON_HEART);
@@ -335,6 +353,13 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
       text(seatText, model.ownSeat?.label ?? '');
       toggle(seatToast, toast === null);
       text(seatToast, toast ?? '');
+      toggle(dash, model.dashboard === null);
+      if (model.dashboard) {
+        text(dashSpeed, String(model.dashboard.kmh));
+        text(dashGear, model.dashboard.gear === 0 ? 'N' : model.dashboard.gear < 0 ? 'R' : String(model.dashboard.gear));
+        scale(dashRevFill, clamp(model.dashboard.rpm / REDLINE_RPM, 0, 1));
+        flag(dashRev, 'red', model.dashboard.rpm >= 6500);
+      }
       text(timer, model.timer);
       text(walletText, `$${model.wallet}`);
 

@@ -15,6 +15,8 @@ export interface TouchUi {
   onChat(handler: () => void): void;
   // The button that opens the emote wheel.
   onEmote(handler: () => void): void;
+  // The button that switches between first and third person.
+  onView(handler: () => void): void;
   // Shows a dot on the chat button while there are unread lines.
   setChatUnread(unread: boolean): void;
 }
@@ -31,6 +33,7 @@ const STYLE = `
 #touch-menu { right: calc(12px + var(--safe-right)); }
 #touch-chat { right: calc(12px + 52px + var(--safe-right)); }
 #touch-emote { right: calc(12px + 2 * 52px + var(--safe-right)); }
+#touch-ui #touch-view { position: absolute; left: calc(8px + 104px + 8px + var(--safe-left)); top: calc(222px + var(--safe-top)); width: 44px; height: 44px; border-radius: 12px; font-size: 11px; }
 #touch-slots { position: absolute; left: 50%; bottom: calc(12px + var(--safe-bottom)); transform: translateX(-50%); display: flex; gap: 8px; }
 #touch-ui #touch-slots button { width: 56px; height: 56px; border-radius: 12px; font-size: 12px; }
 #touch-slots button.selected { border-color: var(--glass-accent); box-shadow: 0 0 0 2px var(--glass-accent); }
@@ -51,6 +54,7 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
   let menuHandler: () => void = () => {};
   let chatHandler: () => void = () => {};
   let emoteHandler: () => void = () => {};
+  let viewHandler: () => void = () => {};
   const releases = new Set<() => void>();
   const releaseOf = new WeakMap<HTMLElement, () => void>();
 
@@ -160,6 +164,7 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
   chat.addEventListener('touchcancel', () => (chatTouch = null));
 
   const emote = make('touch-emote', 'Emote', (down) => down && emoteHandler());
+  const viewButton = make('touch-view', 'View', (down) => down && viewHandler());
 
   const slotBox = document.createElement('div');
   slotBox.id = 'touch-slots';
@@ -182,7 +187,7 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
   rotate.id = 'rotate-prompt';
   rotate.textContent = 'Rotate your phone to landscape';
 
-  root.append(style, ring, actions, slotBox, menu, chat, emote, rotate);
+  root.append(style, ring, actions, slotBox, menu, chat, emote, viewButton, rotate);
 
   let shown: TouchView | null = null;
   let joystickKey = '';
@@ -200,6 +205,7 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
     onMenu: (handler) => (menuHandler = handler),
     onChat: (handler) => (chatHandler = handler),
     onEmote: (handler) => (emoteHandler = handler),
+    onView: (handler) => (viewHandler = handler),
     setChatUnread: (unread) => chat.classList.toggle('on', unread),
     update(view) {
       const changed = changedFields(shown, view);

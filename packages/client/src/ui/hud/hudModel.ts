@@ -1,7 +1,8 @@
-import { FINAL_RESTART_PENALTY, ITEM_KINDS, PLAYER_MAX_HEALTH, clamp, yawOf, type Box, type Checkpoint, type Vec3 } from '@lodgy/shared';
+import { FINAL_RESTART_PENALTY, ITEM_KINDS, PLAYER_MAX_HEALTH, clamp, dot, rotate, vec3, yawOf, type Box, type Checkpoint, type Vec3 } from '@lodgy/shared';
 import { clock, interactHint, useHint, type OverlayData } from '../overlay';
 import { bearingTo, compassLabel, compassTarget, edgeSide, headingOffset, markerPosition } from './compass';
 import { LOW_FRACTION, MARKER_HEIGHT } from './constants';
+import { gearbox, speedKmh } from './dashboard';
 import { ITEM_LABELS } from './itemLabels';
 import { seatLabel } from './seatLabels';
 import { touchWording } from './touchWording';
@@ -14,6 +15,8 @@ export interface HudModel {
   wallet: number;
   ownHealth: number;
   ownSeat: { id: string; label: string } | null;
+  // Shown while the local player sits in the driver's seat.
+  dashboard: { kmh: number; gear: number; rpm: number } | null;
   slots: { kind: string | null; label: string | null; selected: boolean }[];
   prompt: string | null;
   canReset: boolean;
@@ -105,6 +108,12 @@ export function buildHudModel(data: OverlayData, course: { checkpoints: readonly
     downedOthers.push({ id: player.playerId, name, pos: { x: player.pos.x, y: player.pos.y + MARKER_HEIGHT, z: player.pos.z }, seconds: seconds(player.downed) });
   }
 
+  let dashboard: HudModel['dashboard'] = null;
+  if (vehicle && local?.seat === 'driver') {
+    const speed = dot(vehicle.linvel, rotate(vehicle.rot, vec3(0, 0, -1)));
+    dashboard = { kmh: speedKmh(speed), ...gearbox(speed, vehicle.throttle) };
+  }
+
   return {
     heading,
     compass,
@@ -115,6 +124,7 @@ export function buildHudModel(data: OverlayData, course: { checkpoints: readonly
     wallet: status?.wallet ?? 0,
     ownHealth: local?.health ?? 0,
     ownSeat: local && local.seat !== null ? { id: local.seat, label: seatLabel(local.seat) ?? local.seat } : null,
+    dashboard,
     slots,
     prompt,
     canReset,

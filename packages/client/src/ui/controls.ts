@@ -7,8 +7,8 @@ export interface ControlEntry {
   action: string;
 }
 
-// Codes handled outside the keyboard source: F3, T, B and Escape in game.ts, M in audio/soundMap.ts, H in main.ts.
-export const EXTRA_CODES = ['F3', 'Escape', 'KeyM', 'KeyH', 'KeyT', 'KeyB'];
+// Codes handled outside the keyboard source: F3, T, B, V and Escape in game.ts, M in audio/soundMap.ts, H in main.ts.
+export const EXTRA_CODES = ['F3', 'Escape', 'KeyM', 'KeyH', 'KeyT', 'KeyB', 'KeyV'];
 
 export const CONTROLS: readonly ControlEntry[] = [
   { group: 'On foot', keys: ['KeyW', 'KeyA', 'KeyS', 'KeyD'], action: 'Walk' },
@@ -30,6 +30,7 @@ export const CONTROLS: readonly ControlEntry[] = [
   { group: 'Game', keys: ['KeyT'], action: 'Open chat' },
   { group: 'Game', keys: ['KeyB'], action: 'Emote wheel' },
   { group: 'Game', keys: ['Escape'], action: 'Menu, or close this help, chat or emote wheel' },
+  { group: 'Game', keys: ['KeyV'], action: 'Switch between first and third person view' },
   { group: 'Game', keys: ['KeyM'], action: 'Mute or unmute sound' },
 ];
 
@@ -145,3 +146,7 @@ export function createControlsPanel(doc: Document, onChange: (open: boolean) => 
 // H toggles the panel, except while typing in a field or with a shortcut modifier held.
 export const isHelpKey = (event: { code: string; repeat: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean }, targetTag: string | null): boolean =>
   event.code === 'KeyH' && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey && !['INPUT', 'SELECT', 'TEXTAREA'].includes(targetTag?.toUpperCase() ?? '');
+
+// V switches between first and third person, except while typing in a field or with a shortcut modifier held.
+export const isViewKey = (event: { code: string; repeat: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean }, targetTag: string | null): boolean =>
+  event.code === 'KeyV' && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey && !['INPUT', 'SELECT', 'TEXTAREA'].includes(targetTag?.toUpperCase() ?? '');
