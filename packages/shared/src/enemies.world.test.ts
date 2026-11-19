@@ -11,6 +11,7 @@ import {
   ENEMY_SIGHT,
   ENEMY_SLIP_SECONDS,
   ENEMY_SPACING,
+  ENEMY_SEED_SALT,
   ENEMY_SPAWN_AHEAD,
   ENEMY_VEHICLE_DAMAGE,
   GUN_COOLDOWN,
@@ -23,6 +24,8 @@ import {
 import { buildCourse } from './courses/build';
 import { planEnemies, type EnemyEvent } from './enemies';
 import { mixSeed } from './itemDrops';
+import { getCourse } from './courses/index';
+import { createRouteIndex } from './routeAlong';
 import { IDENTITY, vec3 } from './math';
 import { NEUTRAL_INPUT, parseServerMessage, type InputFields, type PlayerInput } from './protocol';
 import { withBoxes } from './testRig';
@@ -95,6 +98,60 @@ describe('planEnemies', () => {
     const before = plan.filter((e) => e.along < 14000).length;
     expect(inCity / 6000).toBeGreaterThan((before / 14000) * 1.7);
     expect(inCity / 6000).toBeLessThan((before / 14000) * 2.3);
+  });
+});
+
+describe('step 40: enemy density and city share come from the course', () => {
+  const road = (n: number) => Array.from({ length: n }, () => ({ type: 'road' as const, length: 400 }));
+  const length = (course: ReturnType<typeof buildCourse>) => createRouteIndex(course.route).length;
+
+  // Every enemy id that appears while the vehicle is carried along the whole route.
+  function seen(course: ReturnType<typeof buildCourse>): number {
+    const world = createWorld(RAPIER, { courseId: course.id, vehicleId: 'lodgy', enemies: true, enemySeed: 1 }, course);
+    worlds.push(world);
+    const ids = new Set<number>();
+    for (let along = 0; along <= length(course); along += 40) {
+      place(world, 0, along);
+      run(world, 3);
+      for (const e of enemyList(world)) ids.add(e.id);
+    }
+    return ids.size;
+  }
+  const expected = (course: ReturnType<typeof buildCourse>, denseShare: number | null, density = 1) =>
+    planEnemies(mixSeed(mixSeed(hashSeed(course.id), 1), ENEMY_SEED_SALT), length(course), denseShare === null ? null : length(course) * (1 - denseShare), density).length;
+
+  test('a course without the fields has events every ENEMY_SPACING', () => {
+    const plain = buildCourse({ id: 'dens-1', segments: road(10), targetTime: 100 });
+    expect(plain.enemyDensity).toBeUndefined();
+    expect(plain.enemyCityShare).toBeUndefined();
+    expect(seen(plain)).toBe(expected(plain, null));
+  });
+
+  test('enemyDensity 2 doubles the events', () => {
+    const plain = buildCourse({ id: 'dens-1', segments: road(10), targetTime: 100 });
+    const dense = buildCourse({ id: 'dens-2', segments: road(10), targetTime: 100, enemyDensity: 2 });
+    expect(dense.enemyDensity).toBe(2);
+    expect(expected(dense, null, 2)).toBeGreaterThanOrEqual(2 * expected(plain, null) - 1);
+    expect(seen(dense)).toBe(expected(dense, null, 2));
+  });
+
+  test('enemyCityShare makes the last share twice as dense, as the id test for marrakech did', () => {
+    const city = buildCourse({ id: 'dens-3', segments: road(10), targetTime: 100, enemyCityShare: 0.3 });
+    expect(city.enemyCityShare).toBe(0.3);
+    expect(seen(city)).toBe(expected(city, 0.3));
+    expect(expected(city, 0.3)).toBeGreaterThan(expected(city, null));
+  });
+
+  test('marrakech carries a city share of 0.3 and no density', () => {
+    const marrakech = getCourse('marrakech');
+    expect(marrakech.enemyCityShare).toBe(0.3);
+    expect(marrakech.enemyDensity).toBeUndefined();
+    const total = length(marrakech);
+    expect(planEnemies(5, total, total * 0.7, marrakech.enemyDensity).length).toBe(planEnemies(5, total, total * 0.7).length);
+  });
+
+  test('the city stage has density 2', () => {
+    expect(getCourse('city').enemyDensity).toBe(2);
   });
 });
 

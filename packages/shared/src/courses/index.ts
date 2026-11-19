@@ -1,3 +1,4 @@
+import { STAGE_IDS } from '../constants';
 import type { BuiltCourse } from '../course';
 import { deepFreeze } from '../math';
 import { buildSegment, type SegmentDef } from '../segments';
@@ -5,6 +6,7 @@ import { airport } from './airport';
 import { buildCourse, type CourseDef } from './build';
 import { segmentDemo } from './demo';
 import { marrakech } from './marrakech';
+import { stageDefs } from './stages';
 import { testGround } from './testGround';
 
 const COURSES: Record<string, BuiltCourse> = {
@@ -14,14 +16,16 @@ const COURSES: Record<string, BuiltCourse> = {
 };
 
 // Built on first use, so importing the package does not pay for the 22 km course.
-const LAZY: Record<string, CourseDef> = { [marrakech.id]: marrakech };
+const LAZY: Record<string, () => CourseDef> = { ...stageDefs, [marrakech.id]: () => marrakech };
 
+// The stages in play order, then marrakech, then the rest.
 export function courseIds(): string[] {
-  return [...new Set([...Object.keys(COURSES), ...Object.keys(LAZY)])];
+  const stages = STAGE_IDS.filter((id) => Object.hasOwn(LAZY, id));
+  return [...new Set([...stages, marrakech.id, ...Object.keys(COURSES), ...Object.keys(LAZY)])];
 }
 
 export function getCourse(courseId: string): BuiltCourse {
-  if (Object.hasOwn(LAZY, courseId) && !Object.hasOwn(COURSES, courseId)) COURSES[courseId] = buildCourse(LAZY[courseId]!);
+  if (Object.hasOwn(LAZY, courseId) && !Object.hasOwn(COURSES, courseId)) COURSES[courseId] = buildCourse(LAZY[courseId]!());
   const course = Object.hasOwn(COURSES, courseId) ? COURSES[courseId] : undefined;
   if (!course) throw new Error(`Unknown course: ${courseId}`);
   return course;
@@ -36,7 +40,7 @@ const COURSE_DEFS: Record<string, CourseDef> = {
 for (const def of Object.values(COURSE_DEFS)) deepFreeze(def);
 
 export function getCourseDef(id: string): CourseDef | null {
-  if (Object.hasOwn(LAZY, id) && !Object.hasOwn(COURSE_DEFS, id)) COURSE_DEFS[id] = deepFreeze(copy(LAZY[id]!));
+  if (Object.hasOwn(LAZY, id) && !Object.hasOwn(COURSE_DEFS, id)) COURSE_DEFS[id] = deepFreeze(copy(LAZY[id]!()));
   return Object.hasOwn(COURSE_DEFS, id) ? COURSE_DEFS[id]! : null;
 }
 

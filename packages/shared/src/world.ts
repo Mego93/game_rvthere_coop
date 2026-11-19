@@ -8,7 +8,7 @@ import { createEnemies, planEnemies, type Enemies, type EnemyEvent, type EnemySn
 import { hashSeed, planAmbient, type AmbientEvent, type AnimalSnapshot } from './ambient';
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DEFAULT_WEATHER, ENEMY_CITY_SHARE, ENEMY_KNIFE_DAMAGE, ENEMY_SEED_SALT, ENEMY_VEHICLE_DAMAGE, GUN_DAMAGE, KOKE_MULTIPLIER, AMMO_BOX_ROUNDS, AMMO_MAX, GUN_COOLDOWN, GUN_RANGE, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, SHIELD_SECONDS, TAJINE_HEAL, WEATHER_SEED_SALT, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather, type WeatherSetting, type ShopItem } from './constants';
+import { DEFAULT_WEATHER, ENEMY_KNIFE_DAMAGE, ENEMY_SEED_SALT, ENEMY_VEHICLE_DAMAGE, GUN_DAMAGE, KOKE_MULTIPLIER, AMMO_BOX_ROUNDS, AMMO_MAX, GUN_COOLDOWN, GUN_RANGE, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, SHIELD_SECONDS, TAJINE_HEAL, WEATHER_SEED_SALT, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather, type WeatherSetting, type ShopItem } from './constants';
 import { weatherAt, weatherSchedule } from './weather';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
@@ -204,7 +204,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   };
   const enemySeed = mixSeed(options.enemySeed ?? options.itemSeed ?? mixSeed(hashSeed(course.id), 1), ENEMY_SEED_SALT);
   const enemyPlan: readonly EnemyEvent[] | undefined =
-    options.enemies === true ? (options.enemyPlan ?? planEnemies(enemySeed, routeIndex!.length, course.id === 'marrakech' ? routeIndex!.length * (1 - ENEMY_CITY_SHARE) : null)) : undefined;
+    options.enemies === true ? (options.enemyPlan ?? planEnemies(enemySeed, routeIndex!.length, course.enemyCityShare !== undefined ? routeIndex!.length * (1 - course.enemyCityShare) : null, course.enemyDensity)) : undefined;
   const enemies: Enemies | null = enemyPlan ? createEnemies(rapier, physics, course.route, enemyPlan, enemySeed, statics.surfaceOf) : null;
   const enemyField = (): { enemies?: EnemySnapshot[] } => {
     const list = enemies?.snapshot();

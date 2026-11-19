@@ -59,16 +59,17 @@ export interface Stab {
   pos: Vec3;
 }
 
-// Events every ENEMY_SPACING m of route, half as far apart from `denseFrom` on; sorted by `along`.
-export function planEnemies(seed: number, routeLength: number, denseFrom: number | null): EnemyEvent[] {
+// Events every ENEMY_SPACING / density m of route, half as far apart from `denseFrom` on; sorted by `along`.
+export function planEnemies(seed: number, routeLength: number, denseFrom: number | null, density = 1): EnemyEvent[] {
   const rand = mulberry32(seed);
   const events: EnemyEvent[] = [];
-  let at = ENEMY_SPACING / 2;
+  const spacing = ENEMY_SPACING / density;
+  let at = spacing / 2;
   while (at < routeLength) {
     const along = Math.min(routeLength, Math.max(0, at + (rand() * 2 - 1) * ENEMY_JITTER));
     const side: -1 | 1 = rand() < 0.5 ? -1 : 1;
     events.push({ id: events.length, along, side });
-    at += denseFrom !== null && at >= denseFrom ? ENEMY_SPACING / 2 : ENEMY_SPACING;
+    at += denseFrom !== null && at >= denseFrom ? spacing / 2 : spacing;
   }
   return events.sort((a, b) => a.along - b.along).map((e, id) => ({ ...e, id }));
 }

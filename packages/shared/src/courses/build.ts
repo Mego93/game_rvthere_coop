@@ -13,6 +13,12 @@ export interface CourseDef {
   ambient?: boolean;
   // Gives the course the solid, uneven land beside the road (see corridor.ts).
   corridor?: boolean;
+  theme?: 'desert' | 'valley' | 'mountain' | 'city' | 'airport';
+  label?: string;
+  // Multiplies how many enemy events the course has (default 1).
+  enemyDensity?: number;
+  // The last share of the route that has twice as many enemy events.
+  enemyCityShare?: number;
 }
 
 interface Frame {
@@ -183,6 +189,8 @@ export function buildCourse(def: CourseDef): BuiltCourse {
     finish: { center: vec3(0, 0, 0), halfExtents: vec3(0, 0, 0), rot: yawQuat(0) },
     killPlaneY: 0,
     targetTime: def.targetTime,
+    ...(def.enemyDensity !== undefined ? { enemyDensity: def.enemyDensity } : {}),
+    ...(def.enemyCityShare !== undefined ? { enemyCityShare: def.enemyCityShare } : {}),
   };
 
   const raw: { from: number; to: number }[] = [];

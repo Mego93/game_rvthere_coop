@@ -496,8 +496,15 @@ export const RAIN_GRIP = 0.75;
 export const HELD_SLOT_TIMEOUT = 30;
 // s a room refuses to build another world after building one, so an admin cannot rebuild at message rate.
 export const WORLD_REBUILD_COOLDOWN = 1;
+// The five stages in play order.
+export const STAGE_IDS: readonly string[] = deepFreeze(['desert', 'valley', 'mountain', 'city', 'airport-road']);
 // Course ids in campaign order.
-export const CAMPAIGN: readonly string[] = deepFreeze(['marrakech']);
+export const CAMPAIGN: readonly string[] = STAGE_IDS;
+// m of route, the length every stage must stay within.
+export const STAGE_MIN_LENGTH = 2000;
+export const STAGE_MAX_LENGTH = 4200;
+// m along the marrakech route where the desert stage is cut.
+export const DESERT_TO = 3400;
 
 // m from the centre line to each barrier of a gates hazard; the corridor between inner edges is 2 * (this - barrier half width).
 export const GATES_OFFSET = 2.7;

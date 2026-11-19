@@ -63,6 +63,9 @@ test('L18: Next only for the admin and a course that is not the last; Back to lo
   expect(resultsView(message({ courseId: 'segment-demo' }), true, TWO)).toMatchObject({ showNext: false, showLobby: true });
   expect(resultsView(message({ courseId: 'elsewhere' }), true, TWO)).toMatchObject({ showNext: false, showLobby: true });
   expect(resultsView(message({ courseId: 'test' }), false, TWO)).toMatchObject({ showNext: false, showLobby: false });
+  // The default campaign is the five stages; marrakech is outside it.
+  expect(resultsView(message({ courseId: 'desert' }), true)).toMatchObject({ showNext: true, showLobby: true });
+  expect(resultsView(message({ courseId: 'airport-road' }), true)).toMatchObject({ showNext: false, showLobby: true });
   expect(resultsView(message({ courseId: 'marrakech' }), true)).toMatchObject({ showNext: false, showLobby: true });
 });
 
