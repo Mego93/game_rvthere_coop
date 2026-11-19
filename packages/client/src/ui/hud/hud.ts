@@ -79,8 +79,8 @@ const STYLE = `
 #hud #hud-health { position: absolute; left: calc(8px + var(--safe-left)); bottom: calc(8px + var(--safe-bottom)); box-sizing: border-box; width: 150px; height: 28px; padding: 0 10px; display: grid; grid-template-columns: 14px 1fr 30px; gap: 6px; align-items: center; transition: background-color 0.3s, border-color 0.3s; }
 #hud #hud-health.full { background: transparent; border-color: transparent; }
 #hud-health svg.ico { color: var(--glass-bad); }
-#hud #hud-combat { position: absolute; left: calc(8px + var(--safe-left)); bottom: calc(42px + var(--safe-bottom)); display: flex; gap: 4px; }
-#hud-combat .chip { display: inline-flex; align-items: center; gap: 3px; height: 22px; box-sizing: border-box; padding: 0 7px; font-size: 12px; border-radius: 11px; }
+#hud #hud-combat { position: absolute; left: calc(8px + var(--safe-left)); bottom: calc(42px + var(--safe-bottom)); display: flex; gap: 3px; }
+#hud-combat .chip { display: inline-flex; align-items: center; gap: 3px; height: 22px; box-sizing: border-box; padding: 0 5px; font-size: 11px; border-radius: 11px; }
 #hud-combat .chip svg.ico { width: 12px; height: 12px; }
 #hud-combat .ammo svg.ico { color: var(--item-ammo); }
 #hud-combat .chip.low .num { color: var(--glass-bad); }

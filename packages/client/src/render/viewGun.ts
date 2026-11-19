@@ -14,7 +14,8 @@ export function createViewGun(): THREE.Group | null {
   group.add(model);
   // The file's muzzle is +z; the camera looks down -z.
   model.rotation.y = Math.PI;
-  group.position.set(0.17, -0.24, -0.42);
+  group.position.set(0.15, -0.2, -0.55);
+  group.scale.setScalar(0.75);
   group.visible = false;
   return group;
 }
