@@ -55,7 +55,7 @@ function cut(id: 'desert' | 'city' | 'airport-road'): CourseDef['segments'] {
 
 // Built when asked for, so importing the package does not walk the 22 km route.
 export const stageDefs = {
-  desert: (): CourseDef => ({ id: 'desert', label: '1 Desert', theme: 'desert', segments: cut('desert'), targetTime: 420, ambient: true, corridor: true }),
-  city: (): CourseDef => ({ id: 'city', label: '4 City', theme: 'city', segments: cut('city'), targetTime: 420, ambient: true, corridor: true, enemyDensity: 2 }),
-  'airport-road': (): CourseDef => ({ id: 'airport-road', label: '5 To the airport', theme: 'airport', segments: cut('airport-road'), targetTime: 420, ambient: true, corridor: true }),
+  desert: (): CourseDef => ({ id: 'desert', label: '1 Desert', theme: 'desert', segments: cut('desert'), targetTime: 300, ambient: true, corridor: true }),
+  city: (): CourseDef => ({ id: 'city', label: '4 City', theme: 'city', segments: cut('city'), targetTime: 300, ambient: true, corridor: true, enemyDensity: 2 }),
+  'airport-road': (): CourseDef => ({ id: 'airport-road', label: '5 To the airport', theme: 'airport', segments: cut('airport-road'), targetTime: 300, ambient: true, corridor: true }),
 } satisfies Record<string, () => CourseDef>;
