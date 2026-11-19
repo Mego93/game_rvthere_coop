@@ -209,7 +209,7 @@ describe('plan test 5: the Lodgy off the road and back', () => {
       const dx = tx - state.pos.x;
       const dz = tz - state.pos.z;
       const error = Math.atan2(f.x * dz - f.z * dx, f.x * dx + f.z * dz);
-      rig.run(TICK_DT, { throttle: 0.35, steer: Math.max(-1, Math.min(1, 1.5 * error)) });
+      rig.run(TICK_DT, { throttle: 0.6, steer: Math.max(-1, Math.min(1, 1.5 * error)) });
       farthest = Math.max(farthest, hit.d);
       lowest = Math.min(lowest, state.pos.y);
       if (hit.d > 33) sandSeen += rig.vehicle.wheelSurfaces().filter((s) => s === 'sand').length;

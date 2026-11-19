@@ -158,8 +158,10 @@ export function createVehicle(
       throttle = clamp(controls.throttle, -1, 1);
       steer = clamp(controls.steer, -1, 1);
       const speed = forwardSpeed();
-      const fade = throttle >= 0 ? 1 - speed / config.maxSpeed : 1 + speed / config.reverseSpeed;
-      const drive = fuel > 0 ? throttle * config.engineForce * clamp(fade, 0, 1) : 0;
+      const knee = config.fadeKnee ?? 0;
+      const fade = throttle >= 0 ? (1 - speed / config.maxSpeed) / (1 - knee) : 1 + speed / config.reverseSpeed;
+      const force = Math.min(config.engineForce, (config.enginePower ?? Infinity) / Math.max(Math.abs(speed), 1));
+      const drive = fuel > 0 ? throttle * force * clamp(fade, 0, 1) : 0;
       fuel = Math.max(0, fuel - Math.abs(throttle) * config.fuelBurn * TICK_DT);
       const moving = Math.abs(speed) > VEHICLE_STOPPED_SPEED;
       const surfaces = wheelSurfaces();

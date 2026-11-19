@@ -72,7 +72,7 @@ describe.each(['lodgy', 'rv'] as const)('%s', (id) => {
   test('approaches but never exceeds its top speed', () => {
     const rig = settled(id);
     rig.run(20, { throttle: 1 });
-    expect(rig.vehicle.forwardSpeed()).toBeLessThanOrEqual(config.maxSpeed * 1.02);
+    expect(rig.vehicle.forwardSpeed()).toBeLessThanOrEqual(config.maxSpeed);
     expect(rig.vehicle.forwardSpeed()).toBeGreaterThan(config.maxSpeed * 0.8);
   });
 

@@ -32,6 +32,10 @@ export interface VehicleConfig {
   sideGrip: number;
   // Total drive force at standstill, shared by the four wheels.
   engineForce: number;
+  // Drive force is capped at enginePower / speed (W); absent means no cap.
+  enginePower?: number;
+  // Fraction of maxSpeed below which the drive force does not fade; absent means it fades from standstill.
+  fadeKnee?: number;
   maxSpeed: number;
   reverseSpeed: number;
   brakeForce: number;
@@ -64,7 +68,9 @@ export const VEHICLES: Record<VehicleId, VehicleConfig> = deepFreeze({
     rideHeight: 0.95,
     grip: 1.6,
     sideGrip: 1,
-    engineForce: 9800,
+    engineForce: 5000,
+    enginePower: 80000,
+    fadeKnee: 0.8,
     maxSpeed: 33,
     reverseSpeed: 6,
     brakeForce: 12000,
