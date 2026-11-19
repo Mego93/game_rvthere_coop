@@ -6,18 +6,18 @@ import { createAnimals, type Animals } from './animals';
 import { hashSeed, planAmbient, type AmbientEvent, type AnimalSnapshot } from './ambient';
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DEFAULT_WEATHER, TAJINE_SECONDS, WEATHER_SEED_SALT, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather, type WeatherSetting, type ShopItem } from './constants';
+import { DEFAULT_WEATHER, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, SHIELD_SECONDS, TAJINE_HEAL, WEATHER_SEED_SALT, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather, type WeatherSetting, type ShopItem } from './constants';
 import { weatherAt, weatherSchedule } from './weather';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
-import { holdTargetValid, pressTarget, stepHold, stepOperateHold, type UseContext } from './holds';
+import { holdTargetValid, isSelfItem, pressTarget, stepHold, stepOperateHold, type UseContext } from './holds';
 import { settleQueries } from './settle';
 import { AXIS_Y, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
 import { inShopRange, interactCandidates, resolveInteract, splitCandidates } from './interact';
 import type { ItemKind } from './constants';
-import { aimRay, createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
+import { aimRay, clearPowerUps, createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
 import { elapsedAfter, finalTime, reachedFinish, vehicleLost } from './rules';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
@@ -51,6 +51,8 @@ export interface WorldEvent {
   tick: number;
   playerId?: string;
   pos?: Vec3;
+  // 'eat': the item eaten or drunk.
+  item?: ItemKind;
 }
 
 export interface WorldSnapshot {
@@ -463,9 +465,14 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       player.hold = hold;
       if (completed === null) continue;
       if (!infinite.has(player.id)) player.inventory[completed.slot] = null;
-      if (completed.item === 'tajine') {
-        player.tajine = TAJINE_SECONDS;
-        events.push({ kind: 'eat', tick: tick + 1, playerId: player.id, pos: { ...player.pos } });
+      if (isSelfItem(completed.item)) {
+        if (completed.item === 'treedent') player.treedent = TREEDENT_SECONDS;
+        else if (completed.item === 'fromageBlanc') {
+          player.shield = SHIELD_HP;
+          player.shieldTime = SHIELD_SECONDS;
+        } else if (completed.item === 'kokeZero') player.koke = KOKE_SECONDS;
+        else player.health = Math.min(PLAYER_MAX_HEALTH, player.health + TAJINE_HEAL);
+        events.push({ kind: 'eat', tick: tick + 1, playerId: player.id, pos: { ...player.pos }, item: completed.item });
         continue;
       }
       if (completed.targetId === 'vehicle') {
@@ -536,6 +543,15 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   // Rule H2.
   const hurt = (player: PlayerState, amount: number, events: WorldEvent[], justDowned: Set<string>) => {
     if (!(amount > 0) || player.seat !== null || player.downed !== null || player.respawnIn !== null) return;
+    // The fromage blanc shield takes damage before health.
+    const absorbed = Math.min(player.shield, amount);
+    player.shield -= absorbed;
+    if (player.shield <= 1e-9) {
+      player.shield = 0;
+      player.shieldTime = 0;
+    }
+    amount -= absorbed;
+    if (!(amount > 1e-9)) return;
     player.health = Math.max(0, player.health - amount);
     events.push({ kind: 'hurt', tick, playerId: player.id, pos: { ...player.pos } });
     if (player.health > 0) return;
@@ -651,7 +667,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       if (player.respawnIn === null) {
         if (player.pos.y < course.killPlaneY) {
           player.respawnIn = PLAYER_KILL_RESPAWN_DELAY;
-          player.tajine = 0;
+          clearPowerUps(player);
         }
         continue;
       }
@@ -663,7 +679,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       players.setSeat(player.id, null, pos);
       player.health = PLAYER_REVIVE_HEALTH;
       player.downed = null;
-      player.tajine = 0;
+      clearPowerUps(player);
       player.hitCooldown.clear();
       if (!won) respawns += 1;
       events.push({ kind: 'respawn', tick, playerId: player.id, pos });
@@ -715,7 +731,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       players.setHands(player.id, null);
       player.hold = null;
       player.respawnIn = null;
-      player.tajine = 0;
+      clearPowerUps(player);
     }
     players.takePushIntents();
     for (const player of players.all()) players.setSeat(player.id, null);
@@ -931,7 +947,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         health: Math.floor(player.health),
         downed: player.downed,
         ...(player.flying ? { flying: true as const } : {}),
-        ...(player.tajine > 1e-9 ? { tajine: Math.min(TAJINE_SECONDS, Math.ceil(player.tajine * 10 - 1e-9) / 10) } : {}),
+        ...(player.treedent > 1e-9 ? { treedent: Math.min(TREEDENT_SECONDS, Math.ceil(player.treedent * 10 - 1e-9) / 10) } : {}),
+        ...(player.koke > 1e-9 ? { koke: Math.min(KOKE_SECONDS, Math.ceil(player.koke * 10 - 1e-9) / 10) } : {}),
+        ...(player.shield > 1e-9 ? { shield: Math.min(SHIELD_HP, Math.ceil(player.shield - 1e-9)) } : {}),
         ...(player.slideTicks > 0 ? { stance: 'slide' as const } : player.crouched ? { stance: 'crouch' as const } : {}),
         ...(player.slideTicks > 0 || player.slideCooldown > 0 || player.launch > 0
           ? {

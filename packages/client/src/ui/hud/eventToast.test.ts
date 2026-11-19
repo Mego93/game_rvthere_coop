@@ -7,7 +7,7 @@ test('T9, T14: the goat, scooter, checkpoint, out-of-bounds and eat events have 
   expect(eventToastText('goatHit')).toBe('Goat!');
   expect(eventToastText('scooterHit')).toBe('Scooter!');
   expect(eventToastText('outOfBounds')).toBe('Back to the road');
-  expect(eventToastText('eat')).toBe('Tajine! Faster for 15 s');
+  expect(eventToastText('eat')).toBe('Power-up!');
   expect(EVENT_KINDS.filter((kind) => eventToastText(kind) !== null)).toEqual(['checkpoint', 'goatHit', 'scooterHit', 'outOfBounds', 'eat']);
 });
 

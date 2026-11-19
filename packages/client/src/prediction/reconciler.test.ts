@@ -41,7 +41,7 @@ const STANCE = {
   slideAir: 0,
   slideDir: { x: 0, z: 0 },
   launch: 0,
-  tajine: 0,
+  treedent: 0,
   carrying: false,
   holdsProp: false,
 };
@@ -368,13 +368,13 @@ describe('with the real predictor', () => {
   });
 });
 
-test('T4: the tajine timer of the server state reaches the predictor on correction and on replay', () => {
+test('T4: the treedent timer of the server state reaches the predictor on correction and on replay', () => {
   const seen: number[] = [];
-  const predictor: Predictor = { ...fake(), stepPlayer: (state) => (seen.push(state.tajine), { ...state, tajine: Math.max(0, state.tajine - 1) }) };
+  const predictor: Predictor = { ...fake(), stepPlayer: (state) => (seen.push(state.treedent), { ...state, treedent: Math.max(0, state.treedent - 1) }) };
   const r = createReconciler(predictor);
-  r.correct({ ...at(0), tajine: 5 }, 0);
+  r.correct({ ...at(0), treedent: 5 }, 0);
   r.record(1, step());
   r.record(2, step());
-  r.correct({ ...at(0), tajine: 4.5 }, 0);
+  r.correct({ ...at(0), treedent: 4.5 }, 0);
   expect(seen).toEqual([5, 4, 4.5, 3.5]);
 });

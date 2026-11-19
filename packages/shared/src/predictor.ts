@@ -1,4 +1,4 @@
-import { GRAVITY, PLAYER_RADIUS, PROP_KINDS, TAJINE_SPEED, TICK_DT, type PropKind } from './constants';
+import { GRAVITY, PLAYER_RADIUS, PROP_KINDS, TREEDENT_SPEED, TICK_DT, type PropKind } from './constants';
 import type { BuiltCourse } from './course';
 import { GROUP_PLAYER, GROUP_WORLD, groups } from './groups';
 import { AXIS_Y, add, rotate, scale, type Quat, type Vec3 } from './math';
@@ -22,8 +22,8 @@ export interface PredictedState {
   slideAir: number;
   slideDir: { x: number; z: number };
   launch: number;
-  // Seconds of the tajine left; the predictor counts it down like the server.
-  tajine: number;
+  // Seconds of the treedent left; the predictor counts it down like the server.
+  treedent: number;
   // Anything in the hands, and a prop in them; constant while the inputs replay (picking up comes from the server).
   carrying: boolean;
   holdsProp: boolean;
@@ -52,7 +52,7 @@ export const copyState = (state: PredictedState): PredictedState => ({
   slideAir: state.slideAir,
   slideDir: { ...state.slideDir },
   launch: state.launch,
-  tajine: state.tajine,
+  treedent: state.treedent,
   carrying: state.carrying,
   holdsProp: state.holdsProp,
   ...(state.flying ? { flying: true } : {}),
@@ -71,7 +71,7 @@ export const predictedFrom = (player: PlayerSnapshot): PredictedState =>
     slideAir: player.slide?.air ?? 0,
     slideDir: { x: player.slide?.dirX ?? 0, z: player.slide?.dirZ ?? 0 },
     launch: player.slide?.launch ?? 0,
-    tajine: player.tajine ?? 0,
+    treedent: player.treedent ?? 0,
     carrying: player.hands !== null,
     holdsProp: player.hands !== null && player.hands !== 'hook',
     ...(player.flying ? { flying: true } : {}),
@@ -177,9 +177,9 @@ export function createPredictor(rapier: Rapier, course: BuiltCourse, vehicle: Ve
           moveX: fields.moveX,
           moveY: fields.moveY,
           yaw: fields.yaw,
-          speedScale: state.tajine > 0 ? TAJINE_SPEED : 1,
+          speedScale: state.treedent > 0 ? TREEDENT_SPEED : 1,
         });
-        next.tajine = Math.max(0, state.tajine - TICK_DT);
+        next.treedent = Math.max(0, state.treedent - TICK_DT);
         return next;
       },
       dispose() {

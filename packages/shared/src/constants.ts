@@ -280,6 +280,11 @@ export const ITEM_KINDS = deepFreeze({
   toolbox: { halfExtents: vec3(0.25 * CHARACTER_SCALE, 0.12 * CHARACTER_SCALE, 0.12 * CHARACTER_SCALE), mass: 10, friction: 0.8 },
   healthKit: { halfExtents: vec3(0.18 * CHARACTER_SCALE, 0.08 * CHARACTER_SCALE, 0.14 * CHARACTER_SCALE), mass: 2, friction: 0.8 },
   tajine: { halfExtents: vec3(0.2 * CHARACTER_SCALE, 0.12 * CHARACTER_SCALE, 0.2 * CHARACTER_SCALE), mass: 3, friction: 0.8 },
+  treedent: { halfExtents: vec3(0.09 * CHARACTER_SCALE, 0.03 * CHARACTER_SCALE, 0.14 * CHARACTER_SCALE), mass: 0.3, friction: 0.8 },
+  fromageBlanc: { halfExtents: vec3(0.12 * CHARACTER_SCALE, 0.09 * CHARACTER_SCALE, 0.12 * CHARACTER_SCALE), mass: 1, friction: 0.8 },
+  kokeZero: { halfExtents: vec3(0.07 * CHARACTER_SCALE, 0.14 * CHARACTER_SCALE, 0.07 * CHARACTER_SCALE), mass: 0.5, friction: 0.8 },
+  ammo: { halfExtents: vec3(0.14 * CHARACTER_SCALE, 0.08 * CHARACTER_SCALE, 0.1 * CHARACTER_SCALE), mass: 2, friction: 0.8 },
+  gun: { halfExtents: vec3(0.2 * CHARACTER_SCALE, 0.08 * CHARACTER_SCALE, 0.06 * CHARACTER_SCALE), mass: 1.5, friction: 0.8 },
 } satisfies Record<string, ItemKindConfig>);
 export type ItemKind = keyof typeof ITEM_KINDS;
 
@@ -409,7 +414,7 @@ export const STOP_POST_HEIGHT = 1.4;
 // m, feet to the counter's box (3D).
 export const SHOP_RANGE = 2 * CHARACTER_SCALE;
 // Coins per item.
-// The items a counter sells; the tajine is found, not sold.
+// The items a counter sells; the power-ups and ammo are found, not sold.
 export const SHOP_ITEMS = Object.freeze(['jerrycan', 'toolbox', 'healthKit'] as const satisfies readonly ItemKind[]);
 export type ShopItem = (typeof SHOP_ITEMS)[number];
 export const SHOP_PRICES: Record<ShopItem, number> = deepFreeze({ jerrycan: 3, toolbox: 3, healthKit: 2 });
@@ -434,9 +439,19 @@ export const WEATHER_BLEND = 10;
 // Chance of each weather when one is drawn.
 export const WEATHER_WEIGHTS: Readonly<Record<Weather, number>> = deepFreeze({ clear: 0.5, rain: 0.3, sandstorm: 0.2 });
 export const WEATHER_SEED_SALT = 0x57ea;
-// Walk and sprint speed factor while the tajine lasts, and its duration in s.
-export const TAJINE_SPEED = 1.35;
-export const TAJINE_SECONDS = 15;
+// Treedent gum: walk and sprint speed factor and its duration in s.
+export const TREEDENT_SPEED = 1.35;
+export const TREEDENT_SECONDS = 15;
+// Fromage blanc: damage it absorbs and how long it lasts in s.
+export const SHIELD_HP = 30;
+export const SHIELD_SECONDS = 30;
+// Koke Zero: the factor on gun damage and its duration in s.
+export const KOKE_MULTIPLIER = 2;
+export const KOKE_SECONDS = 20;
+// Health a tajine heals.
+export const TAJINE_HEAL = 40;
+// Items eaten or drunk by the player himself on foot, with the self hold.
+export const SELF_ITEMS = Object.freeze(['tajine', 'treedent', 'fromageBlanc', 'kokeZero'] as const satisfies readonly ItemKind[]);
 export const DEFAULT_TIME_OF_DAY: TimeOfDay = 'midday';
 export const DEFAULT_WEATHER: Weather = 'clear';
 // Multiplies tyre grip on every surface in rain; a starting value.
@@ -537,7 +552,7 @@ export const ITEM_DROP_LIFT = 0.05;
 export const ITEM_DROP_PROBE_UP = 120;
 export const ITEM_DROP_PROBE_LENGTH = 400;
 // Probability of each kind; sums to 1.
-export const ITEM_DROP_MIX = deepFreeze({ jerrycan: 0.2, toolbox: 0.3, healthKit: 0.35, tajine: 0.15 } satisfies Record<ItemKind, number>);
+export const ITEM_DROP_MIX = deepFreeze({ jerrycan: 0.18, toolbox: 0.22, healthKit: 0.15, tajine: 0.12, treedent: 0.08, fromageBlanc: 0.08, kokeZero: 0.07, ammo: 0.1, gun: 0 } satisfies Record<ItemKind, number>);
 // Fraction of full health lost to one animal hit; health never falls below ANIMAL_HEALTH_FLOOR.
 export const ANIMAL_HIT_DAMAGE = 0.03;
 export const ANIMAL_HEALTH_FLOOR = 0.02;

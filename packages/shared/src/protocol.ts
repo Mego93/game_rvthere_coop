@@ -1,4 +1,4 @@
-import { CHAT_MAX_LENGTH, EMOTES, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, SHOP_ITEMS, TAJINE_SECONDS, TIMES_OF_DAY, WEATHERS, WEATHER_SETTINGS, type Emote, type ItemKind, type ShopItem, type TimeOfDay, type Weather, type WeatherSetting } from './constants';
+import { CHAT_MAX_LENGTH, EMOTES, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, SHOP_ITEMS, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, TIMES_OF_DAY, WEATHERS, WEATHER_SETTINGS, type Emote, type ItemKind, type ShopItem, type TimeOfDay, type Weather, type WeatherSetting } from './constants';
 import { isAppearance, type Appearance } from './characters';
 import { courseIds } from './courses/index';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
@@ -150,8 +150,12 @@ export interface PlayerSnapshot {
   health: number;
   // Seconds left before respawn while downed.
   downed: number | null;
-  // Seconds of the tajine left, rounded up to 0.1; absent at 0.
-  tajine?: number;
+  // Seconds of the treedent left, rounded up to 0.1; absent at 0.
+  treedent?: number;
+  // Damage the fromage blanc shield still absorbs, rounded up; absent at 0.
+  shield?: number;
+  // Seconds of Koke Zero left, rounded up to 0.1; absent at 0.
+  koke?: number;
   // The admin's fly toggle is on; absent otherwise.
   flying?: true;
   // Absent means standing; a stance this version does not know is read as standing.
@@ -169,6 +173,8 @@ export interface EventMessage {
   tick: number;
   playerId?: string;
   pos?: Vec3;
+  // 'eat': the item eaten or drunk.
+  item?: string;
 }
 
 export interface SnapshotMessage extends WorldSnapshot {
@@ -392,7 +398,9 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   value.health <= 100 &&
   (value.downed === null || (finite(value.downed) && value.downed >= 0)) &&
   (value.hold === null || (isRecord(value.hold) && isText(value.hold.action) && isText(value.hold.targetId) && finite(value.hold.progress))) &&
-  (value.tajine === undefined || (finite(value.tajine) && value.tajine > 0 && value.tajine <= TAJINE_SECONDS)) &&
+  (value.treedent === undefined || (finite(value.treedent) && value.treedent > 0 && value.treedent <= TREEDENT_SECONDS)) &&
+  (value.koke === undefined || (finite(value.koke) && value.koke > 0 && value.koke <= KOKE_SECONDS)) &&
+  (value.shield === undefined || (finite(value.shield) && value.shield > 0 && value.shield <= SHIELD_HP)) &&
   (value.flying === undefined || value.flying === true) &&
   (value.stance === undefined || isText(value.stance)) &&
   (value.slide === undefined ||
@@ -504,7 +512,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       return (EVENT_KINDS as readonly unknown[]).includes(data.kind) &&
         isCount(data.tick) &&
         (data.playerId === undefined || isText(data.playerId)) &&
-        (data.pos === undefined || isVec3(data.pos))
+        (data.pos === undefined || isVec3(data.pos)) &&
+        (data.item === undefined || isText(data.item))
         ? message
         : null;
     case 'results':

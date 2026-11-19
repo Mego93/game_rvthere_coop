@@ -344,12 +344,12 @@ test('copies the health and the downed timer of a player', () => {
   expect(view.players[0]!.downed).toBe(12.5);
 });
 
-test('tajine and flying come from the newer snapshot and stay absent when unset', () => {
-  const view = pair([player('a', 0, 0)], [{ ...player('a', 10, 0), tajine: 7.5, flying: true }]).sample(100)!.players[0]!;
-  expect(view.tajine).toBe(7.5);
+test('treedent and flying come from the newer snapshot and stay absent when unset', () => {
+  const view = pair([player('a', 0, 0)], [{ ...player('a', 10, 0), treedent: 7.5, flying: true }]).sample(100)!.players[0]!;
+  expect(view.treedent).toBe(7.5);
   expect(view.flying).toBe(true);
   const plain = pair([player('a', 0, 0)], [player('a', 10, 0)]).sample(100)!.players[0]!;
-  expect('tajine' in plain).toBe(false);
+  expect('treedent' in plain).toBe(false);
   expect('flying' in plain).toBe(false);
 });
 

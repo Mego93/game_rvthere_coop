@@ -44,7 +44,7 @@ const STYLE = `
 @media (prefers-reduced-motion: reduce) { #touch-ui button { transition: none; } }
 `;
 
-const ITEM_LABELS: Record<ItemKind, string> = { jerrycan: 'Fuel', toolbox: 'Tools', healthKit: 'Heal', tajine: 'Tajine' };
+const ITEM_LABELS: Record<ItemKind, string> = { jerrycan: 'Fuel', toolbox: 'Tools', healthKit: 'Heal', tajine: 'Tajine', treedent: 'Gum', fromageBlanc: 'Shield', kokeZero: 'Koke', ammo: 'Ammo', gun: 'Gun' };
 const slotLabel = (kind: ItemKind | null) => (kind === null ? '' : (ITEM_LABELS[kind] ?? kind));
 
 export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { dispose(): void } {

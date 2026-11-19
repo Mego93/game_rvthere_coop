@@ -5,7 +5,7 @@ import { fitted, hasModel, instantiate, shadowed } from './models';
 const COLOURS: Record<PropKind, number> = { crate: 0xb5833f, barrier: 0xc0392b, cart: 0x8b5a2b, scooter: 0x8e1b1b };
 const UNKNOWN_HALF = 0.25;
 export const PROP_MODEL_KEYS: Record<PropKind, string> = { crate: 'prop.crate', cart: 'prop.cart', barrier: 'prop.barrier', scooter: 'prop.scooter' };
-export const ITEM_MODEL_KEYS: Record<ItemKind, string> = { jerrycan: 'item.jerrycan', toolbox: 'item.toolbox', healthKit: 'item.healthKit', tajine: 'item.tajine' };
+export const ITEM_MODEL_KEYS: Record<ItemKind, string> = { jerrycan: 'item.jerrycan', toolbox: 'item.toolbox', healthKit: 'item.healthKit', tajine: 'item.tajine', treedent: 'item.treedent', fromageBlanc: 'item.fromageBlanc', kokeZero: 'item.kokeZero', ammo: 'item.ammo', gun: 'item.gun' };
 // Turns that bring each file's long side onto the hit box's long side (x for the barrier, z for the cart) and the scooter's front to -z.
 const PROP_YAW: Record<PropKind, number> = { crate: 0, barrier: 0, cart: Math.PI / 2, scooter: Math.PI };
 
