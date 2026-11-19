@@ -32,7 +32,7 @@ export const MODEL_MANIFEST = {
   'prop.fence': model('city-roads', 'construction-fence', 2),
   'prop.light': model('city-roads', 'construction-light', 1.2),
   // the handgun: in a player's hand, and as the gun item; the longest side in metres
-  'prop.gun': model('sketchfab', 'gun', 0.3),
+  'prop.gun': model('sketchfab', 'gun', 0.4),
   // anchor
   'anchor.palm': model('nature', 'tree_palm', 6),
   'anchor.boulder': model('sketchfab', 'rocks', 2.2),
@@ -48,7 +48,7 @@ export const MODEL_MANIFEST = {
   'item.ammo': model('sketchfab', 'ammo', longest(ITEM_KINDS.ammo.halfExtents)),
   coin: model('sketchfab', 'coin', COIN_RADIUS * 2),
   // enemy: the knife in an enemy's hand, the longest side in metres
-  'enemy.knife': model('sketchfab', 'knife', 0.36),
+  'enemy.knife': model('sketchfab', 'knife', 0.55),
   // animal
   'animal.goat': model('sketchfab', 'goat', longest(ANIMAL_HALF_GOAT)),
   'animal.scooter': model('sketchfab', 'scooter', longest(PROP_KINDS.scooter.halfExtents)),
