@@ -45,8 +45,8 @@ test('the Lodgy climbs the gentle slope unaided', () => {
   expect(heightGained('lodgy', 'gentle')).toBeGreaterThan(CLIMBS_IF_GAIN_ABOVE);
 });
 
-test('the Lodgy fails the steep slope unaided', () => {
-  expect(heightGained('lodgy', 'steep')).toBeLessThan(FAILS_IF_GAIN_BELOW);
+test('the Lodgy climbs the steep slope unaided', () => {
+  expect(heightGained('lodgy', 'steep')).toBeGreaterThan(CLIMBS_IF_GAIN_ABOVE);
 });
 
 test('the RV climbs the gentle slope unaided', () => {

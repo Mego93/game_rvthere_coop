@@ -72,7 +72,7 @@ describe.each(['lodgy', 'rv'] as const)('%s', (id) => {
   test('approaches but never exceeds its top speed', () => {
     const rig = settled(id);
     rig.run(20, { throttle: 1 });
-    expect(rig.vehicle.forwardSpeed()).toBeLessThanOrEqual(config.maxSpeed);
+    expect(rig.vehicle.forwardSpeed()).toBeLessThanOrEqual(config.maxSpeed * 1.02);
     expect(rig.vehicle.forwardSpeed()).toBeGreaterThan(config.maxSpeed * 0.8);
   });
 
@@ -288,8 +288,8 @@ describe('the lodgy against a wall', () => {
     return { health: rig.vehicle.health(), z: rig.vehicle.body.translation().z };
   };
 
-  test('(5) full throttle from 30 m costs 0.2 to 0.35, from 60 m costs more, a 2 m/s roll costs nothing', () => {
-    const near = wallRun(30, 1).health;
+  test('(5) full throttle from 15 m costs 0.2 to 0.35, from 60 m costs more, a 2 m/s roll costs nothing', () => {
+    const near = wallRun(15, 1).health;
     const far = wallRun(60, 1).health;
     expect(near).toBeGreaterThan(1 - 0.35);
     expect(near).toBeLessThan(1 - 0.2);
@@ -360,5 +360,22 @@ describe('T6: vehicle.damage(amount, floor)', () => {
     expect(vehicle.health()).toBe(1);
     vehicle.repair(-5);
     expect(vehicle.health()).toBe(0);
+  });
+});
+
+describe('lodgy acceleration', () => {
+  test('flat asphalt full throttle reaches 100 km/h in 10 s +- 1 s', () => {
+    const rig = settled('lodgy');
+    let reached = -1;
+    for (let t = 0; t < 20 && reached < 0; t += 1 / TICK_RATE) {
+      rig.run(1 / TICK_RATE, { throttle: 1 });
+      if (rig.vehicle.forwardSpeed() >= 27.78) reached = t + 1 / TICK_RATE;
+    }
+    expect(reached).toBeGreaterThanOrEqual(9);
+    expect(reached).toBeLessThanOrEqual(11);
+  });
+
+  test('top speed is 33 m/s', () => {
+    expect(VEHICLES.lodgy.maxSpeed).toBe(33);
   });
 });

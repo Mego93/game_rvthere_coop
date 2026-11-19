@@ -95,7 +95,7 @@ const roadblockBarriers = propsOf(ROADBLOCK, 'barrier');
 const roadworksBarriers = propsOf(ROADWORKS, 'barrier');
 
 // Drive stops this far before a barrier row so the walk is short and the braking distance is clear.
-const STOP_BEFORE = 50;
+const STOP_BEFORE = 120;
 
 const forwardOf = (id: string) => {
   const f = rotate(propDef(id).pose.rot, vec3(0, 0, -1));
@@ -111,6 +111,10 @@ function openRows(world: World, rows: string[][]): void {
   const first = rows[0]![1]!;
   const driven = driveWorld(world, PLAYER, alongOfProp(first) - STOP_BEFORE, { timeoutTicks: 120 * TICK_RATE });
   expect(driven.reached, `drive to the row, at ${driven.along.toFixed(0)} m`).toBe(true);
+  // At 33 m/s the Lodgy would coast into the row, so the driver brakes to a stop first.
+  for (let i = 0; i < 20 * TICK_RATE && Math.hypot(world.snapshot().vehicle.linvel.x, world.snapshot().vehicle.linvel.z) > 0.2; i++) {
+    world.step(new Map([[PLAYER, { ...NEUTRAL_INPUT, jump: true }]]));
+  }
   exitVehicle(world, PLAYER);
   for (const row of rows) {
     const middle = row[1]!;
