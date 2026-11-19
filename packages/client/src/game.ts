@@ -279,6 +279,8 @@ export function createGame(
     onToLobby: () => closeRun({ type: 'toLobby' }),
     onSkip: () => closeRun({ type: 'adminTool', tool: 'skipCheckpoint' }),
     onRefill: () => closeRun({ type: 'adminTool', tool: 'refill' }),
+    onFly: () => closeRun({ type: 'adminTool', tool: 'fly' }),
+    onInfinite: () => closeRun({ type: 'adminTool', tool: 'infinite' }),
     onKick: (target) => closeRun({ type: 'kick', playerId: target }),
     onMute: view.onMute,
     onHelp: view.onHelp,

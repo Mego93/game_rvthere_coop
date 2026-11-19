@@ -642,6 +642,8 @@ describe('L16: lobby messages', () => {
     { type: 'restartCourse' },
     { type: 'adminTool', tool: 'skipCheckpoint' },
     { type: 'adminTool', tool: 'refill' },
+    { type: 'adminTool', tool: 'fly' },
+    { type: 'adminTool', tool: 'infinite' },
     { type: 'toLobby' },
     { type: 'next' },
   ])('parseClientMessage accepts %j', (message) => {
@@ -880,6 +882,12 @@ describe('step 34: emotes, random weather, the tajine and the eat event', () => 
     expect(parseServer({ ...snapshot, weather: 'random' })).toBeNull();
     expect(parseServer({ ...snapshot, weather: 'fog' })).toBeNull();
     expect(parseServer({ ...snapshot, weather: 3 })).toBeNull();
+  });
+
+  test('a player flying is optional and only true', () => {
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, flying: true }] })).toEqual({ ...snapshot, players: [{ ...onFoot, flying: true }] });
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, flying: false }] })).toBeNull();
+    expect(parseServer({ ...snapshot, players: [{ ...onFoot, flying: 1 }] })).toBeNull();
   });
 
   test('a player tajine is optional, finite and above 0', () => {

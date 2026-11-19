@@ -21,7 +21,7 @@ import { aimRay, createPlayers, type PendingDamage, type PlayerState, type StepI
 import { elapsedAfter, finalTime, reachedFinish, vehicleLost } from './rules';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
-import { NEUTRAL_INPUT, type EventKind, type InputFields, type PlayerSnapshot } from './protocol';
+import { NEUTRAL_INPUT, type AdminTool, type EventKind, type InputFields, type PlayerSnapshot } from './protocol';
 import type { Rapier, RigidBody } from './rapier';
 import { buildStatics } from './statics';
 import { stopUsable } from './stops';
@@ -117,7 +117,8 @@ export interface World {
   // Re-records cp-0 with the players present.
   recordStart(): void;
   // Applies at once; false when it did nothing (won, or no next checkpoint).
-  adminTool(tool: 'skipCheckpoint' | 'refill'): boolean;
+  // `by` is the admin's player id; fly and infinite toggle for that player and need it.
+  adminTool(tool: AdminTool, by?: string): boolean;
   teleportPlayer(id: string, pos: Vec3): void;
   // Whether an emote may play: on foot, not downed, not respawning, nothing in the hands.
   canEmote(playerId: string): boolean;
@@ -216,6 +217,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   let coinsCollected = 0;
   let record: CheckpointRecord;
   let assisted = false;
+  // Players whose item uses are free (the admin's infinite toggle).
+  const infinite = new Set<string>();
   const held = new Map<string, { health: number; downed: boolean; inventory: (ItemKind | null)[] }>();
   let debugDamage: PendingDamage[] = [];
   // Each player's reset hold, private to the world; `spent` waits for a release before it can count again.
@@ -457,7 +460,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       );
       player.hold = hold;
       if (completed === null) continue;
-      player.inventory[completed.slot] = null;
+      if (!infinite.has(player.id)) player.inventory[completed.slot] = null;
       if (completed.item === 'tajine') {
         player.tajine = TAJINE_SECONDS;
         events.push({ kind: 'eat', tick: tick + 1, playerId: player.id, pos: { ...player.pos } });
@@ -590,11 +593,23 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     for (const state of resetHolds.values()) Object.assign(state, { ticks: 0, spent: true });
   };
 
+  // Whether the feet are within the chassis box, so a player riding in the living area never takes a coin.
+  const insideVehicle = (feet: Vec3): boolean => {
+    const centre = vehicle.body.translation();
+    const q = vehicle.body.rotation();
+    const local = rotate({ ...q, x: -q.x, y: -q.y, z: -q.z }, vec3(feet.x - centre.x, feet.y - centre.y, feet.z - centre.z));
+    const half = vehicleConfig.halfExtents;
+    // A little slack above and around, so feet on the roof or the sill count as riding.
+    const slack = 0.25;
+    return Math.abs(local.x) <= half.x + slack && Math.abs(local.y) <= half.y + slack && Math.abs(local.z) <= half.z + slack;
+  };
+
   // Rule V1: the first player in join order to touch a coin takes it.
   const stepCoins = (events: WorldEvent[]) => {
     if (won) return;
     for (const player of players.all()) {
-      if (player.seat !== null || player.downed !== null || player.respawnIn !== null) continue;
+      if (player.seat !== null || player.downed !== null || player.respawnIn !== null || player.flying) continue;
+      if (player.ground?.bodyId === 'vehicle' || insideVehicle(player.pos)) continue;
       for (const id of coinsLeft) {
         const coin = course.coins.find((candidate) => candidate.id === id)!;
         if (!coinTouched(player.pos, coin.pose.pos)) continue;
@@ -913,6 +928,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         slot: player.slot,
         health: Math.floor(player.health),
         downed: player.downed,
+        ...(player.flying ? { flying: true as const } : {}),
         ...(player.tajine > 1e-9 ? { tajine: Math.min(TAJINE_SECONDS, Math.ceil(player.tajine * 10 - 1e-9) / 10) } : {}),
         ...(player.slideTicks > 0 ? { stance: 'slide' as const } : player.crouched ? { stance: 'crouch' as const } : {}),
         ...(player.slideTicks > 0 || player.slideCooldown > 0 || player.launch > 0
@@ -991,8 +1007,24 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     },
     forgetHeld,
     recordStart: () => recordCheckpoint(0),
-    adminTool(tool) {
+    adminTool(tool, by) {
       if (won) return false;
+      if (tool === 'fly' || tool === 'infinite') {
+        const player = by === undefined ? undefined : players.get(by);
+        if (!player) return false;
+        if (tool === 'fly') {
+          if (player.seat !== null || player.downed !== null || player.respawnIn !== null) return false;
+          player.flying = !player.flying;
+          // Leaving flight drops the player from rest.
+          if (!player.flying) player.vy = 0;
+          if (player.flying) assisted = true;
+        } else if (infinite.delete(player.id)) return true;
+        else {
+          infinite.add(player.id);
+          assisted = true;
+        }
+        return true;
+      }
       if (tool === 'refill') {
         vehicle.addFuel(1);
         vehicle.repair(1);

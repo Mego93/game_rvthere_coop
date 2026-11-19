@@ -71,6 +71,8 @@ export interface PlayerState {
   slideAir: number;
   slideDir: { x: number; z: number };
   launch: number;
+  // The admin's fly toggle; cleared while seated.
+  flying: boolean;
   ground: GroundRef | null;
   seat: string | null;
   // The id of the prop being held, or 'hook' for the winch hook.
@@ -498,6 +500,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         jumpPressed: pressed.jump,
         crouchPressed: pressed.crouch,
         crouch: fields.crouch === true,
+        jumpHeld: fields.jump,
         sprint: fields.sprint === true,
         carrying: state.hands !== null,
         holdsProp: state.hands !== null && state.hands !== 'hook',
@@ -573,6 +576,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         slideAir: 0,
         slideDir: { x: 0, z: 0 },
         launch: 0,
+        flying: false,
         ground: null,
         seat: null,
         hands: null,
@@ -656,6 +660,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       }
       if (!seatConfig(seatId)) return;
       resetStance(state);
+      state.flying = false;
       releaseHeld(state, state.yaw, vec3(0, 0, 0));
       state.seat = seatId;
       state.respawnIn = null;
@@ -686,6 +691,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       releaseHeld(state, state.yaw, vec3(0, 0, 0));
       // Crouched stays: under a low ceiling the stepper stands the player up once it fits.
       clearSlide(state);
+      state.flying = false;
       placeCollider(id);
       state.hold = null;
       state.tajine = 0;

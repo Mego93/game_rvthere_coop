@@ -118,7 +118,7 @@ export function startHudTest(mode: HudTestMode, parts: HudTestParts): void {
   parts.chatPanel.setToasts(SAMPLE_CHAT);
 
   if (mode === 'menu') {
-    const menu = createRunMenu(doc, { onResume() {}, onRestartCheckpoint() {}, onRestartCourse() {}, onToLobby() {}, onSkip() {}, onRefill() {}, onKick() {}, onMute() {}, onHelp() {}, onTutorial() {} });
+    const menu = createRunMenu(doc, { onResume() {}, onRestartCheckpoint() {}, onRestartCourse() {}, onToLobby() {}, onSkip() {}, onRefill() {}, onFly() {}, onInfinite() {}, onKick() {}, onMute() {}, onHelp() {}, onTutorial() {} });
     menu.update(true, [{ playerId: 'p2', name: 'Badr' }]);
     menu.setOpen(true);
   } else if (mode === 'shop') {

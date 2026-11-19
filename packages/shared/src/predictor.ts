@@ -27,6 +27,7 @@ export interface PredictedState {
   // Anything in the hands, and a prop in them; constant while the inputs replay (picking up comes from the server).
   carrying: boolean;
   holdsProp: boolean;
+  flying?: boolean;
 }
 
 export interface Predictor {
@@ -54,6 +55,7 @@ export const copyState = (state: PredictedState): PredictedState => ({
   tajine: state.tajine,
   carrying: state.carrying,
   holdsProp: state.holdsProp,
+  ...(state.flying ? { flying: true } : {}),
 });
 
 export const predictedFrom = (player: PlayerSnapshot): PredictedState =>
@@ -72,6 +74,7 @@ export const predictedFrom = (player: PlayerSnapshot): PredictedState =>
     tajine: player.tajine ?? 0,
     carrying: player.hands !== null,
     holdsProp: player.hands !== null && player.hands !== 'hook',
+    ...(player.flying ? { flying: true } : {}),
   });
 
 export function createPredictor(rapier: Rapier, course: BuiltCourse, vehicle: VehicleConfig): Predictor {
@@ -167,6 +170,7 @@ export function createPredictor(rapier: Rapier, course: BuiltCourse, vehicle: Ve
           jumpPressed: fields.jump && !previous.jump,
           crouchPressed: fields.crouch === true && !previous.crouch,
           crouch: fields.crouch === true,
+          jumpHeld: fields.jump,
           sprint: fields.sprint === true,
           carrying: state.carrying,
           holdsProp: state.holdsProp,

@@ -3,6 +3,9 @@ import { createDirector, eligibleSpans, hashSeed, markHit, mulberry32, planAmbie
 import {
   AMBIENT_DESPAWN_BEHIND,
   AMBIENT_EDGE_OFFSET,
+  AMBIENT_HERD_MAX,
+  AMBIENT_HERD_MIN,
+  AMBIENT_HERD_SPACING,
   AMBIENT_GOAT_SPEED,
   AMBIENT_MAX_GOATS,
   AMBIENT_MAX_SCOOTERS,
@@ -115,6 +118,47 @@ const ev = (id: number, along: number, side: -1 | 1, kind: 'goat' | 'scooter'): 
 const at = (vehicleAlong: number, dt = 0.1) => ({ vehicleAlong, vehicleLateral: 0, dt });
 const HALF = ROAD_WIDTH / 2;
 
+describe('herds (step 38)', () => {
+  it('uses the round-3 spacing and cap', () => {
+    expect(AMBIENT_SPACING).toBe(80);
+    expect(AMBIENT_MAX_GOATS).toBe(18);
+  });
+
+  it('gives every planned goat event a count of 3 to 6 and no scooter one', () => {
+    const plan = planAmbient(7, 6000, []);
+    const goats = plan.filter((e) => e.kind === 'goat');
+    expect(goats.length).toBeGreaterThan(10);
+    for (const e of goats) {
+      expect(e.count).toBeGreaterThanOrEqual(AMBIENT_HERD_MIN);
+      expect(e.count).toBeLessThanOrEqual(AMBIENT_HERD_MAX);
+    }
+    expect(new Set(goats.map((e) => e.count)).size).toBeGreaterThan(1);
+    for (const e of plan.filter((x) => x.kind === 'scooter')) expect(e.count).toBeUndefined();
+  });
+
+  it('spawns count goats 1.2 m apart centred on the event, each with its own id', () => {
+    const d = createDirector([{ ...ev(0, 500, 1, 'goat'), count: 4 }]);
+    const { spawn } = stepDirector(d, at(400));
+    expect(spawn.map((s) => s.id)).toEqual([1, 2, 3, 4]);
+    expect(spawn.map((s) => s.along)).toEqual([500 - 1.8, 500 - 0.6, 500 + 0.6, 500 + 1.8].map((v) => expect.closeTo(v, 9)));
+    expect(d.animals).toHaveLength(4);
+    expect(AMBIENT_HERD_SPACING).toBe(1.2);
+  });
+
+  it('holds a herd back whole when it would pass the cap, and spawns it once room frees', () => {
+    const plan = [0, 1, 2].map((i) => ({ ...ev(i, 1000 + i * 10, 1 as const, 'goat' as const), count: 6 }));
+    plan.push({ ...ev(3, 1030, 1, 'goat'), count: 6 });
+    const d = createDirector(plan);
+    expect(stepDirector(d, at(950)).spawn).toHaveLength(18);
+    expect(stepDirector(d, at(951)).spawn).toEqual([]);
+    expect(d.animals.filter((a) => a.kind === 'goat')).toHaveLength(18);
+    for (const a of d.animals.filter((x) => x.eventId === 0)) markHit(d, a.id);
+    expect(stepDirector(d, at(951, ANIMAL_HIT_LINGER)).spawn).toHaveLength(6);
+    expect(d.animals.filter((a) => a.kind === 'goat')).toHaveLength(18);
+    expect(d.animals.filter((a) => a.kind === 'goat').length).toBeLessThanOrEqual(AMBIENT_MAX_GOATS);
+  });
+});
+
 describe('director (T3)', () => {
   it('spawns at the spawn distance and not before', () => {
     const d = createDirector([ev(0, 500, 1, 'goat')]);
@@ -135,8 +179,8 @@ describe('director (T3)', () => {
   });
 
   it('holds the maxima and spawns the waiting event once a slot frees', () => {
-    const plan2 = [...Array(AMBIENT_MAX_GOATS + 2)].map((_, i) => ev(i, 1000 + i * 10, 1, 'goat'));
-    const plan3 = [...Array(AMBIENT_MAX_SCOOTERS + 2)].map((_, i) => ev(plan2.length + i, 1000 + i * 10, -1, 'scooter'));
+    const plan2 = [...Array(AMBIENT_MAX_GOATS + 2)].map((_, i) => ev(i, 1000 + i * 2, 1, 'goat'));
+    const plan3 = [...Array(AMBIENT_MAX_SCOOTERS + 2)].map((_, i) => ev(plan2.length + i, 1000 + i * 2, -1, 'scooter'));
     const d = createDirector([...plan2, ...plan3].sort((a, b) => a.along - b.along));
     const { spawn } = stepDirector(d, at(950));
     expect(spawn.filter((s) => s.kind === 'goat')).toHaveLength(AMBIENT_MAX_GOATS);

@@ -2,6 +2,9 @@ import {
   AMBIENT_DESPAWN_BEHIND,
   AMBIENT_EDGE_OFFSET,
   AMBIENT_GOAT_SHARE,
+  AMBIENT_HERD_MAX,
+  AMBIENT_HERD_MIN,
+  AMBIENT_HERD_SPACING,
   AMBIENT_GOAT_SPEED,
   AMBIENT_GOAT_STOP_BEYOND,
   AMBIENT_JITTER,
@@ -24,6 +27,8 @@ export interface AmbientEvent {
   along: number;
   side: -1 | 1;
   kind: AnimalKind;
+  // Goats only: the herd size, 3 to 6; absent counts as one goat.
+  count?: number;
 }
 
 export interface AnimalSnapshot {
@@ -82,12 +87,13 @@ export function planAmbient(seed: number, routeLength: number, blocked: readonly
     const virtual = (k + 0.5) * AMBIENT_SPACING + (rand() * 2 - 1) * AMBIENT_JITTER;
     const kind: AnimalKind = rand() < AMBIENT_GOAT_SHARE ? 'goat' : 'scooter';
     const side: -1 | 1 = rand() < 0.5 ? -1 : 1;
+    const count = kind === 'goat' ? AMBIENT_HERD_MIN + Math.floor(rand() * (AMBIENT_HERD_MAX - AMBIENT_HERD_MIN + 1)) : undefined;
     if (virtual >= eligible) continue;
     while (span < open.length - 1 && virtual >= spanStart + (open[span]!.to - open[span]!.from)) {
       spanStart += open[span]!.to - open[span]!.from;
       span++;
     }
-    events.push({ id: events.length, along: open[span]!.from + (virtual - spanStart), side, kind });
+    events.push({ id: events.length, along: open[span]!.from + (virtual - spanStart), side, kind, ...(count !== undefined ? { count } : {}) });
   }
   return events;
 }
@@ -179,14 +185,19 @@ export function stepDirector(state: DirectorState, input: DirectorInput): { spaw
   for (const e of state.events) {
     if (state.fired[e.id] || e.along < vehicleAlong) continue;
     if (e.along - vehicleAlong > AMBIENT_SPAWN_AHEAD) break;
-    if (e.kind === 'goat' ? goats >= AMBIENT_MAX_GOATS : scooters >= AMBIENT_MAX_SCOOTERS) continue;
-    if (e.kind === 'goat') goats++;
+    const n = e.kind === 'goat' ? (e.count ?? 1) : 1;
+    // A herd comes whole or not yet, so the cap never splits it.
+    if (e.kind === 'goat' ? goats + n > AMBIENT_MAX_GOATS : scooters >= AMBIENT_MAX_SCOOTERS) continue;
+    if (e.kind === 'goat') goats += n;
     else scooters++;
     state.fired[e.id] = true;
     const lateral = e.side * (ROAD_HALF + AMBIENT_EDGE_OFFSET);
-    const id = state.nextId++;
-    state.animals.push({ id, eventId: e.id, kind: e.kind, phase: 'wait', along: e.along, lateral, dir: e.side === 1 ? -1 : 1, velocity: 0, hitAge: 0 });
-    spawn.push({ id, eventId: e.id, kind: e.kind, along: e.along, lateral });
+    for (let k = 0; k < n; k++) {
+      const along = e.along + (k - (n - 1) / 2) * AMBIENT_HERD_SPACING;
+      const id = state.nextId++;
+      state.animals.push({ id, eventId: e.id, kind: e.kind, phase: 'wait', along, lateral, dir: e.side === 1 ? -1 : 1, velocity: 0, hitAge: 0 });
+      spawn.push({ id, eventId: e.id, kind: e.kind, along, lateral });
+    }
   }
   return { spawn, despawn };
 }

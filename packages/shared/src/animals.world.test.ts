@@ -287,3 +287,40 @@ describe('T5: hit rule', () => {
     expect(world.snapshot().vehicle.health).toBeCloseTo(events.health, 10);
   });
 });
+
+describe('step 38: goat herds', () => {
+  test('a herd spawns as count separate animals, spaced along the road', () => {
+    const world = make([{ ...event('goat', 200), count: 5 }]);
+    place(world, 0, 100, 0);
+    run(world, 2);
+    const goats = world.snapshot().animals!;
+    expect(goats).toHaveLength(5);
+    expect(new Set(goats.map((g) => g.id)).size).toBe(5);
+    const zs = goats.map((g) => g.z).sort((a, b) => a - b);
+    for (let i = 1; i < zs.length; i++) expect(zs[i]! - zs[i - 1]!).toBeCloseTo(1.2, 6);
+  });
+
+  test('a vehicle driven into a standing herd hits each goat it meets once, and a second pass costs nothing', () => {
+    const world = make([{ ...event('goat', 60), count: 6 }]);
+    place(world, 0, 20, 0);
+    run(world, seconds(7));
+    expect(world.snapshot().animals).toHaveLength(6);
+    place(world, -(HALF + 2), 45, 8);
+    const events = run(world, seconds(2));
+    const hits = events.filter((e) => e.kind === 'goatHit');
+    expect(hits.length).toBeGreaterThanOrEqual(2);
+    expect(hits.length).toBeLessThanOrEqual(6);
+    expect(world.snapshot().animals!.filter((a) => a.hit)).toHaveLength(hits.length);
+    place(world, -(HALF + 2), 50, 8);
+    const again = run(world, seconds(1)).filter((e) => e.kind === 'goatHit');
+    expect(again.length + hits.length).toBeLessThanOrEqual(6);
+  });
+
+  test('the goat cap holds at 18 with several herds in the window', () => {
+    const plan: AmbientEvent[] = [0, 1, 2, 3, 4].map((i) => ({ id: i, along: 200 + i * 4, side: 1, kind: 'goat', count: 6 }));
+    const world = make(plan);
+    place(world, 0, 100, 0);
+    run(world, 2);
+    expect(world.snapshot().animals!.length).toBe(18);
+  });
+});
