@@ -35,6 +35,8 @@ export interface Checkpoint {
   trigger: Box;
   // A pose on the ground. The vehicle spawns above it by its ride height.
   spawn: Pose;
+  // Souleyman stands here and greets the crew; every checkpoint saves, only these have the figure.
+  figure?: true;
 }
 
 export interface BuiltCourse {

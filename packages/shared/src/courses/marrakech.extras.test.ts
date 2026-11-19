@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { GATES_SPACING, HAZARD_END_CLEARANCE, ROCK_CLEAR, SEGMENT_SPAWN_INSET } from '../constants';
 import { VEHICLES } from '../vehicles';
+import { BUMP_LENGTH, DIRT_RUN_MAX, DIRT_RUN_MIN, DIRT_SHARE, SOULEYMAN_SPACING } from '../constants';
+import { getCourse, getCourseDef } from './index';
+import { planMarrakech } from './marrakech.plan';
 import { buildSegment, hazardSpan, type SegmentDef } from '../segments';
 import { hazardRange, MUD_PLAN, planExtras, ROCKS_PLAN, spreadCount, TERRAIN_HAZARD_CLEAR, TERRAIN_DEEP_CLEAR, type Extras } from './marrakech.extras';
 
@@ -261,5 +264,101 @@ describe('planExtras mud and rocks beside stops and pickups', () => {
       for (const p of d.pickups ?? []) expect(p.along < a - 10 || p.along > b + 10).toBe(true);
       expect(() => buildSegment(d)).not.toThrow();
     }
+  });
+});
+
+describe('marrakech dirt, bumps and figure checkpoints', () => {
+  const defs = getCourseDef('marrakech')!.segments;
+  const roads = defs.flatMap((d, i) => (d.type === 'road' ? [{ d, i }] : []));
+  const roadTotal = roads.reduce((sum, r) => sum + r.d.length, 0);
+  const runs = (() => {
+    const out: number[] = [];
+    let current = 0;
+    for (const d of defs) {
+      if (d.type === 'road' && d.surface === 'dirt') current += d.length;
+      else if (current > 0) {
+        out.push(current);
+        current = 0;
+      }
+    }
+    if (current > 0) out.push(current);
+    return out;
+  })();
+
+  it('about DIRT_SHARE of the road length is dirt (0.30 to 0.40) and every run is 150 to 600 m', () => {
+    const share = roads.filter((r) => r.d.surface === 'dirt').reduce((sum, r) => sum + r.d.length, 0) / roadTotal;
+    expect(share).toBeGreaterThanOrEqual(0.3);
+    expect(share).toBeLessThanOrEqual(0.4);
+    expect(Math.abs(share - DIRT_SHARE)).toBeLessThan(0.05);
+    expect(runs.length).toBeGreaterThan(5);
+    for (const run of runs) {
+      expect(run).toBeGreaterThanOrEqual(DIRT_RUN_MIN);
+      expect(run).toBeLessThanOrEqual(DIRT_RUN_MAX);
+    }
+  });
+
+  it('dirt is on flat road segments only: no slope, no first or last', () => {
+    for (const { d, i } of roads) {
+      if (d.surface !== 'dirt') continue;
+      expect(d.slope).toBeUndefined();
+      expect(i).toBeGreaterThan(0);
+      expect(i).toBeLessThan(defs.length - 1);
+    }
+  });
+
+  it('bumps sit on straights of 60 m or more, 1 to 3 each, never with a stop, hazard, debris, slope or curve', () => {
+    const bumped = roads.filter((r) => r.d.bumps !== undefined);
+    expect(bumped.length).toBeGreaterThan(10);
+    for (const { d, i } of bumped) {
+      expect(d.bumps).toBeGreaterThanOrEqual(1);
+      expect(d.bumps).toBeLessThanOrEqual(3);
+      expect(d.length).toBeGreaterThanOrEqual(60);
+      expect(d.curve ?? 0).toBe(0);
+      expect(d.slope ?? 0).toBe(0);
+      expect(d.stop).toBeUndefined();
+      expect(d.hazards).toBeUndefined();
+      expect(d.debris).toBeUndefined();
+      expect(i).toBeGreaterThan(0);
+      expect(i).toBeLessThan(defs.length - 1);
+    }
+  });
+
+  it('the built course holds those bumps as ground boxes, BUMP_LENGTH long', () => {
+    const planned = roads.reduce((sum, r) => sum + (r.d.bumps ?? 0), 0);
+    const boxes = getCourse('marrakech').ground.filter((g) => g.halfExtents.z === BUMP_LENGTH / 2);
+    expect(boxes.length).toBeGreaterThan(0);
+    expect(boxes.length).toBeLessThanOrEqual(planned);
+    expect(boxes.length).toBeGreaterThanOrEqual(planned - 10);
+  });
+
+  it('the generated course is what the planner makes (regenerate with scripts/route/buildMarrakech.ts)', () => {
+    expect(JSON.parse(JSON.stringify(planMarrakech().segments))).toEqual(JSON.parse(JSON.stringify(defs)));
+  });
+
+  it('figure checkpoints: the first, then one about every 2000 m, one segment either way', () => {
+    const course = getCourse('marrakech');
+    expect(course.checkpoints[0]!.figure).toBe(true);
+    const figures = course.checkpoints.flatMap((c, i) => (c.figure ? [i] : []));
+    expect(figures.length).toBeGreaterThan(8);
+    const routeAt = (index: number): number => {
+      const spawn = course.checkpoints[index]!.spawn.pos;
+      let bestGap = Infinity;
+      let cum = 0;
+      let at = 0;
+      course.route.forEach(([x, z], k) => {
+        if (k > 0) cum += Math.hypot(x - course.route[k - 1]![0], z - course.route[k - 1]![1]);
+        const gap = Math.hypot(spawn.x - x, spawn.z - z);
+        if (gap < bestGap) {
+          bestGap = gap;
+          at = cum;
+        }
+      });
+      return at;
+    };
+    const longest = Math.max(...roads.map((r) => r.d.length));
+    figures.slice(1).forEach((index, n) => {
+      expect(Math.abs(routeAt(index) - routeAt(figures[n]!) - SOULEYMAN_SPACING)).toBeLessThanOrEqual(longest);
+    });
+    expect(course.checkpoints.filter((c) => !c.figure).length).toBeGreaterThan(figures.length);
   });
 });

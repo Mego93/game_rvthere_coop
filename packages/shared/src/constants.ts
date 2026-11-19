@@ -77,7 +77,7 @@ export const REPORT_INTERVAL = 10;
 // Seconds the server waits for a peer to answer a close frame before dropping the socket.
 export const SOCKET_CLOSE_TIMEOUT = 1;
 
-export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel' | 'mud';
+export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel' | 'mud' | 'dirt';
 
 // grip multiplies the vehicle's tyre grip; rolling is resistance as a fraction of the vehicle's weight.
 export const SURFACES: Record<Surface, { grip: number; rolling: number }> = deepFreeze({
@@ -86,6 +86,7 @@ export const SURFACES: Record<Surface, { grip: number; rolling: number }> = deep
   riverbed: { grip: 0.7, rolling: 0.15 },
   sand: { grip: 0.6, rolling: 0.15 },
   mud: { grip: 0.55, rolling: 0.22 },
+  dirt: { grip: 0.7, rolling: 0.06 },
 });
 
 export const REFERENCE_SLOPES_DEG = deepFreeze({ gentle: 8, medium: 15, steep: 25 } as const);
@@ -599,3 +600,13 @@ export const OBSTACLE_WALL_LATERAL = 31.5;
 export const OBSTACLE_WALL_THICKNESS = 1;
 export const OBSTACLE_WALL_HEIGHT = 8;
 export const OBSTACLE_WALL_PIECE = 4;
+
+// m, a bump's height above the road and its length along it; bumps span the road's width.
+export const BUMP_HEIGHT = 0.12;
+export const BUMP_LENGTH = 1.6;
+// m of route between Souleyman's save points (the first checkpoint after each multiple of this).
+export const SOULEYMAN_SPACING = 2000;
+// The share of marrakech's road length that is dirt, and the shortest and longest dirt run in m.
+export const DIRT_SHARE = 0.35;
+export const DIRT_RUN_MIN = 150;
+export const DIRT_RUN_MAX = 600;

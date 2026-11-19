@@ -1,4 +1,4 @@
-import { AMBIENT_ENDS, AMBIENT_MARGIN, CORRIDOR_BERM_FADE, CORRIDOR_BERM_MARGIN, CORRIDOR_RELIEF, CORRIDOR_RIDGE_END, CORRIDOR_RIDGE_HEIGHT, OBSTACLE_WALL_HEIGHT, OBSTACLE_WALL_LATERAL, OBSTACLE_WALL_PIECE, OBSTACLE_WALL_THICKNESS, CHECKPOINT_TRIGGER, FINISH_PAD, FINISH_TRIGGER, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET } from '../constants';
+import { AMBIENT_ENDS, AMBIENT_MARGIN, CORRIDOR_BERM_FADE, CORRIDOR_BERM_MARGIN, CORRIDOR_RELIEF, CORRIDOR_RIDGE_END, CORRIDOR_RIDGE_HEIGHT, OBSTACLE_WALL_HEIGHT, OBSTACLE_WALL_LATERAL, OBSTACLE_WALL_PIECE, OBSTACLE_WALL_THICKNESS, CHECKPOINT_TRIGGER, SOULEYMAN_SPACING, FINISH_PAD, FINISH_TRIGGER, KILL_PLANE_BELOW, ROAD_WIDTH, SEGMENT_SPAWN_INSET } from '../constants';
 import type { Box, BuiltCourse, Checkpoint, GroundBox, Placed } from '../course';
 import { add, deepFreeze, quatMul, rotate, vec3, type Pose, type Vec3 } from '../math';
 import { routeFrame } from '../corridor';
@@ -188,6 +188,9 @@ export function buildCourse(def: CourseDef): BuiltCourse {
   const raw: { from: number; to: number }[] = [];
   const obstacles: { from: number; to: number }[] = [];
   let routeAt = 0;
+  // Route metres to the start of the current segment, and the next mark that a figure checkpoint waits for.
+  let travelled = 0;
+  let nextFigure = 0;
   let frame: Frame = { pos: vec3(0, 0, 0), yaw: 0 };
   const addRoute = (local: LocalSegment, at: ReturnType<typeof placer>, first: boolean) => {
     const points = local.route.map(([x, z]) => at.point(vec3(x, 0, z)));
@@ -224,7 +227,10 @@ export function buildCourse(def: CourseDef): BuiltCourse {
         rot: at.q,
       },
       spawn: spawnPose,
+      ...(travelled >= nextFigure ? { figure: true as const } : {}),
     };
+    if (travelled >= nextFigure) nextFigure = (Math.floor(travelled / SOULEYMAN_SPACING) + 1) * SOULEYMAN_SPACING;
+    for (let i = 1; i < local.route.length; i++) travelled += Math.hypot(local.route[i]![0] - local.route[i - 1]![0], local.route[i]![1] - local.route[i - 1]![1]);
     course.checkpoints.push(checkpoint);
     addRoute(local, at, index === 0);
     const from = routeAt;

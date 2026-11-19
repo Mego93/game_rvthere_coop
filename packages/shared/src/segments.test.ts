@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import {
+  BUMP_HEIGHT,
+  BUMP_LENGTH,
+  SURFACES,
   ROADBLOCK_LATERAL,
   MUD_MAX_LENGTH,
   MUD_MIN_LENGTH,
@@ -1121,5 +1124,64 @@ describe('mud and rocks', () => {
     expect(() => buildSegment(road(150, { hazards: [{ kind: 'rocks', along: 150 - 8 - ROCK_SPACING - ROCK_HALF.z + 0.01, side: 1 }] }))).toThrow(/end of the segment/);
     expect(() => buildSegment(road(300, { hazards: [{ kind: 'rocks', along: 40, side: 1 }, { kind: 'mud', along: 40 + ROCK_SPACING + ROCK_HALF.z + 19, length: 12 }] }))).toThrow(/20 m apart/);
     expect(() => buildSegment(road(300, { hazards: [{ kind: 'rocks', along: 40, side: 1 }, { kind: 'mud', along: 40 + ROCK_SPACING + ROCK_HALF.z + 20, length: 12 }] }))).not.toThrow();
+  });
+});
+
+describe('dirt road and bumps', () => {
+  const spawnClear = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z;
+  const bumpsOf = (def: SegmentDef) => buildSegment(def).ground.filter((g) => g.halfExtents.y === BUMP_HEIGHT / 2);
+
+  test('dirt has its own grip and rolling resistance', () => {
+    expect(SURFACES.dirt).toEqual({ grip: 0.7, rolling: 0.06 });
+  });
+
+  test('a dirt road draws its road boxes dirt and its shoulders gravel; a plain road stays road', () => {
+    const dirt = buildSegment({ type: 'road', length: 60, surface: 'dirt' }).ground;
+    const roadBoxes = dirt.filter((g) => g.halfExtents.x === ROAD_WIDTH / 2);
+    expect(roadBoxes.length).toBeGreaterThan(0);
+    for (const g of roadBoxes) expect(g.surface).toBe('dirt');
+    for (const g of dirt.filter((b) => b.halfExtents.x !== ROAD_WIDTH / 2)) expect(g.surface).toBe('gravel');
+    expect(buildSegment({ type: 'road', length: 60 }).ground.filter((g) => g.halfExtents.x === ROAD_WIDTH / 2).every((g) => g.surface === 'road')).toBe(true);
+    expect(buildSegment({ type: 'road', length: 60, curve: 0.4, surface: 'dirt' }).ground.filter((g) => g.halfExtents.x === ROAD_WIDTH / 2).every((g) => g.surface === 'dirt')).toBe(true);
+  });
+
+  test('bumps: count, height, width, length and the surface of their segment', () => {
+    for (const surface of ['road', 'dirt'] as const) {
+      const bumps = bumpsOf({ type: 'road', length: 120, bumps: 3, surface });
+      expect(bumps).toHaveLength(3);
+      for (const b of bumps) {
+        expect(b.halfExtents.x).toBe(ROAD_WIDTH / 2);
+        expect(b.halfExtents.z).toBe(BUMP_LENGTH / 2);
+        expect(b.center.y + b.halfExtents.y).toBeCloseTo(BUMP_HEIGHT, 6);
+        expect(b.surface).toBe(surface);
+      }
+    }
+    expect(bumpsOf({ type: 'road', length: 120 })).toHaveLength(0);
+  });
+
+  test('bumps keep the spawn clearance at both ends and are spread evenly', () => {
+    const bumps = bumpsOf({ type: 'road', length: 100, bumps: 3 });
+    const alongs = bumps.map((b) => -b.center.z).sort((a, b) => a - b);
+    expect(alongs[0]!).toBeGreaterThanOrEqual(spawnClear + BUMP_LENGTH / 2 - 1e-9);
+    expect(alongs[2]!).toBeLessThanOrEqual(100 - spawnClear - BUMP_LENGTH / 2 + 1e-9);
+    expect(alongs[1]! - alongs[0]!).toBeCloseTo(alongs[2]! - alongs[1]!, 6);
+  });
+
+  test('a bump never sits on a hazard span (mud, rocks), the stop pad or a pickup', () => {
+    const hazards = [{ kind: 'mud' as const, along: 40, length: 16 }];
+    const alongs = bumpsOf({ type: 'road', length: 100, bumps: 3, hazards }).map((b) => -b.center.z);
+    expect(alongs.length).toBeLessThan(3);
+    for (const a of alongs) expect(a + BUMP_LENGTH / 2 <= 40 || a - BUMP_LENGTH / 2 >= 56).toBe(true);
+    const rocks = bumpsOf({ type: 'road', length: 120, bumps: 3, hazards: [{ kind: 'rocks', along: 55, side: -1 }] }).map((b) => -b.center.z);
+    const [from, to] = hazardSpan({ kind: 'rocks', along: 55, side: -1 });
+    for (const a of rocks) expect(a + BUMP_LENGTH / 2 <= from || a - BUMP_LENGTH / 2 >= to).toBe(true);
+    const stop = bumpsOf({ type: 'road', length: 200, bumps: 3, stop: { kind: 'fuel', side: 1, along: 100 } }).map((b) => -b.center.z);
+    for (const a of stop) expect(Math.abs(a - 100)).toBeGreaterThan(STOP_PAD.z + 5);
+    const pick = bumpsOf({ type: 'road', length: 100, bumps: 2, pickups: [{ kind: 'jerrycan', along: 26, lateral: 0 }] }).map((b) => -b.center.z);
+    for (const a of pick) expect(Math.abs(a - 26)).toBeGreaterThan(1.5);
+  });
+
+  test('bumps must be a whole count', () => {
+    expect(() => buildSegment({ type: 'road', length: 100, bumps: 1.5 })).toThrow(/Bumps/);
   });
 });

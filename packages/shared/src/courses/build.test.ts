@@ -294,3 +294,18 @@ describe('curve next to slope', () => {
     expect(() => buildCourse(course(road(30), curved, road(30), sloped, road(30)))).not.toThrow();
   });
 });
+
+describe('figure checkpoints (Souleyman)', () => {
+  test('the first checkpoint and the first one after every SOULEYMAN_SPACING m carry the figure; all checkpoints still exist', () => {
+    const built = buildCourse(course(...Array.from({ length: 30 }, () => road(300))));
+    expect(built.checkpoints).toHaveLength(30);
+    const figures = built.checkpoints.flatMap((c, i) => (c.figure ? [i] : []));
+    // Segments are 300 m, but a road's route is a hair short of its length: the marks 2000, 4000, ... fall at segments 7, 14, 20, 27.
+    expect(figures).toEqual([0, 7, 14, 20, 27]);
+  });
+
+  test('a short course has the figure only at its first checkpoint', () => {
+    const built = buildCourse(course(road(100), road(100), road(100)));
+    expect(built.checkpoints.map((c) => c.figure === true)).toEqual([true, false, false]);
+  });
+});

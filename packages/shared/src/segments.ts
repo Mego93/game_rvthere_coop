@@ -5,6 +5,8 @@ import {
   ALLEY_WIDTH,
   BANK_APPROACH,
   BANK_TOP,
+  BUMP_HEIGHT,
+  BUMP_LENGTH,
   BOULDER_EDGE_INSET,
   BOULDER_FIRST_ALONG,
   BOULDER_PAIR_SPACING,
@@ -88,7 +90,7 @@ export type Hazard =
   | { kind: 'rocks'; along: number; side: -1 | 1 };
 
 export type SegmentDef =
-  | ({ type: 'road'; length: number; curve?: number; slope?: number; debris?: number; hazards?: Hazard[] } & SegmentExtras)
+  | ({ type: 'road'; length: number; curve?: number; slope?: number; debris?: number; hazards?: Hazard[]; surface?: 'road' | 'dirt'; bumps?: number } & SegmentExtras)
   | ({ type: 'alley'; length: number; clutter: number } & SegmentExtras)
   | ({ type: 'sand'; length: number; palms: number } & SegmentExtras)
   | ({ type: 'ford'; width: number; rocks: number } & SegmentExtras)
@@ -402,13 +404,40 @@ function placeHazard(h: Hazard, surfaceAt: (along: number) => SurfacePoint, id: 
   }
 }
 
+// Bumps spread evenly between the spawn clearances; one that would sit on a hazard, the stop pad, a debris crate or a pickup is left out.
+function bumpBoxes(def: Extract<SegmentDef, { type: 'road' }>, hazards: Hazard[], debrisAlong: number[], routeLength: number, surfaceAt: (along: number) => SurfacePoint, surface: Surface): GroundBox[] {
+  const count = def.bumps ?? 0;
+  if (count === 0) return [];
+  const spawnClear = SEGMENT_SPAWN_INSET + VEHICLES.rv.halfExtents.z;
+  const lo = spawnClear + BUMP_LENGTH / 2;
+  const hi = routeLength - spawnClear - BUMP_LENGTH / 2;
+  if (hi < lo) return [];
+  const crateZ = PROP_KINDS.crate.halfExtents.z;
+  const taken: [number, number][] = [
+    ...hazards.map(hazardSpan),
+    ...debrisAlong.map((d): [number, number] => [d - crateZ, d + crateZ]),
+    ...(def.pickups ?? []).map((p): [number, number] => [p.along - 1, p.along + 1]),
+  ];
+  if (def.stop) taken.push([def.stop.along - STOP_PAD.z - STOP_HAZARD_CLEAR, def.stop.along + STOP_PAD.z + STOP_HAZARD_CLEAR]);
+  const boxes: GroundBox[] = [];
+  for (let i = 0; i < count; i++) {
+    const along = lo + ((i + 0.5) / count) * (hi - lo);
+    if (taken.some(([a, b]) => along + BUMP_LENGTH / 2 > a && along - BUMP_LENGTH / 2 < b)) continue;
+    const s = surfaceAt(along);
+    boxes.push({ center: offsetFrom(s, 0, BUMP_HEIGHT / 2), halfExtents: vec3(ROAD_WIDTH / 2, BUMP_HEIGHT / 2, BUMP_LENGTH / 2), rot: yawPitchQuat(s.yaw, s.pitch), surface });
+  }
+  return boxes;
+}
+
 function buildRoad(def: Extract<SegmentDef, { type: 'road' }>): LocalSegment {
   const curve = def.curve ?? 0;
   const slope = def.slope ?? 0;
   if (!(def.length > 0)) throw new Error('A road needs a positive length');
   if (curve !== 0 && slope !== 0) throw new Error('A road cannot both curve and slope');
   checkCount(def.debris, 'Debris');
-  const pieces = roadPieces(def.length, curve, slope);
+  checkCount(def.bumps, 'Bumps');
+  const roadSurface: Surface = def.surface === 'dirt' ? 'dirt' : 'road';
+  const pieces = roadPieces(def.length, curve, slope, roadSurface);
   const last = pieces[pieces.length - 1]!;
   const routeLength = last.alongStart + last.horizontal;
   if (routeLength < SEGMENT_MIN_LENGTH) throw new Error(`A segment's route must be at least ${SEGMENT_MIN_LENGTH} m`);
@@ -427,6 +456,7 @@ function buildRoad(def: Extract<SegmentDef, { type: 'road' }>): LocalSegment {
   const anchors: Placed[] = [];
   const patches: GroundBox[] = [];
   for (const h of hazards) placeHazard(h, surfaceAt, id, props, walls, anchors, patches);
+  patches.push(...bumpBoxes(def, hazards, debrisSlots.map((slot) => from + slot.along), routeLength, surfaceAt, roadSurface));
   const seg: LocalSegment = {
     ground: [...roadBoxes(pieces, curve !== 0), ...shoulderBoxes(pieces, curve / pieces.length), ...patches],
     walls,

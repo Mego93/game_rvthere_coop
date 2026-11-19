@@ -1,4 +1,4 @@
-import { GATES_SPACING, HAZARD_END_CLEARANCE, MUD_MAX_LENGTH, MUD_MIN_LENGTH, PROP_KINDS, ROADBLOCK_FENCE_HALF, ROCK_CLEAR, ROCK_HALF, ROCK_LATERALS, ROCK_SPACING, SEGMENT_SPAWN_INSET, STOP_HAZARD_CLEAR, STOP_PAD } from '../constants';
+import { DIRT_RUN_MAX, DIRT_RUN_MIN, DIRT_SHARE, GATES_SPACING, HAZARD_END_CLEARANCE, MUD_MAX_LENGTH, MUD_MIN_LENGTH, PROP_KINDS, ROADBLOCK_FENCE_HALF, ROCK_CLEAR, ROCK_HALF, ROCK_LATERALS, ROCK_SPACING, SEGMENT_SPAWN_INSET, STOP_HAZARD_CLEAR, STOP_PAD } from '../constants';
 import { buildSegment, hazardSpan, type Hazard, type Placement, type SegmentDef } from '../segments';
 import { VEHICLES } from '../vehicles';
 
@@ -18,6 +18,7 @@ export const COIN_EVERY = 250;
 export const COIN_MIN_SEGMENT = 30;
 export const HAZARD_MIN_SEGMENT = 22;
 export const GATES_MIN_SEGMENT = 65;
+export const BUMP_MIN_SEGMENT = 60;
 
 // Where the plan wants each hazard, as a fraction of the course (R5).
 export const HAZARD_PLAN: readonly { kind: 'crateWall' | 'gates' | 'roadblock'; fraction: number }[] = [
@@ -64,6 +65,8 @@ export interface ExtrasOptions {
   // Mud patches and rock groups to place (marrakech only); none when absent.
   mud?: readonly MudPlan[];
   rocks?: readonly RocksPlan[];
+  // Seeds the dirt runs and the bumps (marrakech only; the course id); neither is placed when absent.
+  seed?: string;
 }
 
 export interface ExtrasReport {
@@ -75,6 +78,44 @@ export interface ExtrasReport {
   rocks: { index: number; at: number; side: -1 | 1; target: number; distance: number }[];
   pickups: { kind: string; index: number; at: number }[];
   coins: number;
+  dirt: { index: number; from: number; length: number }[];
+  bumps: number;
+}
+
+// A small seeded generator (mulberry32 over an FNV hash of the seed text).
+export function seededRandom(seed: string): () => number {
+  let h = 2166136261;
+  for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  let a = h >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Dirt runs over consecutive eligible road segments, each DIRT_RUN_MIN to DIRT_RUN_MAX m, about DIRT_SHARE of the road length; `gapScale` stretches the gaps between runs.
+function dirtRuns(lengths: readonly number[], eligible: readonly boolean[], seed: string, gapScale: number): number[][] {
+  const random = seededRandom(seed);
+  const runs: number[][] = [];
+  let i = 0;
+  while (i < lengths.length) {
+    const target = DIRT_RUN_MIN + random() * (DIRT_RUN_MAX - DIRT_RUN_MIN) * 0.7;
+    let gap = ((target * (1 - DIRT_SHARE)) / DIRT_SHARE) * (0.5 + random()) * gapScale;
+    const run: number[] = [];
+    let sum = 0;
+    while (i < lengths.length && gap > 0) gap -= lengths[i++]!;
+    while (i < lengths.length && eligible[i]! && sum + lengths[i]! <= DIRT_RUN_MAX && sum < target) {
+      run.push(i);
+      sum += lengths[i++]!;
+    }
+    if (sum >= DIRT_RUN_MIN) runs.push(run);
+    // A run cut short by an ineligible segment is dropped; the walk steps past that segment.
+    else if (i < lengths.length && !eligible[i]!) i++;
+  }
+  return runs;
 }
 
 const round1 = (v: number): number => Math.round(v * 10) / 10;
@@ -170,7 +211,7 @@ export function planExtras(input: readonly SegmentDef[], inserted: readonly numb
     const def = segments[i]!;
     return def.type === 'road' ? def : null;
   };
-  const report: ExtrasReport = { total, fuel: [], garages: [], hazards: [], mud: [], rocks: [], pickups: [], coins: 0 };
+  const report: ExtrasReport = { total, fuel: [], garages: [], hazards: [], mud: [], rocks: [], pickups: [], coins: 0, dirt: [], bumps: 0 };
 
   // Fuel stops: the chain of stop segments whose gaps stay nearest the target and never pass the maximum.
   const best = new Map<number, { cost: number; prev: number }>();
@@ -338,6 +379,36 @@ export function planExtras(input: readonly SegmentDef[], inserted: readonly numb
     roadAt(pick)!.hazards = [hazardAt(findAlong(pick, 'rocks', hazardAt)!)];
     used.add(pick);
     report.rocks.push({ index: pick, at: mid(pick), side: plan.side, target, distance: Math.abs(mid(pick) - target) });
+  }
+
+  if (options.seed !== undefined) {
+    const roadIdx = segments.map((_, i) => i).filter((i) => roadAt(i));
+    const roadTotal = roadIdx.reduce((sum, i) => sum + roadAt(i)!.length, 0);
+    const lengths = segments.map((def) => (def.type === 'road' ? def.length : 0));
+    // Not the spawn lane or the last segment, not an inserted segment, never on a slope.
+    const eligible = segments.map((_, i) => inner(i) && !skip.has(i) && roadAt(i) !== null && !roadAt(i)!.slope);
+    // The first gap scale whose runs land the share within 0.30 to 0.40 of the road length (the lowest share a spread of scales can miss on short runs).
+    let runs: number[][] = [];
+    for (const scale of [1, 0.9, 1.1, 0.8, 1.2, 0.7, 1.3, 0.6, 1.4, 0.5, 1.5]) {
+      runs = dirtRuns(lengths, eligible, options.seed, scale);
+      const share = runs.flat().reduce((sum, i) => sum + lengths[i]!, 0) / roadTotal;
+      if (share >= 0.32 && share <= 0.38) break;
+    }
+    for (const run of runs) {
+      for (const i of run) {
+        roadAt(i)!.surface = 'dirt';
+        report.dirt.push({ index: i, from: start[i]!, length: lengths[i]! });
+      }
+    }
+    // Bumps: 1 to 3 on straights of 60 m or more with no stop, hazard, debris or terrain.
+    const random = seededRandom(`${options.seed}-bumps`);
+    for (let i = 1; i < segments.length - 1; i++) {
+      const def = roadAt(i);
+      const roll = random();
+      if (!def || skip.has(i) || !straight(i) || def.length < BUMP_MIN_SEGMENT || def.stop || def.hazards || def.debris) continue;
+      def.bumps = 1 + Math.floor(roll * 3);
+      report.bumps += def.bumps;
+    }
   }
 
   for (const def of segments) buildSegment(def);

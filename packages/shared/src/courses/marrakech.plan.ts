@@ -79,6 +79,6 @@ export function placeTerrain(fitted: readonly SegmentDef[], shifts: readonly num
 export function planMarrakech(route: Route = MARRAKECH_ROUTE, shifts: readonly number[] = MARRAKECH_TERRAIN_SHIFTS): { segments: SegmentDef[]; report: FitReport; placements: InsertPlacement[]; inserted: number[]; extras: ExtrasReport } {
   const fit = fitRoute(route);
   const planned = placeTerrain(fit.segments, shifts);
-  const extras = planExtras(planned.segments, planned.inserted, { terrain: planned.spans, mud: MUD_PLAN, rocks: ROCKS_PLAN });
+  const extras = planExtras(planned.segments, planned.inserted, { terrain: planned.spans, mud: MUD_PLAN, rocks: ROCKS_PLAN, seed: 'marrakech' });
   return { segments: extras.segments, report: fit.report, placements: planned.placements, inserted: planned.inserted, extras: extras.report };
 }
