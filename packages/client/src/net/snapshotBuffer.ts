@@ -7,6 +7,7 @@ import {
   nlerp,
   type AnimalSnapshot,
   type CableSnapshot,
+  type EnemySnapshot,
   type PlayerSnapshot,
   type PropSnapshot,
   type SnapshotMessage,
@@ -18,7 +19,7 @@ export interface SnapshotBuffer {
   // Stores a snapshot received at local time `receivedAt` (seconds). Snapshots older than the newest are ignored.
   push(snapshot: SnapshotMessage, receivedAt: number): void;
   // The world as it was INTERPOLATION_DELAY before local time `now`, or null before any snapshot.
-  sample(now: number): { vehicle: VehicleState; players: PlayerSnapshot[]; props: PropSnapshot[]; animals: AnimalSnapshot[]; cable: CableSnapshot } | null;
+  sample(now: number): { vehicle: VehicleState; players: PlayerSnapshot[]; props: PropSnapshot[]; animals: AnimalSnapshot[]; enemies: EnemySnapshot[]; cable: CableSnapshot } | null;
   // The tick of the newest snapshot, or 0 before any.
   latestTick(): number;
   // Every prop as of the newest snapshot, partial snapshots merged in.
@@ -95,6 +96,8 @@ const copyProp = (p: PropSnapshot): PropSnapshot => ({ id: p.id, kind: p.kind, p
 
 const copyAnimal = (a: AnimalSnapshot): AnimalSnapshot => ({ id: a.id, kind: a.kind, x: a.x, y: a.y, z: a.z, yaw: a.yaw, ...(a.hit ? { hit: true as const } : {}) });
 
+const copyEnemy = (e: EnemySnapshot): EnemySnapshot => ({ id: e.id, x: e.x, y: e.y, z: e.z, yaw: e.yaw, state: e.state });
+
 // The shorter way round, so a turn across +-pi does not spin the long way.
 function blendYaw(from: number, to: number, t: number): number {
   const yaw = from + Math.atan2(Math.sin(to - from), Math.cos(to - from)) * t;
@@ -107,6 +110,15 @@ function blendAnimals(from: readonly AnimalSnapshot[] | undefined, to: readonly 
     const prev = before.get(a.id);
     if (!prev) return copyAnimal(a);
     return { ...copyAnimal(a), x: prev.x + (a.x - prev.x) * t, y: prev.y + (a.y - prev.y) * t, z: prev.z + (a.z - prev.z) * t, yaw: blendYaw(prev.yaw, a.yaw, t) };
+  });
+}
+
+function blendEnemies(from: readonly EnemySnapshot[] | undefined, to: readonly EnemySnapshot[] | undefined, t: number): EnemySnapshot[] {
+  const before = new Map((from ?? []).map((e) => [e.id, e]));
+  return (to ?? []).map((e) => {
+    const prev = before.get(e.id);
+    if (!prev) return copyEnemy(e);
+    return { ...copyEnemy(e), x: prev.x + (e.x - prev.x) * t, y: prev.y + (e.y - prev.y) * t, z: prev.z + (e.z - prev.z) * t, yaw: blendYaw(prev.yaw, e.yaw, t) };
   });
 }
 
@@ -130,6 +142,7 @@ const copyWorld = (w: WorldSnapshot) => ({
   players: w.players.map(copyPlayer),
   props: w.props.map(copyProp),
   animals: (w.animals ?? []).map(copyAnimal),
+  enemies: (w.enemies ?? []).map(copyEnemy),
   cable: copyCable(w.cable),
 });
 
@@ -187,6 +200,7 @@ export function createSnapshotBuffer(): SnapshotBuffer {
         players: to.snapshot.players.map((p) => blendPlayer(before.get(p.playerId), p, t)),
         props: blendProps(from.snapshot.props, to.snapshot.props, t),
         animals: blendAnimals(from.snapshot.animals, to.snapshot.animals, t),
+        enemies: blendEnemies(from.snapshot.enemies, to.snapshot.enemies, t),
         cable: blendCable(from.snapshot.cable, to.snapshot.cable, t),
       };
     },

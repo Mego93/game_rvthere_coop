@@ -7,6 +7,7 @@ import {
   vec3,
   yawOf,
   type AnimalSnapshot,
+  type EnemySnapshot,
   type PlayerSnapshot,
   type PropSnapshot,
   type SnapshotMessage,
@@ -467,4 +468,21 @@ test('step 39: koke, shield, gun and ammo come from the newer snapshot and stay 
   expect(view).toMatchObject({ koke: 4.5, shield: 12, gun: true, ammo: 7 });
   const plain = pair([player('a', 0, 0)], [player('a', 10, 0)]).sample(100)!.players[0]!;
   for (const key of ['koke', 'shield', 'gun', 'ammo']) expect(key in plain).toBe(false);
+});
+
+const enemy = (id: number, x: number, yaw = 0, state: EnemySnapshot['state'] = 'run'): EnemySnapshot => ({ id, x, y: 0.7, z: -8, yaw, state });
+const withEnemies = (tick: number, enemies: EnemySnapshot[] | undefined): SnapshotMessage => ({ ...snapshot(tick, [], []), ...(enemies ? { enemies } : {}) });
+
+test('step 39: enemies blend position and yaw by id, take the state of the newer snapshot, and an absent field means none', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(withEnemies(3, [enemy(1, 0, Math.PI - 0.1, 'run')]), 3 * TICK_DT);
+  buffer.push(withEnemies(9, [enemy(1, 6, -Math.PI + 0.1, 'attack'), enemy(2, 4, 0, 'idle')]), 9 * TICK_DT);
+  const view = buffer.sample((6 + DELAY_TICKS) * TICK_DT)!.enemies;
+  expect(view.map((e) => e.id)).toEqual([1, 2]);
+  expect(view[0]!.x).toBeCloseTo(3, 6);
+  expect(Math.abs(Math.abs(view[0]!.yaw) - Math.PI)).toBeLessThan(1e-6);
+  expect(view[0]!.state).toBe('attack');
+  expect(view[1]).toEqual(enemy(2, 4, 0, 'idle'));
+  buffer.push(withEnemies(12, undefined), 12 * TICK_DT);
+  expect(buffer.sample(100)!.enemies).toEqual([]);
 });
