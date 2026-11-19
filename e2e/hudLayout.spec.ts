@@ -88,8 +88,8 @@ test.describe('HUD layout (V8)', () => {
           expect(by('chat-toasts').y).toBeCloseTo(150, 0);
           expect(by('chat-toasts').h).toBeLessThanOrEqual(64);
           expect(by('chat-toasts').w).toBeLessThanOrEqual(size.width * 0.4 + 0.5);
-          // The dashboard sits under the minimap, clear of the vehicle panel and the Menu row.
-          expect(by('hud-dashboard').y).toBeGreaterThanOrEqual(by('hud-minimap').y + by('hud-minimap').h);
+          // The dashboard sits at the left under the chat toasts.
+          expect(by('hud-dashboard').y).toBeGreaterThanOrEqual(by('chat-toasts').y + by('chat-toasts').h);
           // Smoke B13: the action column sits fully below the Menu button.
           expect(by('touch-actions').y).toBeGreaterThanOrEqual(by('touch-menu').y + by('touch-menu').h);
         } else {

@@ -102,7 +102,7 @@ const STYLE = `
 #hud-dashboard .gear { grid-row: 1; grid-column: 2; justify-self: end; min-width: 22px; text-align: center; font-size: 15px; color: var(--glass-accent); }
 #hud-dashboard .rev { grid-column: 1 / -1; height: 6px; margin-top: 4px; }
 #hud-dashboard .rev.red > i { background: var(--glass-bad); }
-#hud.touch #hud-dashboard { right: auto; bottom: auto; left: calc(8px + var(--safe-left)); top: calc(124px + var(--safe-top)); width: 104px; padding: 4px 8px; }
+#hud.touch #hud-dashboard { right: auto; bottom: auto; left: calc(8px + var(--safe-left)); top: calc(222px + var(--safe-top)); width: 104px; padding: 4px 8px; }
 #hud.touch #hud-dashboard .speed { font-size: 22px; }
 @media (prefers-reduced-motion: reduce) { #hud .bar.low > i { animation: none; } #hud #hud-health { transition: none; } }
 `;

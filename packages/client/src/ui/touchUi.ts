@@ -33,7 +33,7 @@ const STYLE = `
 #touch-menu { right: calc(12px + var(--safe-right)); }
 #touch-chat { right: calc(12px + 52px + var(--safe-right)); }
 #touch-emote { right: calc(12px + 2 * 52px + var(--safe-right)); }
-#touch-ui #touch-view { position: absolute; left: calc(12px + var(--safe-left)); top: calc(176px + var(--safe-top)); width: 44px; height: 44px; border-radius: 12px; font-size: 11px; }
+#touch-ui #touch-view { position: absolute; left: calc(8px + 104px + 8px + var(--safe-left)); top: calc(222px + var(--safe-top)); width: 44px; height: 44px; border-radius: 12px; font-size: 11px; }
 #touch-slots { position: absolute; left: 50%; bottom: calc(12px + var(--safe-bottom)); transform: translateX(-50%); display: flex; gap: 8px; }
 #touch-ui #touch-slots button { width: 56px; height: 56px; border-radius: 12px; font-size: 12px; }
 #touch-slots button.selected { border-color: var(--glass-accent); box-shadow: 0 0 0 2px var(--glass-accent); }
