@@ -424,7 +424,7 @@ function bumpBoxes(def: Extract<SegmentDef, { type: 'road' }>, hazards: Hazard[]
     const along = lo + ((i + 0.5) / count) * (hi - lo);
     if (taken.some(([a, b]) => along + BUMP_LENGTH / 2 > a && along - BUMP_LENGTH / 2 < b)) continue;
     const s = surfaceAt(along);
-    boxes.push({ center: offsetFrom(s, 0, BUMP_HEIGHT / 2), halfExtents: vec3(ROAD_WIDTH / 2, BUMP_HEIGHT / 2, BUMP_LENGTH / 2), rot: yawPitchQuat(s.yaw, s.pitch), surface });
+    boxes.push({ center: offsetFrom(s, 0, BUMP_HEIGHT / 2), halfExtents: vec3(ROAD_WIDTH / 2, BUMP_HEIGHT / 2, BUMP_LENGTH / 2), rot: yawPitchQuat(s.yaw, s.pitch), surface, bump: true });
   }
   return boxes;
 }

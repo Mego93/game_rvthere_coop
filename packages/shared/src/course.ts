@@ -7,6 +7,8 @@ export interface Box {
   rot: Quat;
   // A rock of a rocks hazard: a wall box the client draws as its boulder, not as a wall.
   rock?: true;
+  // A road bump: ground that sits on top of the road surface.
+  bump?: true;
 }
 
 export interface GroundBox extends Box {

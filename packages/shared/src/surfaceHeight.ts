@@ -51,9 +51,10 @@ function groundNear(course: BuiltCourse, x: number, z: number): readonly Box[] {
 }
 
 // Height of the top of the highest ground box under (x, z), or null off the ground.
-export function surfaceYAt(course: BuiltCourse, x: number, z: number): number | null {
+export function surfaceYAt(course: BuiltCourse, x: number, z: number, skipBumps = false): number | null {
   let best: number | null = null;
   for (const box of groundNear(course, x, z)) {
+    if (skipBumps && box.bump) continue;
     const h = box.halfExtents;
     const reach = Math.hypot(h.x, h.y, h.z);
     if (Math.abs(x - box.center.x) > reach || Math.abs(z - box.center.z) > reach) continue;
@@ -89,7 +90,8 @@ const heightCache = new WeakMap<BuiltCourse, number[]>();
 export function routeHeights(course: BuiltCourse): number[] {
   let heights = heightCache.get(course);
   if (heights) return heights;
-  const raw = course.route.map(([x, z]) => surfaceYAt(course, x, z));
+  // Bumps sit on the road; the route height is the road's own.
+  const raw = course.route.map(([x, z]) => surfaceYAt(course, x, z, true));
   heights = raw.map((height, i) => {
     if (height !== null) return height;
     for (let step = 1; step < raw.length; step++) {
