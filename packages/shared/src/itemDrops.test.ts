@@ -77,16 +77,16 @@ describe('T1 planItemDrops on marrakech', () => {
   });
   it('kind mix is within a binomial tolerance of ITEM_DROP_MIX', () => {
     const n = plan.length;
-    for (const kind of ['jerrycan', 'toolbox', 'healthKit', 'tajine'] as const) {
+    for (const kind of ['jerrycan', 'toolbox', 'healthKit', 'tajine', 'treedent', 'fromageBlanc', 'kokeZero', 'ammo'] as const) {
       const p = ITEM_DROP_MIX[kind];
       const got = plan.filter((e) => e.kind === kind).length;
       expect(Math.abs(got - p * n)).toBeLessThanOrEqual(3 * Math.sqrt(n * p * (1 - p)) + 1);
     }
   });
   it('mix probabilities sum to 1', () => {
-    expect(ITEM_DROP_MIX.jerrycan + ITEM_DROP_MIX.toolbox + ITEM_DROP_MIX.healthKit + ITEM_DROP_MIX.tajine).toBeCloseTo(1, 12);
+    expect(Object.values(ITEM_DROP_MIX).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12);
   });
-  it('adding the tajine leaves every seeded jerrycan drop where it was', () => {
+  it('adding the power-ups leaves the seeded jerrycan bands shrinking only from the top', () => {
     const rolls = (run: number) => {
       const rand = mulberry32(mixSeed(hashSeed('marrakech'), run));
       const spots: number[] = [];
@@ -98,11 +98,13 @@ describe('T1 planItemDrops on marrakech', () => {
       }
       return spots;
     };
-    for (const run of [1, 2, 3, 50]) for (const r of rolls(run)) expect(kindOfRoll(r) === 'jerrycan').toBe(r < 0.2);
+    for (const run of [1, 2, 3, 50]) for (const r of rolls(run)) expect(kindOfRoll(r) === 'jerrycan').toBe(r < 0.18);
   });
-  it('rolls map to kinds in the order jerrycan, toolbox, healthKit, tajine with the plan thresholds', () => {
+  it('rolls map to kinds in the plan order with the step 39 thresholds', () => {
     const roll = (r: number) => kindOfRoll(r);
-    expect([0, 0.19, 0.2, 0.49, 0.5, 0.84, 0.85, 0.999].map(roll)).toEqual(['jerrycan', 'jerrycan', 'toolbox', 'toolbox', 'healthKit', 'healthKit', 'tajine', 'tajine']);
+    expect([0, 0.17, 0.19, 0.39, 0.41, 0.54, 0.56, 0.66, 0.68, 0.74, 0.76, 0.82, 0.84, 0.89, 0.91, 0.999].map(roll)).toEqual([
+      'jerrycan', 'jerrycan', 'toolbox', 'toolbox', 'healthKit', 'healthKit', 'tajine', 'tajine', 'treedent', 'treedent', 'fromageBlanc', 'fromageBlanc', 'kokeZero', 'kokeZero', 'ammo', 'ammo',
+    ]);
   });
 });
 

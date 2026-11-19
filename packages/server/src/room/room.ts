@@ -229,7 +229,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   // A world for the room's configuration, with every player in it and cp-0 recorded.
   const createRunWorld = (run: number): World => {
     const course = config.courses?.[settings.courseId] ?? getCourse(settings.courseId);
-    const next = createWorld(rapier, { courseId: settings.courseId, vehicleId: settings.vehicleId, weather: settings.weather, ambient: course.ambient !== undefined, itemDrops: course.ambient !== undefined, itemSeed: mixSeed(hashSeed(course.id), run) }, course);
+    const next = createWorld(rapier, { courseId: settings.courseId, vehicleId: settings.vehicleId, weather: settings.weather, ambient: course.ambient !== undefined, itemDrops: course.ambient !== undefined, enemies: true, itemSeed: mixSeed(hashSeed(course.id), run) }, course);
     try {
       // Held slots join the world when they rejoin.
       for (const player of players) if (player.connected) next.addPlayer(player.playerId);

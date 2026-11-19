@@ -41,6 +41,9 @@ import { updateFollowCamera } from './render/followCamera';
 import { createPlayerMesh, disposePlayerMesh, LABEL_RANGE, placePlayerMesh, playEmote, setNameVisible } from './render/playerMesh';
 import { createCoinMeshes } from './render/coinMesh';
 import { createAnimalMeshes } from './render/animalMeshes';
+import { createEnemyMeshes } from './render/enemyMeshes';
+import { createShotEffects } from './render/shotEffects';
+import { createViewGun } from './render/viewGun';
 import { createPropMesh, disposePropMesh, placePropMesh } from './render/propMesh';
 import { applyConditions, conditionsLook, configureRenderer, toneMappedColour, type Look } from './render/conditions';
 import { createWeatherTracker } from './render/weatherTracker';
@@ -224,9 +227,15 @@ export function createGame(
   scene.add(winchMesh);
   const coinMeshes = createCoinMeshes(scene, course.coins);
   const animalMeshes = createAnimalMeshes(scene);
+  const enemyMeshes = createEnemyMeshes(scene);
+  const shots = createShotEffects(scene);
   let firstPerson = view.firstPerson === true;
   const camera = new THREE.PerspectiveCamera(firstPerson ? FIRST_PERSON_FOV : THIRD_PERSON_FOV, 1, 0.1, 1000);
   camera.position.set(0, 6, 14);
+  // The camera carries the first-person handgun, so it is part of the scene.
+  const viewGun = createViewGun();
+  if (viewGun) camera.add(viewGun);
+  scene.add(camera);
 
   const predictor = createPredictor(rapier, course, vehicleConfig);
   const reconciler = createReconciler(predictor);
@@ -562,10 +571,13 @@ export function createGame(
     }
     syncPropMeshes(sampled?.props ?? [], players);
     animalMeshes.update(sampled?.animals ?? []);
+    enemyMeshes.update(sampled?.enemies ?? [], frameSeconds);
+    shots.update(now / 1000);
 
     const local = players.find((player) => player.playerId === playerId);
     const onFoot = local !== undefined && local.seat === null;
     crosshair.hidden = !onFoot;
+    if (viewGun) viewGun.visible = firstPerson && onFoot && local.gun === true && local.downed === null && (local.hands === null || local.hands === 'hook');
     if (local && onFoot) {
       const eyeTarget = isCrouchedStance(drawnStance) ? PLAYER_CROUCH_EYE_HEIGHT : PLAYER_EYE_HEIGHT;
       eyeHeight += (eyeTarget - eyeHeight) * (1 - Math.exp(-frameSeconds / EYE_EASE_SECONDS));
@@ -694,7 +706,8 @@ export function createGame(
       if (message.kind === 'checkpoint' && !isFigureCheckpointAt(course.checkpoints, message.pos)) return;
       const sound = soundFor(message, playerId);
       if (sound) audio.play(sound.kind, { ...(sound.positional ? { at: message.pos } : {}), ...(sound.volume === undefined ? {} : { volume: sound.volume }) });
-      if (toastFor(message, playerId)) eventToast.show(message.kind, performance.now() / 1000);
+      if (message.kind === 'shot' && message.pos && message.to) shots.fire(message.pos, message.to, message.hit === true, performance.now() / 1000);
+      if (toastFor(message, playerId)) eventToast.show(message.kind, performance.now() / 1000, message.item);
     },
     setControlsOpen(open) {
       controlsOpen = open;
@@ -737,6 +750,8 @@ export function createGame(
       disposeSeatRing(seatRing);
       coinMeshes.dispose();
       animalMeshes.dispose();
+      enemyMeshes.dispose();
+      shots.dispose();
       input.dispose();
       predictor.dispose();
       if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();

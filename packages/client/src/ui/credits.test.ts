@@ -54,6 +54,14 @@ describe('Sketchfab credits (step 33)', () => {
     });
   }
 
+  it('step 39: the recoloured models say so and the can keeps its modified title', () => {
+    for (const path of ['../../../../CREDITS.md', '../../public/CREDITS.md']) {
+      const lines = read(path).split('\n');
+      for (const file of ['treedent.glb', 'fromage-blanc.glb', 'koke-zero.glb']) expect(lines.find((line) => line.includes(`\`${file}\``)), file).toContain('recoloured');
+      expect(lines.find((line) => line.includes('`koke-zero.glb`'))).toContain('"Soda Can (modified)" by x2w-soda (https://sketchfab.com/x2w-soda)');
+    }
+  });
+
   it('every Sketchfab model is in the folder License.txt, and the served credits list the two new skies', () => {
     const licence = read('../../public/models/sketchfab/License.txt');
     for (const file of files) expect(licence, file).toContain(`File: ${file}`);

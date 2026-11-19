@@ -41,10 +41,12 @@ const SOUND_OF_EVENT: Record<EventMessage['kind'], SoundName | null> = {
   scooterHit: 'impact',
   outOfBounds: null,
   eat: 'use',
+  shot: 'impact',
+  stab: null,
 };
 
 // Events whose sound plays quieter than full.
-const VOLUME_OF_EVENT: Partial<Record<EventMessage['kind'], number>> = { goatHit: 0.5, scooterHit: 0.5 };
+const VOLUME_OF_EVENT: Partial<Record<EventMessage['kind'], number>> = { goatHit: 0.5, scooterHit: 0.5, shot: 0.4 };
 
 const ALWAYS_FLAT: ReadonlySet<SoundName> = new Set(['coin', 'purchase', 'click', 'win']);
 

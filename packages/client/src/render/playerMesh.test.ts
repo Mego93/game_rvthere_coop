@@ -21,8 +21,10 @@ vi.mock('./models', () => ({
     ]),
     new THREE.AnimationClip('walk', 1, [new THREE.NumberKeyframeTrack('leg-left.rotation[x]', [0, 0.5, 1], [-1, 1, -1])]),
   ],
-  instantiate: () => {
+  instantiate: (key: string) => {
     const root = new THREE.Group();
+    // The handgun is one plain mesh, so its parts are not mistaken for the character's nodes.
+    if (key !== 'character.player') return root.add(new THREE.Mesh(shared.geometry, shared.material));
     for (const name of ['torso', 'arm-left', 'arm-right', 'leg-left', 'head']) {
       const mesh = new THREE.Mesh(shared.geometry, shared.material);
       mesh.name = name;
@@ -282,3 +284,33 @@ test('E6: a clip value that changes during the emote becomes the new base the ra
   }
 });
 
+
+const armed = (over: Partial<PlayerSnapshot> = {}) => ({ pos: { x: 0, y: 0, z: 0 }, yaw: 0, downed: null, seat: null, hands: null, gun: true, ammo: 12, ...over }) as unknown as PlayerSnapshot;
+const heldGun = (mesh: THREE.Group) => mesh.getObjectByName('held-gun')!;
+
+test('step 39: the handgun is in the right hand and shows only on foot with a gun, free-handed and not downed', () => {
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  expect(heldGun(mesh).parent).toBe(mesh.getObjectByName('arm-right'));
+  expect(heldGun(mesh).visible).toBe(false);
+  placePlayerMesh(mesh, armed(), 0.05);
+  expect(heldGun(mesh).visible).toBe(true);
+  for (const over of [{ gun: undefined }, { seat: 'driver' }, { downed: 5 }, { hands: 'crate-1' }] as Partial<PlayerSnapshot>[]) {
+    placePlayerMesh(mesh, armed(), 0.05);
+    placePlayerMesh(mesh, armed(over), 0.05);
+    expect(heldGun(mesh).visible, JSON.stringify(over)).toBe(false);
+  }
+  placePlayerMesh(mesh, armed({ hands: 'hook' }), 0.05);
+  expect(heldGun(mesh).visible).toBe(true);
+});
+
+test('step 39: the arm holding the gun is raised forward (pointing along +z of its own frame), and goes back to the clip when the gun is put away', () => {
+  clipped.arm = true;
+  const mesh = createPlayerMesh('Amal', '#e0a030');
+  const arm = mesh.getObjectByName('arm-right')!;
+  placePlayerMesh(mesh, armed(), 0.05);
+  const down = new THREE.Vector3(0, -1, 0).applyQuaternion(arm.quaternion);
+  expect(down.z).toBeGreaterThan(0.9);
+  placePlayerMesh(mesh, armed({ seat: 'driver' }), 0.05);
+  expect(new THREE.Vector3(0, -1, 0).applyQuaternion(arm.quaternion).z).toBeLessThan(0.5);
+  clipped.arm = false;
+});

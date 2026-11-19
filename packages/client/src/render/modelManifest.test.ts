@@ -79,7 +79,8 @@ describe('Sketchfab models (step 33)', () => {
     'item.jerrycan': 'jerrycan', 'item.toolbox': 'toolbox', 'item.healthKit': 'first-aid', 'item.tajine': 'tajine', coin: 'coin',
     'animal.goat': 'goat', 'animal.scooter': 'scooter', 'prop.scooter': 'scooter', 'decor.agave': 'agave', 'decor.kasbah': 'kasbah',
     'decor.mosque': 'mosque', 'decor.stall': 'stall', 'decor.tyres': 'tyres', 'decor.cliffs': 'cliffs', 'decor.mountains': 'mountains',
-    'souleyman.headdress': 'headdress',
+    'souleyman.headdress': 'headdress', 'item.treedent': 'treedent', 'item.fromageBlanc': 'fromage-blanc', 'item.kokeZero': 'koke-zero',
+    'item.ammo': 'ammo', 'prop.gun': 'gun', 'enemy.knife': 'knife',
   } as const;
 
   it('T1: the swapped keys point into the sketchfab pack and the new keys exist', () => {

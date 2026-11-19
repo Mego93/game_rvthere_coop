@@ -117,3 +117,39 @@ https://sketchfab.com/3d-models/arab-headdress-205773879931426c975ce9005274ca81
 Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
 File: headdress.glb
 Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Bubblegum by ZwiebelGames
+https://sketchfab.com/3d-models/bubblegum-c65ee426f5104b35befe416c8154495c
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: treedent.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed; recoloured (the label texture replaced by a flat colour).
+
+psx Yogurt cup by Brainsick Games
+https://sketchfab.com/3d-models/psx-yogurt-cup-f686b13e43554c76bbec6c025810bacc
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: fromage-blanc.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed; recoloured (the label texture replaced by a flat colour).
+
+Soda Can (modified) by x2w-soda
+https://sketchfab.com/3d-models/coca-cola-soda-can-762794c155b84267a906c29507322734
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: koke-zero.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed; recoloured (the label texture replaced by a flat black colour).
+
+Old Ammo Crate by SuperMopsek
+https://sketchfab.com/3d-models/old-ammo-crate-6a834e917e4f4194a29e9f66e6915d8a
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: ammo.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Pistol by DJMaesen
+https://sketchfab.com/3d-models/pistol-5f6ec54257de449cacc8c872660b40d3
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: gun.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+M9 Bayonet knife by Michael Karel
+https://sketchfab.com/3d-models/m9-bayonet-knife-eb61a59f65e449d2a2eabbaef76a4a43
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: knife.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.

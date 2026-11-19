@@ -313,3 +313,16 @@ test('B13: a hidden page clears sprint, and touch never sends crouch', () => {
   expect('sprint' in sample).toBe(false);
   expect('crouch' in sample).toBe(false);
 });
+
+test('step 39: the fire button is held while down, a short tap counts once, and it is absent when up', () => {
+  const { source, button } = setup();
+  button('fire', true);
+  expect(source.sample().fire).toBe(true);
+  expect(source.sample().fire).toBe(true);
+  button('fire', false);
+  expect('fire' in source.sample()).toBe(false);
+  button('fire', true);
+  button('fire', false);
+  expect(source.sample().fire).toBe(true);
+  expect('fire' in source.sample()).toBe(false);
+});

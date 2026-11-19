@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { HOLD_DURATION, PLAYER_CONTROLLER_OFFSET, PLAYER_SPRINT_SPEED, PLAYER_WALK_SPEED, TAJINE_SECONDS, TAJINE_SPEED, TICK_RATE } from './constants';
+import { HOLD_DURATION, PLAYER_CONTROLLER_OFFSET, PLAYER_SPRINT_SPEED, PLAYER_WALK_SPEED, TREEDENT_SECONDS, TREEDENT_SPEED, TICK_RATE } from './constants';
 import { vec3 } from './math';
 import { NEUTRAL_INPUT, type PlayerInput } from './protocol';
 import { createWorld, type World, type WorldEvent } from './world';
@@ -14,7 +14,7 @@ const EAT_TICKS = Math.round(HOLD_DURATION * TICK_RATE) + 2;
 const input = (fields: Partial<PlayerInput>): PlayerInput => ({ ...NEUTRAL_INPUT, seq: 0, ...fields });
 const me = (world: World) => world.snapshot().players.find((player) => player.playerId === 'p')!;
 
-function fresh(inventory: ('tajine' | null)[] = ['tajine', null, null], crew = 1): World {
+function fresh(inventory: ('treedent' | null)[] = ['treedent', null, null], crew = 1): World {
   const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
   world.addPlayer('p');
   if (crew > 1) world.addPlayer('q');
@@ -41,7 +41,7 @@ function topSpeed(world: World, fields: Partial<PlayerInput>): number {
 }
 
 // A player who has boarded: put beside the vehicle at the spawn slot, then interact.
-function seated(inventory: ('tajine' | null)[], eatFirst = false): { world: World } {
+function seated(inventory: ('treedent' | null)[], eatFirst = false): { world: World } {
   const world = createWorld(RAPIER, { courseId: 'test', vehicleId: 'lodgy' });
   world.addPlayer('p');
   for (let i = 0; i < 10; i++) world.step(new Map());
@@ -53,14 +53,14 @@ function seated(inventory: ('tajine' | null)[], eatFirst = false): { world: Worl
   return { world };
 }
 
-describe('eating a tajine', () => {
+describe('eating a treedent', () => {
   test('a hold of HOLD_DURATION consumes the item, sets 15 s and emits eat', () => {
     const world = fresh();
     const events = eat(world);
     expect(events.filter((e) => e.kind === 'eat')).toHaveLength(1);
     expect(events.find((e) => e.kind === 'eat')!.playerId).toBe('p');
     expect(me(world).inventory).toEqual([null, null, null]);
-    expect(me(world).tajine).toBeGreaterThan(TAJINE_SECONDS - 0.15);
+    expect(me(world).treedent).toBeGreaterThan(TREEDENT_SECONDS - 0.15);
     expect(me(world).hold).toBeNull();
     world.dispose();
   });
@@ -70,30 +70,30 @@ describe('eating a tajine', () => {
     for (let i = 0; i < EAT_TICKS / 2; i++) world.step(new Map([['p', input({ use: true })]]));
     expect(me(world).hold).not.toBeNull();
     world.step(new Map([['p', input({})]]));
-    expect(me(world).inventory[0]).toBe('tajine');
-    expect(me(world).tajine).toBeUndefined();
+    expect(me(world).inventory[0]).toBe('treedent');
+    expect(me(world).treedent).toBeUndefined();
     world.dispose();
   });
 
-  test('walk and sprint speed rise by TAJINE_SPEED, measured after 2 s on flat ground', () => {
+  test('walk and sprint speed rise by TREEDENT_SPEED, measured after 2 s on flat ground', () => {
     const world = fresh();
     const walk = topSpeed(world, {});
     const sprint = topSpeed(world, { sprint: true });
         expect(walk).toBeCloseTo(PLAYER_WALK_SPEED, 6);
     expect(sprint).toBeCloseTo(PLAYER_SPRINT_SPEED, 6);
-    world.debugSetInventory('p', ['tajine', null, null]);
+    world.debugSetInventory('p', ['treedent', null, null]);
     eat(world);
     const fastWalk = topSpeed(world, {});
     const fastSprint = topSpeed(world, { sprint: true });
-    expect(fastWalk).toBeCloseTo(PLAYER_WALK_SPEED * TAJINE_SPEED, 6);
-    expect(fastSprint).toBeCloseTo(PLAYER_SPRINT_SPEED * TAJINE_SPEED, 6);
+    expect(fastWalk).toBeCloseTo(PLAYER_WALK_SPEED * TREEDENT_SPEED, 6);
+    expect(fastSprint).toBeCloseTo(PLAYER_SPRINT_SPEED * TREEDENT_SPEED, 6);
     world.dispose();
   });
 
   test('crouch speed is not boosted', () => {
     const world = fresh();
     const slow = topSpeed(world, { crouch: true });
-    world.debugSetInventory('p', ['tajine', null, null]);
+    world.debugSetInventory('p', ['treedent', null, null]);
     eat(world);
     expect(topSpeed(world, { crouch: true })).toBeCloseTo(slow, 6);
     world.dispose();
@@ -103,19 +103,19 @@ describe('eating a tajine', () => {
     const world = fresh();
     eat(world);
     for (let i = 0; i < 14 * TICK_RATE; i++) world.step(new Map());
-    expect(me(world).tajine).toBeGreaterThan(0);
+    expect(me(world).treedent).toBeGreaterThan(0);
     for (let i = 0; i < 2 * TICK_RATE; i++) world.step(new Map());
-    expect(me(world).tajine).toBeUndefined();
+    expect(me(world).treedent).toBeUndefined();
     world.dispose();
   });
 
-  test('a second tajine refreshes the timer to 15 s without stacking', () => {
-    const world = fresh(['tajine', 'tajine', null]);
+  test('a second treedent refreshes the timer to 15 s without stacking', () => {
+    const world = fresh(['treedent', 'treedent', null]);
     eat(world);
     for (let i = 0; i < 10 * TICK_RATE; i++) world.step(new Map());
-    expect(me(world).tajine).toBeLessThan(5.5);
+    expect(me(world).treedent).toBeLessThan(5.5);
     eat(world, { slot: 1 });
-    expect(me(world).tajine).toBeGreaterThan(TAJINE_SECONDS - 0.15);
+    expect(me(world).treedent).toBeGreaterThan(TREEDENT_SECONDS - 0.15);
     expect(me(world).inventory).toEqual([null, null, null]);
     world.dispose();
   });
@@ -123,10 +123,10 @@ describe('eating a tajine', () => {
   test('a restart at the checkpoint clears it', () => {
     const world = fresh();
     eat(world);
-    expect(me(world).tajine).toBeDefined();
+    expect(me(world).treedent).toBeDefined();
     world.restartCheckpoint();
     world.step(new Map());
-    expect(me(world).tajine).toBeUndefined();
+    expect(me(world).treedent).toBeUndefined();
     world.dispose();
   });
 
@@ -134,17 +134,17 @@ describe('eating a tajine', () => {
     const world = fresh();
     eat(world);
     expect(world.adminTool('skipCheckpoint')).toBe(true);
-    expect(me(world).tajine).toBeUndefined();
+    expect(me(world).treedent).toBeUndefined();
     world.dispose();
   });
 
   test('being downed clears it', () => {
-    const world = fresh(['tajine', null, null], 2);
+    const world = fresh(['treedent', null, null], 2);
     eat(world);
     world.debugHurt('p', 100);
     world.step(new Map());
     expect(me(world).downed).not.toBeNull();
-    expect(me(world).tajine).toBeUndefined();
+    expect(me(world).treedent).toBeUndefined();
     world.dispose();
   });
 
@@ -154,7 +154,7 @@ describe('eating a tajine', () => {
     world.teleportPlayer('p', vec3(START.x, world.course.killPlaneY - 5, START.z));
     for (let i = 0; i < 4 * TICK_RATE && me(world).pos.y < 0; i++) world.step(new Map());
     expect(me(world).pos.y).toBeGreaterThan(world.course.killPlaneY);
-    expect(me(world).tajine).toBeUndefined();
+    expect(me(world).treedent).toBeUndefined();
     world.dispose();
   });
 
@@ -165,7 +165,7 @@ describe('eating a tajine', () => {
     expect(me(world).pos.y).toBeLessThan(world.course.killPlaneY);
     expect(world.canEmote('p')).toBe(false);
     for (let i = 0; i < 5; i++) world.step(new Map([['p', input({ use: true })]]));
-    expect(me(world).inventory[0]).toBe('tajine');
+    expect(me(world).inventory[0]).toBe('treedent');
     expect(me(world).hold).toBeNull();
     world.dispose();
   });
@@ -176,7 +176,7 @@ describe('eating a tajine', () => {
     world.teleportPlayer('p', vec3(START.x, world.course.killPlaneY - 5, START.z));
     world.step(new Map());
     world.step(new Map());
-    expect(me(world).tajine).toBeUndefined();
+    expect(me(world).treedent).toBeUndefined();
     world.dispose();
   });
 
@@ -185,8 +185,8 @@ describe('eating a tajine', () => {
     eat(world);
     for (let i = 0; i < 100; i++) {
       world.step(new Map());
-      const t = me(world).tajine!;
-      expect(t).toBeLessThanOrEqual(TAJINE_SECONDS);
+      const t = me(world).treedent!;
+      expect(t).toBeLessThanOrEqual(TREEDENT_SECONDS);
       expect(Math.abs(t * 10 - Math.round(t * 10))).toBeLessThan(1e-6);
     }
     world.dispose();
@@ -196,29 +196,29 @@ describe('eating a tajine', () => {
     const world = fresh();
     eat(world);
     world.teleportPlayer('p', START);
-    expect(me(world).tajine).toBeGreaterThan(TAJINE_SECONDS - 0.15);
+    expect(me(world).treedent).toBeGreaterThan(TREEDENT_SECONDS - 0.15);
     world.dispose();
   });
 
   test('seated, the item stays and nothing is eaten', () => {
-    const { world } = seated(['tajine', null, null]);
+    const { world } = seated(['treedent', null, null]);
     for (let i = 0; i < EAT_TICKS * 2; i++) world.step(new Map([['p', input({ use: true })]]));
-    expect(me(world).inventory[0]).toBe('tajine');
-    expect(me(world).tajine).toBeUndefined();
+    expect(me(world).inventory[0]).toBe('treedent');
+    expect(me(world).treedent).toBeUndefined();
     world.dispose();
   });
 
   test('a timer that runs while seated counts down', () => {
-    const { world } = seated(['tajine', null, null], true);
-    const before = me(world).tajine!;
+    const { world } = seated(['treedent', null, null], true);
+    const before = me(world).treedent!;
     expect(before).toBeGreaterThan(14);
     for (let i = 0; i < 5 * TICK_RATE; i++) world.step(new Map());
-    expect(me(world).tajine!).toBeLessThan(before - 4.9);
+    expect(me(world).treedent!).toBeLessThan(before - 4.9);
     world.dispose();
   });
 
   test('canEmote: true on foot, false for an unknown id, a downed player and a seated one', () => {
-    const world = fresh(['tajine', null, null], 2);
+    const world = fresh(['treedent', null, null], 2);
     expect(world.canEmote('p')).toBe(true);
     expect(world.canEmote('nobody')).toBe(false);
     world.debugHurt('p', 100);
@@ -229,7 +229,7 @@ describe('eating a tajine', () => {
   });
 
   test('canEmote is false seated', () => {
-    const { world } = seated(['tajine', null, null]);
+    const { world } = seated(['treedent', null, null]);
     expect(world.canEmote('p')).toBe(false);
     world.dispose();
   });

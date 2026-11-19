@@ -25,7 +25,7 @@ export function mixSeed(a: number, b: number): number {
 }
 
 // Kinds in the order of their cumulative share, so a kind added at the end leaves every earlier roll's kind alone.
-const MIX_ORDER = ['jerrycan', 'toolbox', 'healthKit', 'tajine'] as const satisfies readonly ItemKind[];
+const MIX_ORDER = ['jerrycan', 'toolbox', 'healthKit', 'tajine', 'treedent', 'fromageBlanc', 'kokeZero', 'ammo'] as const satisfies readonly ItemKind[];
 
 export function kindOfRoll(r: number): ItemKind {
   let upper = 0;

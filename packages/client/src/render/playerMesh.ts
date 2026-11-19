@@ -2,6 +2,7 @@ import { CHARACTER_SCALE, EMOTE_SECONDS, isCrouchedStance, PLAYER_COLOURS, PLAYE
 import * as THREE from 'three';
 import { applyLook } from './characterRig';
 import { EMOTE_NODES, emotePose, emoteWeight, type PoseNode } from './emotePose';
+import { AIM_ARM, holdInRightHand } from './handItem';
 import { animationsOf, hasModel, instantiate, shadowed } from './models';
 
 export const HEAD_RADIUS = 0.2 * CHARACTER_SCALE;
@@ -65,6 +66,10 @@ interface Animation {
   z: number;
   speed: number;
   fresh: boolean;
+  // The handgun in the right hand, shown while the player is on foot with a gun.
+  gun: THREE.Object3D | null;
+  // The arm's rotation from before the gun raised it; the mixer writes a node only when its clip value changes, so it is put back by hand.
+  aimBase: THREE.Quaternion | null;
 }
 
 const animations = new WeakMap<THREE.Object3D, Animation>();
@@ -119,7 +124,13 @@ function createCharacter(colour: string, appearance?: Appearance): THREE.Group |
   walk.setEffectiveWeight(0);
   const nodes: Animation['nodes'] = {};
   for (const name of POSE_NODES) nodes[name] = model.getObjectByName(name) ?? undefined;
-  animations.set(group, { nodes, emote: null, mixer, idle, walk, x: 0, z: 0, speed: 0, fresh: true });
+  const arm = nodes['arm-right'];
+  let gun: THREE.Object3D | null = null;
+  if (arm && hasModel('prop.gun')) {
+    gun = holdInRightHand(arm, shadowed(instantiate('prop.gun')!), 'gun');
+    gun.visible = false;
+  }
+  animations.set(group, { nodes, emote: null, mixer, idle, walk, x: 0, z: 0, speed: 0, fresh: true, gun, aimBase: null });
   return group;
 }
 
@@ -225,6 +236,19 @@ export function placePlayerMesh(mesh: THREE.Group, player: PlayerSnapshot, secon
   }
   if (animation) {
     applyEmote(animation, player, now);
+    // The gun is held up while the player is on foot and free-handed; a running emote keeps the arm it is using.
+    const armed = player.gun === true && player.seat === null && !downed && (player.hands === null || player.hands === 'hook');
+    if (animation.gun) {
+      animation.gun.visible = armed;
+      const arm = animation.nodes['arm-right'];
+      if (arm && armed && !animation.emote) {
+        animation.aimBase ??= arm.quaternion.clone();
+        arm.quaternion.setFromEuler(AIM_ARM);
+      } else if (arm && animation.aimBase && !animation.emote) {
+        arm.quaternion.copy(animation.aimBase);
+        animation.aimBase = null;
+      }
+    }
     animation.x = player.pos.x;
     animation.z = player.pos.z;
     animation.fresh = false;

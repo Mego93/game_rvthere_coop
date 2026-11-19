@@ -39,6 +39,7 @@ export const sampleModel = (touch: boolean): HudModel => ({
     { kind: 'toolbox', label: 'Tools', selected: false },
     { kind: 'healthKit', label: 'Heal', selected: false },
   ],
+  combat: { ammo: 12, timers: [{ kind: 'treedent', label: 'Gum', text: '15s' }, { kind: 'shield', label: 'Shield', text: '30' }, { kind: 'koke', label: 'Koke', text: '20s' }] },
   prompt: touch ? 'Act to board   Hold Use to refuel' : 'E to board   Hold F to refuel',
   canReset: true,
   hold: 0.4,
@@ -59,8 +60,8 @@ export const sampleModel = (touch: boolean): HudModel => ({
 
 export const sampleTouchView = (driving: boolean): TouchView =>
   driving
-    ? { seated: true, useVisible: false, reelVisible: true, resetVisible: true, sprintVisible: false, slots: ['jerrycan', 'toolbox', 'healthKit'], selected: 0 }
-    : { seated: false, useVisible: true, reelVisible: true, resetVisible: true, sprintVisible: true, slots: ['jerrycan', 'toolbox', 'healthKit'], selected: 0 };
+    ? { seated: true, useVisible: false, reelVisible: true, resetVisible: true, sprintVisible: false, fireVisible: false, slots: ['jerrycan', 'toolbox', 'healthKit'], selected: 0 }
+    : { seated: false, useVisible: true, reelVisible: true, resetVisible: true, sprintVisible: true, fireVisible: true, slots: ['jerrycan', 'toolbox', 'healthKit'], selected: 0 };
 
 const SAMPLE_CHAT: ChatLine[] = [
   { id: 1, playerId: 'p2', name: 'Badr', text: 'Left at the fork!', at: 0, own: false, receivedAt: 0 },

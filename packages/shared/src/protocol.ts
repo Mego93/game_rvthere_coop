@@ -1,4 +1,4 @@
-import { CHAT_MAX_LENGTH, EMOTES, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, SHOP_ITEMS, TAJINE_SECONDS, TIMES_OF_DAY, WEATHERS, WEATHER_SETTINGS, type Emote, type ItemKind, type ShopItem, type TimeOfDay, type Weather, type WeatherSetting } from './constants';
+import { CHAT_MAX_LENGTH, EMOTES, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, SHOP_ITEMS, AMMO_MAX, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, TIMES_OF_DAY, WEATHERS, WEATHER_SETTINGS, type Emote, type ItemKind, type ShopItem, type TimeOfDay, type Weather, type WeatherSetting } from './constants';
 import { isAppearance, type Appearance } from './characters';
 import { courseIds } from './courses/index';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
@@ -25,6 +25,8 @@ export interface PlayerInput {
   reset?: boolean;
   sprint?: boolean;
   crouch?: boolean;
+  // Left click or the Fire button; shoots on foot.
+  fire?: boolean;
 }
 
 export type InputFields = Omit<PlayerInput, 'seq'>;
@@ -150,8 +152,16 @@ export interface PlayerSnapshot {
   health: number;
   // Seconds left before respawn while downed.
   downed: number | null;
-  // Seconds of the tajine left, rounded up to 0.1; absent at 0.
-  tajine?: number;
+  // Rounds left; present with `gun`.
+  ammo?: number;
+  // The player has a handgun.
+  gun?: true;
+  // Seconds of the treedent left, rounded up to 0.1; absent at 0.
+  treedent?: number;
+  // Damage the fromage blanc shield still absorbs, rounded up; absent at 0.
+  shield?: number;
+  // Seconds of Koke Zero left, rounded up to 0.1; absent at 0.
+  koke?: number;
   // The admin's fly toggle is on; absent otherwise.
   flying?: true;
   // Absent means standing; a stance this version does not know is read as standing.
@@ -160,7 +170,7 @@ export interface PlayerSnapshot {
   slide?: { ticks: number; cooldown: number; air: number; dirX: number; dirZ: number; launch?: number };
 }
 
-export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit', 'outOfBounds', 'eat'] as const;
+export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit', 'outOfBounds', 'eat', 'shot', 'stab'] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
 export interface EventMessage {
@@ -169,6 +179,11 @@ export interface EventMessage {
   tick: number;
   playerId?: string;
   pos?: Vec3;
+  // 'eat': the item eaten or drunk.
+  item?: string;
+  // 'shot': where the ray ended (`pos` is the eye it left from) and whether it hit an enemy.
+  to?: Vec3;
+  hit?: boolean;
 }
 
 export interface SnapshotMessage extends WorldSnapshot {
@@ -273,7 +288,8 @@ function parseInput(data: Record<string, unknown>): PlayerInput | null {
   if (!finite(moveX) || !finite(moveY) || !finite(yaw) || !finite(pitch)) return null;
   if (typeof jump !== 'boolean' || typeof interact !== 'boolean') return null;
   if (typeof use !== 'boolean' || typeof drop !== 'boolean') return null;
-  const { reset, sprint, crouch } = data;
+  const { reset, sprint, crouch, fire } = data;
+  if (fire !== undefined && typeof fire !== 'boolean') return null;
   if (reset !== undefined && typeof reset !== 'boolean') return null;
   if (sprint !== undefined && typeof sprint !== 'boolean') return null;
   if (crouch !== undefined && typeof crouch !== 'boolean') return null;
@@ -286,6 +302,7 @@ function parseInput(data: Record<string, unknown>): PlayerInput | null {
     ...(reset === undefined ? {} : { reset }),
     ...(sprint === undefined ? {} : { sprint }),
     ...(crouch === undefined ? {} : { crouch }),
+    ...(fire === undefined ? {} : { fire }),
   };
 }
 
@@ -392,7 +409,11 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   value.health <= 100 &&
   (value.downed === null || (finite(value.downed) && value.downed >= 0)) &&
   (value.hold === null || (isRecord(value.hold) && isText(value.hold.action) && isText(value.hold.targetId) && finite(value.hold.progress))) &&
-  (value.tajine === undefined || (finite(value.tajine) && value.tajine > 0 && value.tajine <= TAJINE_SECONDS)) &&
+  (value.treedent === undefined || (finite(value.treedent) && value.treedent > 0 && value.treedent <= TREEDENT_SECONDS)) &&
+  (value.koke === undefined || (finite(value.koke) && value.koke > 0 && value.koke <= KOKE_SECONDS)) &&
+  (value.shield === undefined || (finite(value.shield) && value.shield > 0 && value.shield <= SHIELD_HP)) &&
+  (value.gun === undefined || value.gun === true) &&
+  (value.ammo === undefined || (isCount(value.ammo) && value.ammo <= AMMO_MAX)) &&
   (value.flying === undefined || value.flying === true) &&
   (value.stance === undefined || isText(value.stance)) &&
   (value.slide === undefined ||
@@ -416,6 +437,11 @@ const isAnimalSnapshot = (value: unknown): boolean =>
   finite(value.z) &&
   finite(value.yaw) &&
   (value.hit === undefined || value.hit === true);
+const ENEMY_STATES = ['idle', 'run', 'attack', 'slip', 'down', 'dead'];
+// Far above the most the director keeps alive (ENEMY_MAX_ALIVE).
+const MAX_ENEMIES = 32;
+const isEnemySnapshot = (value: unknown): boolean =>
+  isRecord(value) && isCount(value.id) && finite(value.x) && finite(value.y) && finite(value.z) && finite(value.yaw) && typeof value.state === 'string' && ENEMY_STATES.includes(value.state);
 const isCableSnapshot = (value: unknown): value is CableSnapshot =>
   isRecord(value) &&
   (value.state === 'stowed' || value.state === 'held' || value.state === 'ground' || value.state === 'attached') &&
@@ -497,6 +523,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         data.props.every(isPropSnapshot) &&
         (data.weather === undefined || isWeather(data.weather)) &&
         (data.animals === undefined || (Array.isArray(data.animals) && data.animals.length <= MAX_ANIMALS && data.animals.every(isAnimalSnapshot))) &&
+        (data.enemies === undefined || (Array.isArray(data.enemies) && data.enemies.length <= MAX_ENEMIES && data.enemies.every(isEnemySnapshot))) &&
         isCableSnapshot(data.cable)
         ? message
         : null;
@@ -504,7 +531,10 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       return (EVENT_KINDS as readonly unknown[]).includes(data.kind) &&
         isCount(data.tick) &&
         (data.playerId === undefined || isText(data.playerId)) &&
-        (data.pos === undefined || isVec3(data.pos))
+        (data.pos === undefined || isVec3(data.pos)) &&
+        (data.item === undefined || isText(data.item)) &&
+        (data.to === undefined || isVec3(data.to)) &&
+        (data.hit === undefined || typeof data.hit === 'boolean')
         ? message
         : null;
     case 'results':

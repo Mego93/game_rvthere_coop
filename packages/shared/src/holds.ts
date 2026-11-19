@@ -1,4 +1,4 @@
-import { HEAL_AIM_ANGLE, HEAL_RANGE, HOLD_DURATION, ITEM_KINDS, PLAYER_HEIGHT, PLAYER_MAX_HEALTH, TICK_DT, USE_RANGE, type ItemKind } from './constants';
+import { HEAL_AIM_ANGLE, HEAL_RANGE, HOLD_DURATION, ITEM_KINDS, SELF_ITEMS, PLAYER_HEIGHT, PLAYER_MAX_HEALTH, TICK_DT, USE_RANGE, type ItemKind } from './constants';
 import { dot, length, sub, vec3, type Quat, type Vec3 } from './math';
 import { distanceToBox } from './seats';
 
@@ -55,11 +55,14 @@ const vehicleNeeds = (item: ItemKind, ctx: UseContext): boolean => {
   return distanceToBox(ctx.self.feet, ctx.vehicle.half, ctx.vehicle.pos, ctx.vehicle.rot) <= USE_RANGE;
 };
 
-// Rules I8, H9, J6 and the tajine: eating targets the eater.
+// Rules I8, H9, J6 and the self items (tajine, power-ups, ammo): using targets the user.
+export const isSelfItem = (item: ItemKind | null): boolean => item !== null && (SELF_ITEMS as readonly string[]).includes(item);
+
+
 export function useTarget(item: ItemKind | null, ctx: UseContext): Target | null {
   if (item === null || !Object.hasOwn(ITEM_KINDS, item)) return null;
   if (item === 'jerrycan' || item === 'toolbox') return vehicleNeeds(item, ctx) ? 'vehicle' : null;
-  if (item === 'tajine') return ctx.self.onFoot ? ctx.self.id : null;
+  if (isSelfItem(item)) return ctx.self.onFoot ? ctx.self.id : null;
   if (item !== 'healthKit') return null;
   // The smallest angle wins; the earlier join order keeps a tie.
   const nearest = (wanted: (player: UseContext['players'][number]) => boolean): string | null => {
@@ -93,7 +96,7 @@ export function pressTarget(item: ItemKind | null, ctx: UseContext): { id: Targe
 export function holdTargetValid(hold: Hold, ctx: UseContext): boolean {
   if (hold.targetId === 'vehicle') return vehicleNeeds(hold.item, ctx);
   if (hold.targetId === ctx.self.id) {
-    if (hold.item === 'tajine') return hold.action === 'useItem' && ctx.self.onFoot;
+    if (isSelfItem(hold.item)) return hold.action === 'useItem' && ctx.self.onFoot;
     return hold.action === 'useItem' && ctx.self.health < PLAYER_MAX_HEALTH;
   }
   const target = ctx.players.find((player) => player.id === hold.targetId);

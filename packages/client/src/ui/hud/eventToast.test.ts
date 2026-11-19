@@ -7,7 +7,7 @@ test('T9, T14: the goat, scooter, checkpoint, out-of-bounds and eat events have 
   expect(eventToastText('goatHit')).toBe('Goat!');
   expect(eventToastText('scooterHit')).toBe('Scooter!');
   expect(eventToastText('outOfBounds')).toBe('Back to the road');
-  expect(eventToastText('eat')).toBe('Tajine! Faster for 15 s');
+  expect(eventToastText('eat')).toBe('Power-up!');
   expect(EVENT_KINDS.filter((kind) => eventToastText(kind) !== null)).toEqual(['checkpoint', 'goatHit', 'scooterHit', 'outOfBounds', 'eat']);
 });
 
@@ -32,4 +32,18 @@ test('T10: the eat toast shows only to the eater, other events to everyone', () 
   expect(toastFor({ kind: 'outOfBounds', playerId: 'p2' }, 'p1')).toBe(false);
   expect(toastFor({ kind: 'goatHit', playerId: 'p2' }, 'p1')).toBe(true);
   expect(toastFor({ kind: 'checkpoint' }, 'p1')).toBe(true);
+});
+
+test('step 39: the eat toast names the item and falls back to Power-up! for one it does not know', () => {
+  expect(eventToastText('eat', 'treedent')).toBe('Treedent! Faster for 15 s');
+  expect(eventToastText('eat', 'fromageBlanc')).toBe('Fromage blanc! Shield of 30 for 30 s');
+  expect(eventToastText('eat', 'kokeZero')).toBe('Koke Zero! Double damage for 20 s');
+  expect(eventToastText('eat', 'tajine')).toBe('Tajine! +40 health');
+  expect(eventToastText('eat', 'ammo')).toBe('Ammo! +12 rounds');
+  expect(eventToastText('eat', 'toString')).toBe('Power-up!');
+  expect(eventToastText('eat')).toBe('Power-up!');
+  expect(eventToastText('goatHit', 'treedent')).toBe('Goat!');
+  const toast = createEventToast();
+  toast.show('eat', 5, 'kokeZero');
+  expect(toast.current(5.5)).toBe('Koke Zero! Double damage for 20 s');
 });

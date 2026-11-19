@@ -81,6 +81,43 @@ test('a lock on some other element does not count', () => {
   expect(look.yaw()).toBe(0);
 });
 
+test('step 39: the left button fires while the pointer is locked, as a hold and as a tap, and nothing otherwise', () => {
+  const { canvas, doc, look, lock } = setup();
+  const press = (button: number) => canvas.dispatchEvent(Object.assign(new Event('mousedown'), { button }));
+  const release = (button: number) => doc.dispatchEvent(Object.assign(new Event('mouseup'), { button }));
+  press(0);
+  expect(look.fire()).toBe(false);
+  release(0);
+  lock();
+  press(2);
+  expect(look.fire()).toBe(false);
+  press(0);
+  expect(look.fire()).toBe(true);
+  expect(look.fire()).toBe(true);
+  release(0);
+  expect(look.fire()).toBe(false);
+  press(0);
+  release(0);
+  expect(look.fire()).toBe(true);
+  expect(look.fire()).toBe(false);
+  press(0);
+  lock(false);
+  expect(look.fire()).toBe(false);
+});
+
+test('step 39: a blocked gate (a menu is open) stops the fire', () => {
+  const gate = { blocked: false };
+  const canvas = Object.assign(new EventTarget(), { requestPointerLock() {} });
+  const doc = Object.assign(new EventTarget(), { pointerLockElement: canvas as unknown });
+  const look = createMouseLook(canvas as unknown as HTMLElement, doc as unknown as Document, gate);
+  canvas.dispatchEvent(Object.assign(new Event('mousedown'), { button: 0 }));
+  expect(look.fire()).toBe(true);
+  gate.blocked = true;
+  expect(look.fire()).toBe(false);
+  canvas.dispatchEvent(Object.assign(new Event('mousedown'), { button: 0 }));
+  expect(look.fire()).toBe(false);
+});
+
 test('dispose removes every listener', () => {
   const added: string[] = [];
   const removed: string[] = [];

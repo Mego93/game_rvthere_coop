@@ -1,6 +1,6 @@
 import { clamp } from '@lodgy/shared';
 import { LOW_FRACTION, MAP_MARGIN, MAP_SIZE_DESKTOP, MAP_SIZE_TOUCH } from './constants';
-import { ICON_COIN, ICON_FUEL, ICON_HEALTHKIT, ICON_HEART, ICON_HULL, ICON_JERRYCAN, ICON_SEAT, ICON_TAJINE, ICON_TOOLBOX } from './icons';
+import { ICON_AMMO, ICON_COIN, ICON_FUEL, ICON_GUM, ICON_HEALTHKIT, ICON_HEART, ICON_HULL, ICON_JERRYCAN, ICON_KOKE, ICON_SEAT, ICON_SHIELD, ICON_TAJINE, ICON_TOOLBOX } from './icons';
 import { splitPrompt } from './splitPrompt';
 import { gaugePercent, ownHealthFraction, ownHealthPoints, type HudModel } from './hudModel';
 import { createMapPlan, mapScene } from './mapScene';
@@ -15,6 +15,7 @@ export interface Hud {
 }
 
 const SLOT_ICONS: Record<string, string> = { jerrycan: ICON_JERRYCAN, toolbox: ICON_TOOLBOX, healthKit: ICON_HEALTHKIT, tajine: ICON_TAJINE };
+const TIMER_ICONS = { treedent: ICON_GUM, shield: ICON_SHIELD, koke: ICON_KOKE } as const;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const STYLE = `
@@ -47,6 +48,10 @@ const STYLE = `
 #hud-minimap .item.toolbox { fill: var(--item-toolbox); }
 #hud-minimap .item.healthKit { fill: var(--item-health); }
 #hud-minimap .item.tajine { fill: var(--item-tajine); }
+#hud-minimap .item.treedent { fill: var(--item-treedent); }
+#hud-minimap .item.fromageBlanc { fill: var(--item-fromage); }
+#hud-minimap .item.kokeZero { fill: var(--item-koke); }
+#hud-minimap .item.ammo, #hud-minimap .item.gun { fill: var(--item-ammo); }
 #hud-minimap .finish { fill: var(--finish-a); stroke: var(--finish-b); stroke-width: 1.5; }
 #hud-minimap .checkpoint { fill: none; stroke: var(--on-glass); stroke-width: 2; }
 #hud-minimap .checkpoint.reached { opacity: 0.3; }
@@ -74,6 +79,14 @@ const STYLE = `
 #hud #hud-health { position: absolute; left: calc(8px + var(--safe-left)); bottom: calc(8px + var(--safe-bottom)); box-sizing: border-box; width: 150px; height: 28px; padding: 0 10px; display: grid; grid-template-columns: 14px 1fr 30px; gap: 6px; align-items: center; transition: background-color 0.3s, border-color 0.3s; }
 #hud #hud-health.full { background: transparent; border-color: transparent; }
 #hud-health svg.ico { color: var(--glass-bad); }
+#hud #hud-combat { position: absolute; left: calc(8px + var(--safe-left)); bottom: calc(42px + var(--safe-bottom)); display: flex; gap: 3px; }
+#hud-combat .chip { display: inline-flex; align-items: center; gap: 3px; height: 22px; box-sizing: border-box; padding: 0 5px; font-size: 11px; border-radius: 11px; }
+#hud-combat .chip svg.ico { width: 12px; height: 12px; }
+#hud-combat .ammo svg.ico { color: var(--item-ammo); }
+#hud-combat .chip.low .num { color: var(--glass-bad); }
+#hud-combat .chip.treedent svg.ico { color: var(--item-treedent); }
+#hud-combat .chip.shield svg.ico { color: var(--item-fromage); }
+#hud-combat .chip.koke svg.ico { color: var(--item-koke); }
 #hud-slots { position: absolute; left: 50%; bottom: calc(8px + var(--safe-bottom)); transform: translateX(-50%); display: flex; gap: 6px; }
 #hud-slots .slot { position: relative; width: 52px; height: 52px; display: grid; grid-template-rows: 1fr auto; justify-items: center; align-items: center; padding: 6px 2px 4px; }
 #hud-slots .slot .icon, #hud-slots .slot .icon svg.ico { width: 22px; height: 22px; }
@@ -205,6 +218,21 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
   const ownHealth = el('div', health, undefined, 'bar health');
   const ownFill = el('i', ownHealth);
   const ownNum = el('span', health, undefined, 'num');
+
+  const combat = el('div', root, 'hud-combat');
+  const ammoChip = el('div', combat, undefined, 'chip glass ammo');
+  icon(ammoChip, ICON_AMMO);
+  ammoChip.title = 'Ammo';
+  const ammoNum = el('span', ammoChip, undefined, 'num');
+  ammoChip.hidden = true;
+  const timerNodes = new Map<string, { chip: HTMLElement; num: HTMLElement }>();
+  for (const kind of ['treedent', 'shield', 'koke'] as const) {
+    const chip = el('div', combat, undefined, `chip glass ${kind}`);
+    icon(chip, TIMER_ICONS[kind]);
+    chip.title = kind === 'treedent' ? 'Treedent' : kind === 'shield' ? 'Fromage blanc shield' : 'Koke Zero';
+    timerNodes.set(kind, { chip, num: el('span', chip, undefined, 'num') });
+    chip.hidden = true;
+  }
 
   const slots = el('div', root, 'hud-slots');
   const slotNodes: { tile: HTMLElement; icon: HTMLElement; label: HTMLElement }[] = [];
@@ -381,6 +409,15 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
         flag(node.tile, 'empty', slot.kind === null);
         flag(node.tile, 'selected', slot.selected);
       });
+
+      toggle(ammoChip, model.combat.ammo === null);
+      if (model.combat.ammo !== null) {
+        text(ammoNum, String(model.combat.ammo));
+        flag(ammoChip, 'low', model.combat.ammo <= 3);
+      }
+      const running = new Set(model.combat.timers.map((timer) => timer.kind));
+      for (const [kind, node] of timerNodes) toggle(node.chip, !running.has(kind as 'treedent'));
+      for (const timer of model.combat.timers) text(timerNodes.get(timer.kind)!.num, timer.text);
 
       renderPrompt(model.prompt ?? '');
       toggle(hold, model.hold === null);

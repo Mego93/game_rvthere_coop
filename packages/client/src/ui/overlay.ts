@@ -10,6 +10,7 @@ import {
   stars,
   stopUsable,
   useTarget,
+  isSelfItem,
   vec3,
   type CableSnapshot,
   type InteractAction,
@@ -162,7 +163,8 @@ export function useHint({ lobby, config, vehicle, players, localId, aim }: Overl
   if (!target) return null;
   if (selected === 'jerrycan') return 'Hold F to refuel';
   if (selected === 'toolbox') return 'Hold F to repair';
-  if (selected === 'tajine') return 'Hold F to eat';
+  if (selected === 'kokeZero') return 'Hold F to drink';
+  if (isSelfItem(selected ?? null)) return 'Hold F to eat';
   if (selected !== 'healthKit') return null;
   const mate = context.players.find((other) => other.id === target);
   if (!mate) return 'Hold F to heal yourself';

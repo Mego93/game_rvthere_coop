@@ -1,23 +1,25 @@
+import { castShot } from './shots';
 import { createRouteIndex, type RouteIndex } from './routeAlong';
 import { routeFrame } from './corridor';
 import { groundHeightBelow } from './groundProbe';
 import { createItemDirector, markDropped, mixSeed, planItemDrops, rearmItems, stepItemDirector, unfireItem, type ItemDropEvent } from './itemDrops';
 import { createAnimals, type Animals } from './animals';
+import { createEnemies, planEnemies, type Enemies, type EnemyEvent, type EnemySnapshot } from './enemies';
 import { hashSeed, planAmbient, type AmbientEvent, type AnimalSnapshot } from './ambient';
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DEFAULT_WEATHER, TAJINE_SECONDS, WEATHER_SEED_SALT, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather, type WeatherSetting, type ShopItem } from './constants';
+import { DEFAULT_WEATHER, ENEMY_CITY_SHARE, ENEMY_KNIFE_DAMAGE, ENEMY_SEED_SALT, ENEMY_VEHICLE_DAMAGE, GUN_DAMAGE, KOKE_MULTIPLIER, AMMO_BOX_ROUNDS, AMMO_MAX, GUN_COOLDOWN, GUN_RANGE, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, SHIELD_SECONDS, TAJINE_HEAL, WEATHER_SEED_SALT, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather, type WeatherSetting, type ShopItem } from './constants';
 import { weatherAt, weatherSchedule } from './weather';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
-import { holdTargetValid, pressTarget, stepHold, stepOperateHold, type UseContext } from './holds';
+import { holdTargetValid, isSelfItem, pressTarget, stepHold, stepOperateHold, type UseContext } from './holds';
 import { settleQueries } from './settle';
 import { AXIS_Y, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
 import { inShopRange, interactCandidates, resolveInteract, splitCandidates } from './interact';
 import type { ItemKind } from './constants';
-import { aimRay, createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
+import { aimRay, clearPowerUps, createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
 import { elapsedAfter, finalTime, reachedFinish, vehicleLost } from './rules';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
@@ -44,6 +46,12 @@ export interface WorldOptions {
   itemSeed?: number;
   // Tests only: replaces the drop plan, whatever the course.
   itemPlan?: readonly ItemDropEvent[];
+  // Knife enemies on foot along the route; off by default.
+  enemies?: boolean;
+  // Seed of the enemy plan and their slips; defaults to the item seed (the run's) mixed with a salt.
+  enemySeed?: number;
+  // Tests only: replaces the plan the enemy director follows.
+  enemyPlan?: readonly EnemyEvent[];
 }
 
 export interface WorldEvent {
@@ -51,6 +59,11 @@ export interface WorldEvent {
   tick: number;
   playerId?: string;
   pos?: Vec3;
+  // 'eat': the item eaten or drunk.
+  item?: ItemKind;
+  // 'shot': where the ray ended (`pos` is the eye it left from) and whether it hit an enemy.
+  to?: Vec3;
+  hit?: boolean;
 }
 
 export interface WorldSnapshot {
@@ -78,6 +91,8 @@ export interface WorldSnapshot {
   assisted: boolean;
   // Ambient animals alive; absent when there are none.
   animals?: AnimalSnapshot[];
+  // Enemies alive (or lying for a moment); absent when there are none.
+  enemies?: EnemySnapshot[];
   // The weather in force; present only when the world's setting is random.
   weather?: Weather;
 }
@@ -177,7 +192,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const players = createPlayers(rapier, physics, vehicle, props, course);
   const winch = createWinch(rapier, physics, vehicle, props, course);
   const bounded = course.corridor !== undefined;
-  const routeIndex: RouteIndex | null = options.ambient === true || options.itemDrops === true || bounded ? createRouteIndex(course.route) : null;
+  const routeIndex: RouteIndex | null = options.ambient === true || options.itemDrops === true || options.enemies === true || bounded ? createRouteIndex(course.route) : null;
   // Out-of-bounds checks: the last nearest segment of each player and of the vehicle, as hints.
   const boundsHints = new Map<string, number>();
   let vehicleHint: number | undefined;
@@ -187,6 +202,16 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     const list = animals?.snapshot();
     return list ? { animals: list } : {};
   };
+  const enemySeed = mixSeed(options.enemySeed ?? options.itemSeed ?? mixSeed(hashSeed(course.id), 1), ENEMY_SEED_SALT);
+  const enemyPlan: readonly EnemyEvent[] | undefined =
+    options.enemies === true ? (options.enemyPlan ?? planEnemies(enemySeed, routeIndex!.length, course.id === 'marrakech' ? routeIndex!.length * (1 - ENEMY_CITY_SHARE) : null)) : undefined;
+  const enemies: Enemies | null = enemyPlan ? createEnemies(rapier, physics, course.route, enemyPlan, enemySeed, statics.surfaceOf) : null;
+  const enemyField = (): { enemies?: EnemySnapshot[] } => {
+    const list = enemies?.snapshot();
+    return list ? { enemies: list } : {};
+  };
+  // Knife damage found by the enemies, applied with the other damage of the tick.
+  let knifeDamage: PendingDamage[] = [];
   const dropPlan: readonly ItemDropEvent[] | undefined =
     options.itemDrops !== true
       ? undefined
@@ -221,7 +246,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   let assisted = false;
   // Players whose item uses are free (the admin's infinite toggle).
   const infinite = new Set<string>();
-  const held = new Map<string, { health: number; downed: boolean; inventory: (ItemKind | null)[] }>();
+  const held = new Map<string, { health: number; downed: boolean; inventory: (ItemKind | null)[]; ammo: number }>();
   let debugDamage: PendingDamage[] = [];
   // Each player's reset hold, private to the world; `spent` waits for a release before it can count again.
   const resetHolds = new Map<string, { ticks: number; spent: boolean }>();
@@ -463,9 +488,15 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       player.hold = hold;
       if (completed === null) continue;
       if (!infinite.has(player.id)) player.inventory[completed.slot] = null;
-      if (completed.item === 'tajine') {
-        player.tajine = TAJINE_SECONDS;
-        events.push({ kind: 'eat', tick: tick + 1, playerId: player.id, pos: { ...player.pos } });
+      if (isSelfItem(completed.item)) {
+        if (completed.item === 'treedent') player.treedent = TREEDENT_SECONDS;
+        else if (completed.item === 'fromageBlanc') {
+          player.shield = SHIELD_HP;
+          player.shieldTime = SHIELD_SECONDS;
+        } else if (completed.item === 'kokeZero') player.koke = KOKE_SECONDS;
+        else if (completed.item === 'ammo') player.ammo = Math.min(AMMO_MAX, player.ammo + AMMO_BOX_ROUNDS);
+        else player.health = Math.min(PLAYER_MAX_HEALTH, player.health + TAJINE_HEAL);
+        events.push({ kind: 'eat', tick: tick + 1, playerId: player.id, pos: { ...player.pos }, item: completed.item });
         continue;
       }
       if (completed.targetId === 'vehicle') {
@@ -487,6 +518,35 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         patient.health = Math.min(PLAYER_MAX_HEALTH, patient.health + HEALTH_KIT_HEAL);
         if (patient.downed === null) events.push({ kind: 'use', tick: tick + 1, playerId: player.id, pos: { ...patient.pos } });
       }
+    }
+  };
+
+  // Whether a point lies inside the chassis box; a shot from inside the vehicle does not stop at its own walls.
+  const insideChassis = (point: Vec3): boolean => {
+    const centre = vehicle.body.translation();
+    const q = vehicle.body.rotation();
+    const local = rotate({ ...q, x: -q.x, y: -q.y, z: -q.z }, vec3(point.x - centre.x, point.y - centre.y, point.z - centre.z));
+    const half = vehicleConfig.halfExtents;
+    return Math.abs(local.x) <= half.x && Math.abs(local.y) <= half.y && Math.abs(local.z) <= half.z;
+  };
+
+  // Rule G1 to G3: a held fire button shoots once per GUN_COOLDOWN, on foot with nothing carried, from the eye along this tick's aim.
+  const stepGuns = (onFoot: ReadonlyMap<string, StepInputs>, events: WorldEvent[]) => {
+    for (const player of players.all()) {
+      player.gunCooldown = Math.max(0, player.gunCooldown - TICK_DT);
+      const fields = onFoot.get(player.id)?.fields;
+      if (fields?.fire !== true || !player.gun || player.gunCooldown > 1e-9) continue;
+      if (player.seat !== null || player.downed !== null || player.respawnIn !== null || player.flying) continue;
+      if (player.hands !== null && player.hands !== 'hook') continue;
+      const free = infinite.has(player.id);
+      if (!free && player.ammo <= 0) continue;
+      if (!free) player.ammo -= 1;
+      player.gunCooldown = GUN_COOLDOWN;
+      const { origin, dir } = aimRay(player.pos, fields.yaw, fields.pitch, player.crouched);
+      const shot = castShot(rapier, physics, origin, dir, GUN_RANGE, insideChassis(origin) ? vehicle.chassisHandle : null);
+      const to = vec3(origin.x + dir.x * shot.distance, origin.y + dir.y * shot.distance, origin.z + dir.z * shot.distance);
+      const hit = shot.handle !== null && enemies !== null && enemies.damage(shot.handle, GUN_DAMAGE * (player.koke > 0 ? KOKE_MULTIPLIER : 1));
+      events.push({ kind: 'shot', tick: tick + 1, playerId: player.id, pos: origin, to, hit });
     }
   };
 
@@ -536,6 +596,15 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   // Rule H2.
   const hurt = (player: PlayerState, amount: number, events: WorldEvent[], justDowned: Set<string>) => {
     if (!(amount > 0) || player.seat !== null || player.downed !== null || player.respawnIn !== null) return;
+    // The fromage blanc shield takes damage before health.
+    const absorbed = Math.min(player.shield, amount);
+    player.shield -= absorbed;
+    if (player.shield <= 1e-9) {
+      player.shield = 0;
+      player.shieldTime = 0;
+    }
+    amount -= absorbed;
+    if (!(amount > 1e-9)) return;
     player.health = Math.max(0, player.health - amount);
     events.push({ kind: 'hurt', tick, playerId: player.id, pos: { ...player.pos } });
     if (player.health > 0) return;
@@ -627,9 +696,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const stepHealth = (events: WorldEvent[]) => {
     const justDowned = new Set<string>();
     // Hits before falls; the debug damage last.
-    const rank = { vehicle: 0, prop: 0, fall: 1, debug: 2 };
-    const pending = [...players.takeDamage(), ...debugDamage];
+    const rank = { vehicle: 0, prop: 0, knife: 0, fall: 1, debug: 2 };
+    const pending = [...players.takeDamage(), ...knifeDamage, ...debugDamage];
     debugDamage = [];
+    knifeDamage = [];
     for (const player of players.all()) {
       const own = pending.filter((entry) => entry.playerId === player.id).sort((a, b) => rank[a.source] - rank[b.source]);
       for (const entry of own) hurt(player, entry.amount, events, justDowned);
@@ -651,7 +721,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       if (player.respawnIn === null) {
         if (player.pos.y < course.killPlaneY) {
           player.respawnIn = PLAYER_KILL_RESPAWN_DELAY;
-          player.tajine = 0;
+          clearPowerUps(player);
         }
         continue;
       }
@@ -663,7 +733,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       players.setSeat(player.id, null, pos);
       player.health = PLAYER_REVIVE_HEALTH;
       player.downed = null;
-      player.tajine = 0;
+      clearPowerUps(player);
       player.hitCooldown.clear();
       if (!won) respawns += 1;
       events.push({ kind: 'respawn', tick, playerId: player.id, pos });
@@ -715,7 +785,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       players.setHands(player.id, null);
       player.hold = null;
       player.respawnIn = null;
-      player.tajine = 0;
+      clearPowerUps(player);
     }
     players.takePushIntents();
     for (const player of players.all()) players.setSeat(player.id, null);
@@ -785,6 +855,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       }
     }
     animals?.rearm(vehicle.body.translation());
+    enemies?.rearm(vehicle.body.translation());
+    knifeDamage = [];
     rearmDrops();
     restarts += 1;
     historyNext = 0;
@@ -860,6 +932,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       resolveInteracts(onFoot, events);
       for (const player of players.all()) if (player.seat === null && onFoot.get(player.id)?.pressed.drop) dropSelected(player);
       stepHolds(onFoot, events);
+      stepGuns(onFoot, events);
       const taut = winch.tautObstacle();
       applyPushes(taut);
       const cable = winch.applyForces(reelInput(onFoot));
@@ -868,8 +941,18 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       const controls = driver ? onFoot.get(driver.id)?.fields : undefined;
       stepReset(onFoot, controls?.moveY ?? 0);
       animals?.step(vehicle.body.translation());
+      if (enemies) {
+        const targets = players
+          .all()
+          .filter((player) => player.seat === null && player.downed === null && player.respawnIn === null && !player.flying)
+          .map((player) => ({ id: player.id, feet: player.pos }));
+        for (const stab of enemies.step(vehicle.body.translation(), targets)) {
+          knifeDamage.push({ playerId: stab.playerId, source: 'knife', amount: ENEMY_KNIFE_DAMAGE });
+          events.push({ kind: 'stab', tick: tick + 1, playerId: stab.playerId, pos: stab.pos });
+        }
+      }
       stepDrops();
-      const velocityBefore = animals ? { ...vehicle.body.linvel() } : null;
+      const velocityBefore = animals || enemies ? { ...vehicle.body.linvel() } : null;
       vehicle.step({
         throttle: controls?.moveY ?? 0,
         steer: controls?.moveX ?? 0,
@@ -880,6 +963,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       players.stepOnFoot(onFoot);
       const impactSpeed = vehicle.afterPhysics();
       if (impactSpeed > 0) events.push({ kind: 'impact', tick, pos: { ...vehicle.body.translation() } });
+      if (enemies && velocityBefore && !restartPending && vehicle.health() > 0) {
+        const knocked = enemies.knocks({ pos: vehicle.body.translation(), rot: vehicle.body.rotation(), half: vehicleConfig.halfExtents }, Math.hypot(velocityBefore.x, velocityBefore.z));
+        if (knocked > 0) vehicle.damage(ENEMY_VEHICLE_DAMAGE * knocked, ANIMAL_HEALTH_FLOOR);
+      }
       if (animals && velocityBefore && !restartPending && vehicle.health() > 0) {
         for (const hit of animals.hits({ pos: vehicle.body.translation(), rot: vehicle.body.rotation(), half: vehicleConfig.halfExtents }, velocityBefore)) {
           vehicle.damage(ANIMAL_HIT_DAMAGE, ANIMAL_HEALTH_FLOOR);
@@ -931,7 +1018,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         health: Math.floor(player.health),
         downed: player.downed,
         ...(player.flying ? { flying: true as const } : {}),
-        ...(player.tajine > 1e-9 ? { tajine: Math.min(TAJINE_SECONDS, Math.ceil(player.tajine * 10 - 1e-9) / 10) } : {}),
+        ...(player.gun ? { gun: true as const, ammo: player.ammo } : {}),
+        ...(player.treedent > 1e-9 ? { treedent: Math.min(TREEDENT_SECONDS, Math.ceil(player.treedent * 10 - 1e-9) / 10) } : {}),
+        ...(player.koke > 1e-9 ? { koke: Math.min(KOKE_SECONDS, Math.ceil(player.koke * 10 - 1e-9) / 10) } : {}),
+        ...(player.shield > 1e-9 ? { shield: Math.min(SHIELD_HP, Math.ceil(player.shield - 1e-9)) } : {}),
         ...(player.slideTicks > 0 ? { stance: 'slide' as const } : player.crouched ? { stance: 'crouch' as const } : {}),
         ...(player.slideTicks > 0 || player.slideCooldown > 0 || player.launch > 0
           ? {
@@ -961,6 +1051,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       coinsTotal: course.coins.length,
       assisted,
       ...animalField(),
+      ...enemyField(),
       ...(schedule ? { weather } : {}),
     }),
     restartCheckpoint() {
@@ -986,6 +1077,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       const state = players.add(id);
       if (!entry) return;
       players.restoreInventory(id, entry.inventory);
+      state.ammo = entry.ammo;
       if (!entry.downed) {
         state.health = entry.health;
         return;
@@ -1000,7 +1092,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       // A held id has no character; leaving it for good frees what it held.
       if (!leaving && mode === 'leave') forgetHeld(id);
       if (leaving) {
-        if (mode === 'hold') held.set(id, { health: leaving.health, downed: leaving.downed !== null, inventory: [...leaving.inventory] });
+        if (mode === 'hold') held.set(id, { health: leaving.health, downed: leaving.downed !== null, inventory: [...leaving.inventory], ammo: leaving.ammo });
         else dropInventory(id, leaving.inventory);
       }
       players.remove(id);
@@ -1046,6 +1138,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         }
       });
       animals?.rearm(vehicle.body.translation());
+      enemies?.rearm(vehicle.body.translation());
+      knifeDamage = [];
       rearmDrops();
       recordCheckpoint(next);
       const centre = vehicle.body.translation();

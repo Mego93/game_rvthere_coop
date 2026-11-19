@@ -7,6 +7,7 @@ export * from './animals';
 export * from './checkpoints';
 export * from './coins';
 export * from './corridor';
+export type { EnemySnapshot, EnemyState } from './enemies';
 export * from './course';
 export * from './courses/build';
 export * from './courses/index';

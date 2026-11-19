@@ -9,3 +9,5 @@ export const GROUP_ANIMAL = 0x0020;
 export function groups(membership: number, filter: number): number {
   return ((membership << 16) | filter) >>> 0;
 }
+// Enemies touch nothing in the simulation; shots and the vehicle hit check find them with queries.
+export const GROUP_ENEMY = 0x0040;
