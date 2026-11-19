@@ -7,3 +7,7 @@ export const ICON_HEALTHKIT = `<svg viewBox="0 0 24 24" fill="currentColor"><pat
 export const ICON_TAJINE = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 3h2v2l5.2 9H20a1 1 0 0 1 1 1v1a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-1a1 1 0 0 1 1-1h1.8L11 5z"/></svg>`;
 export const ICON_COIN = `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg>`;
 export const ICON_SEAT = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 3h6a2 2 0 0 1 2 2v7h3a2 2 0 0 1 2 2v4h-2v3h-2v-3H8v3H6v-3H4v-4a2 2 0 0 1 2-2h1z"/></svg>`;
+export const ICON_AMMO = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 9a2 2 0 0 1 2-2 2 2 0 0 1 2 2v1H5zM5 11h4v10H5zM10 8a2 2 0 0 1 2-2 2 2 0 0 1 2 2v2h-4zM10 11h4v10h-4zM15 9a2 2 0 0 1 2-2 2 2 0 0 1 2 2v1h-4zM15 11h4v10h-4z"/></svg>`;
+export const ICON_GUM = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9h14l4 3v4H3zM5 11v3h11v-3z"/></svg>`;
+export const ICON_SHIELD = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/></svg>`;
+export const ICON_KOKE = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3h8l1 3v14a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V6zM8 9v6h8V9z"/></svg>`;

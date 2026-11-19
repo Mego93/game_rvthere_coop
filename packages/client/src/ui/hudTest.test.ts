@@ -30,7 +30,7 @@ describe('?hudtest', () => {
 
   it('shows every touch button on foot, and the driving set when driving', () => {
     const foot = sampleTouchView(false);
-    expect([foot.useVisible, foot.reelVisible, foot.resetVisible, foot.sprintVisible]).toEqual([true, true, true, true]);
+    expect([foot.useVisible, foot.reelVisible, foot.resetVisible, foot.sprintVisible, foot.fireVisible]).toEqual([true, true, true, true, true]);
     expect(sampleTouchView(true).seated).toBe(true);
   });
 });

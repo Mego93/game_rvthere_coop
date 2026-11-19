@@ -3,6 +3,7 @@ import { clock, interactHint, useHint, type OverlayData } from '../overlay';
 import { bearingTo, compassLabel, compassTarget, edgeSide, headingOffset, markerPosition } from './compass';
 import { LOW_FRACTION, MARKER_HEIGHT } from './constants';
 import { gearbox, speedKmh } from './dashboard';
+import { combatView, type CombatView } from './combatView';
 import { ITEM_LABELS } from './itemLabels';
 import { seatLabel } from './seatLabels';
 import { touchWording } from './touchWording';
@@ -18,6 +19,8 @@ export interface HudModel {
   // Shown while the local player sits in the driver's seat.
   dashboard: { kmh: number; gear: number; rpm: number } | null;
   slots: { kind: string | null; label: string | null; selected: boolean }[];
+  // The ammo count and the power-up timers of the local player.
+  combat: CombatView;
   prompt: string | null;
   canReset: boolean;
   hold: number | null;
@@ -126,6 +129,7 @@ export function buildHudModel(data: OverlayData, course: { checkpoints: readonly
     ownSeat: local && local.seat !== null ? { id: local.seat, label: seatLabel(local.seat) ?? local.seat } : null,
     dashboard,
     slots,
+    combat: combatView(local),
     prompt,
     canReset,
     hold: local?.hold?.progress ?? null,

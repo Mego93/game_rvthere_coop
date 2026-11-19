@@ -24,7 +24,7 @@ test('E4: every row of the table maps to its sound', () => {
     scooterHit: 'impact',
     outOfBounds: null,
     eat: 'use',
-    shot: null,
+    shot: 'impact',
     stab: null,
   };
   for (const kind of EVENT_KINDS) expect(soundFor(event(kind, { pos: POS, playerId: 'other' }), 'me')?.kind ?? null, kind).toBe(expected[kind]);
@@ -35,6 +35,11 @@ test('E4: a remote event with a position is positional; a local one or one witho
   expect(soundFor(event('hurt', { pos: POS, playerId: 'me' }), 'me')).toEqual({ kind: 'hurt', positional: false });
   expect(soundFor(event('impact', { pos: POS }), 'me')).toEqual({ kind: 'impact', positional: true });
   expect(soundFor(event('hurt', { playerId: 'other' }), 'me')).toEqual({ kind: 'hurt', positional: false });
+});
+
+test('step 39: a shot reuses the impact sound, quiet, at the place it was fired for everyone but the shooter', () => {
+  expect(soundFor(event('shot', { pos: POS, playerId: 'other' }), 'me')).toEqual({ kind: 'impact', positional: true, volume: 0.4 });
+  expect(soundFor(event('shot', { pos: POS, playerId: 'me' }), 'me')).toEqual({ kind: 'impact', positional: false, volume: 0.4 });
 });
 
 test('E4: coin and purchase are never positional', () => {

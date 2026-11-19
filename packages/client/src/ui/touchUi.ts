@@ -29,6 +29,7 @@ const STYLE = `
 #touch-ui button.on { border-color: var(--glass-accent); box-shadow: 0 0 0 2px var(--glass-accent); }
 #touch-actions { position: absolute; right: calc(12px + var(--safe-right)); bottom: calc(12px + var(--safe-bottom)); display: grid; grid-template-columns: repeat(2, 64px); gap: 10px; }
 #touch-actions button { width: 64px; height: 64px; }
+#touch-actions #touch-fire { width: 56px; height: 56px; grid-column: 2; justify-self: center; align-self: center; }
 #touch-ui #touch-menu, #touch-ui #touch-chat, #touch-ui #touch-emote { position: absolute; top: calc(8px + var(--safe-top)); width: 44px; height: 44px; border-radius: 12px; font-size: 11px; }
 #touch-menu { right: calc(12px + var(--safe-right)); }
 #touch-chat { right: calc(12px + 52px + var(--safe-right)); }
@@ -143,11 +144,13 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
   const reset = make('touch-reset', 'Reset', (down) => buttonHandler('reset', down));
   const sprint = make('touch-sprint', 'Sprint', (down) => down && setSprint(!sprintOn));
   sprint.setAttribute('aria-pressed', 'false');
+  const fire = make('touch-fire', 'Fire', (down) => buttonHandler('fire', down));
+  fire.hidden = true;
   use.hidden = true;
   reset.hidden = true;
   reelIn.hidden = true;
   reelOut.hidden = true;
-  actions.append(sprint, reset, reelIn, reelOut, use, interact, jump);
+  actions.append(sprint, reset, reelIn, reelOut, use, interact, jump, fire);
 
   const menu = make('touch-menu', 'Menu', (down) => down && menuHandler());
 
@@ -217,6 +220,7 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
         hide(reelOut, !view.reelVisible);
       }
       if (changed.has('resetVisible')) hide(reset, !view.resetVisible);
+      if (changed.has('fireVisible')) hide(fire, !view.fireVisible);
       if (changed.has('sprintVisible')) {
         hide(sprint, !view.sprintVisible);
         if (!view.sprintVisible) setSprint(false);

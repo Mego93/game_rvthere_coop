@@ -3,9 +3,9 @@ import * as icons from './icons';
 
 describe('icons', () => {
   const entries = Object.entries(icons);
-  it('T7 exports the nine icons', () => {
+  it('T7 exports the thirteen icons', () => {
     expect(entries.map(([k]) => k).sort()).toEqual(
-      ['ICON_COIN', 'ICON_FUEL', 'ICON_HEALTHKIT', 'ICON_HEART', 'ICON_HULL', 'ICON_JERRYCAN', 'ICON_SEAT', 'ICON_TAJINE', 'ICON_TOOLBOX'],
+      ['ICON_AMMO', 'ICON_COIN', 'ICON_FUEL', 'ICON_GUM', 'ICON_HEALTHKIT', 'ICON_HEART', 'ICON_HULL', 'ICON_JERRYCAN', 'ICON_KOKE', 'ICON_SEAT', 'ICON_SHIELD', 'ICON_TAJINE', 'ICON_TOOLBOX'],
     );
   });
   for (const [name, svg] of entries) {

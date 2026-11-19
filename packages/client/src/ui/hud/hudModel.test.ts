@@ -176,6 +176,14 @@ describe('timer, wallet, health (H8, H9)', () => {
   });
 });
 
+describe('combat (step 39)', () => {
+  test('carries the local ammo count and power-up timers, and nothing without a local player', () => {
+    const model = build({ players: [player('p1', 0, 0, { gun: true, ammo: 9, treedent: 3.2, koke: 10 })] });
+    expect(model.combat).toEqual({ ammo: 9, timers: [{ kind: 'treedent', label: 'Gum', text: '4s' }, { kind: 'koke', label: 'Koke', text: '10s' }] });
+    expect(build({ players: [] }).combat).toEqual({ ammo: null, timers: [] });
+  });
+});
+
 describe('own seat (S1)', () => {
   test('is null on foot and without a snapshot', () => {
     expect(build().ownSeat).toBeNull();

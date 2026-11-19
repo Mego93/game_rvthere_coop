@@ -28,7 +28,7 @@ const view = (local: Partial<PlayerSnapshot>, v: VehicleState | null = vehicle, 
   touchView({ config: rv, vehicle: v, players: [{ ...base, ...local }], localId: 'p1', aim: { yaw: 0, pitch: 0 }, cable: c });
 
 test('with no local player or no vehicle everything is off', () => {
-  const off = { seated: false, useVisible: false, reelVisible: false, resetVisible: false, sprintVisible: false, slots: [null, null, null], selected: 0 };
+  const off = { seated: false, useVisible: false, reelVisible: false, resetVisible: false, sprintVisible: false, fireVisible: false, slots: [null, null, null], selected: 0 };
   expect(touchView({ config: rv, vehicle, players: [base], localId: 'nobody', aim: { yaw: 0, pitch: 0 }, cable: null })).toEqual(off);
   expect(view({}, null)).toEqual(off);
 });
@@ -102,4 +102,13 @@ test('B13: Sprint shows on foot and hides when seated or downed', () => {
   expect(view({}).sprintVisible).toBe(true);
   expect(view({ seat: 'driver' }).sprintVisible).toBe(false);
   expect(view({ downed: 10 }).sprintVisible).toBe(false);
+});
+
+test('step 39: Fire shows on foot with a gun and hides when seated, downed, carrying a prop or without a gun', () => {
+  expect(view({ gun: true, ammo: 12 }).fireVisible).toBe(true);
+  expect(view({ gun: true, hands: 'hook' }).fireVisible).toBe(true);
+  expect(view({}).fireVisible).toBe(false);
+  expect(view({ gun: true, seat: 'driver' }).fireVisible).toBe(false);
+  expect(view({ gun: true, downed: 10 }).fireVisible).toBe(false);
+  expect(view({ gun: true, hands: 'crate-1' }).fireVisible).toBe(false);
 });

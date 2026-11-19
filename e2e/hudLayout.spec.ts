@@ -5,7 +5,7 @@ import { tutorialDone } from './tutorialDone';
 const INSETS = { left: 47, right: 47, bottom: 21 };
 
 // The prompt's text and its hold bar are measured as two boxes; the prompt itself wraps both.
-const COMMON = ['hud-compass', 'hud-minimap', 'hud-vehicle', 'hud-health', 'hud-dashboard', 'hud-prompt-text', 'hud-prompt-hold', 'hud-seat-toast', 'hud-downed', 'chat-toasts'];
+const COMMON = ['hud-compass', 'hud-minimap', 'hud-vehicle', 'hud-health', 'hud-dashboard', 'hud-prompt-text', 'hud-prompt-hold', 'hud-seat-toast', 'hud-downed', 'chat-toasts', 'hud-combat'];
 const DESKTOP = [...COMMON, 'hud-slots'];
 const TOUCH = [...COMMON, 'touch-menu', 'touch-chat', 'touch-emote', 'touch-view', 'touch-actions', 'touch-slots'];
 
@@ -90,6 +90,16 @@ test.describe('HUD layout (V8)', () => {
           expect(by('chat-toasts').w).toBeLessThanOrEqual(size.width * 0.4 + 0.5);
           // The dashboard sits at the left under the chat toasts.
           expect(by('hud-dashboard').y).toBeGreaterThanOrEqual(by('chat-toasts').y + by('chat-toasts').h);
+          // Step 39: on foot the Fire button is a 56 px target at the bottom right of the action column, and Drive hides it.
+          const fire = (await measure(page, ['touch-fire']))[0]!;
+          if (mode === 'hudtest') {
+            expect(fire.w).toBe(56);
+            expect(fire.h).toBe(56);
+            expect(fire.x).toBeGreaterThanOrEqual(by('touch-actions').x + 4);
+            expect(fire.x + fire.w).toBeLessThanOrEqual(by('touch-actions').x + by('touch-actions').w + 0.5);
+            expect(fire.y + fire.h).toBeGreaterThan(by('touch-actions').y + by('touch-actions').h - 12);
+            expect(by('hud-combat').x + by('hud-combat').w).toBeLessThanOrEqual(by('touch-slots').x + 0.5);
+          } else expect(fire.w).toBe(0);
           // Smoke B13: the action column sits fully below the Menu button.
           expect(by('touch-actions').y).toBeGreaterThanOrEqual(by('touch-menu').y + by('touch-menu').h);
         } else {

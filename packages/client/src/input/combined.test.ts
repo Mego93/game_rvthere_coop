@@ -24,3 +24,12 @@ test('dispose stops both', () => {
   source.dispose();
   expect(stopped.sort()).toEqual(['keyboard', 'mouse']);
 });
+
+test('step 39: fire is added only while the mouse fires, and a mouse without fire adds nothing', () => {
+  let firing = false;
+  const source = createInputSource({ sample: () => NEUTRAL_INPUT, dispose() {} }, { yaw: () => 0, pitch: () => 0, fire: () => firing, dispose() {} });
+  expect('fire' in source.sample()).toBe(false);
+  firing = true;
+  expect(source.sample().fire).toBe(true);
+  expect('fire' in createInputSource({ sample: () => NEUTRAL_INPUT, dispose() {} }, { yaw: () => 0, pitch: () => 0, dispose() {} }).sample()).toBe(false);
+});

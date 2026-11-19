@@ -41,7 +41,7 @@ describe('theme tokens', () => {
     const names = [
       '--sand', '--terracotta', '--terracotta-strong', '--saffron', '--majorelle', '--teal', '--ink', '--glass',
       '--danger', '--ok', '--warn', '--info', '--scrim', '--shadow',
-      '--item-jerrycan', '--item-toolbox', '--item-health', '--item-tajine', '--stop-fuel', '--stop-garage', '--finish-a', '--finish-b',
+      '--item-jerrycan', '--item-toolbox', '--item-health', '--item-tajine', '--item-treedent', '--item-fromage', '--item-koke', '--item-ammo', '--stop-fuel', '--stop-garage', '--finish-a', '--finish-b',
       '--portrait-skin', '--portrait-cap', '--portrait-fez',
       '--font-display', '--font-text',
     ];
