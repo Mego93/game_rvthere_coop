@@ -97,3 +97,11 @@ test('a prop or item whose model loaded is drawn as the model, otherwise as a bo
   expectFit(createPropMesh('toolbox'), ITEM_KINDS.toolbox.halfExtents, 'toolbox');
   expect(createPropMesh('toolbox').children).toHaveLength(1);
 });
+
+test('a scooter prop carries a seated rider above its box; other props do not', () => {
+  const scooter = createPropMesh('scooter');
+  const rider = scooter.getObjectByName('rider');
+  expect(rider).toBeDefined();
+  expect(rider!.children.length).toBeGreaterThanOrEqual(6);
+  expect(createPropMesh('crate').getObjectByName('rider')).toBeUndefined();
+});

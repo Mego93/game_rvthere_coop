@@ -426,6 +426,26 @@ test('L6: a non-admin restartCheckpoint, adminTool or next gets not_admin, and h
   expect(reasons(client)).toEqual([]);
 });
 
+test('step 38: fly and infinite are refused for a non-admin and in the lobby, and set assisted for the admin', () => {
+  const { host, guest, server } = setup(true);
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  client.send({ type: 'adminTool', tool: 'fly' });
+  client.send({ type: 'adminTool', tool: 'infinite' });
+  expect(reasons(client)).toEqual(['bad_phase', 'bad_phase']);
+  ready(badr);
+  startRun(client);
+  const world = server.debugWorld(room)!;
+  badr.send({ type: 'adminTool', tool: 'fly' });
+  badr.send({ type: 'adminTool', tool: 'infinite' });
+  expect(reasons(badr)).toEqual(['not_admin', 'not_admin']);
+  expect(world.status().assisted).toBe(false);
+  expect(world.snapshot().players.some((p) => p.flying)).toBe(false);
+  client.send({ type: 'adminTool', tool: 'fly' });
+  expect(reasons(client)).toEqual(['bad_phase', 'bad_phase']);
+  expect(world.status().assisted).toBe(true);
+});
+
 test('L6: restartCheckpoint, adminTool and next in the wrong phase get bad_phase', () => {
   const { host, guest, advance } = setup(true);
   const { client, room } = host();
@@ -857,6 +877,29 @@ test('L9: the admin hold expires and the longest-connected player becomes admin,
   wait(advance, 1, chadi, badrAgain);
   expect(chadi.last('lobby').adminId).toBe('p3');
   expect(badrAgain.last('lobby').adminId).toBe('p3');
+});
+
+test('step 38: when the admin role passes, the world ends fly and infinite for everyone else', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  ready(badr);
+  startRun(client);
+  advance(0.2);
+  const world = server.debugWorld(room)!;
+  const cleared: (string | null)[] = [];
+  const original = world.clearAdminModes.bind(world);
+  world.clearAdminModes = (keep) => {
+    cleared.push(keep);
+    original(keep);
+  };
+  client.send({ type: 'adminTool', tool: 'infinite' });
+  advance(0.2);
+  client.close();
+  wait(advance, HELD_SLOT_TIMEOUT - 1, badr);
+  expect(cleared).toEqual([]);
+  wait(advance, 1, badr);
+  expect(cleared).toEqual(['p2']);
 });
 
 test('L9: with nobody connected the role waits for the next joiner, who may be a held player rejoining', () => {

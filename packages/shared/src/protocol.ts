@@ -69,7 +69,7 @@ export type ClientMessage =
   | { type: 'chat'; text: string }
   | { type: 'emote'; emote: Emote };
 
-export const ADMIN_TOOLS = ['skipCheckpoint', 'refill'] as const;
+export const ADMIN_TOOLS = ['skipCheckpoint', 'refill', 'fly', 'infinite'] as const;
 export type AdminTool = (typeof ADMIN_TOOLS)[number];
 
 export interface RoomSettings {
@@ -152,6 +152,8 @@ export interface PlayerSnapshot {
   downed: number | null;
   // Seconds of the tajine left, rounded up to 0.1; absent at 0.
   tajine?: number;
+  // The admin's fly toggle is on; absent otherwise.
+  flying?: true;
   // Absent means standing; a stance this version does not know is read as standing.
   stance?: 'crouch' | 'slide';
   // Present only while a slide or its cooldown runs; timers are whole ticks.
@@ -391,6 +393,7 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   (value.downed === null || (finite(value.downed) && value.downed >= 0)) &&
   (value.hold === null || (isRecord(value.hold) && isText(value.hold.action) && isText(value.hold.targetId) && finite(value.hold.progress))) &&
   (value.tajine === undefined || (finite(value.tajine) && value.tajine > 0 && value.tajine <= TAJINE_SECONDS)) &&
+  (value.flying === undefined || value.flying === true) &&
   (value.stance === undefined || isText(value.stance)) &&
   (value.slide === undefined ||
     (isRecord(value.slide) &&

@@ -77,7 +77,7 @@ export const REPORT_INTERVAL = 10;
 // Seconds the server waits for a peer to answer a close frame before dropping the socket.
 export const SOCKET_CLOSE_TIMEOUT = 1;
 
-export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel' | 'mud';
+export type Surface = 'road' | 'sand' | 'riverbed' | 'gravel' | 'mud' | 'dirt';
 
 // grip multiplies the vehicle's tyre grip; rolling is resistance as a fraction of the vehicle's weight.
 export const SURFACES: Record<Surface, { grip: number; rolling: number }> = deepFreeze({
@@ -86,6 +86,7 @@ export const SURFACES: Record<Surface, { grip: number; rolling: number }> = deep
   riverbed: { grip: 0.7, rolling: 0.15 },
   sand: { grip: 0.6, rolling: 0.15 },
   mud: { grip: 0.55, rolling: 0.22 },
+  dirt: { grip: 0.7, rolling: 0.06 },
 });
 
 export const REFERENCE_SLOPES_DEG = deepFreeze({ gentle: 8, medium: 15, steep: 25 } as const);
@@ -480,9 +481,9 @@ export const ROCK_CLEAR = 40;
 export const ROADBLOCK_LATERAL = 3;
 
 // m of eligible route per ambient event, on average.
-export const AMBIENT_SPACING = 120;
+export const AMBIENT_SPACING = 80;
 // m, jitter either side of an event's slot centre; keeps events at least AMBIENT_MIN_GAP apart.
-export const AMBIENT_JITTER = 30;
+export const AMBIENT_JITTER = 10;
 // m, least distance between two events along the route; planAmbient keeps AMBIENT_SPACING - 2 * AMBIENT_JITTER >= this.
 export const AMBIENT_MIN_GAP = 60;
 // m of route at the start and the end with no events.
@@ -502,7 +503,7 @@ export const AMBIENT_DESPAWN_BEHIND = 80;
 // m beyond the road edge where an animal waits.
 export const AMBIENT_EDGE_OFFSET = 1.5;
 // Most animals of each kind alive at once.
-export const AMBIENT_MAX_GOATS = 6;
+export const AMBIENT_MAX_GOATS = 18;
 export const AMBIENT_MAX_SCOOTERS = 3;
 // m/s crossing speeds.
 export const AMBIENT_GOAT_SPEED = 2.5;
@@ -511,6 +512,13 @@ export const AMBIENT_SCOOTER_SPEED = 4.5;
 export const AMBIENT_GOAT_STOP_BEYOND = 2;
 // m beyond the road edge where a scooter is removed.
 export const AMBIENT_SCOOTER_LEAVE = 15;
+// Goats in a herd (inclusive), and the m between neighbours along the road.
+export const AMBIENT_HERD_MIN = 3;
+export const AMBIENT_HERD_MAX = 6;
+export const AMBIENT_HERD_SPACING = 1.2;
+// m/s of the admin's flight, horizontally and up or down.
+export const ADMIN_FLY_SPEED = 12;
+export const ADMIN_FLY_VERTICAL = 6;
 // m of eligible route per item drop, on average.
 export const ITEM_DROP_SPACING = 600;
 // m, jitter either side of a drop's slot centre.
@@ -599,3 +607,13 @@ export const OBSTACLE_WALL_LATERAL = 31.5;
 export const OBSTACLE_WALL_THICKNESS = 1;
 export const OBSTACLE_WALL_HEIGHT = 8;
 export const OBSTACLE_WALL_PIECE = 4;
+
+// m, a bump's height above the road and its length along it; bumps span the road's width.
+export const BUMP_HEIGHT = 0.12;
+export const BUMP_LENGTH = 1.6;
+// m of route between Souleyman's save points (the first checkpoint after each multiple of this).
+export const SOULEYMAN_SPACING = 2000;
+// The share of marrakech's road length that is dirt, and the shortest and longest dirt run in m.
+export const DIRT_SHARE = 0.35;
+export const DIRT_RUN_MIN = 150;
+export const DIRT_RUN_MAX = 600;

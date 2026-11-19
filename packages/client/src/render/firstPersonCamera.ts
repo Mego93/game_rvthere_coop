@@ -11,6 +11,20 @@ export function firstPersonEnabled(search: string, stored: string | null): boole
   return new URLSearchParams(search).has('fp') || stored === '1';
 }
 
+interface Store { getItem(key: string): string | null; setItem(key: string, value: string): void }
+const STORE_KEY = 'lodgy.fp';
+
+// The remembered view for the next run; storage may be blocked, so every access is guarded.
+export function loadFirstPerson(search: string, store: Store | null): boolean {
+  let stored: string | null = null;
+  try { stored = store?.getItem(STORE_KEY) ?? null; } catch { /* blocked storage: use the default */ }
+  return firstPersonEnabled(search, stored);
+}
+
+export function saveFirstPerson(on: boolean, store: Store | null): void {
+  try { store?.setItem(STORE_KEY, on ? '1' : '0'); } catch { /* blocked storage: the choice lasts this run only */ }
+}
+
 function aimDirection(yaw: number, pitch: number): Vec3 {
   const cosPitch = Math.cos(pitch);
   return vec3(-Math.sin(yaw) * cosPitch, Math.sin(pitch), -Math.cos(yaw) * cosPitch);

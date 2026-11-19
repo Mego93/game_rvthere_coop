@@ -3,11 +3,12 @@ import * as THREE from 'three';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { SOULEYMAN_GREETING } from '../ui/hud/eventToast';
 import { loadManifestModel } from './modelTestHelper';
-import { createSouleymanMesh, createSouleymanMeshes, SOULEYMAN_LATERAL, souleymanPlacements } from './souleyman';
+import { createSouleymanMesh, createSouleymanMeshes, isFigureCheckpointAt, SOULEYMAN_LATERAL, souleymanPlacements } from './souleyman';
 
 const box = { center: vec3(0, 0, 0), halfExtents: vec3(1, 1, 1), rot: { x: 0, y: 0, z: 0, w: 1 } };
-const checkpoint = (id: string, x: number, y: number, z: number, yaw: number): Checkpoint => ({
+const checkpoint = (id: string, x: number, y: number, z: number, yaw: number, figure = true): Checkpoint => ({
   id,
+  ...(figure ? { figure: true as const } : {}),
   trigger: box,
   spawn: { pos: vec3(x, y, z), rot: quatFromAxisAngle(AXIS_Y, yaw) },
 });
@@ -29,6 +30,21 @@ test('T1: the offset rotates with the yaw; one placement per checkpoint in order
   expect(placed[1]!.y).toBe(1);
   expect(placed[2]!.x).toBeCloseTo(-3 + SOULEYMAN_LATERAL * Math.cos(1));
   expect(placed[2]!.z).toBeCloseTo(7 - SOULEYMAN_LATERAL * Math.sin(1));
+});
+
+test('only figure checkpoints get a Souleyman; the look still follows the checkpoint index', () => {
+  const list = [checkpoint('a', 0, 0, 0, 0), checkpoint('b', 10, 0, -50, 0, false), checkpoint('c', 20, 0, -100, 0), checkpoint('d', 30, 0, -150, 0, false)];
+  const placed = souleymanPlacements(list);
+  expect(placed).toHaveLength(2);
+  expect(placed.map((p) => p.z)).toEqual([0, -100]);
+  expect(placed.map((p) => p.variant)).toEqual([0, 2]);
+});
+
+test('a checkpoint event greets only at the nearest figure checkpoint', () => {
+  const list = [checkpoint('a', 0, 0, 0, 0), checkpoint('b', 0, 0, -500, 0, false), checkpoint('c', 0, 0, -1000, 0)];
+  expect(isFigureCheckpointAt(list, { x: 1, z: -498 })).toBe(false);
+  expect(isFigureCheckpointAt(list, { x: -2, z: -1003 })).toBe(true);
+  expect(isFigureCheckpointAt(list, undefined)).toBe(true);
 });
 
 test('T2: the figure faces the road centre for two yaws', () => {

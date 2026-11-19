@@ -1,6 +1,6 @@
 import { AXIS_Y, IDENTITY, PLAYER_CROUCH_EYE_HEIGHT, PLAYER_EYE_HEIGHT, PLAYER_HEIGHT, VEHICLES, quatFromAxisAngle, vec3 } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { FIRST_PERSON_FOV, firstPersonEnabled, onFootPose, seatedPose } from './firstPersonCamera';
+import { FIRST_PERSON_FOV, firstPersonEnabled, loadFirstPerson, onFootPose, saveFirstPerson, seatedPose } from './firstPersonCamera';
 
 test('the flag is off by default and on for ?fp or lodgy.fp=1', () => {
   expect(firstPersonEnabled('', null)).toBe(false);
@@ -69,4 +69,21 @@ test('an unknown seat gives no pose', () => {
 
 test('the prototype field of view is 75', () => {
   expect(FIRST_PERSON_FOV).toBe(75);
+});
+
+test('stores the choice as 1 or 0 under lodgy.fp and reads it back', () => {
+  const data = new Map<string, string>();
+  const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) };
+  saveFirstPerson(true, store);
+  expect(data.get('lodgy.fp')).toBe('1');
+  expect(firstPersonEnabled('', store.getItem('lodgy.fp'))).toBe(true);
+  saveFirstPerson(false, store);
+  expect(firstPersonEnabled('', store.getItem('lodgy.fp'))).toBe(false);
+});
+
+test('survives storage that throws', () => {
+  const broken = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
+  expect(() => saveFirstPerson(true, broken)).not.toThrow();
+  expect(loadFirstPerson('', broken)).toBe(false);
+  expect(loadFirstPerson('?fp', broken)).toBe(true);
 });

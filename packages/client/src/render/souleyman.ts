@@ -155,18 +155,36 @@ export function createSouleymanMesh(variant = 0): THREE.Group {
   return modelFigure(variant) ?? proceduralFigure();
 }
 
-// Right of each checkpoint's spawn heading, facing back across the road. Reads only the spawn pose; the look is the checkpoint's index % SOULEYMAN_LOOKS.
+// Whether the checkpoint a `checkpoint` event came from (the nearest spawn to the event's position) has Souleyman: only those greet.
+export function isFigureCheckpointAt(checkpoints: readonly Checkpoint[], pos: { x: number; z: number } | undefined): boolean {
+  if (!pos) return true;
+  let best: Checkpoint | null = null;
+  let bestGap = Infinity;
+  for (const cp of checkpoints) {
+    const gap = Math.hypot(cp.spawn.pos.x - pos.x, cp.spawn.pos.z - pos.z);
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = cp;
+    }
+  }
+  return best?.figure === true;
+}
+
+// Right of each figure checkpoint's spawn heading, facing back across the road. Reads only the spawn pose; the look is the checkpoint's index % SOULEYMAN_LOOKS.
 export function souleymanPlacements(checkpoints: readonly Checkpoint[]): Required<Spot>[] {
   // Checkpoint spawns sit on the road centre line.
-  return checkpoints.map(({ spawn }, index) => {
+  return checkpoints.flatMap(({ spawn, figure }, index) => {
+    if (!figure) return [];
     const yaw = yawOf(spawn.rot);
-    return {
-      x: spawn.pos.x + Math.cos(yaw) * SOULEYMAN_LATERAL,
-      z: spawn.pos.z - Math.sin(yaw) * SOULEYMAN_LATERAL,
-      y: spawn.pos.y,
-      yaw: yaw + Math.PI / 2,
-      variant: index % SOULEYMAN_LOOKS,
-    };
+    return [
+      {
+        x: spawn.pos.x + Math.cos(yaw) * SOULEYMAN_LATERAL,
+        z: spawn.pos.z - Math.sin(yaw) * SOULEYMAN_LATERAL,
+        y: spawn.pos.y,
+        yaw: yaw + Math.PI / 2,
+        variant: index % SOULEYMAN_LOOKS,
+      },
+    ];
   });
 }
 

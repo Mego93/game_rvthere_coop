@@ -20,7 +20,7 @@ export function runMenuState(prev: RunMenuState, event: RunMenuEvent, shopOpen: 
 export const inputFrozen = (menuOpen: boolean, phase: string): boolean => menuOpen || phase !== 'playing';
 
 export function runMenuItems(isAdmin: boolean): string[] {
-  return isAdmin ? ['Resume', 'Restart from checkpoint', 'Restart course', 'Return to lobby', 'Skip checkpoint', 'Refill'] : ['Resume'];
+  return isAdmin ? ['Resume', 'Restart from checkpoint', 'Restart course', 'Return to lobby', 'Skip checkpoint', 'Refill', 'Toggle fly', 'Toggle infinite items'] : ['Resume'];
 }
 
 export interface RunMenuHandlers {
@@ -30,6 +30,8 @@ export interface RunMenuHandlers {
   onToLobby(): void;
   onSkip(): void;
   onRefill(): void;
+  onFly(): void;
+  onInfinite(): void;
   onKick(playerId: string): void;
   onMute(): void;
   onHelp(): void;
@@ -84,6 +86,8 @@ export function createRunMenu(doc: Document, handlers: RunMenuHandlers): RunMenu
     'Return to lobby': ['run-to-lobby', handlers.onToLobby],
     'Skip checkpoint': ['run-skip', handlers.onSkip],
     Refill: ['run-refill', handlers.onRefill],
+    'Toggle fly': ['run-fly', handlers.onFly],
+    'Toggle infinite items': ['run-infinite', handlers.onInfinite],
   };
 
   return {

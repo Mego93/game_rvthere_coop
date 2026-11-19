@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { KEY_BINDINGS } from '../input/keyboard';
 import { FINAL_RESTART_PENALTY } from '@lodgy/shared';
-import { CONTROLS, EXTRA_CODES, createControlsPanel, isHelpKey, keyLabel, keyLabels, missingFromControls } from './controls';
+import { CONTROLS, EXTRA_CODES, createControlsPanel, isHelpKey, isViewKey, keyLabel, keyLabels, missingFromControls } from './controls';
 
 const plain = { code: 'KeyH', repeat: false, ctrlKey: false, metaKey: false, altKey: false };
 
@@ -90,4 +90,16 @@ test('B13: Shift, C and slide are listed, and both Shift codes show as one cap',
   expect(keyLabel('ShiftRight')).toBe('Shift');
   expect(keyLabels(['ShiftLeft', 'ShiftRight'])).toEqual(['Shift']);
   expect(keyLabels(['ShiftLeft', 'KeyC'])).toEqual(['Shift', 'C']);
+});
+
+test('V toggles the camera view, is listed as an extra code, and ignores fields and modifiers', () => {
+  expect(EXTRA_CODES).toContain('KeyV');
+  expect(CONTROLS.find((entry) => entry.keys.includes('KeyV'))?.action).toMatch(/first|third|view/i);
+  const v = { ...plain, code: 'KeyV' };
+  expect(isViewKey(v, 'CANVAS')).toBe(true);
+  expect(isViewKey(v, null)).toBe(true);
+  expect(isViewKey(v, 'input')).toBe(false);
+  expect(isViewKey({ ...v, repeat: true }, null)).toBe(false);
+  expect(isViewKey({ ...v, ctrlKey: true }, null)).toBe(false);
+  expect(isViewKey(plain, null)).toBe(false);
 });

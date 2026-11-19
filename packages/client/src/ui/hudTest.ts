@@ -33,6 +33,7 @@ export const sampleModel = (touch: boolean): HudModel => ({
   wallet: 120,
   ownHealth: 55,
   ownSeat: { id: 'driver', label: 'Driver' },
+  dashboard: { kmh: 64, gear: 3, rpm: 4200 },
   slots: [
     { kind: 'jerrycan', label: 'Fuel', selected: true },
     { kind: 'toolbox', label: 'Tools', selected: false },
@@ -118,7 +119,7 @@ export function startHudTest(mode: HudTestMode, parts: HudTestParts): void {
   parts.chatPanel.setToasts(SAMPLE_CHAT);
 
   if (mode === 'menu') {
-    const menu = createRunMenu(doc, { onResume() {}, onRestartCheckpoint() {}, onRestartCourse() {}, onToLobby() {}, onSkip() {}, onRefill() {}, onKick() {}, onMute() {}, onHelp() {}, onTutorial() {} });
+    const menu = createRunMenu(doc, { onResume() {}, onRestartCheckpoint() {}, onRestartCourse() {}, onToLobby() {}, onSkip() {}, onRefill() {}, onFly() {}, onInfinite() {}, onKick() {}, onMute() {}, onHelp() {}, onTutorial() {} });
     menu.update(true, [{ playerId: 'p2', name: 'Badr' }]);
     menu.setOpen(true);
   } else if (mode === 'shop') {

@@ -501,6 +501,15 @@ Random weather: the lobby's weather setting may be `random`. The run then follow
 
 Every screen and overlay uses one theme (`packages/client/src/ui/theme.ts`): a Marrakech road-trip palette (sand, terracotta, saffron, majorelle blue, teal, ink, a dark glass for HUD panels) as CSS custom properties, Rubik for titles and Inter for text and numbers (self-hosted, latin only), rounded panels with a small zellige border, short ease-out motion that respects reduced motion, 44 px touch targets and safe-area insets. Text meets WCAG AA contrast (tested). The theme is injected into the page at build time, so nothing renders unstyled. HUD placements are fixed per size (desktop and phone landscape) and a browser test checks that no HUD element overlaps another at 667×375, 844×390, 1280×720 and 1920×1080. The course's terrain, corridor and decor start building while the lobby shows the course, so a run starts faster. The 3D name tags and the debug overlay keep their own look.
 
+### Round-3 changes (step 38)
+
+- Road: on `marrakech` about 37 % of the road is `dirt` (grip 0.7, rolling 0.06) in runs of 150–600 m, and straights carry low bumps (0.12 m high, 1.6 m long, 1 to 3 per straight; 74 in all) that the land under the road ignores. Souleyman stands only at "figure" checkpoints: the first and one about every 2 km (12 of 281); every checkpoint still saves.
+- Animals: goats cross in herds of 3 to 6 (each its own hit), events every 80 m, at most 18 goats alive.
+- Coins: collected only by a player on foot who is not riding on the vehicle (seated, downed, respawning, flying or standing on the vehicle never collect).
+- Admin mode (run menu, admin only, marks the run assisted): fly (no gravity, no collisions; jump climbs, crouch descends; ends when seated or downed; turning it off drops the player) and infinite items (an item use does not consume it).
+- View: V (or a touch View button) switches first and third person at any time; the choice is remembered on the device.
+- Lodgy: 0 to 100 km/h in about 10.3 s, top speed 33 m/s (about 120 km/h): drive force `min(engineForce, enginePower / speed)` with no fade below 80 % of top speed (the RV keeps today's curve); the steep slope still needs help from rest. The driver sees a dashboard (km/h, gear, rev bar); the body pitches, rolls and lifts with the motion and the camera shakes slightly at speed. Scooters carry riders.
+
 ### Protocol
 
 JSON over WebSocket.

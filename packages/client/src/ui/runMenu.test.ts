@@ -31,7 +31,7 @@ test('L19: the button opens the run menu even with the shop menu open (the calle
 
 test('L19: a non-admin sees only Resume; the admin sees the actions too', () => {
   expect(runMenuItems(false)).toEqual(['Resume']);
-  expect(runMenuItems(true)).toEqual(['Resume', 'Restart from checkpoint', 'Restart course', 'Return to lobby', 'Skip checkpoint', 'Refill']);
+  expect(runMenuItems(true)).toEqual(['Resume', 'Restart from checkpoint', 'Restart course', 'Return to lobby', 'Skip checkpoint', 'Refill', 'Toggle fly', 'Toggle infinite items']);
 });
 
 test('L19: input is neutral while either menu is open, with the slot kept from the last send', () => {

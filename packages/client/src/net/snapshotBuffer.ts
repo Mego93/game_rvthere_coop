@@ -76,6 +76,8 @@ function copyPlayer(p: PlayerSnapshot): PlayerSnapshot {
     hold: p.hold && { action: p.hold.action, targetId: p.hold.targetId, progress: p.hold.progress },
     health: p.health,
     downed: p.downed,
+    ...(p.tajine === undefined ? {} : { tajine: p.tajine }),
+    ...(p.flying ? { flying: true as const } : {}),
     ...(p.stance === undefined ? {} : { stance: p.stance }),
     ...(p.slide === undefined ? {} : { slide: { ...p.slide } }),
   };

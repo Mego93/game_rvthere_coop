@@ -296,6 +296,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       let longest: RoomPlayer | null = null;
       for (const candidate of players) if (candidate.connected && (!longest || candidate.connectedSince < longest.connectedSince)) longest = candidate;
       adminId = longest?.playerId ?? null;
+      world?.clearAdminModes(adminId);
     }
   };
 
@@ -462,7 +463,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       const refused = refusal(by, 'playing');
       if (refused) return refused;
       // A skip moves the whole crew, so the next snapshot is full for everyone.
-      if (world?.adminTool(tool) && tool === 'skipCheckpoint') restarted = true;
+      if (world?.adminTool(tool, by.playerId) && tool === 'skipCheckpoint') restarted = true;
       return null;
     },
     toLobby(by) {

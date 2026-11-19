@@ -7,6 +7,8 @@ export interface Box {
   rot: Quat;
   // A rock of a rocks hazard: a wall box the client draws as its boulder, not as a wall.
   rock?: true;
+  // A road bump: ground that sits on top of the road surface.
+  bump?: true;
 }
 
 export interface GroundBox extends Box {
@@ -35,6 +37,8 @@ export interface Checkpoint {
   trigger: Box;
   // A pose on the ground. The vehicle spawns above it by its ride height.
   spawn: Pose;
+  // Souleyman stands here and greets the crew; every checkpoint saves, only these have the figure.
+  figure?: true;
 }
 
 export interface BuiltCourse {
