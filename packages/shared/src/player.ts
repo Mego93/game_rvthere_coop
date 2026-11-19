@@ -73,6 +73,8 @@ export interface PlayerState {
   launch: number;
   // The admin's fly toggle; cleared while seated.
   flying: boolean;
+  // Set when flight ends so the fall that follows costs nothing; cleared on landing.
+  noFall: boolean;
   ground: GroundRef | null;
   seat: string | null;
   // The id of the prop being held, or 'hook' for the winch hook.
@@ -526,9 +528,10 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
       }
     }
     if (wasAirborne && state.grounded) {
-      const amount = damageAbove(Math.max(0, -moveVy), FALL_DAMAGE_SPEED, FALL_DAMAGE);
+      const amount = state.noFall ? 0 : damageAbove(Math.max(0, -moveVy), FALL_DAMAGE_SPEED, FALL_DAMAGE);
       if (amount > 0) damage.push({ playerId: state.id, source: 'fall', amount });
     }
+    if (state.grounded) state.noFall = false;
     if (state.downed === null) {
       // Rule J2: the ground, and contacts with an upward normal, are not hits.
       const contacts = new Map<string, Vec3>();
@@ -577,6 +580,7 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         slideDir: { x: 0, z: 0 },
         launch: 0,
         flying: false,
+        noFall: false,
         ground: null,
         seat: null,
         hands: null,

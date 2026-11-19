@@ -879,6 +879,29 @@ test('L9: the admin hold expires and the longest-connected player becomes admin,
   expect(badrAgain.last('lobby').adminId).toBe('p3');
 });
 
+test('step 38: when the admin role passes, the world ends fly and infinite for everyone else', () => {
+  const { host, guest, server, advance } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  ready(badr);
+  startRun(client);
+  advance(0.2);
+  const world = server.debugWorld(room)!;
+  const cleared: (string | null)[] = [];
+  const original = world.clearAdminModes.bind(world);
+  world.clearAdminModes = (keep) => {
+    cleared.push(keep);
+    original(keep);
+  };
+  client.send({ type: 'adminTool', tool: 'infinite' });
+  advance(0.2);
+  client.close();
+  wait(advance, HELD_SLOT_TIMEOUT - 1, badr);
+  expect(cleared).toEqual([]);
+  wait(advance, 1, badr);
+  expect(cleared).toEqual(['p2']);
+});
+
 test('L9: with nobody connected the role waits for the next joiner, who may be a held player rejoining', () => {
   const { host, guest, server, advance } = setup();
   const { client, room } = host();

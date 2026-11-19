@@ -160,3 +160,62 @@ describe('step 38: admin infinite items', () => {
     world.debugSetInventory('p1', ['jerrycan', null, null]);
   });
 });
+
+describe('step 38: flight end and admin change', () => {
+  const fallDamage = (turnOffAt: number) => {
+    const world = make();
+    world.adminTool('fly', 'p1');
+    run(world, 1);
+    world.teleportPlayer('p1', vec3(FAR.x, turnOffAt, FAR.z));
+    world.adminTool('fly', 'p1');
+    run(world, 4 * TICK_RATE);
+    return { health: me(world).health, grounded: me(world).grounded };
+  };
+
+  test('turning flight off high up costs no health on landing', () => {
+    const result = fallDamage(30);
+    expect(result.grounded).toBe(true);
+    expect(result.health).toBe(100);
+  });
+
+  test('an ordinary fall from the same height still hurts, so the exemption is only for flight', () => {
+    const world = make();
+    world.teleportPlayer('p1', vec3(FAR.x, 30, FAR.z));
+    run(world, 4 * TICK_RATE);
+    expect(me(world).health).toBeLessThan(100);
+  });
+
+  test('the exemption ends on landing: a later fall hurts again', () => {
+    const world = make();
+    world.adminTool('fly', 'p1');
+    run(world, 1);
+    world.teleportPlayer('p1', vec3(FAR.x, 10, FAR.z));
+    world.adminTool('fly', 'p1');
+    run(world, 3 * TICK_RATE);
+    expect(me(world).health).toBe(100);
+    world.teleportPlayer('p1', vec3(FAR.x, 30, FAR.z));
+    run(world, 4 * TICK_RATE);
+    expect(me(world).health).toBeLessThan(100);
+  });
+
+  test('clearAdminModes ends flight and infinite for everyone but the kept id', () => {
+    const world = make();
+    world.addPlayer('p2');
+    world.teleportPlayer('p2', vec3(FAR.x + 5, PLAYER_CONTROLLER_OFFSET, FAR.z));
+    world.adminTool('fly', 'p1');
+    world.adminTool('fly', 'p2');
+    world.adminTool('infinite', 'p1');
+    run(world, 1);
+    world.clearAdminModes('p2');
+    run(world, 1);
+    const flying = (id: string) => world.snapshot().players.find((p) => p.playerId === id)!.flying;
+    expect(flying('p1')).toBeUndefined();
+    expect(flying('p2')).toBe(true);
+    world.debugSetInventory('p1', ['jerrycan', null, null]);
+    // infinite for p1 is gone: toggling it now turns it on again (returns true) and the old state did not linger.
+    expect(world.adminTool('infinite', 'p1')).toBe(true);
+    world.clearAdminModes(null);
+    run(world, 1);
+    expect(flying('p2')).toBeUndefined();
+  });
+});

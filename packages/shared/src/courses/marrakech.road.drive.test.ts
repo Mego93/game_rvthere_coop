@@ -41,12 +41,12 @@ const spans = (() => {
   return { dirt, bumps };
 })();
 
-function drive(vehicleId: VehicleId, from: number, until: number): { reached: boolean; slowest: number; airborne: number; dirtWheels: number } {
+function drive(vehicleId: VehicleId, from: number, until: number, speed = START_SPEED): { reached: boolean; slowest: number; airborne: number; dirtWheels: number } {
   const c = frame.pointAt(from);
   const pose = { pos: vec3(c.x, surfaceYAt(course, c.x, c.z)!, c.z), rot: yawQuat(Math.atan2(-c.tx, -c.tz)) };
   const rig = createRig(RAPIER, vehicleId, pose, course);
   rig.vehicle.resetTo(pose, 1, 1);
-  rig.vehicle.body.setLinvel(rotate(pose.rot, vec3(0, 0, -START_SPEED)), true);
+  rig.vehicle.body.setLinvel(rotate(pose.rot, vec3(0, 0, -speed)), true);
   let slowest = Infinity;
   let airborne = 0;
   let longest = 0;
@@ -70,7 +70,7 @@ function drive(vehicleId: VehicleId, from: number, until: number): { reached: bo
     const dz = target.z - state.pos.z;
     const error = Math.atan2(f.x * dz - f.z * dx, f.x * dx + f.z * dz);
     // Hold about 12 m/s so a downhill run does not build speed beyond the test's claim.
-    const throttle = rig.vehicle.forwardSpeed() < START_SPEED ? 1 : 0;
+    const throttle = rig.vehicle.forwardSpeed() < speed ? 1 : 0;
     rig.run(TICK_DT, { throttle, steer: Math.max(-1, Math.min(1, 1.5 * error)) });
   }
   rig.world.free();
@@ -97,6 +97,15 @@ describe('dirt runs and bumps of marrakech', () => {
     test.each(spans.bumps.map((s, n) => [n, s] as const))('bumped segment %i is crossed without stopping or leaving the ground', (_n, s) => {
       // From the segment start: the stretch before it may be a pit climb that stops an RV on its own.
       const run = drive(vehicleId, s.from + 2, s.to + 5);
+      expect(run.reached).toBe(true);
+      expect(run.slowest).toBeGreaterThan(1);
+      expect(run.airborne).toBeLessThanOrEqual(MAX_AIRBORNE);
+    }, 120000);
+  });
+
+  describe('the lodgy at 28 m/s', () => {
+    test.each(spans.bumps.map((s, n) => [n, s] as const))('bumped segment %i is crossed without stopping or a long airborne spell', (_n, s) => {
+      const run = drive('lodgy', s.from + 2, s.to + 5, 28);
       expect(run.reached).toBe(true);
       expect(run.slowest).toBeGreaterThan(1);
       expect(run.airborne).toBeLessThanOrEqual(MAX_AIRBORNE);

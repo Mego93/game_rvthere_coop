@@ -119,6 +119,8 @@ export interface World {
   // Applies at once; false when it did nothing (won, or no next checkpoint).
   // `by` is the admin's player id; fly and infinite toggle for that player and need it.
   adminTool(tool: AdminTool, by?: string): boolean;
+  // Ends fly and infinite for everyone but `keepId` (null: everyone); the room calls it when the admin changes.
+  clearAdminModes(keepId: string | null): void;
   teleportPlayer(id: string, pos: Vec3): void;
   // Whether an emote may play: on foot, not downed, not respawning, nothing in the hands.
   canEmote(playerId: string): boolean;
@@ -1016,7 +1018,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
           if (player.seat !== null || player.downed !== null || player.respawnIn !== null) return false;
           player.flying = !player.flying;
           // Leaving flight drops the player from rest.
-          if (!player.flying) player.vy = 0;
+          if (!player.flying) {
+            player.vy = 0;
+            player.noFall = true;
+          }
           if (player.flying) assisted = true;
         } else if (infinite.delete(player.id)) return true;
         else {
@@ -1047,6 +1052,15 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       queuedEvents.push({ kind: 'checkpoint', tick: tick + 1, pos: vec3(centre.x, centre.y, centre.z) });
       assisted = true;
       return true;
+    },
+    clearAdminModes(keepId) {
+      for (const id of [...infinite]) if (id !== keepId) infinite.delete(id);
+      for (const player of players.all()) {
+        if (player.id === keepId || !player.flying) continue;
+        player.flying = false;
+        player.vy = 0;
+        player.noFall = true;
+      }
     },
     teleportPlayer: (id, pos) => players.teleport(id, pos),
     canEmote(id) {

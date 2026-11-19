@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { vec3 } from '@lodgy/shared';
-import { MAX_LIFT, MAX_SHAKE, MAX_TILT, bodyBob, cameraShake } from './bodyBob';
+import { MAX_LIFT, MAX_SHAKE, MAX_TILT, MAX_TILT_RV, bodyBob, cameraShake } from './bodyBob';
 
 const rest = vec3(0, 0, 0);
 
@@ -23,9 +23,9 @@ describe('bodyBob', () => {
     expect(bodyBob(rest, vec3(-0.2, 0, 0), 1 / 60, 10).roll).toBeLessThan(0);
   });
 
-  it('clamps pitch and roll to 0.06 rad and lift to 0.03 m', () => {
+  it('clamps pitch and roll to 0.03 rad (0.02 for the RV) and lift to 0.03 m', () => {
     const wild = bodyBob(rest, vec3(1000, 1000, -1000), 1 / 60, 40);
-    expect(MAX_TILT).toBe(0.06);
+    expect(MAX_TILT).toBe(0.03);
     expect(MAX_LIFT).toBe(0.03);
     expect(Math.abs(wild.pitch)).toBeLessThanOrEqual(MAX_TILT);
     expect(Math.abs(wild.roll)).toBeLessThanOrEqual(MAX_TILT);
@@ -33,6 +33,11 @@ describe('bodyBob', () => {
     const wildBack = bodyBob(rest, vec3(-1000, -1000, 1000), 1 / 60, 40);
     expect(Math.abs(wildBack.pitch)).toBe(MAX_TILT);
     expect(Math.abs(wildBack.lift)).toBeLessThanOrEqual(MAX_LIFT);
+    expect(MAX_TILT_RV).toBe(0.02);
+    const rv = bodyBob(rest, vec3(1000, 1000, -1000), 1 / 60, 40, MAX_TILT_RV);
+    expect(Math.abs(rv.pitch)).toBe(MAX_TILT_RV);
+    expect(Math.abs(rv.roll)).toBe(MAX_TILT_RV);
+    expect(rv.lift).toBe(wild.lift);
   });
 
   it('stays finite on non-finite input', () => {

@@ -66,7 +66,7 @@ import { CLOSED, createShopMenu, gateControl, menuFeet, menuInput, shopMenuState
 import { createRunMenu, inputFrozen, runMenuState, type RunMenuEvent, type RunMenuState } from './ui/runMenu';
 import { isChatKey } from './ui/chat';
 import { isViewKey } from './ui/controls';
-import { bodyBob, cameraShake } from './render/bodyBob';
+import { MAX_TILT, MAX_TILT_RV, bodyBob, cameraShake } from './render/bodyBob';
 import { emoteWheelAllowed, isEmoteKey } from './ui/emoteWheel';
 import type { TouchUi } from './ui/touchUi';
 import { touchView } from './ui/touchView';
@@ -541,7 +541,7 @@ export function createGame(
       placeVehicleMesh(vehicleMesh, vehicle);
       // The body bobs on its own frame: wheel spin above used the plain pose.
       bobVelocity.set(vehicle.linvel.x, vehicle.linvel.y, vehicle.linvel.z).applyQuaternion(bobInverse.copy(vehicleMesh.quaternion).invert());
-      const raw = bobFresh ? { pitch: 0, roll: 0, lift: 0 } : bodyBob(bobPrev, bobVelocity, frameSeconds, forwardSpeedOf(vehicle));
+      const raw = bobFresh ? { pitch: 0, roll: 0, lift: 0 } : bodyBob(bobPrev, bobVelocity, frameSeconds, forwardSpeedOf(vehicle), lobby.vehicleId === 'rv' ? MAX_TILT_RV : MAX_TILT);
       const follow = 1 - Math.exp(-BOB_RATE * frameSeconds);
       bobState.pitch += (raw.pitch - bobState.pitch) * follow;
       bobState.roll += (raw.roll - bobState.roll) * follow;
