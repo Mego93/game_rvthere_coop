@@ -1,6 +1,8 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import {
   GRAVITY,
+  ADMIN_FLY_SPEED,
+  ADMIN_FLY_VERTICAL,
   PLAYER_AIR_ACCEL,
   PLAYER_CONTROLLER_OFFSET,
   PLAYER_CROUCH_HEIGHT,
@@ -46,6 +48,8 @@ export interface WalkState {
   slideDir: { x: number; z: number };
   // Horizontal speed at the take-off of a slide jump, kept as the air speed floor until landing; 0 otherwise.
   launch: number;
+  // The admin's flight: no gravity, no collisions; see stepWalk.
+  flying?: boolean;
 }
 
 export interface WalkEnv {
@@ -66,6 +70,8 @@ export interface WalkInput {
   jumpPressed: boolean;
   crouchPressed: boolean;
   crouch: boolean;
+  // The jump button held, for the climb of a flight.
+  jumpHeld?: boolean;
   sprint: boolean;
   // Anything in the hands: blocks sprint and slide.
   carrying: boolean;
@@ -159,10 +165,29 @@ function steer(dir: { x: number; z: number }, target: { x: number; z: number }, 
   return { x: Math.cos(angle), z: Math.sin(angle) };
 }
 
+// Flight ignores gravity and the world: horizontal at ADMIN_FLY_SPEED, jump climbs and crouch descends at ADMIN_FLY_VERTICAL. Leaving it leaves the player airborne at rest, so gravity takes over.
+function stepFlight(env: StepEnv, state: WalkState, input: WalkInput, wish: { x: number; z: number }): WalkResult {
+  const vertical = (input.jumpHeld || input.jumpPressed ? 1 : 0) - (input.crouch ? 1 : 0);
+  state.walk = { x: wish.x * ADMIN_FLY_SPEED, z: wish.z * ADMIN_FLY_SPEED };
+  state.carry = { x: 0, z: 0 };
+  state.vy = 0;
+  state.grounded = false;
+  state.crouched = false;
+  state.slideTicks = 0;
+  state.slideCooldown = 0;
+  state.slideAir = 0;
+  state.slideDir = { x: 0, z: 0 };
+  state.launch = 0;
+  state.pos = vec3(state.pos.x + state.walk.x * TICK_DT, state.pos.y + vertical * ADMIN_FLY_VERTICAL * TICK_DT, state.pos.z + state.walk.z * TICK_DT);
+  placeCapsule(env.collider, state.pos, false);
+  return { moveVy: 0, collisions: [] };
+}
+
 // One tick of rule P3: stance, jump, gravity, wish acceleration, move.
 export function stepWalk(env: StepEnv, state: WalkState, input: WalkInput): WalkResult {
   const { controller, collider } = env;
   const wish = wishDirection(input.yaw, input.moveX, input.moveY);
+  if (state.flying) return stepFlight(env, state, input, wish);
   const wantCrouch = input.crouch && !input.holdsProp;
   const wantSprint = input.sprint && input.moveY > 0 && !input.carrying;
 

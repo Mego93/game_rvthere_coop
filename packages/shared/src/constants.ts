@@ -480,9 +480,9 @@ export const ROCK_CLEAR = 40;
 export const ROADBLOCK_LATERAL = 3;
 
 // m of eligible route per ambient event, on average.
-export const AMBIENT_SPACING = 120;
+export const AMBIENT_SPACING = 80;
 // m, jitter either side of an event's slot centre; keeps events at least AMBIENT_MIN_GAP apart.
-export const AMBIENT_JITTER = 30;
+export const AMBIENT_JITTER = 10;
 // m, least distance between two events along the route; planAmbient keeps AMBIENT_SPACING - 2 * AMBIENT_JITTER >= this.
 export const AMBIENT_MIN_GAP = 60;
 // m of route at the start and the end with no events.
@@ -502,7 +502,7 @@ export const AMBIENT_DESPAWN_BEHIND = 80;
 // m beyond the road edge where an animal waits.
 export const AMBIENT_EDGE_OFFSET = 1.5;
 // Most animals of each kind alive at once.
-export const AMBIENT_MAX_GOATS = 6;
+export const AMBIENT_MAX_GOATS = 18;
 export const AMBIENT_MAX_SCOOTERS = 3;
 // m/s crossing speeds.
 export const AMBIENT_GOAT_SPEED = 2.5;
@@ -511,6 +511,13 @@ export const AMBIENT_SCOOTER_SPEED = 4.5;
 export const AMBIENT_GOAT_STOP_BEYOND = 2;
 // m beyond the road edge where a scooter is removed.
 export const AMBIENT_SCOOTER_LEAVE = 15;
+// Goats in a herd (inclusive), and the m between neighbours along the road.
+export const AMBIENT_HERD_MIN = 3;
+export const AMBIENT_HERD_MAX = 6;
+export const AMBIENT_HERD_SPACING = 1.2;
+// m/s of the admin's flight, horizontally and up or down.
+export const ADMIN_FLY_SPEED = 12;
+export const ADMIN_FLY_VERTICAL = 6;
 // m of eligible route per item drop, on average.
 export const ITEM_DROP_SPACING = 600;
 // m, jitter either side of a drop's slot centre.

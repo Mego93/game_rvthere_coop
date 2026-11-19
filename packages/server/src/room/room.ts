@@ -462,7 +462,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       const refused = refusal(by, 'playing');
       if (refused) return refused;
       // A skip moves the whole crew, so the next snapshot is full for everyone.
-      if (world?.adminTool(tool) && tool === 'skipCheckpoint') restarted = true;
+      if (world?.adminTool(tool, by.playerId) && tool === 'skipCheckpoint') restarted = true;
       return null;
     },
     toLobby(by) {

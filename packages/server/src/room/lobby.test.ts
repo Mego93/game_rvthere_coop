@@ -426,6 +426,26 @@ test('L6: a non-admin restartCheckpoint, adminTool or next gets not_admin, and h
   expect(reasons(client)).toEqual([]);
 });
 
+test('step 38: fly and infinite are refused for a non-admin and in the lobby, and set assisted for the admin', () => {
+  const { host, guest, server } = setup(true);
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  client.send({ type: 'adminTool', tool: 'fly' });
+  client.send({ type: 'adminTool', tool: 'infinite' });
+  expect(reasons(client)).toEqual(['bad_phase', 'bad_phase']);
+  ready(badr);
+  startRun(client);
+  const world = server.debugWorld(room)!;
+  badr.send({ type: 'adminTool', tool: 'fly' });
+  badr.send({ type: 'adminTool', tool: 'infinite' });
+  expect(reasons(badr)).toEqual(['not_admin', 'not_admin']);
+  expect(world.status().assisted).toBe(false);
+  expect(world.snapshot().players.some((p) => p.flying)).toBe(false);
+  client.send({ type: 'adminTool', tool: 'fly' });
+  expect(reasons(client)).toEqual(['bad_phase', 'bad_phase']);
+  expect(world.status().assisted).toBe(true);
+});
+
 test('L6: restartCheckpoint, adminTool and next in the wrong phase get bad_phase', () => {
   const { host, guest, advance } = setup(true);
   const { client, room } = host();
