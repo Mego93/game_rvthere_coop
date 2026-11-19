@@ -34,7 +34,8 @@ test('T4: the Souleyman mesh count is a few and does not grow with the checkpoin
   expect(a.length).toBeLessThanOrEqual(6);
   expect(b.length).toBe(a.length);
   const vertices = (meshes: THREE.Mesh[]) => meshes.reduce((sum, mesh) => sum + mesh.geometry.getAttribute('position').count, 0);
-  expect(vertices(b) / large.checkpoints.length).toBeCloseTo(vertices(a) / small.checkpoints.length);
+  const figures = (c: typeof small) => c.checkpoints.filter((cp) => cp.figure).length;
+  expect(vertices(b) / figures(large)).toBeCloseTo(vertices(a) / figures(small));
 });
 
 test('T4: disposeScene frees his geometry and materials', () => {

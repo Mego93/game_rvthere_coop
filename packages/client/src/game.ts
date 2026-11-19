@@ -50,6 +50,7 @@ import { DESKTOP_DECOR, SOFTWARE_DECOR, TOUCH_DECOR } from './render/decorChunks
 import { createDecorRenderer } from './render/decorRenderer';
 import { decorFor } from './render/warm';
 import { createScene } from './render/scene';
+import { isFigureCheckpointAt } from './render/souleyman';
 import { disposeScene } from './render/disposeScene';
 import { FIRST_PERSON_FOV, onFootPose, seatedPose } from './render/firstPersonCamera';
 import { cameraPlacement } from './render/shoulderCamera';
@@ -642,6 +643,8 @@ export function createGame(
       else reconciler.suspend();
     },
     onEvent(message) {
+      // Every checkpoint saves; only Souleyman's greet.
+      if (message.kind === 'checkpoint' && !isFigureCheckpointAt(course.checkpoints, message.pos)) return;
       const sound = soundFor(message, playerId);
       if (sound) audio.play(sound.kind, { ...(sound.positional ? { at: message.pos } : {}), ...(sound.volume === undefined ? {} : { volume: sound.volume }) });
       if (toastFor(message, playerId)) eventToast.show(message.kind, performance.now() / 1000);

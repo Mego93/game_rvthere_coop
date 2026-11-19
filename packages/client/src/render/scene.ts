@@ -12,6 +12,7 @@ const SURFACE_COLOURS: Record<Surface, number> = {
   riverbed: 0x7d8a8f,
   sand: 0xd9b77a,
   mud: 0x4a3a2a,
+  dirt: 0xa5683a,
 };
 
 // The riverbed texture darkened to the flat colour.
