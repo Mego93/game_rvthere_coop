@@ -1,4 +1,4 @@
-import { CHAT_MAX_LENGTH, EMOTES, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, SHOP_ITEMS, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, TIMES_OF_DAY, WEATHERS, WEATHER_SETTINGS, type Emote, type ItemKind, type ShopItem, type TimeOfDay, type Weather, type WeatherSetting } from './constants';
+import { CHAT_MAX_LENGTH, EMOTES, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, SHOP_ITEMS, AMMO_MAX, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, TIMES_OF_DAY, WEATHERS, WEATHER_SETTINGS, type Emote, type ItemKind, type ShopItem, type TimeOfDay, type Weather, type WeatherSetting } from './constants';
 import { isAppearance, type Appearance } from './characters';
 import { courseIds } from './courses/index';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
@@ -25,6 +25,8 @@ export interface PlayerInput {
   reset?: boolean;
   sprint?: boolean;
   crouch?: boolean;
+  // Left click or the Fire button; shoots on foot.
+  fire?: boolean;
 }
 
 export type InputFields = Omit<PlayerInput, 'seq'>;
@@ -150,6 +152,10 @@ export interface PlayerSnapshot {
   health: number;
   // Seconds left before respawn while downed.
   downed: number | null;
+  // Rounds left; present with `gun`.
+  ammo?: number;
+  // The player has a handgun.
+  gun?: true;
   // Seconds of the treedent left, rounded up to 0.1; absent at 0.
   treedent?: number;
   // Damage the fromage blanc shield still absorbs, rounded up; absent at 0.
@@ -164,7 +170,7 @@ export interface PlayerSnapshot {
   slide?: { ticks: number; cooldown: number; air: number; dirX: number; dirZ: number; launch?: number };
 }
 
-export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit', 'outOfBounds', 'eat'] as const;
+export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit', 'outOfBounds', 'eat', 'shot', 'stab'] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
 export interface EventMessage {
@@ -175,6 +181,9 @@ export interface EventMessage {
   pos?: Vec3;
   // 'eat': the item eaten or drunk.
   item?: string;
+  // 'shot': where the ray ended (`pos` is the eye it left from) and whether it hit an enemy.
+  to?: Vec3;
+  hit?: boolean;
 }
 
 export interface SnapshotMessage extends WorldSnapshot {
@@ -279,7 +288,8 @@ function parseInput(data: Record<string, unknown>): PlayerInput | null {
   if (!finite(moveX) || !finite(moveY) || !finite(yaw) || !finite(pitch)) return null;
   if (typeof jump !== 'boolean' || typeof interact !== 'boolean') return null;
   if (typeof use !== 'boolean' || typeof drop !== 'boolean') return null;
-  const { reset, sprint, crouch } = data;
+  const { reset, sprint, crouch, fire } = data;
+  if (fire !== undefined && typeof fire !== 'boolean') return null;
   if (reset !== undefined && typeof reset !== 'boolean') return null;
   if (sprint !== undefined && typeof sprint !== 'boolean') return null;
   if (crouch !== undefined && typeof crouch !== 'boolean') return null;
@@ -292,6 +302,7 @@ function parseInput(data: Record<string, unknown>): PlayerInput | null {
     ...(reset === undefined ? {} : { reset }),
     ...(sprint === undefined ? {} : { sprint }),
     ...(crouch === undefined ? {} : { crouch }),
+    ...(fire === undefined ? {} : { fire }),
   };
 }
 
@@ -401,6 +412,8 @@ const isPlayerSnapshot = (value: unknown): value is PlayerSnapshot =>
   (value.treedent === undefined || (finite(value.treedent) && value.treedent > 0 && value.treedent <= TREEDENT_SECONDS)) &&
   (value.koke === undefined || (finite(value.koke) && value.koke > 0 && value.koke <= KOKE_SECONDS)) &&
   (value.shield === undefined || (finite(value.shield) && value.shield > 0 && value.shield <= SHIELD_HP)) &&
+  (value.gun === undefined || value.gun === true) &&
+  (value.ammo === undefined || (isCount(value.ammo) && value.ammo <= AMMO_MAX)) &&
   (value.flying === undefined || value.flying === true) &&
   (value.stance === undefined || isText(value.stance)) &&
   (value.slide === undefined ||
@@ -513,7 +526,9 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         isCount(data.tick) &&
         (data.playerId === undefined || isText(data.playerId)) &&
         (data.pos === undefined || isVec3(data.pos)) &&
-        (data.item === undefined || isText(data.item))
+        (data.item === undefined || isText(data.item)) &&
+        (data.to === undefined || isVec3(data.to)) &&
+        (data.hit === undefined || typeof data.hit === 'boolean')
         ? message
         : null;
     case 'results':

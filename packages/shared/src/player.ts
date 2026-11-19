@@ -28,6 +28,7 @@ import {
   THROW_HEAD_CLEARANCE,
   THROW_SPEED,
   TICK_DT,
+  GUN_AMMO_START,
   type ItemKind,
 } from './constants';
 import type { BuiltCourse } from './course';
@@ -86,6 +87,10 @@ export interface PlayerState {
   hold: PlayerHold | null;
   // Seconds of the treedent left, 0 when not chewed; the three power-up timers run down while seated too.
   treedent: number;
+  // The handgun every player starts with, its rounds and the seconds before the next shot.
+  gun: boolean;
+  ammo: number;
+  gunCooldown: number;
   // Fromage blanc: damage it still absorbs, and the seconds it still lasts.
   shield: number;
   shieldTime: number;
@@ -608,6 +613,9 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
         inventory: [null, null, null],
         slot: 0,
         hold: null,
+        gun: true,
+        ammo: GUN_AMMO_START,
+        gunCooldown: 0,
         treedent: 0,
         shield: 0,
         shieldTime: 0,

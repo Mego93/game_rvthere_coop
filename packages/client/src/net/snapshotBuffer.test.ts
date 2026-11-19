@@ -461,3 +461,10 @@ test('a hit animal knocked along keeps hit and blends its position', () => {
   expect(view.x).toBeCloseTo(2, 6);
   expect(view.hit).toBe(true);
 });
+
+test('step 39: koke, shield, gun and ammo come from the newer snapshot and stay absent when unset', () => {
+  const view = pair([player('a', 0, 0)], [{ ...player('a', 10, 0), koke: 4.5, shield: 12, gun: true, ammo: 7 }]).sample(100)!.players[0]!;
+  expect(view).toMatchObject({ koke: 4.5, shield: 12, gun: true, ammo: 7 });
+  const plain = pair([player('a', 0, 0)], [player('a', 10, 0)]).sample(100)!.players[0]!;
+  for (const key of ['koke', 'shield', 'gun', 'ammo']) expect(key in plain).toBe(false);
+});

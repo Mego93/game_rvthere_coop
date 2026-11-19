@@ -57,8 +57,8 @@ const held = { usePressed: false, useHeld: true, slot: 0 as const };
 
 describe('self item hold targets', () => {
   const far = vec3(50, 0, 50);
-  test('every power-up targets its user on foot, and nobody when not on foot; guns and ammo boxes are not usable yet', () => {
-    for (const item of ['tajine', 'treedent', 'fromageBlanc', 'kokeZero'] as const) {
+  test('every power-up targets its user on foot, and nobody when not on foot; a gun is not usable', () => {
+    for (const item of ['tajine', 'treedent', 'fromageBlanc', 'kokeZero', 'ammo'] as const) {
       expect(useTarget(item, ctxFor(far, car(1, 1)))).toBe('me');
       expect(useTarget(item, ctxFor(far, car(1, 1), 0, 0, 100, [], false))).toBeNull();
     }

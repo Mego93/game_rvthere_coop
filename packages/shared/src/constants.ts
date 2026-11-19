@@ -450,8 +450,15 @@ export const KOKE_MULTIPLIER = 2;
 export const KOKE_SECONDS = 20;
 // Health a tajine heals.
 export const TAJINE_HEAL = 40;
-// Items eaten or drunk by the player himself on foot, with the self hold.
-export const SELF_ITEMS = Object.freeze(['tajine', 'treedent', 'fromageBlanc', 'kokeZero'] as const satisfies readonly ItemKind[]);
+// Handgun: damage per shot, s between shots, m of range, rounds at the start of a run, rounds in an ammo box and the most a player carries.
+export const GUN_DAMAGE = 34;
+export const GUN_COOLDOWN = 0.3;
+export const GUN_RANGE = 60;
+export const GUN_AMMO_START = 12;
+export const AMMO_BOX_ROUNDS = 12;
+export const AMMO_MAX = 48;
+// Items eaten, drunk or loaded by the player himself on foot, with the self hold.
+export const SELF_ITEMS = Object.freeze(['tajine', 'treedent', 'fromageBlanc', 'kokeZero', 'ammo'] as const satisfies readonly ItemKind[]);
 export const DEFAULT_TIME_OF_DAY: TimeOfDay = 'midday';
 export const DEFAULT_WEATHER: Weather = 'clear';
 // Multiplies tyre grip on every surface in rain; a starting value.
