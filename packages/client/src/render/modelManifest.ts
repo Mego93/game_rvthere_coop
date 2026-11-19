@@ -31,6 +31,8 @@ export const MODEL_MANIFEST = {
   'prop.scooter': model('sketchfab', 'scooter', longest(PROP_KINDS.scooter.halfExtents)),
   'prop.fence': model('city-roads', 'construction-fence', 2),
   'prop.light': model('city-roads', 'construction-light', 1.2),
+  // the handgun: in a player's hand, and as the gun item; the longest side in metres
+  'prop.gun': model('sketchfab', 'gun', 0.3),
   // anchor
   'anchor.palm': model('nature', 'tree_palm', 6),
   'anchor.boulder': model('sketchfab', 'rocks', 2.2),
@@ -40,7 +42,13 @@ export const MODEL_MANIFEST = {
   'item.toolbox': model('sketchfab', 'toolbox', longest(ITEM_KINDS.toolbox.halfExtents)),
   'item.healthKit': model('sketchfab', 'first-aid', longest(ITEM_KINDS.healthKit.halfExtents)),
   'item.tajine': model('sketchfab', 'tajine', longest(ITEM_KINDS.tajine.halfExtents)),
+  'item.treedent': model('sketchfab', 'treedent', longest(ITEM_KINDS.treedent.halfExtents)),
+  'item.fromageBlanc': model('sketchfab', 'fromage-blanc', longest(ITEM_KINDS.fromageBlanc.halfExtents)),
+  'item.kokeZero': model('sketchfab', 'koke-zero', longest(ITEM_KINDS.kokeZero.halfExtents)),
+  'item.ammo': model('sketchfab', 'ammo', longest(ITEM_KINDS.ammo.halfExtents)),
   coin: model('sketchfab', 'coin', COIN_RADIUS * 2),
+  // enemy: the knife in an enemy's hand, the longest side in metres
+  'enemy.knife': model('sketchfab', 'knife', 0.36),
   // animal
   'animal.goat': model('sketchfab', 'goat', longest(ANIMAL_HALF_GOAT)),
   'animal.scooter': model('sketchfab', 'scooter', longest(PROP_KINDS.scooter.halfExtents)),

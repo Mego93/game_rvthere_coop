@@ -6,10 +6,10 @@ const PUBLIC = join(import.meta.dirname, '../../public');
 const FOLDER = join(PUBLIC, 'models/sketchfab');
 const NAMES = [
   'jerrycan', 'toolbox', 'first-aid', 'tajine', 'coin', 'crate', 'barrier', 'cart', 'scooter', 'goat', 'rocks',
-  'tyres', 'cone', 'agave', 'cliffs', 'kasbah', 'mosque', 'stall', 'mountains', 'headdress',
+  'tyres', 'cone', 'agave', 'cliffs', 'kasbah', 'mosque', 'stall', 'mountains', 'headdress', 'treedent', 'fromage-blanc', 'koke-zero', 'ammo', 'gun', 'knife',
 ];
 
-test('T2: the 20 Sketchfab files exist, add at most 8 MB and none is over 1.5 MB', () => {
+test('T2: the 26 Sketchfab files exist, add at most 8 MB and none is over 1.5 MB', () => {
   const files = readdirSync(FOLDER).filter((name) => name.endsWith('.glb'));
   expect(files.sort()).toEqual(NAMES.map((name) => `${name}.glb`).sort());
   let total = 0;

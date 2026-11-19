@@ -1,7 +1,6 @@
 import { ITEM_KINDS, PROP_KINDS, type ItemKind, type PropKind } from '@lodgy/shared';
 import * as THREE from 'three';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { MODEL_MANIFEST } from './modelManifest';
 import { loadManifestModel } from './modelTestHelper';
 import { createPropMesh, fitItemModel, fitPropModel, fitToHalf, ITEM_MODEL_KEYS, PROP_MODEL_KEYS } from './propMesh';
 
@@ -37,10 +36,13 @@ const KEPT_STRETCH: Record<string, string> = {
   crate: 'the file is a 1:1:2 crate and the hit box is a cube: kept, the cube look is wanted',
   cart: 'the file is a long flat hand cart and the hit box is deeper: kept',
   healthKit: 'the file is a kit with its drawer open, 1.61 against the 1.6 limit: kept',
+  treedent: 'the file is a long gum strip and the hit box is a fat slab: kept',
+  ammo: 'the file is a long crate and the hit box is shorter and deeper: kept',
+  gun: 'the file is a pistol and the hit box a thin slab; the gun item is never dropped, the held gun is not stretched: kept',
 };
 // The long axis of the model after its turn, which must be the hit box long axis (a wrong yaw or a wrong file changes it).
 // The tajine is exempt: its hit box is as long in x as in z, so no turn can be told wrong.
-const NATIVE_LONG: Partial<Record<string, Axis>> = { crate: 'z', barrier: 'x', cart: 'z', scooter: 'z', jerrycan: 'y', toolbox: 'x', healthKit: 'x' };
+const NATIVE_LONG: Partial<Record<string, Axis>> = { crate: 'z', barrier: 'x', cart: 'z', scooter: 'z', jerrycan: 'y', toolbox: 'x', healthKit: 'x', treedent: 'z', kokeZero: 'y', ammo: 'x', gun: 'x' };
 
 // The per-axis scale a fit applied, and the size the model had along each axis before it, recovered from the hit box.
 function stretchOf(fit: THREE.Object3D, half: { x: number; y: number; z: number }) {
@@ -69,8 +71,7 @@ test('T4: every prop model fits its hit box within 10 % on each axis, rests on i
 });
 
 test('T4: every item model fits its hit box within 10 % on each axis and is stretched at most 1.6x between axes', async () => {
-  // The step 39 items have no model in the manifest yet (they are drawn as the procedural stand-in until the client step adds them).
-  for (const kind of (Object.keys(ITEM_KINDS) as ItemKind[]).filter((k) => ITEM_MODEL_KEYS[k] in MODEL_MANIFEST)) {
+  for (const kind of Object.keys(ITEM_KINDS) as ItemKind[]) {
     const model = await loadManifestModel(ITEM_MODEL_KEYS[kind] as never);
     const fit = fitItemModel(model, kind);
     expectFit(fit, ITEM_KINDS[kind].halfExtents, kind);

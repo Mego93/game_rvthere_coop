@@ -5,7 +5,7 @@ import { fitted, hasModel, instantiate, shadowed } from './models';
 const COLOURS: Record<PropKind, number> = { crate: 0xb5833f, barrier: 0xc0392b, cart: 0x8b5a2b, scooter: 0x8e1b1b };
 const UNKNOWN_HALF = 0.25;
 export const PROP_MODEL_KEYS: Record<PropKind, string> = { crate: 'prop.crate', cart: 'prop.cart', barrier: 'prop.barrier', scooter: 'prop.scooter' };
-export const ITEM_MODEL_KEYS: Record<ItemKind, string> = { jerrycan: 'item.jerrycan', toolbox: 'item.toolbox', healthKit: 'item.healthKit', tajine: 'item.tajine', treedent: 'item.treedent', fromageBlanc: 'item.fromageBlanc', kokeZero: 'item.kokeZero', ammo: 'item.ammo', gun: 'item.gun' };
+export const ITEM_MODEL_KEYS: Record<ItemKind, string> = { jerrycan: 'item.jerrycan', toolbox: 'item.toolbox', healthKit: 'item.healthKit', tajine: 'item.tajine', treedent: 'item.treedent', fromageBlanc: 'item.fromageBlanc', kokeZero: 'item.kokeZero', ammo: 'item.ammo', gun: 'prop.gun' };
 // Turns that bring each file's long side onto the hit box's long side (x for the barrier, z for the cart) and the scooter's front to -z.
 const PROP_YAW: Record<PropKind, number> = { crate: 0, barrier: 0, cart: Math.PI / 2, scooter: Math.PI };
 
@@ -88,7 +88,9 @@ export function fitToHalf(model: THREE.Object3D, h: { x: number; y: number; z: n
 }
 
 export const fitPropModel = (model: THREE.Object3D, kind: PropKind): THREE.Group => fitToHalf(model, PROP_KINDS[kind].halfExtents, PROP_YAW[kind]);
-export const fitItemModel = (model: THREE.Object3D, kind: ItemKind): THREE.Group => fitToHalf(model, ITEM_KINDS[kind].halfExtents, 0);
+// The gun file is long in z and its hit box in x.
+const ITEM_YAW: Partial<Record<ItemKind, number>> = { gun: Math.PI / 2 };
+export const fitItemModel = (model: THREE.Object3D, kind: ItemKind): THREE.Group => fitToHalf(model, ITEM_KINDS[kind].halfExtents, ITEM_YAW[kind] ?? 0);
 
 function loadedModel(key: string): THREE.Group | null {
   return hasModel(key) ? instantiate(key) : null;
