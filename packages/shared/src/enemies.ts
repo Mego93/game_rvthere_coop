@@ -224,6 +224,8 @@ export function createEnemies(
       return;
     }
     entry.state = 'run';
+    // A target straight above or below gives no direction to run in.
+    if (bestDistance < 1e-6) return;
     const step = Math.min(ENEMY_RUN_SPEED * TICK_DT, Math.max(0, bestDistance - ENEMY_KNIFE_RANGE * 0.5));
     const nx = entry.x + (dx / bestDistance) * step;
     const nz = entry.z + (dz / bestDistance) * step;
