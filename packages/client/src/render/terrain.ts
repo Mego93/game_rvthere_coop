@@ -1,7 +1,7 @@
 import { CORRIDOR_CELL, CORRIDOR_RELIEF, CORRIDOR_RIDGE_HEIGHT, CORRIDOR_TILE_CELLS, corridorHeightAt, corridorOf, corridorReliefAt, routeFrame, routeHeights, surfaceYAt, type BuiltCourse, type Corridor } from '@lodgy/shared';
 import * as THREE from 'three';
 import { nearestSegment } from './routeIndex';
-import { groundTexture, type SceneOptions } from './groundTextures';
+import { groundTexture, tinted, type SceneOptions } from './groundTextures';
 
 export { surfaceYAt };
 
@@ -331,7 +331,7 @@ export function* warmTerrainGrid(course: BuiltCourse): Generator<void, void> {
   if (!grids.has(course)) grids.set(course, grid);
 }
 
-export function createTerrainMesh(course: BuiltCourse, { lite = false, flat = false }: SceneOptions = {}): THREE.Group {
+export function createTerrainMesh(course: BuiltCourse, { lite = false, flat = false, tint }: SceneOptions = {}): THREE.Group {
   const grid = terrainGridOf(course);
   const attributes = {
     position: new THREE.BufferAttribute(grid.positions, 3),
@@ -341,7 +341,7 @@ export function createTerrainMesh(course: BuiltCourse, { lite = false, flat = fa
   };
   const map = flat ? null : groundTexture('red-earth', 'diffuse');
   const normalMap = lite ? null : groundTexture('red-earth', 'normal');
-  const material = new THREE.MeshStandardMaterial({ color: map ? 0xffffff : RED_EARTH, map, normalMap, roughness: 1, metalness: 0, vertexColors: true });
+  const material = new THREE.MeshStandardMaterial({ color: tinted(map ? 0xffffff : RED_EARTH, tint), map, normalMap, roughness: 1, metalness: 0, vertexColors: true });
   if (map) map.anisotropy = lite ? 1 : 4;
   const group = new THREE.Group();
   for (const chunk of grid.chunks) {

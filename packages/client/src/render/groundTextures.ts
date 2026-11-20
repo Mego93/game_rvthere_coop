@@ -8,6 +8,20 @@ export interface SceneOptions {
   lite?: boolean;
   // Flat colours instead of textures: software GL fills pixels on the CPU and cannot afford them.
   flat?: boolean;
+  // Multiplies the colour of the land beside the road; left out, the land looks as it always did.
+  tint?: number;
+}
+
+// The land's tint for a course theme; the desert, the city, the airport and a course with no theme have none.
+export const THEME_GROUND_TINT: Readonly<Record<string, number>> = { valley: 0x8fbf5f, mountain: 0x9b8f80 };
+
+export function tintFor(theme: string | undefined): number | undefined {
+  return theme === undefined ? undefined : THEME_GROUND_TINT[theme];
+}
+
+// A material colour times the tint; the colour itself when there is no tint.
+export function tinted(colour: number, tint: number | undefined): number {
+  return tint === undefined ? colour : new THREE.Color(colour).multiply(new THREE.Color(tint)).getHex();
 }
 
 export type TextureSet = 'asphalt' | 'gravel' | 'sand' | 'pebbles' | 'red-earth';
