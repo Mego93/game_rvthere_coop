@@ -52,6 +52,8 @@ export interface BuiltCourse {
   coins: Placed[];
   decor: Placed[];
   checkpoints: Checkpoint[];
+  // Along-route spans (m) of the bridges; the land under each is sunk (see corridor.ts).
+  ravines: { from: number; to: number }[];
   route: [x: number, z: number][];
   finish: Box;
   killPlaneY: number;

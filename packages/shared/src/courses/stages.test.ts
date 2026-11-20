@@ -10,6 +10,7 @@ import { sliceCourse } from './stages';
 type RoadDef = Extract<SegmentDef, { type: 'road' }>;
 
 const CUT = ['desert', 'city', 'airport-road'] as const;
+const HAND = ['valley'] as const;
 const LABELS: Record<string, string> = { desert: '1 Desert', city: '4 City', 'airport-road': '5 To the airport' };
 const THEMES: Record<string, string> = { desert: 'desert', city: 'city', 'airport-road': 'airport' };
 const plainRoad = (s: SegmentDef | undefined, i: number): boolean => s?.type === 'road' && !MARRAKECH_INSERTED.includes(i) && !s.slope && !s.stop;
@@ -23,7 +24,7 @@ describe('stage ids', () => {
   it('lists the stages, then marrakech, then the rest', () => {
     const ids = courseIds();
     const present = STAGE_IDS.filter((id) => ids.includes(id));
-    expect(present).toEqual(['desert', 'city', 'airport-road']);
+    expect(present).toEqual(['desert', 'valley', 'city', 'airport-road']);
     expect(ids.slice(0, present.length)).toEqual(present);
     expect(ids[present.length]).toBe('marrakech');
     expect([...ids].sort()).toEqual([...present, 'airport', 'marrakech', 'segment-demo', 'test'].sort());
@@ -66,6 +67,41 @@ describe.each(CUT)('cut stage %s', (id) => {
     expect(mids.length).toBeGreaterThan(0);
     const points = [0, ...mids, total + FINISH_PAD];
     for (let i = 1; i < points.length; i++) expect(points[i]! - points[i - 1]!).toBeLessThanOrEqual(FUEL_MAX_GAP);
+  });
+});
+
+describe.each(HAND)('hand-built stage %s', (id) => {
+  const def = getCourseDef(id)!;
+  const ranges = segmentRanges(def);
+  const total = ranges[ranges.length - 1]!.to;
+
+  it('has its label, theme, corridor and ambient', () => {
+    expect(def.label).toBe('2 Bridge and forest');
+    expect(def.theme).toBe('valley');
+    expect(def.targetTime).toBe(300);
+    expect(def.corridor).toBe(true);
+    expect(def.ambient).toBe(true);
+  });
+
+  it('builds within the stage length limits, with three bridges, one of them broken', () => {
+    const course = getCourse(id);
+    expect(total).toBeGreaterThanOrEqual(STAGE_MIN_LENGTH);
+    expect(total).toBeLessThanOrEqual(STAGE_MAX_LENGTH);
+    expect(course.ravines).toHaveLength(3);
+    expect(def.segments.filter((s) => s.type === 'bridge' && s.broken)).toHaveLength(1);
+  });
+
+  it('has a fuel stop, and no fuel gap above the maximum counting both ends', () => {
+    const mids = def.segments.flatMap((s, i) => (s.type === 'road' && s.stop?.kind === 'fuel' ? [ranges[i]!.from + s.stop.along] : []));
+    expect(mids.length).toBeGreaterThan(0);
+    const points = [0, ...mids, total + FINISH_PAD];
+    for (let i = 1; i < points.length; i++) expect(points[i]! - points[i - 1]!).toBeLessThanOrEqual(FUEL_MAX_GAP);
+  });
+
+  it('carries the three start pickups and at least one coin per 400 m', () => {
+    const course = getCourse(id);
+    expect((def.segments[0] as RoadDef).pickups!.map((p) => p.kind).sort()).toEqual(['healthKit', 'jerrycan', 'toolbox']);
+    expect(course.coins.length).toBeGreaterThanOrEqual(total / 400);
   });
 });
 

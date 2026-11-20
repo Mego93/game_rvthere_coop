@@ -185,6 +185,7 @@ export function buildCourse(def: CourseDef): BuiltCourse {
     coins: [],
     decor: [],
     checkpoints: [],
+    ravines: [],
     route: [],
     finish: { center: vec3(0, 0, 0), halfExtents: vec3(0, 0, 0), rot: yawQuat(0) },
     killPlaneY: 0,
@@ -196,6 +197,7 @@ export function buildCourse(def: CourseDef): BuiltCourse {
   const raw: { from: number; to: number }[] = [];
   const obstacles: { from: number; to: number }[] = [];
   let routeAt = 0;
+  let alongAt = 0;
   // Route metres to the start of the current segment, and the next mark that a figure checkpoint waits for.
   let travelled = 0;
   let nextFigure = 0;
@@ -241,6 +243,9 @@ export function buildCourse(def: CourseDef): BuiltCourse {
     for (let i = 1; i < local.route.length; i++) travelled += Math.hypot(local.route[i]![0] - local.route[i - 1]![0], local.route[i]![1] - local.route[i - 1]![1]);
     course.checkpoints.push(checkpoint);
     addRoute(local, at, index === 0);
+    const alongFrom = alongAt;
+    for (let i = 1; i < local.route.length; i++) alongAt += Math.hypot(local.route[i]![0] - local.route[i - 1]![0], local.route[i]![1] - local.route[i - 1]![1]);
+    if (segmentDef.type === 'bridge') course.ravines.push({ from: alongFrom, to: alongAt });
     const from = routeAt;
     if (def.ambient || def.corridor) {
       for (let i = 1; i < local.route.length; i++) routeAt += Math.hypot(local.route[i]![0] - local.route[i - 1]![0], local.route[i]![1] - local.route[i - 1]![1]);

@@ -506,6 +506,17 @@ export const STAGE_MAX_LENGTH = 4200;
 // m along the marrakech route where the desert stage is cut.
 export const DESERT_TO = 3400;
 
+// m, how far the land under a bridge is sunk below the route.
+export const BRIDGE_RAVINE_DEPTH = 8;
+export const BRIDGE_RAIL_HEIGHT = 1.1;
+export const BRIDGE_RAIL_THICKNESS = 0.3;
+// m of bridge at each end over the bank, where the land is not sunk.
+export const BRIDGE_ABUTMENT = 6;
+// m, along the road, over which the land falls from the abutment to the ravine floor (8 m over 12 m is 33.7 degrees).
+export const BRIDGE_BANK_RUN = 12;
+// m under the deck where the client draws the water.
+export const WATER_DEPTH_BELOW_ROAD = 6.5;
+
 // m from the centre line to each barrier of a gates hazard; the corridor between inner edges is 2 * (this - barrier half width).
 export const GATES_OFFSET = 2.7;
 // m between the barriers of a gates hazard along the road.

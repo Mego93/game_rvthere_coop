@@ -1,5 +1,6 @@
-import { DESERT_TO } from '../constants';
-import { buildSegment, type SegmentDef } from '../segments';
+import { DESERT_TO, HILL_SLOPE, SEGMENT_MIN_LENGTH } from '../constants';
+import { buildSegment, type Placement, type SegmentDef } from '../segments';
+import { hillSegments } from './terrain';
 import type { CourseDef } from './build';
 import { MARRAKECH_INSERTED, MARRAKECH_SEGMENTS } from './marrakech.generated';
 
@@ -53,9 +54,30 @@ function cut(id: 'desert' | 'city' | 'airport-road'): CourseDef['segments'] {
   return sliceCourse(MARRAKECH_SEGMENTS, MARRAKECH_INSERTED, STAGE_SLICES[id].from(total), STAGE_SLICES[id].to(total));
 }
 
+const coin = (along: number, lateral: number): Placement => ({ along, lateral });
+
+// Stage 2: forest and ravines, about 2.6 km. Coins at the middle of each road of 150 m or more, alternating sides;.
+export const VALLEY_SEGMENTS: SegmentDef[] = [
+  { type: 'road', length: 80, pickups: [{ kind: 'jerrycan', along: 30, lateral: -3 }, { kind: 'toolbox', along: 30, lateral: 3 }, { kind: 'healthKit', along: 40, lateral: 0 }] },
+  { type: 'road', length: 200, curve: 0.5, coins: [coin(100, 2.5)] },
+  { type: 'bridge', length: 60 },
+  { type: 'road', length: 160, curve: -0.6, surface: 'dirt', coins: [coin(80, -2.5)] },
+  { type: 'ford', width: SEGMENT_MIN_LENGTH, rocks: 4 },
+  { type: 'road', length: 180, stop: { kind: 'fuel', side: 1, along: 90 }, coins: [coin(45, 2.5)] },
+  ...hillSegments(HILL_SLOPE),
+  { type: 'road', length: 150, curve: 0.4, coins: [coin(75, -2.5)] },
+  { type: 'bridge', length: 80, broken: true },
+  { type: 'road', length: 200, curve: -0.5, surface: 'dirt', hazards: [{ kind: 'mud', along: 100, length: 16 }], coins: [coin(50, 2.5)] },
+  { type: 'road', length: 250, bumps: 3, pickups: [{ kind: 'toolbox', along: 60, lateral: -3 }, { kind: 'jerrycan', along: 180, lateral: 3 }], coins: [coin(125, -2.5)] },
+  { type: 'bridge', length: 120 },
+  { type: 'road', length: 200, curve: 0.3, coins: [coin(100, 2.5)] },
+  { type: 'road', length: 150, coins: [coin(75, -2.5)] },
+];
+
 // Built when asked for, so importing the package does not walk the 22 km route.
 export const stageDefs = {
   desert: (): CourseDef => ({ id: 'desert', label: '1 Desert', theme: 'desert', segments: cut('desert'), targetTime: 300, ambient: true, corridor: true }),
+  valley: (): CourseDef => ({ id: 'valley', label: '2 Bridge and forest', theme: 'valley', segments: VALLEY_SEGMENTS, targetTime: 300, ambient: true, corridor: true }),
   city: (): CourseDef => ({ id: 'city', label: '4 City', theme: 'city', segments: cut('city'), targetTime: 300, ambient: true, corridor: true, enemyDensity: 2 }),
   'airport-road': (): CourseDef => ({ id: 'airport-road', label: '5 To the airport', theme: 'airport', segments: cut('airport-road'), targetTime: 300, ambient: true, corridor: true }),
 } satisfies Record<string, () => CourseDef>;
