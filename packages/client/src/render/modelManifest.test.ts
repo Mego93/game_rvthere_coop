@@ -25,11 +25,11 @@ describe('model manifest', () => {
     }
   });
 
-  it('T2: target sizes are above 0 and at most 30 m, except distant cliffs up to 40 m', () => {
+  it('T2: target sizes are above 0 and at most 30 m, except distant cliffs and the kasbah landmark up to 40 m', () => {
     for (const key of MODEL_KEYS) {
       const { targetSize } = MODEL_MANIFEST[key];
       const sides = typeof targetSize === 'number' ? [targetSize] : [targetSize.x, targetSize.y, targetSize.z];
-      const limit = key.startsWith('decor.cliff.') ? 40 : 30;
+      const limit = key.startsWith('decor.cliff.') || key === 'decor.kasbah.landmark' ? 40 : 30;
       for (const side of sides) {
         expect(side, key).toBeGreaterThan(0);
         expect(side, key).toBeLessThanOrEqual(limit);
@@ -49,6 +49,15 @@ describe('model manifest', () => {
       }
     }
     expect(total).toBeLessThan(12 * 1024 * 1024);
+  });
+});
+
+describe('step 40 models', () => {
+  it('the trees, the house, the kasbah and the cars are fitted to their real size in metres', () => {
+    expect(MODEL_MANIFEST['decor.pine'].targetSize).toBe(12);
+    expect(MODEL_MANIFEST['decor.kasbah.landmark'].targetSize).toBe(40);
+    expect(MODEL_MANIFEST['decor.car.hatchback'].targetSize).toBe(4);
+    for (const key of ['decor.pine', 'decor.broadleaf', 'decor.adobe', 'decor.kasbah.landmark', 'decor.car.hatchback', 'decor.car.minicab'] as const) expect(MODEL_MANIFEST[key].pack, key).toBe('sketchfab');
   });
 });
 

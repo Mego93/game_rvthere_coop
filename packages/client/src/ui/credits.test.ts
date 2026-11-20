@@ -62,6 +62,18 @@ describe('Sketchfab credits (step 33)', () => {
     }
   });
 
+  it('step 40: the minicab is credited as "Minicab 2005 (modified)" with its logos painted out, and every new model has a credit', () => {
+    for (const path of ['../../../../CREDITS.md', '../../public/CREDITS.md']) {
+      const lines = read(path).split('\n');
+      const cab = lines.find((line) => line.includes('`car-minicab.glb`'))!;
+      expect(cab).toContain('"Minicab 2005 (modified)" by own.guest (https://sketchfab.com/own.guest)');
+      expect(cab).not.toContain('Mitsubishi');
+      expect(cab).toContain('painted out');
+      for (const file of ['pine.glb', 'broadleaf.glb', 'adobe-house.glb', 'kasbah-abh.glb', 'car-hatchback.glb']) expect(lines.find((line) => line.includes(`\`${file}\``)), file).toContain('CC BY 4.0');
+    }
+    expect(read('../../public/models/sketchfab/License.txt')).toContain('Minicab 2005 (modified) by own.guest');
+  });
+
   it('every Sketchfab model is in the folder License.txt, and the served credits list the two new skies', () => {
     const licence = read('../../public/models/sketchfab/License.txt');
     for (const file of files) expect(licence, file).toContain(`File: ${file}`);
