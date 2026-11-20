@@ -4,6 +4,8 @@
 
 The geometry of the Marrakech route is derived from OpenStreetMap data: © OpenStreetMap contributors, available under the Open Database Licence (ODbL). See https://www.openstreetmap.org/copyright .
 
+Mountain stage (Ourika road): Route: OpenStreetMap contributors (ODbL); heights: SRTM via OpenTopoData.
+
 ## Fonts
 
 Both fonts are licensed under the SIL Open Font License 1.1 (https://openfontlicense.org), are used unmodified (Latin subset, variable woff2) and are served from the game's own files, from the npm packages `@fontsource-variable/rubik` and `@fontsource-variable/inter`.

@@ -25,7 +25,7 @@ describe('registration (T11)', () => {
   it('keeps marrakech out of the campaign and registers every course', () => {
     expect(CAMPAIGN).toEqual(STAGE_IDS);
     expect(CAMPAIGN).not.toContain('marrakech');
-    expect(courseIds().sort()).toEqual(['airport', 'airport-road', 'city', 'desert', 'marrakech', 'segment-demo', 'test']);
+    expect(courseIds().sort()).toEqual(['airport', 'airport-road', 'city', 'desert', 'marrakech', 'mountain', 'segment-demo', 'test', 'valley']);
     expect(getCourse('marrakech')).toBe(getCourse('marrakech'));
     expect(getCourse('marrakech').id).toBe('marrakech');
     expect(getCourse('marrakech').targetTime).toBe(1800);

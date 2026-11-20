@@ -3,6 +3,7 @@ import { buildSegment, type Placement, type SegmentDef } from '../segments';
 import { hillSegments } from './terrain';
 import type { CourseDef } from './build';
 import { MARRAKECH_INSERTED, MARRAKECH_SEGMENTS } from './marrakech.generated';
+import { OURIKA_SEGMENTS } from './ourika.generated';
 
 type RoadDef = Extract<SegmentDef, { type: 'road' }>;
 
@@ -78,6 +79,7 @@ export const VALLEY_SEGMENTS: SegmentDef[] = [
 export const stageDefs = {
   desert: (): CourseDef => ({ id: 'desert', label: '1 Desert', theme: 'desert', segments: cut('desert'), targetTime: 300, ambient: true, corridor: true }),
   valley: (): CourseDef => ({ id: 'valley', label: '2 Bridge and forest', theme: 'valley', segments: VALLEY_SEGMENTS, targetTime: 300, ambient: true, corridor: true }),
+  mountain: (): CourseDef => ({ id: 'mountain', label: '3 Mountains', theme: 'mountain', segments: OURIKA_SEGMENTS, targetTime: 300, ambient: true, corridor: true }),
   city: (): CourseDef => ({ id: 'city', label: '4 City', theme: 'city', segments: cut('city'), targetTime: 300, ambient: true, corridor: true, enemyDensity: 2 }),
   'airport-road': (): CourseDef => ({ id: 'airport-road', label: '5 To the airport', theme: 'airport', segments: cut('airport-road'), targetTime: 300, ambient: true, corridor: true }),
 } satisfies Record<string, () => CourseDef>;
