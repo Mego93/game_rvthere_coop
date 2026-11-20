@@ -141,5 +141,8 @@ describe('the kasbah landmark stands upright on the highest ground of its footpr
     expect(kasbah.y).toBeCloseTo(footprintTop(ground, kasbah.x, kasbah.z, kasbah.yaw, KASBAH_HALF_FOOTPRINT.x, KASBAH_HALF_FOOTPRINT.z), 6);
     expect(kasbah.y).toBeGreaterThanOrEqual(ground(kasbah.x, kasbah.z));
     expect(kasbah.scale).toBe(1);
+    // It stands on the flattest spot found, so the base floats little over the lower side.
+    const lowest = Math.min(...[-1, 0, 1].flatMap((i) => [-1, 0, 1].map((j) => ground(kasbah.x + i * KASBAH_HALF_FOOTPRINT.x * Math.cos(kasbah.yaw) + j * KASBAH_HALF_FOOTPRINT.z * Math.sin(kasbah.yaw), kasbah.z - i * KASBAH_HALF_FOOTPRINT.x * Math.sin(kasbah.yaw) + j * KASBAH_HALF_FOOTPRINT.z * Math.cos(kasbah.yaw)))));
+    expect(kasbah.y - lowest).toBeLessThan(3);
   });
 });
