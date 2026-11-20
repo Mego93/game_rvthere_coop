@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { expect, test } from 'vitest';
 import { createCorridorTerrain } from './corridorMesh';
 import { THEME_GROUND_TINT, tintFor, tinted } from './groundTextures';
+import { createScene } from './scene';
 import { createTerrainMesh } from './terrain';
 
 const colourOf = (group: THREE.Group): number => ((group.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
@@ -36,4 +37,21 @@ test('the terrain and the corridor land take the tint, and without one keep thei
   b.update({ x: 0, z: 0 }, 0, true);
   const material = (t: ReturnType<typeof land>) => ((t.group.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
   expect(material(b)).not.toBe(material(a));
+});
+
+test('the shoulders of a tinted course take the tint and its road does not', () => {
+  const course = getCourse('valley');
+  const colours = (tint?: number) => {
+    const found = new Map<string, number>();
+    createScene(course, { flat: true, tint }).traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      const material = mesh.material as THREE.MeshStandardMaterial | undefined;
+      if (mesh.isMesh && material?.color && mesh.receiveShadow) found.set(mesh.uuid, material.color.getHex());
+    });
+    return [...found.values()];
+  };
+  const plain = colours();
+  const green = colours(tintFor('valley'));
+  expect(green.filter((c) => !plain.includes(c)).length).toBeGreaterThan(0);
+  expect(plain.filter((c) => green.includes(c)).length).toBeGreaterThan(0);
 });
