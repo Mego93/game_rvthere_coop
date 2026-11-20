@@ -24,7 +24,7 @@ const make = (): World => {
 const carry = (fields: Partial<WorldCarry> = {}): WorldCarry => ({
   fuel: 0.4,
   health: 0.6,
-  players: [{ id: 'p1', health: 55, ammo: 10, gun: true }],
+  players: [{ id: 'p1', health: 55, ammo: 10, gun: true, seat: null }],
   coinsCollected: 3,
   coinsTotal: 5,
   wallet: 2,
@@ -42,7 +42,7 @@ describe('step 40: carry between stages', () => {
     const out = world.carryOut();
     expect(out.fuel).toBeCloseTo(0.4, 6);
     expect(out.health).toBeCloseTo(0.6, 6);
-    expect(out.players).toEqual([{ id: 'p1', health: 55, ammo: 10, gun: true }]);
+    expect(out.players).toEqual([{ id: 'p1', health: 55, ammo: 10, gun: true, seat: null }]);
     expect(out.wallet).toBe(2);
     expect(out.respawns).toBe(1);
     expect(out.elapsed).toBeCloseTo(12.5, 6);
@@ -76,12 +76,12 @@ describe('step 40: carry between stages', () => {
 
   test('fuel, health and ammo are clamped to their maximums', () => {
     const world = make();
-    world.applyCarry(carry({ fuel: 7, health: 9, players: [{ id: 'p1', health: 5000, ammo: 5000, gun: true }] }));
+    world.applyCarry(carry({ fuel: 7, health: 9, players: [{ id: 'p1', health: 5000, ammo: 5000, gun: true, seat: null }] }));
     const out = world.carryOut();
     expect(out.fuel).toBe(1);
     expect(out.health).toBe(1);
-    expect(out.players[0]).toEqual({ id: 'p1', health: PLAYER_MAX_HEALTH, ammo: AMMO_MAX, gun: true });
-    world.applyCarry(carry({ fuel: -1, health: -1, players: [{ id: 'p1', health: -4, ammo: -4, gun: true }] }));
+    expect(out.players[0]).toEqual({ id: 'p1', health: PLAYER_MAX_HEALTH, ammo: AMMO_MAX, gun: true, seat: null });
+    world.applyCarry(carry({ fuel: -1, health: -1, players: [{ id: 'p1', health: -4, ammo: -4, gun: true, seat: null }] }));
     const low = world.carryOut();
     expect(low.fuel).toBe(0);
     expect(low.players[0]!.ammo).toBe(0);
@@ -90,7 +90,7 @@ describe('step 40: carry between stages', () => {
   test('a carried player who is not in the new world is ignored, and a present one with no entry keeps its own values', () => {
     const world = make();
     world.addPlayer('p2');
-    world.applyCarry(carry({ players: [{ id: 'gone', health: 10, ammo: 1, gun: true }] }));
+    world.applyCarry(carry({ players: [{ id: 'gone', health: 10, ammo: 1, gun: true, seat: null }] }));
     expect(world.carryOut().players.map((player) => player.id)).toEqual(['p1', 'p2']);
     expect(world.carryOut().players[0]!.health).toBe(PLAYER_MAX_HEALTH);
   });

@@ -102,7 +102,7 @@ export interface WorldSnapshot {
 export interface WorldCarry {
   fuel: number;
   health: number;
-  players: { id: string; health: number; ammo: number; gun: boolean }[];
+  players: { id: string; health: number; ammo: number; gun: boolean; seat: string | null }[];
   coinsCollected: number;
   // Coins on the stages so far, this one included, so that collected never passes total.
   coinsTotal: number;
@@ -174,6 +174,8 @@ export interface World {
   debugHurt(id: string, amount: number): void;
   // Tests only: the player's health before the snapshot rounds it down.
   debugPlayerHealth(id: string): number;
+  // Tests only: puts a player in a seat of the vehicle.
+  debugSeat(id: string, seatId: string): void;
   // Tests only: replaces the player's inventory.
   debugSetInventory(id: string, inventory: readonly (ItemKind | null)[]): void;
   // Frees the physics world. The world must not be used afterwards.
@@ -1081,7 +1083,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     carryOut: () => ({
       fuel: vehicle.fuel(),
       health: vehicle.health(),
-      players: players.all().map((player) => ({ id: player.id, health: player.health, ammo: player.ammo, gun: player.gun })),
+      players: players.all().map((player) => ({ id: player.id, health: player.health, ammo: player.ammo, gun: player.gun, seat: player.seat })),
       coinsCollected,
       coinsTotal: coinsBase + course.coins.length,
       wallet,
@@ -1099,6 +1101,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         player.health = clamp(saved.health, 0, PLAYER_MAX_HEALTH);
         player.ammo = clamp(saved.ammo, 0, AMMO_MAX);
         player.gun = saved.gun;
+        // Whoever sat when the stage ended sits in the same seat of the new vehicle.
+        if (saved.seat !== null && vehicleConfig.seats.some((seat) => seat.id === saved.seat) && !players.all().some((other) => other.seat === saved.seat)) players.setSeat(saved.id, saved.seat);
       }
       coinsCollected = carry.coinsCollected;
       coinsBase = carry.coinsTotal;
@@ -1232,6 +1236,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     debugVehicle: () => vehicle,
     debugPlayerHealth: (id) => players.get(id)!.health,
     debugSetInventory: (id, inventory) => players.restoreInventory(id, inventory),
+    debugSeat: (id, seatId) => players.setSeat(id, seatId),
     debugHurt(id, amount) {
       debugDamage.push({ playerId: id, source: 'debug', amount });
     },

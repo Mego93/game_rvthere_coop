@@ -195,3 +195,15 @@ test('leaving to the lobby ends the chain: a later single start plays one stage'
   expect(ofType('results')[0]!.courseId).toBe('c');
   room.dispose();
 });
+
+test('a player seated when the stage ends sits in the same seat of the new vehicle', () => {
+  const { room, admin, settings, run } = setup(['a']);
+  room.configure(admin, settings());
+  room.start(admin);
+  room.debugWorld()!.debugSeat('p1', 'driver');
+  run(1);
+  const world = room.debugWorld()!;
+  expect(world.course.id).toBe('b');
+  expect(world.snapshot().players.map((player) => [player.playerId, player.seat])).toEqual([['p1', 'driver']]);
+  room.dispose();
+});
