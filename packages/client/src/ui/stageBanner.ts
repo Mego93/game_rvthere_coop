@@ -34,7 +34,8 @@ export function createStageBanner(doc: Document, setTimer: (fn: () => void, ms: 
   style.textContent = STYLE;
   const toast = doc.createElement('div');
   toast.className = 'ui-toast';
-  root.append(style, toast);
+  root.append(toast);
+  doc.head.append(style);
   doc.body.append(root);
   let timer: unknown = null;
   const hide = () => {

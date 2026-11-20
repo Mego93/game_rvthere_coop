@@ -72,7 +72,7 @@ type Density = Partial<Record<string, number>>;
 // Step 40 themes: the densities a stage changes in its open (non-city) zones, per 100 m of route per side.
 export const THEME_DENSITY: Partial<Record<NonNullable<CourseDef['theme']>, Density>> = {
   desert: { palms: 3, cactus: 1.5, fields: 0 },
-  valley: { palms: 0, cactus: 0, scrub: 8, grass: 25, trees: 14, rocks: 1, fields: 0 },
+  valley: { palms: 0, cactus: 0, scrub: 8, grass: 25, trees: 22, rocks: 1, fields: 0 },
   mountain: { palms: 0.3, cactus: 0, scrub: 14, grass: 6, stones: 8, rocks: 5, trees: 0, fields: 0 },
 };
 // The share of the airport stage, from its start, that is built up.
