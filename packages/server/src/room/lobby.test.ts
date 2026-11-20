@@ -43,6 +43,7 @@ const settings: Extract<ClientMessage, { type: 'configure' }> = {
   vehicleId: 'rv',
   timeOfDay: 'night',
   weather: 'rain',
+  chain: false,
 };
 
 // --- L5: phases ---
@@ -1082,7 +1083,7 @@ test('W3: a rain room builds its world with rain grip, at start and after restar
 
   client.send({ type: 'toLobby' });
   advance(WORLD_REBUILD_COOLDOWN + 0.1);
-  client.send({ type: 'configure', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'rain' });
+  client.send({ type: 'configure', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'rain', chain: false });
   startRun(client);
   advance(0.1);
   const wet = () => server.debugWorld(room)!.debug().wheelFrictionSlips;
@@ -1100,7 +1101,7 @@ test('W3: a rain room builds its world with rain grip, at start and after restar
 test('W4: a random room keeps the setting in the lobby and results messages, builds a world that follows the schedule, and restartCourse replays it', () => {
   const { host, advance, server } = setup();
   const { client, room } = host();
-  client.send({ type: 'configure', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'random' });
+  client.send({ type: 'configure', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'random', chain: false });
   expect(client.last('lobby').weather).toBe('random');
   startRun(client);
   advance(0.1);

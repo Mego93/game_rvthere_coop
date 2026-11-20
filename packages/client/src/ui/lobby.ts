@@ -54,7 +54,7 @@ export function lobbyView(message: LobbyMessage, localId: string): LobbyView {
   return {
     isAdmin,
     settingsEditable: isAdmin,
-    settings: { courseId: message.courseId, vehicleId: message.vehicleId, timeOfDay: message.timeOfDay, weather: message.weather },
+    settings: { courseId: message.courseId, vehicleId: message.vehicleId, timeOfDay: message.timeOfDay, weather: message.weather, chain: message.chain },
     players,
     showReady: !isAdmin,
     localReady: message.players.find((entry) => entry.playerId === localId)?.ready ?? false,
@@ -85,8 +85,8 @@ export function mergeSettings(local: RoomSettings, pending: Partial<RoomSettings
   const remaining: Partial<RoomSettings> = {};
   for (const key of Object.keys(pending) as (keyof RoomSettings)[]) {
     if (server[key] === pending[key]) continue;
-    (settings as Record<string, string>)[key] = local[key];
-    (remaining as Record<string, string>)[key] = pending[key]!;
+    (settings as Record<string, unknown>)[key] = local[key];
+    (remaining as Record<string, unknown>)[key] = pending[key]!;
   }
   return { settings, pending: remaining };
 }

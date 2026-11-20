@@ -69,7 +69,7 @@ test('L18: Next only for the admin and a course that is not the last; Back to lo
   expect(resultsView(message({ courseId: 'marrakech' }), true)).toMatchObject({ showNext: false, showLobby: true });
 });
 
-const server = { courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'clear' } as const;
+const server = { courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'clear', chain: false } as const;
 
 test('mergeSettings: an unconfirmed local change survives an echo that lacks it', () => {
   const local = { ...server, vehicleId: 'rv', weather: 'rain' } as const;

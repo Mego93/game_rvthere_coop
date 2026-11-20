@@ -103,6 +103,7 @@ test('create makes a room and welcomes its creator, then announces the lobby', (
     vehicleId: 'lodgy',
     timeOfDay: 'midday',
     weather: 'clear',
+    chain: false,
   });
 });
 
