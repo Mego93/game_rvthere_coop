@@ -157,6 +157,8 @@ let adminId: string | null = null;
 let lastResults: ResultsMessage | null = null;
 // The newest lobby message, which a stage change builds its game from.
 let latestLobby: LobbyMessage | null = null;
+// Set only while a stage change builds its game.
+let firstSeq = 0;
 let phase: Phase | null = null;
 // What the home page says when the socket next closes.
 let closeReason = CONNECTION_LOST;
@@ -305,9 +307,11 @@ function onStage(message: StageMessage) {
   if (!latestLobby || latestLobby.phase !== 'playing') return;
   stageBanner.show(stageBannerText(message));
   if (game && game.courseId === message.courseId) return;
+  firstSeq = game?.lastSeq() ?? 0;
   game?.stop(true);
   game = null;
   startGame({ ...latestLobby, courseId: message.courseId });
+  firstSeq = 0;
 }
 
 function onMessage(message: ServerMessage) {
@@ -434,7 +438,7 @@ function startGame(lobby: LobbyMessage) {
       ? createTouchSource({ surface: canvas, win: window, doc: document, width: () => window.innerWidth, controls })
       : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document, pointerGate));
   touchUi?.setVisible(true);
-  game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, firstPerson: loadFirstPerson(fpSearch, storageOrNull()), onViewChange: (on) => saveFirstPerson(on, storageOrNull()), onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen(), chatOpen: chatPanel.isOpen(), emoteOpen: emoteWheel.isOpen(), onChat: () => chatPanel.open(), onEmoteWheel: () => emoteWheel.open(), onEmoteWheelClose: () => emoteWheel.close() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ firstSeq, renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, firstPerson: loadFirstPerson(fpSearch, storageOrNull()), onViewChange: (on) => saveFirstPerson(on, storageOrNull()), onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen(), chatOpen: chatPanel.isOpen(), emoteOpen: emoteWheel.isOpen(), onChat: () => chatPanel.open(), onEmoteWheel: () => emoteWheel.open(), onEmoteWheelClose: () => emoteWheel.close() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
   warmNextStage(lobby);
 }
 
