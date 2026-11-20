@@ -4,7 +4,9 @@ import { fitted, hasModel, instantiate, shadowed, type FitSize } from './models'
 import { groupBySurface, mergeBoxes, toGeometry } from './groundMerge';
 import { groundTexture, SURFACE_TEXTURE, type SceneOptions } from './groundTextures';
 import { createSouleymanMeshes, souleymanPlacements } from './souleyman';
+import { bridgeParts, createBridgeMeshes } from './bridgeMesh';
 import { createTerrainMesh } from './terrain';
+import { createWaterMeshes } from './water';
 
 const SURFACE_COLOURS: Record<Surface, number> = {
   road: 0x8a7f72,
@@ -99,13 +101,19 @@ export function visibleWalls(course: BuiltCourse): readonly Box[] {
 
 export function createScene(course: BuiltCourse, options: SceneOptions = {}): THREE.Scene {
   const scene = new THREE.Scene();
-  const groups = groupBySurface(course.ground);
+  const drawn = visibleWalls(course);
+  const bridges = bridgeParts(course, drawn);
+  const deck = new Set<unknown>(bridges.deck);
+  const rails = new Set<unknown>(bridges.rails);
+  const groups = groupBySurface(deck.size > 0 ? course.ground.filter((box) => !deck.has(box)) : course.ground);
   for (const surface of Object.keys(groups) as Surface[]) {
     const mesh = mergedMesh(groups[surface]!, groundMaterial(surface, options), false);
     if (mesh) scene.add(mesh);
   }
-  const walls = mergedMesh(visibleWalls(course), solid(0xc98a5a), true);
+  const walls = mergedMesh(rails.size > 0 ? drawn.filter((box) => !rails.has(box)) : drawn, solid(0xc98a5a), true);
   if (walls) scene.add(walls);
+  if (deck.size > 0 || rails.size > 0) scene.add(createBridgeMeshes(bridges));
+  scene.add(createWaterMeshes(course, options));
   scene.add(createTerrainMesh(course, options));
   scene.add(...createSouleymanMeshes(souleymanPlacements(course.checkpoints)));
   scene.add(boxMesh(course.finish, ghost(0x22c55e)));
