@@ -217,6 +217,7 @@ const lobby = {
   vehicleId: 'lodgy',
   timeOfDay: 'midday',
   weather: 'clear',
+  chain: false,
 };
 
 test.each<ServerMessage>([
@@ -627,7 +628,7 @@ test('parseServerMessage keeps unknown fields on a prop entry and accepts an emp
 
 describe('L16: lobby messages', () => {
   const COURSE = 'segment-demo';
-  const configure = { type: 'configure', courseId: COURSE, vehicleId: 'rv', timeOfDay: 'night', weather: 'sandstorm' };
+  const configure = { type: 'configure', courseId: COURSE, vehicleId: 'rv', timeOfDay: 'night', weather: 'sandstorm', chain: false };
   const parse = (message: unknown) => parseClientMessage(JSON.stringify(message));
 
   test.each<unknown>([
@@ -864,9 +865,30 @@ describe('step 34: emotes, random weather, the tajine and the eat event', () => 
   });
 
   test('configure accepts random, and still refuses an unknown weather', () => {
-    const configure = { type: 'configure', courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'random' };
+    const configure = { type: 'configure', courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'random', chain: false };
     expect(parseClient(configure)).toEqual(configure);
     expect(parseClient({ ...configure, weather: 'fog' })).toBeNull();
+  });
+
+  test('configure carries chain, defaults it to false and refuses a non-boolean', () => {
+    const configure = { type: 'configure', courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'clear', chain: true };
+    expect(parseClient(configure)).toEqual(configure);
+    const { chain: _chain, ...without } = configure;
+    expect(parseClient(without)).toEqual({ ...without, chain: false });
+    expect(parseClient({ ...configure, chain: 'yes' })).toBeNull();
+    expect(parseClient({ ...configure, courseId: 'nowhere' })).toBeNull();
+  });
+
+  test('the lobby message needs a boolean chain', () => {
+    expect(parseServer({ ...lobby, chain: true })).toEqual({ ...lobby, chain: true });
+    expect(parseServer({ ...lobby, chain: undefined })).toBeNull();
+    expect(parseServer({ ...lobby, chain: 1 })).toBeNull();
+  });
+
+  test('the stage message is validated', () => {
+    const stage = { type: 'stage', courseId: 'valley', index: 1, of: 5 };
+    expect(parseServer(stage)).toEqual(stage);
+    for (const bad of [{ ...stage, courseId: 5 }, { ...stage, index: -1 }, { ...stage, index: 5 }, { ...stage, of: 0 }, { ...stage, index: 1.5 }, { type: 'stage' }]) expect(parseServer(bad)).toBeNull();
   });
 
   test('the lobby and results messages accept random', () => {

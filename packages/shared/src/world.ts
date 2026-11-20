@@ -15,7 +15,7 @@ import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
 import { holdTargetValid, isSelfItem, pressTarget, stepHold, stepOperateHold, type UseContext } from './holds';
 import { settleQueries } from './settle';
-import { AXIS_Y, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
+import { AXIS_Y, add, clamp, length, rotate, scale, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
 import { inShopRange, interactCandidates, resolveInteract, splitCandidates } from './interact';
 import type { ItemKind } from './constants';
@@ -97,6 +97,21 @@ export interface WorldSnapshot {
   weather?: Weather;
 }
 
+// What a chained run takes from one stage's world into the next; props, items, power-ups and drops stay behind.
+export interface WorldCarry {
+  fuel: number;
+  health: number;
+  players: { id: string; health: number; ammo: number; gun: boolean }[];
+  coinsCollected: number;
+  // Coins on the stages so far, this one included, so that collected never passes total.
+  coinsTotal: number;
+  wallet: number;
+  respawns: number;
+  assisted: boolean;
+  elapsed: number;
+  restarts: number;
+}
+
 export interface WorldStatus {
   state: 'running' | 'won';
   elapsed: number;
@@ -144,6 +159,9 @@ export interface World {
   status(): WorldStatus;
   // Restarts at the last checkpoint on the next step; does nothing once the run is won.
   restartCheckpoint(): void;
+  carryOut(): WorldCarry;
+  // For a fresh world: sets the carried values (clamped), continues the timer and counts, and re-records cp-0.
+  applyCarry(carry: WorldCarry): void;
   debug(): WorldDebug;
   // Tests only: the rigid body of the vehicle ('vehicle') or of a prop.
   debugBody(id: 'vehicle' | string): RigidBody | undefined;
@@ -242,6 +260,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   let coinsLeft = course.coins.map((coin) => coin.id);
   let wallet = 0;
   let coinsCollected = 0;
+  // Coins of earlier stages in a chained run.
+  let coinsBase = 0;
   let record: CheckpointRecord;
   let assisted = false;
   // Players whose item uses are free (the admin's infinite toggle).
@@ -1048,7 +1068,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       coinsLeft: [...coinsLeft],
       wallet,
       coinsCollected,
-      coinsTotal: course.coins.length,
+      coinsTotal: coinsBase + course.coins.length,
       assisted,
       ...animalField(),
       ...enemyField(),
@@ -1056,6 +1076,37 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }),
     restartCheckpoint() {
       if (!won) restartPending = true;
+    },
+    carryOut: () => ({
+      fuel: vehicle.fuel(),
+      health: vehicle.health(),
+      players: players.all().map((player) => ({ id: player.id, health: player.health, ammo: player.ammo, gun: player.gun })),
+      coinsCollected,
+      coinsTotal: coinsBase + course.coins.length,
+      wallet,
+      respawns,
+      assisted,
+      elapsed: elapsedAfter(runTicks),
+      restarts,
+    }),
+    applyCarry(carry) {
+      vehicle.addFuel(clamp(carry.fuel, 0, 1) - vehicle.fuel());
+      vehicle.repair(clamp(carry.health, 0, 1) - vehicle.health());
+      for (const saved of carry.players) {
+        const player = players.get(saved.id);
+        if (!player) continue;
+        player.health = clamp(saved.health, 0, PLAYER_MAX_HEALTH);
+        player.ammo = clamp(saved.ammo, 0, AMMO_MAX);
+        player.gun = saved.gun;
+      }
+      coinsCollected = carry.coinsCollected;
+      coinsBase = carry.coinsTotal;
+      wallet = carry.wallet;
+      respawns = carry.respawns;
+      assisted = carry.assisted;
+      runTicks = Math.round(carry.elapsed / TICK_DT);
+      restarts = carry.restarts;
+      recordCheckpoint(0);
     },
     status() {
       const elapsed = elapsedAfter(runTicks);
@@ -1066,7 +1117,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         respawns,
         wallet,
         coinsCollected,
-        coinsTotal: course.coins.length,
+        coinsTotal: coinsBase + course.coins.length,
         finalTime: finalTime({ elapsed, restarts, respawns, wallet }),
         assisted,
       };

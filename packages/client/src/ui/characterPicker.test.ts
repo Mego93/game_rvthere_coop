@@ -22,6 +22,7 @@ const message = (players: LobbyPlayer[]): LobbyMessage => ({
   vehicleId: 'lodgy',
   timeOfDay: 'midday',
   weather: 'clear',
+  chain: false,
 });
 
 const duo = message([player('p1', 'Amal', defaultAppearance('sounile')), player('p2', 'Badr', defaultAppearance('rafael'))]);
