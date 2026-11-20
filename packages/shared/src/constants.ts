@@ -505,6 +505,16 @@ export const STAGE_MIN_LENGTH = 2000;
 export const STAGE_MAX_LENGTH = 4200;
 // m along the marrakech route where the desert stage is cut.
 export const DESERT_TO = 3400;
+// The Ourika road's climb is stretched by this factor.
+export const MOUNTAIN_CLIMB_SCALE = 3;
+// Degrees, the steepest mountain straight (BIG_HILL_SLOPE).
+export const MOUNTAIN_MAX_SLOPE = 14;
+// Degrees: a mountain straight at or above this gets two boulders.
+export const MOUNTAIN_ANCHOR_SLOPE = 10;
+// m, the flat straight put between a curve and a sloped straight.
+export const MOUNTAIN_FLAT_LINK = 15;
+// Degrees: a mountain straight that would slope less than this stays flat, so the road keeps flat runs for stops.
+export const MOUNTAIN_FLAT_BELOW = 1;
 
 // m from the centre line to each barrier of a gates hazard; the corridor between inner edges is 2 * (this - barrier half width).
 export const GATES_OFFSET = 2.7;

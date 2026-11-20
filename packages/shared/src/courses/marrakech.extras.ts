@@ -67,6 +67,8 @@ export interface ExtrasOptions {
   rocks?: readonly RocksPlan[];
   // Seeds the dirt runs and the bumps (marrakech only; the course id); neither is placed when absent.
   seed?: string;
+  // Pickups and coins may also sit on curved and sloped roads (the mountain, whose straights are few).
+  onBends?: boolean;
 }
 
 export interface ExtrasReport {
@@ -286,7 +288,7 @@ export function planExtras(input: readonly SegmentDef[], inserted: readonly numb
     { kind: 'healthKit', along: 40, lateral: 0 },
   ];
   const pickupSegments = new Set<number>([0]);
-  const pickupPool = segments.map((_, i) => i).filter((i) => inner(i) && straight(i) && !hazardSegments.has(i) && roadAt(i)!.length >= 40);
+  const pickupPool = segments.map((_, i) => i).filter((i) => inner(i) && (options.onBends ? roadAt(i) !== null : straight(i)) && !hazardSegments.has(i) && roadAt(i)!.length >= 40);
   const pickupAt = (i: number): number => start[i]! + advance[i]! / 4;
   // Each kind steps about 1.5 km from its last pickup (never more than 1.8 km), the kinds starting 250 to 500 m apart.
   const lastAt: Record<string, number> = { jerrycan: 35, toolbox: -500, healthKit: -250 };
@@ -314,7 +316,7 @@ export function planExtras(input: readonly SegmentDef[], inserted: readonly numb
 
   // Coins: on straights of 30 m or more (not on hazard segments), about one per 250 m of course; the villa lane gets two.
   first.coins = coinsAlong(2, first.length, { next: 1 });
-  const coinPool = segments.map((_, i) => i).filter((i) => i > 0 && straight(i) && !hazardSegments.has(i) && roadAt(i)!.length >= COIN_MIN_SEGMENT);
+  const coinPool = segments.map((_, i) => i).filter((i) => i > 0 && (options.onBends ? roadAt(i) !== null : straight(i)) && !hazardSegments.has(i) && roadAt(i)!.length >= COIN_MIN_SEGMENT);
   const wanted = Math.round(total / COIN_EVERY) - 2;
   const counts = spreadCount(coinPool.map((i) => roadAt(i)!.length), wanted);
   const side = { next: -1 as -1 | 1 };

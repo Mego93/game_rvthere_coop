@@ -23,7 +23,7 @@ describe('stage ids', () => {
   it('lists the stages, then marrakech, then the rest', () => {
     const ids = courseIds();
     const present = STAGE_IDS.filter((id) => ids.includes(id));
-    expect(present).toEqual(['desert', 'city', 'airport-road']);
+    expect(present).toEqual(['desert', 'mountain', 'city', 'airport-road']);
     expect(ids.slice(0, present.length)).toEqual(present);
     expect(ids[present.length]).toBe('marrakech');
     expect([...ids].sort()).toEqual([...present, 'airport', 'marrakech', 'segment-demo', 'test'].sort());
