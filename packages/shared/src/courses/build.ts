@@ -13,6 +13,12 @@ export interface CourseDef {
   ambient?: boolean;
   // Gives the course the solid, uneven land beside the road (see corridor.ts).
   corridor?: boolean;
+  theme?: 'desert' | 'valley' | 'mountain' | 'city' | 'airport';
+  label?: string;
+  // Multiplies how many enemy events the course has (default 1).
+  enemyDensity?: number;
+  // The last share of the route that has twice as many enemy events.
+  enemyCityShare?: number;
 }
 
 interface Frame {
@@ -179,15 +185,19 @@ export function buildCourse(def: CourseDef): BuiltCourse {
     coins: [],
     decor: [],
     checkpoints: [],
+    ravines: [],
     route: [],
     finish: { center: vec3(0, 0, 0), halfExtents: vec3(0, 0, 0), rot: yawQuat(0) },
     killPlaneY: 0,
     targetTime: def.targetTime,
+    ...(def.enemyDensity !== undefined ? { enemyDensity: def.enemyDensity } : {}),
+    ...(def.enemyCityShare !== undefined ? { enemyCityShare: def.enemyCityShare } : {}),
   };
 
   const raw: { from: number; to: number }[] = [];
   const obstacles: { from: number; to: number }[] = [];
   let routeAt = 0;
+  let alongAt = 0;
   // Route metres to the start of the current segment, and the next mark that a figure checkpoint waits for.
   let travelled = 0;
   let nextFigure = 0;
@@ -233,6 +243,9 @@ export function buildCourse(def: CourseDef): BuiltCourse {
     for (let i = 1; i < local.route.length; i++) travelled += Math.hypot(local.route[i]![0] - local.route[i - 1]![0], local.route[i]![1] - local.route[i - 1]![1]);
     course.checkpoints.push(checkpoint);
     addRoute(local, at, index === 0);
+    const alongFrom = alongAt;
+    for (let i = 1; i < local.route.length; i++) alongAt += Math.hypot(local.route[i]![0] - local.route[i - 1]![0], local.route[i]![1] - local.route[i - 1]![1]);
+    if (segmentDef.type === 'bridge') course.ravines.push({ from: alongFrom, to: alongAt });
     const from = routeAt;
     if (def.ambient || def.corridor) {
       for (let i = 1; i < local.route.length; i++) routeAt += Math.hypot(local.route[i]![0] - local.route[i - 1]![0], local.route[i]![1] - local.route[i - 1]![1]);

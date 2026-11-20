@@ -64,6 +64,13 @@ export const MODEL_MANIFEST = {
   'decor.agave': model('sketchfab', 'agave', 1.2),
   'decor.kasbah': model('sketchfab', 'kasbah', 24),
   'decor.mosque': model('sketchfab', 'mosque', 30),
+  // Step 40 models. The pine, the hatchback and the kasbah come in the author's units, so the size is the real one in metres (the longest side: pine height, car length, kasbah width).
+  'decor.pine': model('sketchfab', 'pine', 12),
+  'decor.broadleaf': model('sketchfab', 'broadleaf', 9),
+  'decor.adobe': model('sketchfab', 'adobe-house', 9),
+  'decor.kasbah.landmark': model('sketchfab', 'kasbah-abh', 40),
+  'decor.car.hatchback': model('sketchfab', 'car-hatchback', 4),
+  'decor.car.minicab': model('sketchfab', 'car-minicab', 3.6),
   'decor.stall': model('sketchfab', 'stall', 3.2),
   'decor.tyres': model('sketchfab', 'tyres', 1),
   'decor.cliffs': model('sketchfab', 'cliffs', 10),

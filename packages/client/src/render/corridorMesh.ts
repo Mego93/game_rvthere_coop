@@ -1,7 +1,7 @@
 import { CORRIDOR_BLEND_START, corridorHeightAt, corridorOf, routeFrame, type BuiltCourse, type Corridor, type CorridorTile } from '@lodgy/shared';
 import * as THREE from 'three';
 import { TEXTURE_METRES_PER_REPEAT } from './groundMerge';
-import { groundTexture, type SceneOptions } from './groundTextures';
+import { groundTexture, tinted, type SceneOptions } from './groundTextures';
 import { terrainShade } from './terrain';
 
 // Metres a tile's edge skirt hangs below its surface, so a crack to a missing neighbour or the far land shows no gap.
@@ -115,10 +115,10 @@ export interface CorridorTerrain {
   dispose(): void;
 }
 
-function sandMaterial({ lite = false, flat = false }: SceneOptions): THREE.MeshStandardMaterial {
+function sandMaterial({ lite = false, flat = false, tint }: SceneOptions): THREE.MeshStandardMaterial {
   const map = flat ? null : groundTexture('sand', 'diffuse');
   if (map) map.anisotropy = lite ? 1 : 4;
-  return new THREE.MeshStandardMaterial({ color: map ? 0xffffff : SAND, map, normalMap: map && !lite ? groundTexture('sand', 'normal') : null, roughness: 1, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });
+  return new THREE.MeshStandardMaterial({ color: tinted(map ? 0xffffff : SAND, tint), map, normalMap: map && !lite ? groundTexture('sand', 'normal') : null, roughness: 1, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });
 }
 
 // The land beside the road, one mesh per tile, built when the camera comes within `radius` and disposed when it leaves; null for a course without a corridor.

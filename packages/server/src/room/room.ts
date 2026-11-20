@@ -41,7 +41,9 @@ import {
   type RoomSettings,
   type ServerMessage,
   type SnapshotMessage,
+  type StageMessage,
   type World,
+  type WorldCarry,
 } from '@lodgy/shared';
 import { createInputQueue, type InputQueue } from './inputQueue';
 import type { Connection } from './types';
@@ -144,10 +146,14 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   let phase: Phase = 'lobby';
   // Only exists while playing, and frozen while the results are shown.
   let world: World | null = null;
-  let settings: RoomSettings = { courseId: campaign[0]!, vehicleId: 'lodgy', timeOfDay: DEFAULT_TIME_OF_DAY, weather: DEFAULT_WEATHER };
+  let settings: RoomSettings = { courseId: campaign[0]!, vehicleId: 'lodgy', timeOfDay: DEFAULT_TIME_OF_DAY, weather: DEFAULT_WEATHER, chain: false };
   let lastResults: ResultsMessage | null = null;
   // The latest final time of each course finished since the room was created.
   const finished = new Map<string, number>();
+  // The stage a chained run is on, or null outside one; it stays set while the chain's results are shown.
+  let chainIndex: number | null = null;
+  // What the current stage of a chained run began with, or null on the first stage until it restarts.
+  let stageCarry: WorldCarry | null = null;
   // Kept in the order players joined.
   const players: RoomPlayer[] = [];
   let nextPlayerNumber = 1;
@@ -191,6 +197,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       players: players.map(({ playerId, name, colour, ready, connected, appearance }) => ({ playerId, name, colour, ready, connected, appearance: { ...appearance } })),
       adminId,
       ...settings,
+      courseId: chainIndex === null ? settings.courseId : campaign[chainIndex]!,
     } satisfies LobbyMessage);
   };
 
@@ -227,9 +234,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   };
 
   // A world for the room's configuration, with every player in it and cp-0 recorded.
-  const createRunWorld = (run: number): World => {
-    const course = config.courses?.[settings.courseId] ?? getCourse(settings.courseId);
-    const next = createWorld(rapier, { courseId: settings.courseId, vehicleId: settings.vehicleId, weather: settings.weather, ambient: course.ambient !== undefined, itemDrops: course.ambient !== undefined, enemies: true, itemSeed: mixSeed(hashSeed(course.id), run) }, course);
+  const createRunWorld = (run: number, courseId: string = settings.courseId): World => {
+    const course = config.courses?.[courseId] ?? getCourse(courseId);
+    const next = createWorld(rapier, { courseId, vehicleId: settings.vehicleId, weather: settings.weather, ambient: course.ambient !== undefined, itemDrops: course.ambient !== undefined, enemies: true, itemSeed: mixSeed(hashSeed(course.id), run) }, course);
     try {
       // Held slots join the world when they rejoin.
       for (const player of players) if (player.connected) next.addPlayer(player.playerId);
@@ -242,16 +249,51 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     return next;
   };
 
+  const stageMessage = (): StageMessage => ({ type: 'stage', courseId: campaign[chainIndex!]!, index: chainIndex!, of: campaign.length });
+
   const enterResults = (current: World) => {
     phase = 'results';
-    const results = resultsOf(current.status(), { id: settings.courseId, targetTime: current.course.targetTime }, settings);
-    finished.set(settings.courseId, results.finalTime);
-    lastResults = { type: 'results', ...results };
-    if (campaign.every((id) => finished.has(id))) lastResults.campaignTotal = campaign.reduce((sum, id) => sum + finished.get(id)!, 0);
+    if (chainIndex !== null) {
+      // One result for the whole run: the stages' target times add up.
+      const targetTime = campaign.reduce((sum, id) => sum + (config.courses?.[id] ?? getCourse(id)).targetTime, 0);
+      const results = resultsOf(current.status(), { id: 'run', targetTime }, settings);
+      finished.set('run', results.finalTime);
+      lastResults = { type: 'results', ...results, campaignTotal: results.finalTime };
+    } else {
+      const results = resultsOf(current.status(), { id: settings.courseId, targetTime: current.course.targetTime }, settings);
+      finished.set(settings.courseId, results.finalTime);
+      lastResults = { type: 'results', ...results };
+      if (campaign.every((id) => finished.has(id))) lastResults.campaignTotal = campaign.reduce((sum, id) => sum + finished.get(id)!, 0);
+    }
     // The snapshot goes out at once, outside the cadence, so that clients see the win.
     broadcastSnapshot(current);
     broadcastLobby();
     broadcast(lastResults);
+  };
+
+  // Rule R2: the next stage's world takes the finished one's carry; the phase stays playing.
+  const advanceStage = (current: World) => {
+    const index = chainIndex! + 1;
+    // Built first: nothing changes if it throws.
+    const next = createRunWorld(runNumber, campaign[index]!);
+    const carry = current.carryOut();
+    try {
+      next.applyCarry(carry);
+    } catch (error) {
+      next.dispose();
+      throw error;
+    }
+    chainIndex = index;
+    stageCarry = carry;
+    world = next;
+    tickOffset += worldTicks;
+    worldTicks = 0;
+    lastSent.clear();
+    restarted = true;
+    current.dispose();
+    broadcast(stageMessage());
+    broadcastLobby();
+    broadcastSnapshot(next);
   };
 
   // Returns true when this tick won the run.
@@ -264,6 +306,10 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     tick += 1;
     worldTicks += 1;
     if (current.status().state === 'won') {
+      if (chainIndex !== null && chainIndex < campaign.length - 1) {
+        advanceStage(current);
+        return false;
+      }
       enterResults(current);
       return true;
     }
@@ -280,6 +326,8 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     world?.dispose();
     world = null;
     lastResults = null;
+    chainIndex = null;
+    stageCarry = null;
     phase = 'lobby';
     for (const player of players) player.ready = false;
     broadcastLobby();
@@ -385,6 +433,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     },
     announce: broadcastLobby,
     catchUp(player) {
+      if (phase === 'playing' && chainIndex !== null) player.connection.send(JSON.stringify(stageMessage()));
       if (phase === 'results' && lastResults) player.connection.send(JSON.stringify(lastResults));
       for (const line of chatHistory) player.connection.send(JSON.stringify({ ...line, replay: true }));
     },
@@ -407,9 +456,11 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     configure(by, next) {
       const refused = refusal(by, 'lobby');
       if (refused) return refused;
-      const changed = settings.courseId !== next.courseId || settings.vehicleId !== next.vehicleId || settings.timeOfDay !== next.timeOfDay || settings.weather !== next.weather;
+      // Rule R1: a chain only makes sense for a course of the campaign.
+      const chain = next.chain && campaign.includes(next.courseId);
+      const changed = settings.courseId !== next.courseId || settings.vehicleId !== next.vehicleId || settings.timeOfDay !== next.timeOfDay || settings.weather !== next.weather || settings.chain !== chain;
       if (!changed) return null;
-      settings = { courseId: next.courseId, vehicleId: next.vehicleId, timeOfDay: next.timeOfDay, weather: next.weather };
+      settings = { courseId: next.courseId, vehicleId: next.vehicleId, timeOfDay: next.timeOfDay, weather: next.weather, chain };
       warm(settings.courseId);
       broadcastLobby();
       return null;
@@ -420,8 +471,11 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       if (players.some((player) => player.playerId !== adminId && player.connected && !player.ready)) return 'not_ready';
       if (lastNow - lastBuild < WORLD_REBUILD_COOLDOWN) return 'bad_phase';
       // Built first: if it throws, the room is still in the lobby, untouched.
-      const fresh = createRunWorld(runNumber + 1);
+      const first = settings.chain ? campaign[0]! : settings.courseId;
+      const fresh = createRunWorld(runNumber + 1, first);
       runNumber += 1;
+      chainIndex = settings.chain ? 0 : null;
+      stageCarry = null;
       for (const player of players) {
         player.queue = createInputQueue();
         player.sentFull = false;
@@ -436,6 +490,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       world = fresh;
       phase = 'playing';
       broadcastLobby();
+      if (chainIndex !== null) broadcast(stageMessage());
       return null;
     },
     restartCourse(by) {
@@ -443,7 +498,18 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       if (refused) return refused;
       if (lastNow - lastBuild < WORLD_REBUILD_COOLDOWN) return 'bad_phase';
       // The queues stay: the client's game keeps running and its seq keeps rising.
-      const fresh = createRunWorld(runNumber);
+      const fresh = createRunWorld(runNumber, chainIndex === null ? settings.courseId : campaign[chainIndex]);
+      if (chainIndex !== null) {
+        // Rule R4: the stage's own values come back, the restart count only goes up.
+        const carry: WorldCarry = { ...(stageCarry ?? fresh.carryOut()), restarts: world!.status().restarts + 1 };
+        try {
+          fresh.applyCarry(carry);
+        } catch (error) {
+          fresh.dispose();
+          throw error;
+        }
+        stageCarry = carry;
+      }
       const old = world;
       world = fresh;
       tickOffset += worldTicks;
@@ -475,6 +541,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     next(by) {
       const refused = refusal(by, 'results');
       if (refused) return refused;
+      if (chainIndex !== null) return 'bad_phase';
       const index = campaign.indexOf(settings.courseId);
       if (index === -1 || index === campaign.length - 1) return 'bad_phase';
       settings = { ...settings, courseId: campaign[index + 1]! };
@@ -522,7 +589,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
         due = SERVER_MAX_CATCHUP_STEPS;
       }
       // After the win the world is frozen, even if more ticks are due.
-      for (let i = 0; i < due; i++) if (stepOnce(world)) break;
+      for (let i = 0; i < due; i++) if (stepOnce(world!)) break;
     },
     emptySince: () => emptySince,
     everJoinedByOthers: () => joinedByOthers,

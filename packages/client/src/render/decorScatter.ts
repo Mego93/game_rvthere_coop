@@ -1,4 +1,4 @@
-import { CORRIDOR_BERM_FADE, CORRIDOR_BERM_MARGIN, CORRIDOR_OUTER, corridorOf, rotate, routeFrame, segmentRanges, type BuiltCourse, type Box, type CourseDef, type Placed, type SegmentDef } from '@lodgy/shared';
+import { CORRIDOR_BERM_FADE, CORRIDOR_BERM_MARGIN, CORRIDOR_OUTER, ROAD_WIDTH, corridorOf, rotate, routeFrame, segmentRanges, type BuiltCourse, type Box, type CourseDef, type Placed, type SegmentDef } from '@lodgy/shared';
 import { MODEL_MANIFEST, type ModelKey } from './modelManifest';
 import { landHeight, routeDistance, surfaceYAt, terrainHeight } from './terrain';
 
@@ -69,6 +69,50 @@ export const DECOR_DENSITY = {
 
 type Density = Partial<Record<string, number>>;
 
+// Step 40 themes: the densities a stage changes in its open (non-city) zones, per 100 m of route per side.
+export const THEME_DENSITY: Partial<Record<NonNullable<CourseDef['theme']>, Density>> = {
+  desert: { palms: 3, cactus: 1.5, fields: 0 },
+  valley: { palms: 0, cactus: 0, scrub: 8, grass: 25, trees: 22, rocks: 1, fields: 0 },
+  mountain: { palms: 0.3, cactus: 0, scrub: 14, grass: 6, stones: 8, rocks: 5, trees: 0, fields: 0 },
+};
+// The share of the airport stage, from its start, that is built up.
+export const AIRPORT_CITY_SHARE = 0.4;
+// Parked cars stand this far from the centre line (the lane edge is ROAD_WIDTH / 2) and are decor only.
+export const PARKED_LATERAL = ROAD_WIDTH / 2 + 3.6;
+export const PARKED_SPACING: readonly [number, number] = [14, 34];
+// Mountain houses come in clusters beside the road, at this distance from the centre line.
+export const ADOBE_ZONE: readonly [number, number] = [34, 52];
+export const ADOBE_CLUSTER_SPACING: readonly [number, number] = [280, 520];
+export const KASBAH_LANDMARK_ZONE: readonly [number, number] = [60, 110];
+// m, half the landmark's footprint at scale 1 (its width and depth, measured on the model).
+export const KASBAH_HALF_FOOTPRINT = { x: 20, z: 16.5 };
+const FOOTPRINT_SAMPLES = 9;
+const KASBAH_DISTANCE_COST = 0.05;
+
+// The ground heights under a footprint turned by `yaw` (the way the renderer turns a model), sampled on a grid.
+function footprintHeights(groundAt: (x: number, z: number) => number, x: number, z: number, yaw: number, halfX: number, halfZ: number): number[] {
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
+  const heights: number[] = [];
+  for (let i = 0; i < FOOTPRINT_SAMPLES; i++) {
+    for (let j = 0; j < FOOTPRINT_SAMPLES; j++) {
+      const lx = (i / (FOOTPRINT_SAMPLES - 1) - 0.5) * 2 * halfX;
+      const lz = (j / (FOOTPRINT_SAMPLES - 1) - 0.5) * 2 * halfZ;
+      heights.push(groundAt(x + lx * cos + lz * sin, z - lx * sin + lz * cos));
+    }
+  }
+  return heights;
+}
+
+// The highest ground under the footprint, so an upright model on it never sinks.
+export function footprintTop(groundAt: (x: number, z: number) => number, x: number, z: number, yaw: number, halfX: number, halfZ: number): number {
+  return Math.max(...footprintHeights(groundAt, x, z, yaw, halfX, halfZ));
+}
+
+function footprintBottom(groundAt: (x: number, z: number) => number, x: number, z: number, yaw: number, halfX: number, halfZ: number): number {
+  return Math.min(...footprintHeights(groundAt, x, z, yaw, halfX, halfZ));
+}
+
 const keys = <T extends string>(...list: T[]) => list;
 const MODELS = {
   scrub: keys<ModelKey>('decor.scrub', 'decor.bush.small', 'decor.bush.a'),
@@ -78,6 +122,7 @@ const MODELS = {
   palms: keys<ModelKey>('decor.palm.a', 'decor.palm.b', 'decor.palm.c', 'decor.palm.d', 'decor.palm.e'),
   cactus: keys<ModelKey>('decor.cactus.short', 'decor.cactus.tall'),
   trees: keys<ModelKey>('decor.tree.small', 'decor.tree.large'),
+  forest: keys<ModelKey>('decor.pine', 'decor.broadleaf'),
   crops: keys<ModelKey>('decor.crop.wheatA', 'decor.crop.wheatB', 'decor.crop.cornC', 'decor.crop.cornD'),
   buildings: keys<ModelKey>('decor.building.a', 'decor.building.b', 'decor.building.c', 'decor.building.d', 'decor.building.e', 'decor.building.h', 'decor.building.k', 'decor.building.n'),
   houses: keys<ModelKey>('decor.house.a', 'decor.house.c', 'decor.house.h', 'decor.house.m'),
@@ -192,19 +237,28 @@ export function* scatterDecorSteps(course: BuiltCourse, def: CourseDef | null, s
     return { x: x0 + (x1 - x0) * t, z: z0 + (z1 - z0) * t, tx: (x1 - x0) / length, tz: (z1 - z0) / length };
   };
 
-  // Zones: each segment, split where the city begins; the finish pad counts as road.
+  // Zones: each segment, split where the city begins (and ends, for the airport stage); the finish pad counts as road.
   const cityLength = options.cityLength ?? CITY_LENGTH;
-  const cityFrom = total >= 2 * cityLength ? total - cityLength : Infinity;
+  const theme = def.theme;
+  const cityFrom = theme === 'city' || theme === 'airport' ? 0 : theme === 'desert' || theme === 'valley' || theme === 'mountain' ? Infinity : total >= 2 * cityLength ? total - cityLength : Infinity;
+  const cityTo = theme === 'airport' ? AIRPORT_CITY_SHARE * total : Infinity;
   const ranges = segmentRanges(def);
   const spans = [...ranges, { type: 'road' as const, from: ranges[ranges.length - 1]!.to, to: total }];
   const zones: Zone[] = [];
   for (const span of spans) {
     if (span.type === 'alley' || span.to - span.from < 1) continue;
     const city = span.type === 'road' || span.type === 'roadworks';
-    if (city && span.to > cityFrom && span.from < cityFrom) {
-      zones.push({ type: span.type, from: span.from, to: cityFrom, city: false }, { type: span.type, from: cityFrom, to: span.to, city: true });
-    } else zones.push({ type: span.type, from: span.from, to: span.to, city: city && span.from >= cityFrom });
+    const cuts = [cityFrom, cityTo].filter((c) => city && c > span.from && c < span.to);
+    const edges = [span.from, ...cuts, span.to];
+    for (let i = 0; i + 1 < edges.length; i++) zones.push({ type: span.type, from: edges[i]!, to: edges[i + 1]!, city: city && edges[i]! >= cityFrom && edges[i]! < cityTo });
   }
+  const tableFor = (zone: Zone): Density => {
+    if (zone.city) return DECOR_DENSITY.city;
+    const base: Density = DECOR_DENSITY[zone.type as keyof typeof DECOR_DENSITY] ?? DECOR_DENSITY.road;
+    const over = theme ? THEME_DENSITY[theme] : undefined;
+    return over ? { ...base, ...over } : base;
+  };
+  const treeKeys = theme === 'valley' ? MODELS.forest : undefined;
 
   const blockers: { x: number; z: number }[] = [...course.props, ...course.pickups, ...course.anchors, ...course.coins].map((p: Placed) => ({ x: p.pose.pos.x, z: p.pose.pos.z }));
   const water = course.decor.filter((d) => d.kind === 'water' && d.size).map((d): Box => ({ center: d.pose.pos, halfExtents: d.size!, rot: d.pose.rot }));
@@ -288,8 +342,10 @@ export function* scatterDecorSteps(course: BuiltCourse, def: CourseDef | null, s
   const pick = (list: readonly ModelKey[]) => list[Math.floor(rng() * list.length)]!;
   const count = (expected: number) => Math.floor(expected + rng());
 
+  // The mountain landmarks go first, so that the rest makes way for them.
+  if (theme === 'mountain') yield* scatterMountain();
   for (const zone of zones) {
-    const table: Density = zone.city ? DECOR_DENSITY.city : (DECOR_DENSITY[zone.type as keyof typeof DECOR_DENSITY] ?? DECOR_DENSITY.road);
+    const table = tableFor(zone);
     const length = zone.to - zone.from;
     for (const side of [-1, 1]) {
       const at = (along: number, lateral: number) => {
@@ -324,7 +380,7 @@ export function* scatterDecorSteps(course: BuiltCourse, def: CourseDef | null, s
             }
             continue;
           }
-          const key = pick(spec.keys);
+          const key = pick(name === 'trees' && treeKeys ? treeKeys : spec.keys);
           const along = between(zone.from, zone.to);
           let scale = between(spec.scale[0], spec.scale[1]);
           let [low, high] = spec.zone;
@@ -387,6 +443,7 @@ export function* scatterDecorSteps(course: BuiltCourse, def: CourseDef | null, s
     }
   }
   if (corridor) yield* scatterCorridor();
+  if (theme === 'city') yield* scatterParkedCars();
   return out;
 
   // The step 32 and 33 decor of a corridor course, from its own random stream so the rest of the scatter is unchanged.
@@ -429,14 +486,20 @@ export function* scatterDecorSteps(course: BuiltCourse, def: CourseDef | null, s
       }
     };
     let along = betweenC(800, 1400);
-    while (along < total) {
+    // The valley and the mountains have their own settlements.
+    while (along < total && theme !== 'valley' && theme !== 'mountain') {
       const zone = roadZones.find((z) => along - VILLAGE_HALF >= z.from && along + VILLAGE_HALF <= z.to);
       if (zone) {
         village(along - VILLAGE_HALF, along + VILLAGE_HALF, 1, 2 + Math.floor(rc() * 2));
         along += betweenC(VILLAGE_SPACING[0], VILLAGE_SPACING[1]);
       } else along += 150;
     }
-    for (const zone of cityZones) village(zone.from, zone.to, 2, 2);
+    // A built-up stage is all city zones: landmarks scale with the length instead of repeating per zone.
+    const builtUp = theme === 'city' || theme === 'airport';
+    for (const zone of cityZones) {
+      if (!builtUp) village(zone.from, zone.to, 2, 2);
+      else if (zone.to - zone.from >= 200) village(zone.from, zone.to, Math.floor((zone.to - zone.from) / 500), Math.floor((zone.to - zone.from) / 800));
+    }
 
     // Stalls near each fuel stop, on its side of the road, behind the shoulders.
     const frame = routeFrame(course);
@@ -465,7 +528,7 @@ export function* scatterDecorSteps(course: BuiltCourse, def: CourseDef | null, s
 
     // Per zone and side: the corridor band's own shrubs, rocks, palms and cacti (the table's density again, doubling the decor beyond the shoulders), agaves and tyres by the road edge, cliffs and mountains beyond the ridge.
     for (const zone of zones) {
-      const table: Density = zone.city ? DECOR_DENSITY.city : (DECOR_DENSITY[zone.type as keyof typeof DECOR_DENSITY] ?? DECOR_DENSITY.road);
+      const table = tableFor(zone);
       const length = zone.to - zone.from;
       for (const s of side) {
         const scatter = function* (keys: readonly ModelKey[], density: number, zoneLateral: readonly [number, number], scale: readonly [number, number], radius: number, sunk = 0): Generator<void> {
@@ -478,6 +541,7 @@ export function* scatterDecorSteps(course: BuiltCourse, def: CourseDef | null, s
         yield* scatter(MODELS.rocks, table.rocks ?? 0, [BAND[0], 130], [0.8, 1.8], 2);
         yield* scatter(MODELS.palms, table.palms ?? 0, [BAND[0], 110], [0.85, 1.25], 2.2);
         yield* scatter(MODELS.cactus, table.cactus ?? 0, [BAND[0], 90], [0.8, 1.3], 1);
+        if (treeKeys) yield* scatter(treeKeys, (table.trees ?? 0), [BAND[0], 124], [0.8, 1.3], 3);
         yield* scatter(MODELS.scrub, (table.scrub ?? 0) * BAND_SHRUBS, BAND, [0.9, 1.8], 1);
         if (!zone.city) {
           yield* scatter(['decor.agave'], 0.8, ROADSIDE_ZONE, [0.9, 1.4], 0.8);
@@ -493,6 +557,85 @@ export function* scatterDecorSteps(course: BuiltCourse, def: CourseDef | null, s
         }
         yield* scatter(['decor.cliffs'], 0.8, CLIFFS_ZONE, [1.5, 3], 8, 0.3);
         yield* scatter(['decor.mountains'], 0.5, MOUNTAINS_ZONE, [7, 12], 120, 8);
+      }
+    }
+  }
+  // Houses in clusters beside the mountain road, and the kasbah on the last flat straight before the finish.
+  function* scatterMountain(): Generator<void> {
+    const rm = prng((seed ^ 0x2545f491) >>> 0);
+    const betweenM = (a: number, b: number) => a + (b - a) * rm();
+    const spot = (along: number, lateral: number, s: number) => {
+      const f = frameAt(Math.min(total, Math.max(0, along)));
+      return { x: f.x - f.tz * lateral * s, z: f.z + f.tx * lateral * s, f };
+    };
+    const face = (f: Frame, s: number) => Math.atan2(f.tz * s, -f.tx * s);
+    const sink = (placed: boolean, amount: number) => {
+      if (placed) out[out.length - 1]!.y -= amount;
+    };
+    const flats = ranges.filter((r, i) => {
+      const segment = def!.segments[i]!;
+      return segment.type === 'road' && !segment.slope && !segment.curve && r.to - r.from >= 20;
+    });
+    const last = flats.filter((r) => r.to - r.from >= 40).pop() ?? flats[flats.length - 1];
+    let landmark: { from: number; to: number } | undefined;
+    if (last) {
+      landmark = last;
+      const middle = (last.from + last.to) / 2;
+      // The road winds, so a spot may be near another stretch of it: try many, the flattest first.
+      const ground = (gx: number, gz: number) => (corridor ? landHeight(course, gx, gz) : terrainHeight(course, gx, gz));
+      const spots: { p: ReturnType<typeof spot>; s: 1 | -1; score: number }[] = [];
+      for (let attempt = 0; attempt < 80; attempt++) {
+        yield;
+        const s = attempt % 2 === 0 ? 1 : -1;
+        const lateral = betweenM(KASBAH_LANDMARK_ZONE[0], KASBAH_LANDMARK_ZONE[1]) + attempt;
+        const p = spot(middle + betweenM(-(last.to - last.from) / 2, (last.to - last.from) / 2), lateral, s);
+        const yaw = face(p.f, s);
+        // Each metre of distance from the road costs 5 cm of relief, so the site stays within sight of the road.
+        spots.push({ p, s, score: KASBAH_DISTANCE_COST * lateral + footprintTop(ground, p.x, p.z, yaw, KASBAH_HALF_FOOTPRINT.x, KASBAH_HALF_FOOTPRINT.z) - footprintBottom(ground, p.x, p.z, yaw, KASBAH_HALF_FOOTPRINT.x, KASBAH_HALF_FOOTPRINT.z) });
+      }
+      spots.sort((a, b) => a.score - b.score);
+      for (const { p, s } of spots) {
+        yield;
+        if (place('decor.kasbah.landmark', p.x, p.z, face(p.f, s), 1, [FAR_MIN, Infinity], 22)) {
+          // Upright, with its base at the highest ground under the footprint.
+          out[out.length - 1]!.y = footprintTop(ground, p.x, p.z, face(p.f, s), KASBAH_HALF_FOOTPRINT.x, KASBAH_HALF_FOOTPRINT.z);
+          break;
+        }
+      }
+    }
+    for (let along = betweenM(150, 400); along < total; along += betweenM(ADOBE_CLUSTER_SPACING[0], ADOBE_CLUSTER_SPACING[1])) {
+      // The kasbah has the last flat to itself.
+      if (landmark && along > landmark.from - 60 && along < landmark.to + 60) continue;
+      const s = rm() < 0.5 ? -1 : 1;
+      const lateral = betweenM(ADOBE_ZONE[0], ADOBE_ZONE[1]);
+      for (let k = 0, n = 4 + Math.floor(rm() * 3); k < n; k++) {
+        yield;
+        const p = spot(along + k * 11 + betweenM(-1.5, 1.5), lateral + betweenM(-3, 5), s);
+        sink(place('decor.adobe', p.x, p.z, face(p.f, s) + (rm() - 0.5) * 0.7, betweenM(0.9, 1.3), [FAR_MIN, Infinity], 4), 0.4);
+      }
+    }
+  }
+
+  // Cars parked at the road edge, outside the lane, on both sides of every built-up zone. Decor only: nothing here is physical.
+  function* scatterParkedCars(): Generator<void> {
+    const rp = prng((seed ^ 0x3c6ef372) >>> 0);
+    const betweenP = (a: number, b: number) => a + (b - a) * rp();
+    for (const zone of zones) {
+      if (!zone.city) continue;
+      for (const s of [-1, 1] as const) {
+        for (let along = zone.from + betweenP(0, PARKED_SPACING[1]); along < zone.to; along += betweenP(PARKED_SPACING[0], PARKED_SPACING[1])) {
+          yield;
+          if (rp() < 0.3) continue;
+          const key: ModelKey = rp() < 0.5 ? 'decor.car.hatchback' : 'decor.car.minicab';
+          const f = frameAt(along);
+          const lateral = PARKED_LATERAL + betweenP(-0.3, 0.3);
+          const x = f.x - f.tz * lateral * s;
+          const z = f.z + f.tx * lateral * s;
+          // The hatchback's long side is its Z axis, the minicab's its X axis; cars on the far side point the other way.
+          const flip = s > 0 ? Math.PI : 0;
+          const yaw = (key === 'decor.car.hatchback' ? Math.atan2(f.tx, f.tz) : Math.atan2(-f.tz, f.tx)) + flip + betweenP(-0.05, 0.05);
+          place(key, x, z, yaw, 1, [PARKED_LATERAL - 1.2, PARKED_LATERAL + 1.2], 2.4);
+        }
       }
     }
   }

@@ -8,18 +8,19 @@ import { createEnemies, planEnemies, type Enemies, type EnemyEvent, type EnemySn
 import { hashSeed, planAmbient, type AmbientEvent, type AnimalSnapshot } from './ambient';
 import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
-import { DEFAULT_WEATHER, ENEMY_CITY_SHARE, ENEMY_KNIFE_DAMAGE, ENEMY_SEED_SALT, ENEMY_VEHICLE_DAMAGE, GUN_DAMAGE, KOKE_MULTIPLIER, AMMO_BOX_ROUNDS, AMMO_MAX, GUN_COOLDOWN, GUN_RANGE, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, SHIELD_SECONDS, TAJINE_HEAL, WEATHER_SEED_SALT, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather, type WeatherSetting, type ShopItem } from './constants';
+import { DEFAULT_WEATHER, ENEMY_KNIFE_DAMAGE, ENEMY_SEED_SALT, ENEMY_VEHICLE_DAMAGE, GUN_DAMAGE, KOKE_MULTIPLIER, AMMO_BOX_ROUNDS, AMMO_MAX, GUN_COOLDOWN, GUN_RANGE, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, SHIELD_SECONDS, TAJINE_HEAL, WEATHER_SEED_SALT, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather, type WeatherSetting, type ShopItem } from './constants';
 import { weatherAt, weatherSchedule } from './weather';
 import type { BuiltCourse } from './course';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
 import { holdTargetValid, isSelfItem, pressTarget, stepHold, stepOperateHold, type UseContext } from './holds';
 import { settleQueries } from './settle';
-import { AXIS_Y, add, length, rotate, scale, sub, vec3, type Vec3 } from './math';
+import { AXIS_Y, add, clamp, length, rotate, scale, sub, vec3, type Vec3 } from './math';
 import { createItems } from './items';
 import { inShopRange, interactCandidates, resolveInteract, splitCandidates } from './interact';
 import type { ItemKind } from './constants';
 import { aimRay, clearPowerUps, createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
+import { belowWater } from './water';
 import { elapsedAfter, finalTime, reachedFinish, vehicleLost } from './rules';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
@@ -97,6 +98,21 @@ export interface WorldSnapshot {
   weather?: Weather;
 }
 
+// What a chained run takes from one stage's world into the next; props, items, power-ups and drops stay behind.
+export interface WorldCarry {
+  fuel: number;
+  health: number;
+  players: { id: string; health: number; ammo: number; gun: boolean; seat: string | null }[];
+  coinsCollected: number;
+  // Coins on the stages so far, this one included, so that collected never passes total.
+  coinsTotal: number;
+  wallet: number;
+  respawns: number;
+  assisted: boolean;
+  elapsed: number;
+  restarts: number;
+}
+
 export interface WorldStatus {
   state: 'running' | 'won';
   elapsed: number;
@@ -144,6 +160,9 @@ export interface World {
   status(): WorldStatus;
   // Restarts at the last checkpoint on the next step; does nothing once the run is won.
   restartCheckpoint(): void;
+  carryOut(): WorldCarry;
+  // For a fresh world: sets the carried values (clamped), continues the timer and counts, and re-records cp-0.
+  applyCarry(carry: WorldCarry): void;
   debug(): WorldDebug;
   // Tests only: the rigid body of the vehicle ('vehicle') or of a prop.
   debugBody(id: 'vehicle' | string): RigidBody | undefined;
@@ -155,6 +174,8 @@ export interface World {
   debugHurt(id: string, amount: number): void;
   // Tests only: the player's health before the snapshot rounds it down.
   debugPlayerHealth(id: string): number;
+  // Tests only: puts a player in a seat of the vehicle.
+  debugSeat(id: string, seatId: string): void;
   // Tests only: replaces the player's inventory.
   debugSetInventory(id: string, inventory: readonly (ItemKind | null)[]): void;
   // Frees the physics world. The world must not be used afterwards.
@@ -204,7 +225,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   };
   const enemySeed = mixSeed(options.enemySeed ?? options.itemSeed ?? mixSeed(hashSeed(course.id), 1), ENEMY_SEED_SALT);
   const enemyPlan: readonly EnemyEvent[] | undefined =
-    options.enemies === true ? (options.enemyPlan ?? planEnemies(enemySeed, routeIndex!.length, course.id === 'marrakech' ? routeIndex!.length * (1 - ENEMY_CITY_SHARE) : null)) : undefined;
+    options.enemies === true ? (options.enemyPlan ?? planEnemies(enemySeed, routeIndex!.length, course.enemyCityShare !== undefined ? routeIndex!.length * (1 - course.enemyCityShare) : null, course.enemyDensity)) : undefined;
   const enemies: Enemies | null = enemyPlan ? createEnemies(rapier, physics, course.route, enemyPlan, enemySeed, statics.surfaceOf) : null;
   const enemyField = (): { enemies?: EnemySnapshot[] } => {
     const list = enemies?.snapshot();
@@ -242,6 +263,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   let coinsLeft = course.coins.map((coin) => coin.id);
   let wallet = 0;
   let coinsCollected = 0;
+  // Coins of earlier stages in a chained run.
+  let coinsBase = 0;
   let record: CheckpointRecord;
   let assisted = false;
   // Players whose item uses are free (the admin's infinite toggle).
@@ -719,7 +742,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     for (const player of players.all()) {
       if (player.seat !== null) continue;
       if (player.respawnIn === null) {
-        if (player.pos.y < course.killPlaneY) {
+        if (player.pos.y < course.killPlaneY || belowWater(course, player.pos)) {
           player.respawnIn = PLAYER_KILL_RESPAWN_DELAY;
           clearPowerUps(player);
         }
@@ -992,7 +1015,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         }
         // The pending flag lives only until this check; a manual restart also stops a win on its tick.
         if (vehicleOutOfBounds()) restartPending = true;
-        const restarting = vehicleLost(centre, vehicle.health(), course.killPlaneY) || restartPending;
+        const restarting = vehicleLost(centre, vehicle.health(), course.killPlaneY) || belowWater(course, centre) || restartPending;
         restartPending = false;
         if (restarting) restart(events);
         if (reachedFinish(centre, course.finish, restarting)) won = true;
@@ -1048,7 +1071,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       coinsLeft: [...coinsLeft],
       wallet,
       coinsCollected,
-      coinsTotal: course.coins.length,
+      coinsTotal: coinsBase + course.coins.length,
       assisted,
       ...animalField(),
       ...enemyField(),
@@ -1056,6 +1079,39 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }),
     restartCheckpoint() {
       if (!won) restartPending = true;
+    },
+    carryOut: () => ({
+      fuel: vehicle.fuel(),
+      health: vehicle.health(),
+      players: players.all().map((player) => ({ id: player.id, health: player.health, ammo: player.ammo, gun: player.gun, seat: player.seat })),
+      coinsCollected,
+      coinsTotal: coinsBase + course.coins.length,
+      wallet,
+      respawns,
+      assisted,
+      elapsed: elapsedAfter(runTicks),
+      restarts,
+    }),
+    applyCarry(carry) {
+      vehicle.addFuel(clamp(carry.fuel, 0, 1) - vehicle.fuel());
+      vehicle.repair(clamp(carry.health, 0, 1) - vehicle.health());
+      for (const saved of carry.players) {
+        const player = players.get(saved.id);
+        if (!player) continue;
+        player.health = clamp(saved.health, 0, PLAYER_MAX_HEALTH);
+        player.ammo = clamp(saved.ammo, 0, AMMO_MAX);
+        player.gun = saved.gun;
+        // Whoever sat when the stage ended sits in the same seat of the new vehicle.
+        if (saved.seat !== null && vehicleConfig.seats.some((seat) => seat.id === saved.seat) && !players.all().some((other) => other.seat === saved.seat)) players.setSeat(saved.id, saved.seat);
+      }
+      coinsCollected = carry.coinsCollected;
+      coinsBase = carry.coinsTotal;
+      wallet = carry.wallet;
+      respawns = carry.respawns;
+      assisted = carry.assisted;
+      runTicks = Math.round(carry.elapsed / TICK_DT);
+      restarts = carry.restarts;
+      recordCheckpoint(0);
     },
     status() {
       const elapsed = elapsedAfter(runTicks);
@@ -1066,7 +1122,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         respawns,
         wallet,
         coinsCollected,
-        coinsTotal: course.coins.length,
+        coinsTotal: coinsBase + course.coins.length,
         finalTime: finalTime({ elapsed, restarts, respawns, wallet }),
         assisted,
       };
@@ -1180,6 +1236,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     debugVehicle: () => vehicle,
     debugPlayerHealth: (id) => players.get(id)!.health,
     debugSetInventory: (id, inventory) => players.restoreInventory(id, inventory),
+    debugSeat: (id, seatId) => players.setSeat(id, seatId),
     debugHurt(id, amount) {
       debugDamage.push({ playerId: id, source: 'debug', amount });
     },

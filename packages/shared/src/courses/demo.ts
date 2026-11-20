@@ -2,6 +2,7 @@ import type { CourseDef } from './build';
 
 export const segmentDemo: CourseDef = {
   id: 'segment-demo',
+  label: 'segment-demo',
   segments: [
     {
       type: 'road',

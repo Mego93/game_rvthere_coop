@@ -1,5 +1,6 @@
 import { CAMPAIGN, type ResultsMessage } from '@lodgy/shared';
-import { VEHICLE_LABELS, WEATHER_LABELS } from './lobby';
+import { courseLabel, VEHICLE_LABELS, WEATHER_LABELS } from './lobby';
+import { labelWithoutNumber } from './stageBanner';
 
 export interface ResultsView {
   lines: string[];
@@ -14,19 +15,24 @@ function clock(seconds: number): string {
   return `${minutes}:${rest < 10 ? '0' : ''}${rest.toFixed(1)}`;
 }
 
+// The course id a chained run's results carry; the run is not a course.
+export const RUN_RESULTS_ID = 'run';
+export const RUN_RESULTS_NAME = 'Five stages';
+
 export function resultsView(message: ResultsMessage, isAdmin: boolean, campaign: readonly string[] = CAMPAIGN): ResultsView {
   const lines = [
     `Final time ${clock(message.finalTime)}`,
     `Vehicle ${Object.hasOwn(VEHICLE_LABELS, message.vehicleId) ? VEHICLE_LABELS[message.vehicleId] : message.vehicleId}`,
-    `Course ${message.courseId}, ${message.timeOfDay}, ${WEATHER_LABELS[message.weather]}`,
+    `Course ${message.courseId === RUN_RESULTS_ID ? RUN_RESULTS_NAME : labelWithoutNumber(courseLabel(message.courseId))}, ${message.timeOfDay}, ${WEATHER_LABELS[message.weather]}`,
     `Restarts ${message.restarts}, respawns ${message.respawns}`,
     `Coins ${message.wallet} kept, ${message.coinsCollected}/${message.coinsTotal} collected`,
     `Stars ${message.stars.map((earned) => (earned ? '★' : '☆')).join('')}`,
   ];
   if (message.assisted) lines.push('assisted');
-  if (message.campaignTotal !== undefined) lines.push(`Campaign total ${clock(message.campaignTotal)}`);
+  // A chained run's final time already is the total.
+  if (message.campaignTotal !== undefined && message.courseId !== RUN_RESULTS_ID) lines.push(`Campaign total ${clock(message.campaignTotal)}`);
   if (!isAdmin) lines.push('Waiting for the admin');
-  const index = campaign.indexOf(message.courseId);
+  const index = message.courseId === RUN_RESULTS_ID ? -1 : campaign.indexOf(message.courseId);
   return { lines, showNext: isAdmin && index >= 0 && index < campaign.length - 1, showLobby: isAdmin };
 }
 

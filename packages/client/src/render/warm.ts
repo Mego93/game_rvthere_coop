@@ -1,4 +1,4 @@
-import { getCourse, getCourseDef, warmCorridor } from '@lodgy/shared';
+import { CAMPAIGN, getCourse, getCourseDef, warmCorridor } from '@lodgy/shared';
 import { scatterDecorSteps, seedFromId, type DecorPlacement } from './decorScatter';
 import { warmTerrainGrid } from './terrain';
 
@@ -52,6 +52,9 @@ export function runSliced(gen: Generator<void, unknown>, budgetMs: number, activ
     },
   };
 }
+
+// The course the lobby warms: a chained run starts at the first stage, whatever stage is selected.
+export const warmTarget = (settings: { courseId: string; chain: boolean }): string => (settings.chain && CAMPAIGN.includes(settings.courseId) ? CAMPAIGN[0]! : settings.courseId);
 
 // How long a course stays selected before the lobby starts building it.
 export const WARM_DELAY_MS = 1500;

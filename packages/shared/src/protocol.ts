@@ -79,6 +79,8 @@ export interface RoomSettings {
   vehicleId: string;
   timeOfDay: TimeOfDay;
   weather: WeatherSetting;
+  // Play the campaign's stages as one run; only honoured for a course in the campaign.
+  chain: boolean;
 }
 
 export type Phase = 'lobby' | 'playing' | 'results';
@@ -106,6 +108,7 @@ export interface LobbyMessage {
   vehicleId: string;
   timeOfDay: TimeOfDay;
   weather: WeatherSetting;
+  chain: boolean;
 }
 
 export interface ResultsMessage {
@@ -201,10 +204,19 @@ export type ServerMessage =
   | SnapshotMessage
   | EventMessage
   | ResultsMessage
+  | StageMessage
   | { type: 'error'; reason: ErrorReason }
   | ChatMessage
   | { type: 'emote'; playerId: string; emote: Emote }
   | { type: 'ping' };
+
+// A chained run moved to another stage (index counts from 0, of is the stage count); also sent to a player who joins mid-chain.
+export interface StageMessage {
+  type: 'stage';
+  courseId: string;
+  index: number;
+  of: number;
+}
 
 // `id` counts a room's chat lines from 1; `at` is the server clock in whole seconds, opaque to clients.
 export interface ChatMessage {
@@ -341,9 +353,9 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     case 'appearance':
       return isAppearance(fields) ? { type: 'appearance', characterId: fields.characterId, glasses: fields.glasses, top: fields.top, hat: fields.hat, skin: fields.skin, eyes: fields.eyes, smile: fields.smile } : null;
     case 'configure': {
-      const { courseId, vehicleId, timeOfDay, weather } = fields;
-      return isCourseId(courseId) && isVehicleId(vehicleId) && isTimeOfDay(timeOfDay) && isWeatherSetting(weather)
-        ? { type: 'configure', courseId, vehicleId, timeOfDay, weather }
+      const { courseId, vehicleId, timeOfDay, weather, chain = false } = fields;
+      return isCourseId(courseId) && isVehicleId(vehicleId) && isTimeOfDay(timeOfDay) && isWeatherSetting(weather) && typeof chain === 'boolean'
+        ? { type: 'configure', courseId, vehicleId, timeOfDay, weather, chain }
         : null;
     }
     case 'kick':
@@ -494,9 +506,12 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         isText(data.courseId) &&
         isText(data.vehicleId) &&
         isTimeOfDay(data.timeOfDay) &&
-        isWeatherSetting(data.weather)
+        isWeatherSetting(data.weather) &&
+        typeof data.chain === 'boolean'
         ? message
         : null;
+    case 'stage':
+      return isText(data.courseId) && isCount(data.index) && isCount(data.of) && data.of >= 1 && data.index < data.of ? message : null;
     case 'snapshot':
       return isCount(data.tick) &&
         isCount(data.ackSeq) &&

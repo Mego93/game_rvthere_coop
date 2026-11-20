@@ -496,8 +496,36 @@ export const RAIN_GRIP = 0.75;
 export const HELD_SLOT_TIMEOUT = 30;
 // s a room refuses to build another world after building one, so an admin cannot rebuild at message rate.
 export const WORLD_REBUILD_COOLDOWN = 1;
+// The five stages in play order.
+export const STAGE_IDS: readonly string[] = deepFreeze(['desert', 'valley', 'mountain', 'city', 'airport-road']);
 // Course ids in campaign order.
-export const CAMPAIGN: readonly string[] = deepFreeze(['marrakech']);
+export const CAMPAIGN: readonly string[] = STAGE_IDS;
+// m of route, the length every stage must stay within.
+export const STAGE_MIN_LENGTH = 2000;
+export const STAGE_MAX_LENGTH = 4200;
+// m along the marrakech route where the desert stage is cut.
+export const DESERT_TO = 3400;
+// The Ourika road's climb is stretched by this factor.
+export const MOUNTAIN_CLIMB_SCALE = 3;
+// Degrees, the steepest mountain straight (BIG_HILL_SLOPE).
+export const MOUNTAIN_MAX_SLOPE = 14;
+// Degrees: a mountain straight at or above this gets two boulders.
+export const MOUNTAIN_ANCHOR_SLOPE = 10;
+// m, the flat straight put between a curve and a sloped straight.
+export const MOUNTAIN_FLAT_LINK = 15;
+// Degrees: a mountain straight that would slope less than this stays flat, so the road keeps flat runs for stops.
+export const MOUNTAIN_FLAT_BELOW = 1;
+
+// m, how far the land under a bridge is sunk below the route.
+export const BRIDGE_RAVINE_DEPTH = 8;
+export const BRIDGE_RAIL_HEIGHT = 1.1;
+export const BRIDGE_RAIL_THICKNESS = 0.3;
+// m of bridge at each end over the bank, where the land is not sunk.
+export const BRIDGE_ABUTMENT = 6;
+// m, along the road, over which the land falls from the abutment to the ravine floor (8 m over 12 m is 33.7 degrees).
+export const BRIDGE_BANK_RUN = 12;
+// m under the deck where the client draws the water.
+export const WATER_DEPTH_BELOW_ROAD = 6.5;
 
 // m from the centre line to each barrier of a gates hazard; the corridor between inner edges is 2 * (this - barrier half width).
 export const GATES_OFFSET = 2.7;

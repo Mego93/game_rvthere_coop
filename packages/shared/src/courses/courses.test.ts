@@ -29,7 +29,7 @@ beforeAll(async () => {
 const course = getCourse('segment-demo');
 
 test('courseIds lists every registered course', () => {
-  expect(courseIds().sort()).toEqual(['airport', 'marrakech', 'segment-demo', 'test']);
+  expect(courseIds().sort()).toEqual(['airport', 'airport-road', 'city', 'desert', 'marrakech', 'mountain', 'segment-demo', 'test', 'valley']);
 });
 const VEHICLE_CONFIGS = Object.values(VEHICLES);
 

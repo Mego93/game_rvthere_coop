@@ -4,6 +4,10 @@ import {
   ALLEY_WALL_HEIGHT,
   ALLEY_WIDTH,
   BANK_APPROACH,
+  BRIDGE_ABUTMENT,
+  BRIDGE_BANK_RUN,
+  BRIDGE_RAIL_HEIGHT,
+  BRIDGE_RAIL_THICKNESS,
   BANK_TOP,
   BUMP_HEIGHT,
   BUMP_LENGTH,
@@ -63,6 +67,7 @@ import {
   type Surface,
 } from './constants';
 import type { Box, GroundBox, Placed, ServiceStop } from './course';
+import { DEEP_PIT } from './courses/terrain';
 import { VEHICLES } from './vehicles';
 import { AXIS_X, AXIS_Y, add, degToRad, quatFromAxisAngle, quatMul, rotate, vec3, type Quat, type Vec3 } from './math';
 
@@ -98,7 +103,9 @@ export type SegmentDef =
   | ({ type: 'bank'; height: number; gradient: number; anchors: number } & Omit<SegmentExtras, 'anchors'>)
   // A pit descends `depth` at `gradient`, runs flat for `floor`, climbs out at `gradientOut` (default `gradient`); its `anchors` count replaces the extras' list.
   | ({ type: 'pit'; depth: number; gradient: number; gradientOut?: number; floor: number; anchors: number } & Omit<SegmentExtras, 'anchors'>)
-  | ({ type: 'roadworks'; length: number; obstacles: number } & SegmentExtras);
+  | ({ type: 'roadworks'; length: number; obstacles: number } & SegmentExtras)
+  // A flat deck with railings over a ravine; `broken` puts the deep pit's profile in the middle, so a vehicle needs the winch.
+  | ({ type: 'bridge'; length: number; broken?: true } & SegmentExtras);
 
 export interface SurfacePoint {
   pos: Vec3;
@@ -309,6 +316,7 @@ export function obstacleSpans(def: SegmentDef, routeLength: number): [from: numb
     case 'roadworks':
       return [[0, routeLength]];
     case 'sand':
+    case 'bridge':
       return [];
   }
 }
@@ -669,6 +677,57 @@ function buildRoadworks(def: Extract<SegmentDef, { type: 'roadworks' }>): LocalS
   return finish(pieces, { ground: [...roadBoxes(pieces, false), ...shoulderBoxes(pieces, 0)], walls, props, anchors: [], decor: [], width: ROAD_WIDTH }, def, id);
 }
 
+// The shortest bridge: an abutment and a bank at each end.
+export const BRIDGE_MIN_LENGTH = 2 * (BRIDGE_ABUTMENT + BRIDGE_BANK_RUN);
+
+// A railing along each edge, one box per piece so it follows a pit; the boxes overlap at the joints.
+function railBoxes(pieces: Piece[]): Box[] {
+  const lateral = ROAD_WIDTH / 2 + BRIDGE_RAIL_THICKNESS / 2;
+  return pieces.flatMap((piece) => {
+    const rot = yawPitchQuat(piece.yaw, piece.pitch);
+    const total = piece.length + 0.4;
+    return ([-1, 1] as const).map((side) => ({
+      center: add(piece.start, rotate(rot, vec3(side * lateral, BRIDGE_RAIL_HEIGHT / 2, -piece.length / 2))),
+      halfExtents: vec3(BRIDGE_RAIL_THICKNESS / 2, BRIDGE_RAIL_HEIGHT / 2, total / 2),
+      rot,
+    }));
+  });
+}
+
+function buildBridge(def: Extract<SegmentDef, { type: 'bridge' }>): LocalSegment {
+  if (def.stop) throw new Error('A bridge takes no stop');
+  const loose = def as { hazards?: unknown; bumps?: unknown };
+  if (loose.hazards !== undefined || loose.bumps !== undefined) throw new Error('A bridge takes no mud, rocks, hazards or bumps');
+  if (!(def.length >= BRIDGE_MIN_LENGTH)) throw new Error(`A bridge must be at least ${BRIDGE_MIN_LENGTH} m`);
+  const id = idCounter();
+  let pieces: Piece[];
+  const anchors: Placed[] = [];
+  if (def.broken) {
+    const { depth, gradient, floor: floorLength, anchors: count } = DEEP_PIT;
+    const gradientOut = DEEP_PIT.gradientOut ?? gradient;
+    const core = depth / Math.tan(degToRad(gradient)) + floorLength + depth / Math.tan(degToRad(gradientOut));
+    const approachLength = def.length - core - PIT_EXIT;
+    if (approachLength < PIT_APPROACH) throw new Error(`A broken bridge must be at least ${PIT_APPROACH + core + PIT_EXIT} m`);
+    const approach = roadPieces(approachLength, 0, 0);
+    const descent = roadPieces(depth / Math.sin(degToRad(gradient)), 0, -gradient, 'gravel', approach[approach.length - 1]);
+    const floor = roadPieces(floorLength, 0, 0, 'road', descent[descent.length - 1]);
+    const climb = roadPieces(depth / Math.sin(degToRad(gradientOut)), 0, gradientOut, 'gravel', floor[floor.length - 1]);
+    const exit = roadPieces(PIT_EXIT, 0, 0, 'road', climb[climb.length - 1]);
+    pieces = [...approach, ...descent, ...floor, ...climb, ...exit];
+    const at = surfaceOnPieces(pieces);
+    const exitStart = exit[0]!.alongStart;
+    for (let i = 0; i < count; i++) {
+      const side = i % 2 === 0 ? -1 : 1;
+      const along = exitStart + PIT_ANCHOR_FIRST_ALONG + PIT_ANCHOR_PAIR_SPACING * Math.floor(i / 2);
+      anchors.push({ id: id('boulder'), kind: 'boulder', pose: { pos: offsetFrom(at(along), side * (ROAD_WIDTH / 2 - BOULDER_EDGE_INSET)), rot: yawQuat(0) } });
+    }
+  } else {
+    pieces = roadPieces(def.length, 0, 0);
+  }
+  const { broken: _broken, ...extras } = def;
+  return finish(pieces, { ground: roadBoxes(pieces, false), walls: railBoxes(pieces), props: [], anchors, decor: [], width: ROAD_WIDTH }, extras, id);
+}
+
 export function buildSegment(def: SegmentDef): LocalSegment {
   switch (def.type) {
     case 'road':
@@ -685,5 +744,7 @@ export function buildSegment(def: SegmentDef): LocalSegment {
       return buildPit(def);
     case 'roadworks':
       return buildRoadworks(def);
+    case 'bridge':
+      return buildBridge(def);
   }
 }

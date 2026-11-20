@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CAMPAIGN } from '../constants';
+import { CAMPAIGN, STAGE_IDS } from '../constants';
 import { hashSeed, planAmbient } from '../ambient';
 import { mixSeed, planItemDrops } from '../itemDrops';
 import { createRouteIndex } from '../routeAlong';
@@ -22,9 +22,10 @@ const garages = roads.filter(({ s }) => s.stop?.kind === 'garage').map(({ i }) =
 const finish = total + 20;
 
 describe('registration (T11)', () => {
-  it('makes marrakech the campaign and registers every course', () => {
-    expect(CAMPAIGN).toEqual(['marrakech']);
-    expect(courseIds().sort()).toEqual(['airport', 'marrakech', 'segment-demo', 'test']);
+  it('keeps marrakech out of the campaign and registers every course', () => {
+    expect(CAMPAIGN).toEqual(STAGE_IDS);
+    expect(CAMPAIGN).not.toContain('marrakech');
+    expect(courseIds().sort()).toEqual(['airport', 'airport-road', 'city', 'desert', 'marrakech', 'mountain', 'segment-demo', 'test', 'valley']);
     expect(getCourse('marrakech')).toBe(getCourse('marrakech'));
     expect(getCourse('marrakech').id).toBe('marrakech');
     expect(getCourse('marrakech').targetTime).toBe(1800);

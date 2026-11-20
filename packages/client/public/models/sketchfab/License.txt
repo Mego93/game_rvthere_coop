@@ -153,3 +153,39 @@ https://sketchfab.com/3d-models/m9-bayonet-knife-eb61a59f65e449d2a2eabbaef76a4a4
 Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
 File: knife.glb
 Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Pine tree by Andriy Shekh
+https://sketchfab.com/3d-models/pine-tree-e52769d653cd4e52a4acff3041961e65
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: pine.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Leaf Tree - PS1 Low Poly by Wersaus33
+https://sketchfab.com/3d-models/leaf-tree-ps1-low-poly-d799c08100974e1ba352fcd646cb0694
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: broadleaf.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Desert House by Avgust9
+https://sketchfab.com/3d-models/desert-house-dfd9dd93d3ed4e8eae1b1b4c2659857e
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: adobe-house.glb
+Modified: textures resized to at most 512 px and re-encoded; unused data removed.
+
+Ait Ben Haddou by Bart Huylebroeck
+https://sketchfab.com/3d-models/ait-ben-haddou-17530a423853483b8023e95fc1a5c05a
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: kasbah-abh.glb
+Modified: textures resized to at most 512 px and re-encoded; unused data removed.
+
+Generic 80s european car by Henry VIII
+https://sketchfab.com/3d-models/generic-80s-european-car-af108d4773df4722a62420f65dd5b8fe
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: car-hatchback.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Minicab 2005 (modified) by own.guest
+https://sketchfab.com/3d-models/mitsubishi-minicab-2005-0203f5e1bda44380914a2280e4d99689
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: car-minicab.glb
+Modified: textures resized to at most 256 px and re-encoded; unused data removed; brand emblems and plate text painted out of the texture.

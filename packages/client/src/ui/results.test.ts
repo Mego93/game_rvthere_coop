@@ -1,7 +1,7 @@
 import type { ResultsMessage } from '@lodgy/shared';
 import { expect, test } from 'vitest';
 import { mergeSettings } from './lobby';
-import { resultsView } from './results';
+import { resultsView, RUN_RESULTS_NAME } from './results';
 
 const message = (changes: Partial<ResultsMessage> = {}): ResultsMessage => ({
   type: 'results',
@@ -63,10 +63,13 @@ test('L18: Next only for the admin and a course that is not the last; Back to lo
   expect(resultsView(message({ courseId: 'segment-demo' }), true, TWO)).toMatchObject({ showNext: false, showLobby: true });
   expect(resultsView(message({ courseId: 'elsewhere' }), true, TWO)).toMatchObject({ showNext: false, showLobby: true });
   expect(resultsView(message({ courseId: 'test' }), false, TWO)).toMatchObject({ showNext: false, showLobby: false });
+  // The default campaign is the five stages; marrakech is outside it.
+  expect(resultsView(message({ courseId: 'desert' }), true)).toMatchObject({ showNext: true, showLobby: true });
+  expect(resultsView(message({ courseId: 'airport-road' }), true)).toMatchObject({ showNext: false, showLobby: true });
   expect(resultsView(message({ courseId: 'marrakech' }), true)).toMatchObject({ showNext: false, showLobby: true });
 });
 
-const server = { courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'clear' } as const;
+const server = { courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'clear', chain: false } as const;
 
 test('mergeSettings: an unconfirmed local change survives an echo that lacks it', () => {
   const local = { ...server, vehicleId: 'rv', weather: 'rain' } as const;
@@ -88,4 +91,20 @@ test('C9: resultsView takes the campaign: one course shows no Next, two courses 
   expect(resultsView(message({ courseId: 'test' }), true, ['test'])).toMatchObject({ showNext: false, showLobby: true });
   expect(resultsView(message({ courseId: 'test' }), true, ['test', 'other'])).toMatchObject({ showNext: true });
   expect(resultsView(message({ courseId: 'other' }), true, ['test', 'other'])).toMatchObject({ showNext: false });
+});
+
+test('R-chain: the results of a chained run are "Five stages", with one time and no Next, and are not looked up as a course', () => {
+  const run = message({ courseId: 'run', finalTime: 905.5, campaignTotal: 905.5 });
+  const view = resultsView(run, true);
+  expect(RUN_RESULTS_NAME).toBe('Five stages');
+  expect(view.lines).toContain('Course Five stages, midday, Clear');
+  expect(view.lines.join('\n')).not.toContain('Campaign total');
+  expect(view.lines[0]).toBe('Final time 15:05.5');
+  expect(view).toMatchObject({ showNext: false, showLobby: true });
+  // Even a campaign list that names it cannot give it a Next.
+  expect(resultsView(run, true, ['run', 'desert']).showNext).toBe(false);
+});
+
+test('V1: a single stage shows its label without the number', () => {
+  expect(resultsView(message({ courseId: 'valley' }), true).lines).toContain('Course Bridge and forest, midday, Clear');
 });

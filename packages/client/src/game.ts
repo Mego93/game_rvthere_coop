@@ -7,6 +7,7 @@ import {
   rotate,
   createPredictor,
   getCourse,
+  getCourseDef,
   getVehicleConfig,
   holdPoseAt,
   isCrouchedStance,
@@ -53,6 +54,7 @@ import { DESKTOP_DECOR, SOFTWARE_DECOR, TOUCH_DECOR } from './render/decorChunks
 import { createDecorRenderer } from './render/decorRenderer';
 import { decorFor } from './render/warm';
 import { createScene } from './render/scene';
+import { tintFor } from './render/groundTextures';
 import { isFigureCheckpointAt } from './render/souleyman';
 import { disposeScene } from './render/disposeScene';
 import { FIRST_PERSON_FOV, onFootPose, seatedPose } from './render/firstPersonCamera';
@@ -116,11 +118,17 @@ export interface Game {
   // Switches the camera between first and third person; V and the touch View button call it through the page.
   setFirstPerson(on: boolean): void;
   isFirstPerson(): boolean;
-  // Stops drawing and listening for input.
-  stop(): void;
+  // The course this game drew; a chained run builds a new game when the stage changes.
+  readonly courseId: string;
+  // The sequence number of the last input sent; a stage change continues from it, since the server drops inputs that are not newer.
+  lastSeq(): number;
+  // Stops drawing and listening for input. A stage change keeps the pointer lock, so the mouse stays captured.
+  stop(keepPointerLock?: boolean): void;
 }
 
 export interface GameView {
+  // Where the input sequence numbers start from; a later stage of a chained run continues the earlier one's.
+  firstSeq?: number;
   renderer: THREE.WebGLRenderer;
   overlay: HTMLElement;
   crosshair: HTMLElement;
@@ -172,11 +180,12 @@ export function createGame(
   let ownColour = colourIn(firstLobby);
   const course = getCourse(lobby.courseId);
   const cameraBoxes = [...course.ground, ...course.walls];
-  const scene = createScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true });
+  const tint = tintFor(getCourseDef(course.id)?.theme);
+  const scene = createScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true, tint });
   const decor = createDecorRenderer(decorFor(course.id), course.route, { touch: view.touchUi !== null, softwareGl: view.softwareGl === true });
   scene.add(decor.group);
   const decorLimits = view.softwareGl === true ? SOFTWARE_DECOR : view.touchUi !== null ? TOUCH_DECOR : DESKTOP_DECOR;
-  const corridorTerrain = createCorridorTerrain(course, decorLimits.radius, { lite: view.touchUi !== null, flat: view.softwareGl === true });
+  const corridorTerrain = createCorridorTerrain(course, decorLimits.radius, { lite: view.touchUi !== null, flat: view.softwareGl === true, tint });
   if (corridorTerrain) {
     scene.add(corridorTerrain.group);
     const start = course.route[0]!;
@@ -253,7 +262,7 @@ export function createGame(
   const propMeshes = new Map<string, { mesh: THREE.Object3D; kind: string }>();
   // The local player's entry in the newest snapshot, not interpolated.
   let latestLocal: PlayerSnapshot | null = null;
-  let seq = 0;
+  let seq = view.firstSeq ?? 0;
   // What the last frame drew, for resolving an interact press the way the hint does.
   let lastVehicle: VehicleState | null = null;
   let lastPlayers: PlayerSnapshot[] = [];
@@ -735,7 +744,9 @@ export function createGame(
     isFirstPerson: () => firstPerson,
     setMuted: (muted) => runMenu.setMuted(muted),
     showShopError: () => shopMenu.showError(),
-    stop() {
+    courseId: course.id,
+    lastSeq: () => seq,
+    stop(keepPointerLock = false) {
       cancelAnimationFrame(frameRequest);
       for (const loop of LOOPS) audio.setLoop(loop, false);
       document.removeEventListener('visibilitychange', onVisibility);
@@ -754,7 +765,7 @@ export function createGame(
       shots.dispose();
       input.dispose();
       predictor.dispose();
-      if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+      if (!keepPointerLock && document.pointerLockElement === renderer.domElement) document.exitPointerLock();
       crosshair.hidden = true;
       for (const entry of playerMeshes.values()) disposePlayerMesh(entry.mesh);
       playerMeshes.clear();

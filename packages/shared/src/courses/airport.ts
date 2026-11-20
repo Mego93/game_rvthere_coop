@@ -11,6 +11,7 @@ function coinsAlong(count: number, length: number): Placement[] {
 
 export const airport: CourseDef = {
   id: 'airport',
+  label: 'airport',
   segments: [
     {
       type: 'road',

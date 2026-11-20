@@ -2,9 +2,11 @@ import { ANCHOR_HEIGHT, ROAD_WIDTH, ROCK_HALF, SHOP_COUNTER_HALF, STOP_POST_HEIG
 import * as THREE from 'three';
 import { fitted, hasModel, instantiate, shadowed, type FitSize } from './models';
 import { groupBySurface, mergeBoxes, toGeometry } from './groundMerge';
-import { groundTexture, SURFACE_TEXTURE, type SceneOptions } from './groundTextures';
+import { groundTexture, SURFACE_TEXTURE, tinted, type SceneOptions } from './groundTextures';
 import { createSouleymanMeshes, souleymanPlacements } from './souleyman';
+import { bridgeParts, createBridgeMeshes } from './bridgeMesh';
 import { createTerrainMesh } from './terrain';
+import { createWaterMeshes } from './water';
 
 const SURFACE_COLOURS: Record<Surface, number> = {
   road: 0x8a7f72,
@@ -34,14 +36,16 @@ const ghost = (colour: number) =>
   new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.25, depthWrite: false });
 
 // A surface with its texture, or its flat colour when the texture did not load.
-function groundMaterial(surface: Surface, { lite = false, flat = false }: SceneOptions): THREE.MeshStandardMaterial {
+function groundMaterial(surface: Surface, { lite = false, flat = false, tint }: SceneOptions): THREE.MeshStandardMaterial {
   const set = SURFACE_TEXTURE[surface];
   const map = flat ? null : groundTexture(set, 'diffuse');
   // Mud lies 1 cm above the road: the offset keeps it from z-fighting with the road far away.
+  // The road and the mud keep their colour; the land beside the road takes the theme's tint.
+  const land = surface === 'gravel' || surface === 'sand' || surface === 'dirt' ? tint : undefined;
   const offset = surface === 'mud' ? { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 } : {};
-  if (!map) return new THREE.MeshStandardMaterial({ color: SURFACE_COLOURS[surface], roughness: 1, metalness: 0, ...offset });
+  if (!map) return new THREE.MeshStandardMaterial({ color: tinted(SURFACE_COLOURS[surface], land), roughness: 1, metalness: 0, ...offset });
   map.anisotropy = lite ? 1 : 4;
-  return new THREE.MeshStandardMaterial({ color: surface === 'mud' ? MUD_TINT : 0xffffff, map, normalMap: lite ? null : groundTexture(set, 'normal'), roughness: 1, metalness: 0, ...offset });
+  return new THREE.MeshStandardMaterial({ color: surface === 'mud' ? MUD_TINT : tinted(0xffffff, land), map, normalMap: lite ? null : groundTexture(set, 'normal'), roughness: 1, metalness: 0, ...offset });
 }
 
 function mergedMesh(boxes: readonly Box[], material: THREE.Material, bottom: boolean): THREE.Mesh | null {
@@ -99,13 +103,19 @@ export function visibleWalls(course: BuiltCourse): readonly Box[] {
 
 export function createScene(course: BuiltCourse, options: SceneOptions = {}): THREE.Scene {
   const scene = new THREE.Scene();
-  const groups = groupBySurface(course.ground);
+  const drawn = visibleWalls(course);
+  const bridges = bridgeParts(course, drawn);
+  const deck = new Set<unknown>(bridges.deck);
+  const rails = new Set<unknown>(bridges.rails);
+  const groups = groupBySurface(deck.size > 0 ? course.ground.filter((box) => !deck.has(box)) : course.ground);
   for (const surface of Object.keys(groups) as Surface[]) {
     const mesh = mergedMesh(groups[surface]!, groundMaterial(surface, options), false);
     if (mesh) scene.add(mesh);
   }
-  const walls = mergedMesh(visibleWalls(course), solid(0xc98a5a), true);
+  const walls = mergedMesh(rails.size > 0 ? drawn.filter((box) => !rails.has(box)) : drawn, solid(0xc98a5a), true);
   if (walls) scene.add(walls);
+  if (deck.size > 0 || rails.size > 0) scene.add(createBridgeMeshes(bridges));
+  scene.add(createWaterMeshes(course, options));
   scene.add(createTerrainMesh(course, options));
   scene.add(...createSouleymanMeshes(souleymanPlacements(course.checkpoints)));
   scene.add(boxMesh(course.finish, ghost(0x22c55e)));

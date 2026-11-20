@@ -71,6 +71,7 @@ export const testGround: BuiltCourse = deepFreeze({
     { id: 'coin-4', kind: 'coin', pose: { pos: vec3(-6, COIN_HEIGHT, -44), rot: IDENTITY } },
   ],
   decor: [],
+  ravines: [],
   checkpoints: [
     {
       id: 'cp-0',

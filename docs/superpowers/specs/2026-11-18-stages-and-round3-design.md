@@ -59,6 +59,7 @@ The story mode (days, stats, traits, minigames); new vehicles; Paris and Dubai (
 - The campaign chains them (desert → airport) as today's "next" flow; the lobby can start any single stage. Fuel, health and coins carry over between stages in a chained run (my call; restarting a stage alone starts full).
 - **Enemies and combat** (owner: players shoot on foot; enemies attack on foot with knives, run at you and can slip; a bit cartoon): see Part C.
 - Bridges are a new segment type (deck over a gap or river, railings; a broken bridge has a gap that crates, a plank prop or the winch must solve).
+- As built (step 40): see the ROADMAP decision of 2026-11-20. The mountain climbs about 57 m, not ×3 in full, because curves stay flat; a broken bridge is crossed with the winch (its middle is a deep pit), and falling into a ravine below the water restarts at the checkpoint.
 
 ## Part C: combat and power-ups
 

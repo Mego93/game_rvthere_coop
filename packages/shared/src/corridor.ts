@@ -21,6 +21,9 @@ import {
   CORRIDOR_SMOOTH,
   CORRIDOR_TILE_CELLS,
   CORRIDOR_UNDER,
+  BRIDGE_ABUTMENT,
+  BRIDGE_BANK_RUN,
+  BRIDGE_RAVINE_DEPTH,
 } from './constants';
 import type { BuiltCourse } from './course';
 import { routeHeights } from './surfaceHeight';
@@ -301,11 +304,23 @@ export interface HeightInputs {
   low: number;
   // Berm weight at the nearest route point, 0 to 1.
   berm: number;
+  // How far the land is sunk under a bridge, 0 to 1 (default 0).
+  ravine?: number;
+}
+
+// 1 between the banks of a ravine span, falling linearly to 0 over BRIDGE_BANK_RUN m after each abutment.
+export function ravineWeight(ravines: readonly { from: number; to: number }[], along: number): number {
+  let best = 0;
+  for (const r of ravines) {
+    const w = Math.min(1, Math.max(0, (along - r.from - BRIDGE_ABUTMENT) / BRIDGE_BANK_RUN), Math.max(0, (r.to - BRIDGE_ABUTMENT - along) / BRIDGE_BANK_RUN));
+    best = Math.max(best, Math.min(1, w));
+  }
+  return best;
 }
 
 // Rule 1 with T3, T4, T8, T9 and T10.
 export function corridorHeight(input: HeightInputs): number {
-  const { d, relief, smooth, low, berm } = input;
+  const { d, relief, smooth, low, berm, ravine = 0 } = input;
   const under = low - CORRIDOR_UNDER;
   let h: number;
   if (d < CORRIDOR_UNDER_UNTIL) h = under;
@@ -318,7 +333,7 @@ export function corridorHeight(input: HeightInputs): number {
     else h = smooth + relief + CORRIDOR_RIDGE_HEIGHT * smoothstep((d - CORRIDOR_RIDGE_START) / (CORRIDOR_RIDGE_END - CORRIDOR_RIDGE_START));
   }
   if (berm > 0 && d > CORRIDOR_BERM_START && d < CORRIDOR_BLEND_END) h = Math.max(h, under + CORRIDOR_BERM_HEIGHT * berm * bermProfile(d));
-  return h;
+  return h - BRIDGE_RAVINE_DEPTH * ravine;
 }
 
 const BLOCK = 8;
@@ -329,6 +344,7 @@ const TILE_REACH = CORRIDOR_LAND_END + 8 + Math.SQRT2 * TILE_SIZE;
 export function* corridorSteps(course: BuiltCourse): Generator<void, Corridor> {
   const frame = routeFrame(course);
   const obstacles = course.corridor?.obstacles ?? [];
+  const ravines = course.ravines;
   const { minX, maxX, minZ, maxZ, count } = frame.segment;
   // Which tiles each route segment can matter to: the tiles within the land end for building, within TILE_REACH for the nearest search.
   const near = new Map<number, number[]>();
@@ -388,6 +404,7 @@ export function* corridorSteps(course: BuiltCourse): Generator<void, Corridor> {
               smooth: frame.smoothedAt(hit),
               low: close ? frame.lowestAround(hit.along, LOW_HALF) : 0,
               berm: close && obstacles.length > 0 ? bermWeight(obstacles, hit.along) : 0,
+              ravine: ravines.length > 0 ? ravineWeight(ravines, hit.along) : 0,
             });
           }
         }
