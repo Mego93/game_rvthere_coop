@@ -84,6 +84,24 @@ export const PARKED_SPACING: readonly [number, number] = [14, 34];
 export const ADOBE_ZONE: readonly [number, number] = [34, 52];
 export const ADOBE_CLUSTER_SPACING: readonly [number, number] = [280, 520];
 export const KASBAH_LANDMARK_ZONE: readonly [number, number] = [60, 110];
+// m, half the landmark's footprint at scale 1 (its width and depth, measured on the model).
+export const KASBAH_HALF_FOOTPRINT = { x: 20, z: 16.5 };
+const FOOTPRINT_SAMPLES = 9;
+
+// The highest ground under a footprint turned by `yaw` (the way the renderer turns a model), so an upright model on it never sinks.
+export function footprintTop(groundAt: (x: number, z: number) => number, x: number, z: number, yaw: number, halfX: number, halfZ: number): number {
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
+  let top = -Infinity;
+  for (let i = 0; i < FOOTPRINT_SAMPLES; i++) {
+    for (let j = 0; j < FOOTPRINT_SAMPLES; j++) {
+      const lx = (i / (FOOTPRINT_SAMPLES - 1) - 0.5) * 2 * halfX;
+      const lz = (j / (FOOTPRINT_SAMPLES - 1) - 0.5) * 2 * halfZ;
+      top = Math.max(top, groundAt(x + lx * cos + lz * sin, z - lx * sin + lz * cos));
+    }
+  }
+  return top;
+}
 
 const keys = <T extends string>(...list: T[]) => list;
 const MODELS = {
@@ -559,7 +577,8 @@ export function* scatterDecorSteps(course: BuiltCourse, def: CourseDef | null, s
         const s = attempt % 2 === 0 ? 1 : -1;
         const p = spot(middle + betweenM(-(last.to - last.from) / 2, (last.to - last.from) / 2), betweenM(KASBAH_LANDMARK_ZONE[0], KASBAH_LANDMARK_ZONE[1]) + attempt, s);
         if (place('decor.kasbah.landmark', p.x, p.z, face(p.f, s), 1, [FAR_MIN, Infinity], 22)) {
-          sink(true, 1.5);
+          // Upright, with its base at the highest ground under the footprint.
+          out[out.length - 1]!.y = footprintTop((gx, gz) => (corridor ? landHeight(course, gx, gz) : terrainHeight(course, gx, gz)), p.x, p.z, face(p.f, s), KASBAH_HALF_FOOTPRINT.x, KASBAH_HALF_FOOTPRINT.z);
           break;
         }
       }

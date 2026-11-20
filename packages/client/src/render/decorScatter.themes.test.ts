@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { getCourse, getCourseDef, ROAD_WIDTH, segmentRanges } from '@lodgy/shared';
 import { describe, expect, test } from 'vitest';
-import { AIRPORT_CITY_SHARE, PARKED_LATERAL, scatterDecor, seedFromId } from './decorScatter';
-import { routeDistance } from './terrain';
+import { AIRPORT_CITY_SHARE, KASBAH_HALF_FOOTPRINT, PARKED_LATERAL, footprintTop, scatterDecor, seedFromId } from './decorScatter';
+import { landHeight, routeDistance, terrainHeight } from './terrain';
+import { corridorOf } from '@lodgy/shared';
 
 const place = (id: string) => scatterDecor(getCourse(id), getCourseDef(id), seedFromId(id));
 const count = (list: { model: string }[], prefix: string) => list.filter((p) => p.model.startsWith(prefix)).length;
@@ -123,5 +124,22 @@ describe('V3 themes', () => {
 
   test('every themed stage is deterministic', () => {
     for (const id of ['desert', 'valley', 'mountain', 'city', 'airport-road']) expect(place(id)).toEqual(place(id));
+  });
+});
+
+describe('the kasbah landmark stands upright on the highest ground of its footprint', () => {
+  test('footprintTop is the highest of a turned footprint on a slope', () => {
+    const slope = (x: number) => 0.5 * x;
+    expect(footprintTop(slope, 10, 0, 0, 20, 10)).toBeCloseTo(0.5 * 30, 6);
+    expect(footprintTop(slope, 10, 0, Math.PI / 2, 20, 10)).toBeCloseTo(0.5 * 20, 6);
+  });
+
+  test('the mountain kasbah sits at the top of the ground under its footprint', () => {
+    const course = getCourse('mountain');
+    const kasbah = place('mountain').find((p) => p.model === 'decor.kasbah.landmark')!;
+    const ground = (x: number, z: number) => (corridorOf(course) ? landHeight(course, x, z) : terrainHeight(course, x, z));
+    expect(kasbah.y).toBeCloseTo(footprintTop(ground, kasbah.x, kasbah.z, kasbah.yaw, KASBAH_HALF_FOOTPRINT.x, KASBAH_HALF_FOOTPRINT.z), 6);
+    expect(kasbah.y).toBeGreaterThanOrEqual(ground(kasbah.x, kasbah.z));
+    expect(kasbah.scale).toBe(1);
   });
 });
