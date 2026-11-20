@@ -87,6 +87,7 @@ export const KASBAH_LANDMARK_ZONE: readonly [number, number] = [60, 110];
 // m, half the landmark's footprint at scale 1 (its width and depth, measured on the model).
 export const KASBAH_HALF_FOOTPRINT = { x: 20, z: 16.5 };
 const FOOTPRINT_SAMPLES = 9;
+const KASBAH_DISTANCE_COST = 0.05;
 
 // The ground heights under a footprint turned by `yaw` (the way the renderer turns a model), sampled on a grid.
 function footprintHeights(groundAt: (x: number, z: number) => number, x: number, z: number, yaw: number, halfX: number, halfZ: number): number[] {
@@ -582,15 +583,17 @@ export function* scatterDecorSteps(course: BuiltCourse, def: CourseDef | null, s
       const middle = (last.from + last.to) / 2;
       // The road winds, so a spot may be near another stretch of it: try many, the flattest first.
       const ground = (gx: number, gz: number) => (corridor ? landHeight(course, gx, gz) : terrainHeight(course, gx, gz));
-      const spots: { p: ReturnType<typeof spot>; s: 1 | -1; relief: number }[] = [];
+      const spots: { p: ReturnType<typeof spot>; s: 1 | -1; score: number }[] = [];
       for (let attempt = 0; attempt < 80; attempt++) {
         yield;
         const s = attempt % 2 === 0 ? 1 : -1;
-        const p = spot(middle + betweenM(-(last.to - last.from) / 2, (last.to - last.from) / 2), betweenM(KASBAH_LANDMARK_ZONE[0], KASBAH_LANDMARK_ZONE[1]) + attempt, s);
+        const lateral = betweenM(KASBAH_LANDMARK_ZONE[0], KASBAH_LANDMARK_ZONE[1]) + attempt;
+        const p = spot(middle + betweenM(-(last.to - last.from) / 2, (last.to - last.from) / 2), lateral, s);
         const yaw = face(p.f, s);
-        spots.push({ p, s, relief: footprintTop(ground, p.x, p.z, yaw, KASBAH_HALF_FOOTPRINT.x, KASBAH_HALF_FOOTPRINT.z) - footprintBottom(ground, p.x, p.z, yaw, KASBAH_HALF_FOOTPRINT.x, KASBAH_HALF_FOOTPRINT.z) });
+        // Each metre of distance from the road costs 5 cm of relief, so the site stays within sight of the road.
+        spots.push({ p, s, score: KASBAH_DISTANCE_COST * lateral + footprintTop(ground, p.x, p.z, yaw, KASBAH_HALF_FOOTPRINT.x, KASBAH_HALF_FOOTPRINT.z) - footprintBottom(ground, p.x, p.z, yaw, KASBAH_HALF_FOOTPRINT.x, KASBAH_HALF_FOOTPRINT.z) });
       }
-      spots.sort((a, b) => a.relief - b.relief);
+      spots.sort((a, b) => a.score - b.score);
       for (const { p, s } of spots) {
         yield;
         if (place('decor.kasbah.landmark', p.x, p.z, face(p.f, s), 1, [FAR_MIN, Infinity], 22)) {
