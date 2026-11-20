@@ -20,6 +20,7 @@ import { createItems } from './items';
 import { inShopRange, interactCandidates, resolveInteract, splitCandidates } from './interact';
 import type { ItemKind } from './constants';
 import { aimRay, clearPowerUps, createPlayers, type PendingDamage, type PlayerState, type StepInputs } from './player';
+import { belowWater } from './water';
 import { elapsedAfter, finalTime, reachedFinish, vehicleLost } from './rules';
 import { requiredPushers, type PushIntent } from './push';
 import { createProps, type PropSnapshot } from './props';
@@ -719,7 +720,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     for (const player of players.all()) {
       if (player.seat !== null) continue;
       if (player.respawnIn === null) {
-        if (player.pos.y < course.killPlaneY) {
+        if (player.pos.y < course.killPlaneY || belowWater(course, player.pos)) {
           player.respawnIn = PLAYER_KILL_RESPAWN_DELAY;
           clearPowerUps(player);
         }
@@ -992,7 +993,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         }
         // The pending flag lives only until this check; a manual restart also stops a win on its tick.
         if (vehicleOutOfBounds()) restartPending = true;
-        const restarting = vehicleLost(centre, vehicle.health(), course.killPlaneY) || restartPending;
+        const restarting = vehicleLost(centre, vehicle.health(), course.killPlaneY) || belowWater(course, centre) || restartPending;
         restartPending = false;
         if (restarting) restart(events);
         if (reachedFinish(centre, course.finish, restarting)) won = true;
