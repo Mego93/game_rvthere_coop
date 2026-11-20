@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { ClientMessage, LobbyMessage, Phase, ResultsMessage, ServerMessage } from '@lodgy/shared';
+import { CAMPAIGN, type ClientMessage, type LobbyMessage, type Phase, type ResultsMessage, type ServerMessage, type StageMessage } from '@lodgy/shared';
 import * as THREE from 'three';
 import './ui/fonts.css';
 import { createAudio } from './audio/audio';
@@ -26,7 +26,8 @@ import { createEmoteWheel } from './ui/emoteWheel';
 import { createHome, errorText } from './ui/home';
 import { createLobby } from './ui/lobby';
 import { createResults } from './ui/results';
-import { WARM_BUDGET_DESKTOP_MS, WARM_BUDGET_TOUCH_MS, cancelWarm, warmCourse } from './render/warm';
+import { createStageBanner, stageBannerText } from './ui/stageBanner';
+import { WARM_BUDGET_DESKTOP_MS, WARM_BUDGET_TOUCH_MS, cancelWarm, warmCourse, warmTarget } from './render/warm';
 import { installTheme } from './ui/theme';
 import { createTouchUi } from './ui/touchUi';
 import { createTutorial, shouldAutoShowTutorial } from './ui/tutorial';
@@ -154,6 +155,8 @@ let name = savedName(nameStore);
 let playerId = '';
 let adminId: string | null = null;
 let lastResults: ResultsMessage | null = null;
+// The newest lobby message, which a stage change builds its game from.
+let latestLobby: LobbyMessage | null = null;
 let phase: Phase | null = null;
 // What the home page says when the socket next closes.
 let closeReason = CONNECTION_LOST;
@@ -248,6 +251,8 @@ const results = createResults(document.querySelector<HTMLElement>('#results')!, 
   onLobby: () => socket?.send({ type: 'toLobby' }),
 });
 
+const stageBanner = createStageBanner(document);
+
 const SOMETHING_WRONG = 'Something went wrong.';
 
 // Stops the run's drawing and input; the lobby and the home page take over the screen.
@@ -262,14 +267,16 @@ function stopGame() {
 
 function onLobby(message: LobbyMessage) {
   phase = message.phase;
+  latestLobby = message;
   syncChatTimer();
   adminId = message.adminId;
   if (message.phase !== 'results') lastResults = null;
   if (message.phase === 'lobby') {
     stopGame();
+    stageBanner.hide();
     results.hide();
     lobby.show(message, playerId);
-    warmCourse(message.courseId, () => phase === 'lobby', touchDevice ? WARM_BUDGET_TOUCH_MS : WARM_BUDGET_DESKTOP_MS);
+    warmCourse(warmTarget(message), () => phase === 'lobby', touchDevice ? WARM_BUDGET_TOUCH_MS : WARM_BUDGET_DESKTOP_MS);
     chatLog.markRead();
     if (shouldAutoShowTutorial(nameStore, tutorialOffered)) tutorial.open();
     tutorialOffered = true;
@@ -291,6 +298,16 @@ function onLobby(message: LobbyMessage) {
   game?.setLobby(message);
   // An admin handover during results changes who sees the buttons.
   if (lastResults) results.show(lastResults, adminId === playerId);
+}
+
+// A chained run moved to another stage: the course scene is rebuilt the way a Start builds it. The server keeps the players' state and the page keeps the pointer lock; the HUD is drawn again from the next snapshot.
+function onStage(message: StageMessage) {
+  if (!latestLobby || latestLobby.phase !== 'playing') return;
+  stageBanner.show(stageBannerText(message));
+  if (game && game.courseId === message.courseId) return;
+  game?.stop(true);
+  game = null;
+  startGame({ ...latestLobby, courseId: message.courseId });
 }
 
 function onMessage(message: ServerMessage) {
@@ -321,6 +338,15 @@ function onMessage(message: ServerMessage) {
           lastResults = message;
           results.show(message, adminId === playerId);
         }
+      } catch (error) {
+        console.error(error);
+        closeReason = SOMETHING_WRONG;
+        socket?.close();
+      }
+      return;
+    case 'stage':
+      try {
+        onStage(message);
       } catch (error) {
         console.error(error);
         closeReason = SOMETHING_WRONG;
@@ -409,6 +435,14 @@ function startGame(lobby: LobbyMessage) {
       : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document, pointerGate));
   touchUi?.setVisible(true);
   game = createGame({ renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, firstPerson: loadFirstPerson(fpSearch, storageOrNull()), onViewChange: (on) => saveFirstPerson(on, storageOrNull()), onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen(), chatOpen: chatPanel.isOpen(), emoteOpen: emoteWheel.isOpen(), onChat: () => chatPanel.open(), onEmoteWheel: () => emoteWheel.open(), onEmoteWheelClose: () => emoteWheel.close() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  warmNextStage(lobby);
+}
+
+// During a chained run the next stage is built in short slices while this one is played, so the change of stage does not freeze the frame.
+const WARM_AHEAD_DELAY_MS = 4000;
+function warmNextStage(lobby: LobbyMessage) {
+  const next = lobby.chain ? CAMPAIGN[CAMPAIGN.indexOf(lobby.courseId) + 1] : undefined;
+  if (next) warmCourse(next, () => phase === 'playing', touchDevice ? 3 : 4, WARM_AHEAD_DELAY_MS);
 }
 
 const clock = () => performance.now() / 1000;
@@ -434,6 +468,8 @@ function showHome(text: string) {
   socket = null;
   autoJoining = false;
   stopGame();
+  stageBanner.hide();
+  latestLobby = null;
   lobby.hide();
   results.hide();
   chatLog.clear();

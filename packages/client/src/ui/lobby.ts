@@ -1,10 +1,16 @@
 import { CHAT_LIMIT, CHAT_FORM_STYLE, createChatForm, renderChatLines, type ChatLine, type SubmitResult } from './chat';
-import { CHARACTER_IDS, CHARACTER_NAMES, TIMES_OF_DAY, VEHICLE_IDS, WEATHER_SETTINGS, courseIds, defaultAppearance, type Appearance, type LobbyMessage, type RoomSettings, type WeatherSetting } from '@lodgy/shared';
+import { CAMPAIGN, CHARACTER_IDS, CHARACTER_NAMES, TIMES_OF_DAY, VEHICLE_IDS, WEATHER_SETTINGS, courseIds, defaultAppearance, getCourseDef, type Appearance, type LobbyMessage, type RoomSettings, type WeatherSetting } from '@lodgy/shared';
 import { OPTION_ROWS, createPickerState, optionText, portraitModel } from './characterPicker';
 
 export const VEHICLE_LABELS: Record<string, string> = { lodgy: 'Lodgy', rv: 'RV' };
 export const WEATHER_LABELS: Record<WeatherSetting, string> = { clear: 'Clear', rain: 'Rain', sandstorm: 'Sandstorm', random: 'Random' };
 export const weatherOptions = () => WEATHER_SETTINGS.map((id) => ({ value: id, text: WEATHER_LABELS[id] }));
+// The name a course shows in the lobby: its label, or its id when it has none.
+export const courseLabel = (id: string): string => getCourseDef(id)?.label ?? id;
+export const courseOptions = () => courseIds().map((id) => ({ value: id, text: courseLabel(id) }));
+export const CHAIN_LABEL = 'Run all five stages';
+// The chain checkbox shows when the selected course is one of the stages.
+export const chainShown = (courseId: string): boolean => CAMPAIGN.includes(courseId);
 const vehicleLabel = (id: string) => (Object.hasOwn(VEHICLE_LABELS, id) ? VEHICLE_LABELS[id] : id);
 
 export interface LobbyPlayerView {
@@ -25,6 +31,9 @@ export const OSM_ATTRIBUTION = { text: 'Route data © OpenStreetMap contributors
 export interface LobbyView {
   isAdmin: boolean;
   settingsEditable: boolean;
+  // The "Run all five stages" checkbox: shown for a stage, and only the admin can change it.
+  showChain: boolean;
+  chainEditable: boolean;
   settings: RoomSettings;
   players: LobbyPlayerView[];
   showReady: boolean;
@@ -54,6 +63,8 @@ export function lobbyView(message: LobbyMessage, localId: string): LobbyView {
   return {
     isAdmin,
     settingsEditable: isAdmin,
+    showChain: chainShown(message.courseId),
+    chainEditable: isAdmin,
     settings: { courseId: message.courseId, vehicleId: message.vehicleId, timeOfDay: message.timeOfDay, weather: message.weather, chain: message.chain },
     players,
     showReady: !isAdmin,
@@ -152,6 +163,9 @@ const STYLE = `${CHAT_FORM_STYLE}
 #lobby-panel h1 { margin: 0; font-size: 28px; line-height: 1.1; color: var(--teal); }
 #lobby-panel select { width: auto; max-width: 60%; cursor: pointer; }
 .lobby-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; min-height: 44px; border-radius: var(--radius-ctl); }
+.lobby-chain { justify-content: flex-start; cursor: pointer; font-weight: 600; }
+.lobby-chain[hidden] { display: none; }
+.lobby-chain input { width: 22px; height: 22px; flex: none; accent-color: var(--terracotta); }
 #lobby-link { min-width: 0; overflow-wrap: anywhere; font-weight: 600; color: var(--info); }
 #lobby-players { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 #lobby-players li { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: center; min-height: 44px; padding: 0 10px; border-radius: var(--radius-ctl); background: var(--paper); transition: opacity 0.35s; }
@@ -251,7 +265,7 @@ const STYLE = `${CHAT_FORM_STYLE}
 `;
 
 const SETTINGS = [
-  { key: 'courseId', id: 'lobby-course', label: 'Course', options: () => courseIds().map((id) => ({ value: id, text: id })) },
+  { key: 'courseId', id: 'lobby-course', label: 'Course', options: courseOptions },
   { key: 'vehicleId', id: 'lobby-vehicle', label: 'Vehicle', options: () => VEHICLE_IDS.map((id) => ({ value: id, text: vehicleLabel(id) })) },
   { key: 'timeOfDay', id: 'lobby-time', label: 'Time of day', options: () => TIMES_OF_DAY.map((id) => ({ value: id, text: id })) },
   { key: 'weather', id: 'lobby-weather', label: 'Weather', options: weatherOptions },
@@ -373,8 +387,17 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
       if (element.dataset.value !== undefined && element.dataset.value !== value) animate(element.parentElement!, 'lobby-flash');
       element.dataset.value = value;
     }
+    applyChain(values, renderedEditable === true);
   };
   let room = '';
+  let chainRow: HTMLElement | null = null;
+  let chainBox: HTMLInputElement | null = null;
+  const applyChain = (values: RoomSettings, editable: boolean) => {
+    if (!chainRow || !chainBox) return;
+    chainRow.hidden = !chainShown(values.courseId);
+    chainBox.checked = values.chain && chainShown(values.courseId);
+    chainBox.disabled = !editable;
+  };
 
   const reducedMotion = () => doc.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const animate = (element: HTMLElement, name: string) => {
@@ -529,6 +552,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
       const select = doc.getElementById(id);
       if (select instanceof HTMLSelectElement) values[key] = select.value as never;
     }
+    if (chainBox) values.chain = chainBox.checked && chainShown(values.courseId);
     return values;
   };
 
@@ -548,6 +572,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
           error.textContent = '';
           select.dataset.value = select.value;
           pending = { ...pending, [key]: select.value };
+          if (chainBox && key === 'courseId') applyChain(current(), true);
           handlers.onConfigure(current());
         });
         row.append(select);
@@ -556,6 +581,18 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
       }
       settingsBox.append(row);
     }
+    chainRow = el('label', 'lobby-chain-row');
+    chainRow.className = 'lobby-row lobby-chain';
+    chainBox = el('input', 'lobby-chain');
+    chainBox.type = 'checkbox';
+    chainBox.disabled = !editable;
+    chainBox.addEventListener('change', () => {
+      error.textContent = '';
+      pending = { ...pending, chain: chainBox!.checked };
+      handlers.onConfigure(current());
+    });
+    chainRow.append(chainBox, el('span', undefined, CHAIN_LABEL));
+    settingsBox.append(chainRow);
     renderedEditable = editable;
   };
 

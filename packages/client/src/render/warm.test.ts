@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { cancelWarm, runSliced, warmCourse } from './warm';
+import { cancelWarm, runSliced, warmCourse, warmTarget } from './warm';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -89,5 +89,13 @@ describe('warmCourse', () => {
     warmCourse('no-such-course', active, 12, 1500);
     vi.advanceTimersByTime(600);
     expect(active).toHaveBeenCalled();
+  });
+});
+
+describe('warmTarget', () => {
+  test('V1: a chained run warms the first stage, whichever stage is selected; otherwise the selected course', () => {
+    expect(warmTarget({ courseId: 'city', chain: true })).toBe('desert');
+    expect(warmTarget({ courseId: 'city', chain: false })).toBe('city');
+    expect(warmTarget({ courseId: 'marrakech', chain: true })).toBe('marrakech');
   });
 });

@@ -116,8 +116,10 @@ export interface Game {
   // Switches the camera between first and third person; V and the touch View button call it through the page.
   setFirstPerson(on: boolean): void;
   isFirstPerson(): boolean;
-  // Stops drawing and listening for input.
-  stop(): void;
+  // The course this game drew; a chained run builds a new game when the stage changes.
+  readonly courseId: string;
+  // Stops drawing and listening for input. A stage change keeps the pointer lock, so the mouse stays captured.
+  stop(keepPointerLock?: boolean): void;
 }
 
 export interface GameView {
@@ -735,7 +737,8 @@ export function createGame(
     isFirstPerson: () => firstPerson,
     setMuted: (muted) => runMenu.setMuted(muted),
     showShopError: () => shopMenu.showError(),
-    stop() {
+    courseId: course.id,
+    stop(keepPointerLock = false) {
       cancelAnimationFrame(frameRequest);
       for (const loop of LOOPS) audio.setLoop(loop, false);
       document.removeEventListener('visibilitychange', onVisibility);
@@ -754,7 +757,7 @@ export function createGame(
       shots.dispose();
       input.dispose();
       predictor.dispose();
-      if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+      if (!keepPointerLock && document.pointerLockElement === renderer.domElement) document.exitPointerLock();
       crosshair.hidden = true;
       for (const entry of playerMeshes.values()) disposePlayerMesh(entry.mesh);
       playerMeshes.clear();
