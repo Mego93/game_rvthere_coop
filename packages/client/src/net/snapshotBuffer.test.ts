@@ -500,3 +500,39 @@ test('step 41: latestAbsent is empty before any snapshot and when none lists any
   buffer.push({ ...snapshot(3), absent: [] }, 0.1);
   expect(buffer.latestAbsent()).toEqual([]);
 });
+
+const withBall = (tick: number, ball: ReturnType<typeof vec3> | null, turn: 'luiz' | null = 'luiz'): SnapshotMessage => ({ ...snapshot(tick), golf: { turn, ball, scores: { luiz: [10] } } });
+
+test('step 41b: latestGolf is null before any golf snapshot, then the newest snapshot\'s golf as a copy', () => {
+  const buffer = createSnapshotBuffer();
+  expect(buffer.latestGolf()).toBeNull();
+  buffer.push(snapshot(1), 0);
+  expect(buffer.latestGolf()).toBeNull();
+  buffer.push(withBall(2, vec3(1, 2, 3)), 0.05);
+  const golf = buffer.latestGolf()!;
+  expect(golf).toEqual({ turn: 'luiz', ball: vec3(1, 2, 3), scores: { luiz: [10] } });
+  golf.scores.luiz!.push(99);
+  golf.ball!.x = 50;
+  expect(buffer.latestGolf()!.scores.luiz).toEqual([10]);
+  expect(buffer.latestGolf()!.ball!.x).toBe(1);
+});
+
+test('step 41b: the ball is blended between the two snapshots around now minus the delay, like everything else', () => {
+  const buffer = createSnapshotBuffer();
+  expect(buffer.golfBall(1)).toBeNull();
+  buffer.push(withBall(3, vec3(0, 10, -30)), 3 * TICK_DT);
+  buffer.push(withBall(9, vec3(0, 4, -90)), 9 * TICK_DT);
+  const mid = buffer.golfBall(6 * TICK_DT + INTERPOLATION_DELAY)!;
+  expect(mid.z).toBeCloseTo(-60, 6);
+  expect(mid.y).toBeCloseTo(7, 6);
+});
+
+test('step 41b: a ball that appears or goes in the newer snapshot is not blended with nothing', () => {
+  const buffer = createSnapshotBuffer();
+  buffer.push(withBall(3, null), 3 * TICK_DT);
+  buffer.push(withBall(9, vec3(0, 1, -5)), 9 * TICK_DT);
+  expect(buffer.golfBall(6 * TICK_DT + INTERPOLATION_DELAY)).toBeNull();
+  expect(buffer.golfBall(20)).toEqual(vec3(0, 1, -5));
+  buffer.push(withBall(12, null), 12 * TICK_DT);
+  expect(buffer.golfBall(20)).toBeNull();
+});

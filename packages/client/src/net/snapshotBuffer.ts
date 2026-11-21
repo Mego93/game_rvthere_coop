@@ -13,6 +13,8 @@ import {
   type SnapshotMessage,
   type VehicleState,
   type CharacterId,
+  type GolfSnapshot,
+  type Vec3,
   type WorldSnapshot,
 } from '@lodgy/shared';
 
@@ -33,6 +35,10 @@ export interface SnapshotBuffer {
   latestCoinsLeft(): string[];
   // The friends nobody plays as of the newest snapshot (story mode); empty before any and outside the villa.
   latestAbsent(): CharacterId[];
+  // PrimeGolf as of the newest snapshot (a copy); null outside a golf game.
+  latestGolf(): GolfSnapshot | null;
+  // The golf ball as it was INTERPOLATION_DELAY before local time `now`, or null when there is none.
+  golfBall(now: number): Vec3 | null;
 }
 
 export interface RunStatus {
@@ -220,6 +226,25 @@ export function createSnapshotBuffer(): SnapshotBuffer {
     },
     latestCoinsLeft: () => [...(entries[entries.length - 1]?.snapshot.coinsLeft ?? [])],
     latestAbsent: () => [...(entries[entries.length - 1]?.snapshot.absent ?? [])],
+    latestGolf() {
+      const golf = entries[entries.length - 1]?.snapshot.golf;
+      return golf ? { turn: golf.turn, ball: golf.ball && copyVec(golf.ball), scores: JSON.parse(JSON.stringify(golf.scores)) as GolfSnapshot['scores'] } : null;
+    },
+    golfBall(now) {
+      const first = entries[0];
+      const last = entries[entries.length - 1];
+      if (!first || !last || offset === null) return null;
+      const time = now + offset - INTERPOLATION_DELAY;
+      const ballOf = (entry: (typeof entries)[number]) => entry.snapshot.golf?.ball ?? null;
+      if (time <= first.time) return ballOf(first) && copyVec(ballOf(first)!);
+      if (time >= last.time) return ballOf(last) && copyVec(ballOf(last)!);
+      let index = entries.length - 2;
+      while (entries[index]!.time > time) index -= 1;
+      const from = ballOf(entries[index]!);
+      const to = ballOf(entries[index + 1]!);
+      if (!from || !to) return null;
+      return lerp(from, to, (time - entries[index]!.time) / (entries[index + 1]!.time - entries[index]!.time));
+    },
     latestProps: () => (entries[entries.length - 1]?.snapshot.props ?? []).map(copyProp),
   };
 }
