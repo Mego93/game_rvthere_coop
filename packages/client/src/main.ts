@@ -31,6 +31,7 @@ import { WARM_BUDGET_DESKTOP_MS, WARM_BUDGET_TOUCH_MS, cancelWarm, warmCourse, w
 import { installTheme } from './ui/theme';
 import { createTouchUi } from './ui/touchUi';
 import { createStoryUi } from './ui/story/storyUi';
+import { createGolfResults } from './ui/golf/golfHud';
 import { createTutorial, shouldAutoShowTutorial } from './ui/tutorial';
 import { loadFirstPerson, saveFirstPerson } from './render/firstPersonCamera';
 
@@ -160,8 +161,6 @@ let lastResults: ResultsMessage | null = null;
 let latestLobby: LobbyMessage | null = null;
 // The course a story run is in, from the stage messages; a story run starts in the villa.
 let stageCourse: string | null = null;
-// ?storytest offers the Race / Story toggle (the server has no gating yet); read at load, before a room's path replaces the address.
-const storyEnabled = new URLSearchParams(location.search).has('storytest');
 // Set only while a stage change builds its game.
 let firstSeq = 0;
 let phase: Phase | null = null;
@@ -245,7 +244,6 @@ function syncChatTimer() {
 }
 
 const lobby = createLobby(document, {
-  storyEnabled,
   onResetWeek: () => socket?.send({ type: 'resetWeek' }),
   onReady: (ready) => socket?.send({ type: 'ready', ready }),
   onConfigure: (settings) => socket?.send({ type: 'configure', ...settings }),
@@ -264,6 +262,9 @@ const results = createResults(document.querySelector<HTMLElement>('#results')!, 
 
 const stageBanner = createStageBanner(document);
 
+// PrimeGolf's final results live on the page: the group is taken back to the villa a moment after the last ball, and they stay over it until closed.
+const golfResults = createGolfResults(document);
+
 const SOMETHING_WRONG = 'Something went wrong.';
 
 // Stops the run's drawing and input; the lobby and the home page take over the screen.
@@ -272,6 +273,7 @@ function stopGame() {
   emoteWheel.close();
   game?.stop();
   game = null;
+  golfResults.hide();
   storyUi.reset();
   stageCourse = null;
   touchUi?.setVisible(false);
@@ -385,6 +387,7 @@ function onMessage(message: ServerMessage) {
       return;
     case 'event':
       if (message.kind === 'spot' && message.spotKind && message.playerId === playerId) storyUi.onSpot(message.spotKind);
+      if (message.kind === 'golfEnd' && message.scores) golfResults.show(message.scores);
       game?.onEvent(message);
       return;
     case 'storyState':

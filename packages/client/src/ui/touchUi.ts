@@ -19,6 +19,8 @@ export interface TouchUi {
   onView(handler: () => void): void;
   // Shows a dot on the chat button while there are unread lines.
   setChatUnread(unread: boolean): void;
+  // The fire button's label: "Shoot" in PrimeGolf, "Fire" otherwise.
+  setFireLabel(label: string): void;
 }
 
 const STYLE = `
@@ -210,6 +212,7 @@ export function createTouchUi(root: HTMLElement): TouchUi & TouchControls & { di
     onEmote: (handler) => (emoteHandler = handler),
     onView: (handler) => (viewHandler = handler),
     setChatUnread: (unread) => chat.classList.toggle('on', unread),
+    setFireLabel: (label) => void (fire.textContent = label),
     update(view) {
       const changed = changedFields(shown, view);
       if (changed.size === 0) return;

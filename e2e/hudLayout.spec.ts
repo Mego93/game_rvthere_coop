@@ -163,6 +163,83 @@ test.describe('HUD layout (V8)', () => {
     });
   }
 
+  // Step 41b: the PrimeGolf HUD. The race gauges hide; the turn, the balls left, the meter (or, after a ball, the popup and the scoreboard) show with the touch buttons.
+  const GOLF_TOUCH = ['touch-menu', 'touch-chat', 'touch-emote', 'touch-actions', 'chat-toasts'];
+  const golfCases = [
+    { name: '667x375 golf aiming', width: 667, height: 375, touch: true, mode: 'hudtest=golf', ids: [...GOLF_TOUCH, 'golf-turn', 'golf-balls', 'golf-meter'] },
+    { name: '844x390 golf aiming', width: 844, height: 390, touch: true, mode: 'hudtest=golf', ids: [...GOLF_TOUCH, 'golf-turn', 'golf-balls', 'golf-meter'] },
+    { name: '667x375 golf scoreboard', width: 667, height: 375, touch: true, mode: 'hudtest=golfboard', ids: [...GOLF_TOUCH, 'golf-turn', 'golf-balls', 'golf-pop', 'golf-board'] },
+    { name: '1280x720 golf aiming', width: 1280, height: 720, touch: false, mode: 'hudtest=golf', ids: ['chat-toasts', 'golf-turn', 'golf-balls', 'golf-meter'] },
+    { name: '1280x720 golf scoreboard', width: 1280, height: 720, touch: false, mode: 'hudtest=golfboard', ids: ['chat-toasts', 'golf-turn', 'golf-balls', 'golf-pop', 'golf-board'] },
+    { name: '1920x1080 golf aiming', width: 1920, height: 1080, touch: false, mode: 'hudtest=golf', ids: ['chat-toasts', 'golf-turn', 'golf-balls', 'golf-meter'] },
+  ];
+  for (const golf of golfCases) {
+    test(`${golf.name}: the golf HUD fits, overlaps nothing and hides the race gauges`, async ({ browser }, info) => {
+      test.skip(info.project.name !== 'desktop', 'sizes and touch are set here, once');
+      const context = await browser.newContext({ viewport: { width: golf.width, height: golf.height }, hasTouch: golf.touch, storageState: tutorialDone('http://localhost:3100') });
+      const page = await context.newPage();
+      await page.goto(`/?${golf.mode}`);
+      if (golf.touch) await page.addStyleTag({ content: `:root { --safe-left: ${INSETS.left}px; --safe-right: ${INSETS.right}px; --safe-bottom: ${INSETS.bottom}px; }` });
+      await expect(page.locator('#golf-turn')).toBeVisible();
+      await expect(page.locator('#chat-toasts .chat-toast')).toHaveCount(3);
+      const boxes = await measure(page, golf.ids);
+      const inset = golf.touch ? INSETS : { left: 0, right: 0, bottom: 0 };
+      for (const box of boxes) {
+        expect(box.w, `${box.id} is shown`).toBeGreaterThan(0);
+        expect(box.x, `${box.id} inside the left inset`).toBeGreaterThanOrEqual(inset.left - 0.5);
+        expect(box.x + box.w, `${box.id} inside the right inset`).toBeLessThanOrEqual(golf.width - inset.right + 0.5);
+        expect(box.y, `${box.id} below the top`).toBeGreaterThanOrEqual(0);
+        expect(box.y + box.h, `${box.id} above the bottom inset`).toBeLessThanOrEqual(golf.height - inset.bottom + 0.5);
+      }
+      const clashes: string[] = [];
+      boxes.forEach((a, i) => boxes.slice(i + 1).forEach((b) => overlaps(a, b) && clashes.push(`${a.id} x ${b.id}`)));
+      expect(clashes).toEqual([]);
+      // The race gauges are gone.
+      const gone = await measure(page, ['hud-compass', 'hud-minimap', 'hud-vehicle', 'hud-health', 'hud-dashboard', 'hud-slots', 'hud-prompt-text']);
+      for (const box of gone) expect(box.w, `${box.id} is hidden`).toBe(0);
+      if (golf.mode === 'hudtest=golf') {
+        await expect(page.locator('#golf-turn')).toHaveText('Your turn!');
+        await expect(page.locator('#golf-balls')).toHaveText('Balls left: 4');
+        const meter = (await measure(page, ['golf-power', 'golf-curve']));
+        for (const box of meter) expect(box.w, `${box.id} has width`).toBeGreaterThan(40);
+        if (golf.touch) {
+          await expect(page.locator('#touch-fire')).toHaveText('Shoot');
+          const fire = (await measure(page, ['touch-fire']))[0]!;
+          expect([fire.w, fire.h]).toEqual([56, 56]);
+        }
+      } else {
+        await expect(page.locator('#golf-turn')).toHaveText("Rafael's turn");
+        await expect(page.locator('#golf-pop')).toHaveText('Blue ring +25');
+        await expect(page.locator('#golf-board .line')).toHaveCount(5);
+      }
+      await context.close();
+    });
+  }
+
+  for (const size of [{ name: '667x375', width: 667, height: 375, touch: true }, { name: '1280x720', width: 1280, height: 720, touch: false }]) {
+    test(`${size.name}: the golf results fit and show the best, the worst and the team bonus`, async ({ browser }, info) => {
+      test.skip(info.project.name !== 'desktop', 'sizes and touch are set here, once');
+      const context = await browser.newContext({ viewport: { width: size.width, height: size.height }, hasTouch: size.touch, storageState: tutorialDone('http://localhost:3100') });
+      const page = await context.newPage();
+      await page.goto('/?hudtest=golfresults');
+      if (size.touch) await page.addStyleTag({ content: `:root { --safe-left: ${INSETS.left}px; --safe-right: ${INSETS.right}px; --safe-bottom: ${INSETS.bottom}px; }` });
+      await expect(page.locator('#golf-results')).toBeVisible();
+      const box = (await page.locator('#golf-results').boundingBox())!;
+      const inset = size.touch ? INSETS : { left: 0, right: 0, bottom: 0 };
+      expect(box.x).toBeGreaterThanOrEqual(inset.left - 0.5);
+      expect(box.x + box.width).toBeLessThanOrEqual(size.width - inset.right + 0.5);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height).toBeLessThanOrEqual(size.height - inset.bottom + 0.5);
+      expect(await page.evaluate(() => { const panel = document.getElementById('golf-results')!; return panel.scrollHeight <= panel.clientHeight; })).toBe(true);
+      await expect(page.locator('#golf-results .row')).toHaveCount(4);
+      await expect(page.locator('#golf-results')).toContainText('Best: Alexander');
+      await expect(page.locator('#golf-results')).toContainText('pays coffee for everyone');
+      await expect(page.locator('#golf-results')).toContainText('Team bonus');
+      await expect(page.locator('#golf-results-close')).toBeVisible();
+      await context.close();
+    });
+  }
+
   test('the results actions are visible without scrolling at 667x375', async ({ browser }, info) => {
     test.skip(info.project.name !== 'desktop', 'sizes and touch are set here, once');
     const context = await browser.newContext({ viewport: { width: 667, height: 375 }, hasTouch: true, storageState: tutorialDone('http://localhost:3100') });
