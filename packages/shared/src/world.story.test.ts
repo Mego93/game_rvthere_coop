@@ -117,3 +117,39 @@ describe('the story option', () => {
     expect(world.snapshot()).toMatchObject({ coinsLeft: [], wallet: 0, coinsCollected: 0 });
   });
 });
+
+describe('the holdDowned option', () => {
+  const downedWorld = (holdDowned: boolean): World => {
+    const world = createWorld(RAPIER, { courseId: spotCourse.id, vehicleId: 'lodgy', ...(holdDowned ? { holdDowned: true } : {}) }, spotCourse);
+    worlds.push(world);
+    world.addPlayer('p1');
+    world.addPlayer('p2');
+    world.step(new Map());
+    return world;
+  };
+  const downFor = (world: World, seconds: number, both = false): WorldEvent[] => {
+    world.debugHurt('p1', 100);
+    if (both) world.debugHurt('p2', 100);
+    const events: WorldEvent[] = [];
+    for (let i = 0; i < seconds * 60; i++) events.push(...world.step(new Map()));
+    return events;
+  };
+
+  test('without it a downed player respawns after the timeout', () => {
+    const events = downFor(downedWorld(false), 35);
+    expect(events.some((event) => event.kind === 'respawn')).toBe(true);
+  });
+
+  test('with it a downed player stays down until revived', () => {
+    const world = downedWorld(true);
+    const events = downFor(world, 90);
+    expect(events.some((event) => event.kind === 'downed')).toBe(true);
+    expect(events.some((event) => event.kind === 'respawn')).toBe(false);
+    expect(world.snapshot().players.find((player) => player.playerId === 'p1')!.downed).not.toBeNull();
+  });
+
+  test('with it a world where everyone is downed does not respawn them either', () => {
+    const events = downFor(downedWorld(true), 5, true);
+    expect(events.some((event) => event.kind === 'respawn')).toBe(false);
+  });
+});

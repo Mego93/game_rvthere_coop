@@ -18,5 +18,5 @@ export function summaryView(message: Pick<DaySummaryMessage, 'day' | 'done' | 'm
     { key: 'missed', title: 'Missed', labels: message.missed.map((id) => labelOf(message.day, id)) },
     { key: 'skipped', title: 'Skipped (a friend was away)', labels: message.skipped.map((id) => labelOf(message.day, id)) },
   ];
-  return { title: `${dayTitle(message.day)} is over`, sections: sections.filter((section) => section.labels.length > 0) };
+  return { title: `Day ${message.day} is over`, sections: sections.filter((section) => section.labels.length > 0) };
 }

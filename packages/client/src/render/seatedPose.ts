@@ -23,3 +23,6 @@ export function applySeatedPose(mesh: THREE.Object3D): boolean {
   }
   return posed;
 }
+
+// m, how far above the floor a seated figure's feet are placed so the thighs lie on a couch cushion.
+export const SEAT_DROP = 0.25;

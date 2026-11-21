@@ -20,13 +20,17 @@ export interface Placement {
   size: FitSize;
 }
 
+export const COUCH_SEAT_X = (index: number): number => -17.5 + COUCH_SEAT_SPACING * index;
+
 const at = (key: ModelKey, x: number, y: number, z: number, yaw: number, size: FitSize): Placement => ({ key, x, y, z, yaw, size });
 const SOUTH = 0;
 const EAST = -Math.PI / 2;
 
-// A sectional couch of six pieces on the seat spots, facing the room.
+// Two couches of three seats, centred on the middle seat spot of each trio and facing the room.
 export const COUCH_Z = -21.5;
-const couches = Array.from({ length: 6 }, (_, i) => at('villa.couch', -17.5 + 2.4 * i, FLOOR, COUCH_Z, SOUTH, { x: 2.4, y: 0.9, z: 1.0 }));
+export const COUCH_SEAT_SPACING = 2.4;
+export const COUCH_WIDTH = 6.8;
+const couches = [1, 4].map((middle) => at('villa.couch', COUCH_SEAT_X(middle), FLOOR, COUCH_Z, SOUTH, { x: COUCH_WIDTH, y: 0.9, z: 1.0 }));
 // The bed row sits on the bed spots, the head to the north.
 const beds = Array.from({ length: 6 }, (_, i) => at('villa.bed', -2.5 + 1.8 * i, FLOOR, -12, Math.PI / 2, { x: 1.5, y: 0.6, z: 2.1 }));
 // The desk the laptops stand on runs along the wing's north wall.
@@ -60,7 +64,6 @@ export const PLACEMENTS: readonly Placement[] = [
 ];
 
 // Where each friend sits on the couch while nobody plays him: the seat with his index in the cast.
-export const COUCH_SEAT_X = (index: number): number => -17.5 + 2.4 * index;
 export const seatFor = (id: CharacterId, cast: readonly CharacterId[]): { x: number; y: number; z: number } => ({ x: COUCH_SEAT_X(Math.max(0, cast.indexOf(id))), y: FLOOR, z: COUCH_Z + 0.2 });
 
 // Olive trees (the broadleaf in grey-green) and palms, all on the lawn outside the paths and the buildings.

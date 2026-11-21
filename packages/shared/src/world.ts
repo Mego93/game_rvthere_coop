@@ -59,6 +59,8 @@ export interface WorldOptions {
   enemyPlan?: readonly EnemyEvent[];
   // The story villa: no race win, no fuel use, no coins, and `use` at a course spot emits a spot event.
   story?: boolean;
+  // A downed player is not auto-respawned: he stays down until revived (story worlds and outings).
+  holdDowned?: boolean;
 }
 
 export interface WorldEvent {
@@ -212,6 +214,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   let weather: Weather = schedule ? weatherAt(schedule, 0) : (weatherSetting as Weather);
   const gripOf = (current: Weather): number => (current === 'rain' ? RAIN_GRIP : 1);
   const story = options.story === true;
+  const holdDowned = options.holdDowned === true || story;
   const vehicle = createVehicle(rapier, physics, story ? { ...vehicleConfig, fuelBurn: 0 } : vehicleConfig, start.spawn, statics.surfaceOf, { gripScale: gripOf(weather) });
   // Queries see nothing until the broad phase has run once, and spawn rays are cast before the first tick.
   physics.timestep = 0;
@@ -759,11 +762,12 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       if (player.downed === null || player.respawnIn !== null || justDowned.has(player.id)) continue;
       // Rule H6 and J7: a revive hold on this player pauses the timer.
       const paused = players.all().some((other) => other.hold?.action === 'revive' && other.hold.targetId === player.id);
+      if (holdDowned) continue;
       const left = stepDowned(player.downed, paused);
       if (left === 'respawn') respawnPlayer(player, events);
       else player.downed = left;
     }
-    if (everyoneDowned(players.all())) for (const player of players.all()) respawnPlayer(player, events);
+    if (!holdDowned && everyoneDowned(players.all())) for (const player of players.all()) respawnPlayer(player, events);
   };
 
   const killPlane = (events: WorldEvent[]) => {

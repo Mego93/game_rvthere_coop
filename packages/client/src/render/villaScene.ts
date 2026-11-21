@@ -5,7 +5,7 @@ import { mergeBoxes, toGeometry } from './groundMerge';
 import type { SceneOptions } from './groundTextures';
 import { fitted, hasModel, instantiate, shadowed, type FitSize } from './models';
 import { createPlayerMesh, disposePlayerMesh } from './playerMesh';
-import { applySeatedPose, SEATED_POSE } from './seatedPose';
+import { applySeatedPose, SEAT_DROP } from './seatedPose';
 import { DESK, OLIVES, OLIVE_TINT, PALMS, PLACEMENTS, VILLA_COURT, VILLA_GYM, VILLA_HOUSE, VILLA_POOL, VILLA_WATER_Y, seatFor } from './villaLayout';
 import { createPoolWater } from './water';
 
@@ -200,7 +200,7 @@ export function createVillaScene(course: BuiltCourse, options: SceneOptions & { 
     const figure = createPlayerMesh(CHARACTER_NAMES[id], colour, defaultAppearance(id));
     applySeatedPose(figure);
     const place = seatFor(id, CHARACTER_IDS);
-    figure.position.set(place.x, place.y + 0.55 - SEATED_POSE.sink + 0.4, place.z);
+    figure.position.set(place.x, place.y + SEAT_DROP, place.z);
     // The figures face south, into the room.
     figure.rotation.set(0, Math.PI, 0);
     const laptop = modelAt('villa.laptop', 0, 0.62, -0.42, { x: 0.34, y: 0.23, z: 0.32 }, Math.PI);

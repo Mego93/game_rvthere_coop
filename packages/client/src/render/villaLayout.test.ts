@@ -18,11 +18,23 @@ describe('villa layout', () => {
     }
   });
 
-  it('puts a couch piece, a bed and a laptop on every spot of those kinds', () => {
-    for (const kind of ['couch', 'bed', 'laptop'] as const) {
+  it('draws two three-seat couches, each centred under the middle of three couch spots and clear of the walls', () => {
+    const couch = villa.spots!.filter((spot) => spot.kind === 'couch');
+    const placed = PLACEMENTS.filter((p) => p.key === 'villa.couch');
+    expect(placed).toHaveLength(2);
+    placed.forEach((p, i) => {
+      expect(p.x).toBeCloseTo(couch[i * 3 + 1]!.pos.x);
+      for (const spot of couch.slice(i * 3, i * 3 + 3)) expect(Math.abs(spot.pos.x - p.x)).toBeLessThanOrEqual(p.size.x! / 2);
+      for (const wall of walls) expect(inside(wall, p.x - p.size.x! / 2, p.z, 0)).toBe(false);
+    });
+    expect(placed[0]!.x + placed[0]!.size.x! / 2).toBeLessThan(placed[1]!.x - placed[1]!.size.x! / 2);
+  });
+
+  it('puts a bed and a laptop on every spot of those kinds', () => {
+    for (const kind of ['bed', 'laptop'] as const) {
       const spots = villa.spots!.filter((spot) => spot.kind === kind);
       expect(spots).toHaveLength(6);
-      const key = kind === 'couch' ? 'villa.couch' : kind === 'bed' ? 'villa.bed' : 'villa.laptop';
+      const key = kind === 'bed' ? 'villa.bed' : 'villa.laptop';
       const placed = PLACEMENTS.filter((p) => p.key === key);
       expect(placed).toHaveLength(6);
       for (const spot of spots) expect(placed.some((p) => Math.abs(p.x - spot.pos.x) < 0.01), `${spot.id}`).toBe(true);

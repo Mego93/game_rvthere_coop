@@ -258,9 +258,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   };
 
   // A world for the room's configuration, with every player in it and cp-0 recorded.
-  const createRunWorld = (run: number, courseId: string = settings.courseId, story = false): World => {
+  const createRunWorld = (run: number, courseId: string = settings.courseId, story = false, holdDowned = false): World => {
     const course = config.courses?.[courseId] ?? getCourse(courseId);
-    const next = createWorld(rapier, { courseId, vehicleId: settings.vehicleId, weather: settings.weather, ambient: course.ambient !== undefined, itemDrops: course.ambient !== undefined, enemies: !story, itemSeed: mixSeed(hashSeed(course.id), run), ...(story ? { story: true } : {}) }, course);
+    const next = createWorld(rapier, { courseId, vehicleId: settings.vehicleId, weather: settings.weather, ambient: course.ambient !== undefined, itemDrops: course.ambient !== undefined, enemies: !story, itemSeed: mixSeed(hashSeed(course.id), run), ...(story ? { story: true } : {}), ...(holdDowned ? { holdDowned: true } : {}) }, course);
     try {
       // Held slots join the world when they rejoin.
       for (const player of players) if (player.connected) next.addPlayer(player.playerId);
@@ -286,7 +286,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     connected: () => players.filter((player) => player.connected).map((player) => ({ playerId: player.playerId, characterId: player.appearance.characterId })),
     characterOf: (playerId) => players.find((player) => player.playerId === playerId)?.appearance.characterId,
     world: () => world!,
-    buildWorld: (courseId, story) => createRunWorld(story ? runNumber + 1 : runNumber, courseId, story),
+    buildWorld: (courseId, story) => createRunWorld(story ? runNumber + 1 : runNumber, courseId, story, true),
     swapWorld(next, courseId) {
       const current = world!;
       world = next;

@@ -509,6 +509,20 @@ test('S7: a friend downed for 60 s without a revive loses the day: the villa is 
   ctx.room.dispose();
 });
 
+test('S7: a friend really downed in the world is not respawned and the day is lost at 60 s', async () => {
+  const ctx = await setup({ characters: ['sounile', 'luiz'] });
+  await ctx.enterStory();
+  const [, p2] = ctx.players;
+  ctx.room.debugWorld()!.debugHurt(p2!.playerId, 100);
+  ctx.run(59 * 60);
+  const downed = ctx.room.debugWorld()!.snapshot().players.find((player) => player.playerId === p2!.playerId)!.downed;
+  expect(downed).not.toBeNull();
+  expect(ctx.ofType('toast').map((message) => message.text)).not.toContain('Day lost');
+  ctx.run(3 * 60);
+  expect(ctx.ofType('toast').map((message) => message.text)).toContain('Day lost');
+  ctx.room.dispose();
+});
+
 test('S7: a revive stops the count', async () => {
   const ctx = await setup({ characters: ['sounile', 'luiz'] });
   await ctx.enterStory();
