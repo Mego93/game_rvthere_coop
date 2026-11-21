@@ -61,6 +61,14 @@ import { FIRST_PERSON_FOV, onFootPose, seatedPose } from './render/firstPersonCa
 import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createSeatRing, createVehicleMesh, disposeSeatRing, placeSeatRing, placeVehicleMesh } from './render/vehicleMesh';
+import { createVillaScene, type VillaScene } from './render/villaScene';
+import { showBubble, tickBubble } from './render/speechBubble';
+import { complaintText } from './ui/story/complaints';
+import { storyHudModel } from './ui/story/needsView';
+import { createStoryHud } from './ui/story/storyHud';
+import { isComplainKey, isPhoneKey, type StoryUi } from './ui/story/storyUi';
+import { spotPrompt, usableSpot } from './ui/story/spots';
+import { touchWording } from './ui/hud/touchWording';
 import { createEventToast, toastFor } from './ui/hud/eventToast';
 import { createSeatAnnouncer } from './ui/hud/seatToast';
 import { interactAction, overlayText, type OverlayData } from './ui/overlay';
@@ -107,6 +115,8 @@ export interface Game {
   requestChat(): void;
   // The server says a player did an emote: plays it on their figure.
   onEmote(message: { playerId: string; emote: Emote }): void;
+  // Luiz complained: a speech bubble over his figure.
+  onComplain(message: { playerId: string; line: number }): void;
   // The emote wheel opened or closed: the game stands still while it is open.
   setEmoteOpen(open: boolean): void;
   // Opens the emote wheel through the page when nothing blocks it; the touch Emote button uses it like B does.
@@ -163,6 +173,8 @@ export interface GameView {
   onEmoteWheel: () => void;
   // The wheel must close: the local player was seated, downed or removed.
   onEmoteWheelClose: () => void;
+  // The page's story menus and state; given only in a story run.
+  story?: StoryUi;
 }
 
 const stanceFields = (stance: PlayerSnapshot['stance']): Pick<PlayerSnapshot, 'stance'> | Record<string, never> => (stance === undefined ? {} : { stance });
@@ -326,6 +338,22 @@ export function createGame(
   const hudRoot = document.createElement('div');
   document.body.append(hudRoot);
   const hud = createHud(hudRoot, { touch: view.touchUi !== null, route: course.route, finish: { x: course.finish.center.x, z: course.finish.center.z } });
+  // Story mode: the villa's dressing and absent friends, and the needs HUD.
+  const story = lobby.mode === 'story' ? view.story : undefined;
+  let villa: VillaScene | null = null;
+  if (story && course.id === 'villa') {
+    villa = createVillaScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true });
+    scene.add(villa.group);
+  }
+  const menusBlock = () => menuState.open || runState.open || chatOpen || emoteOpen || (controlsOpen && !story?.isOpen());
+  const storyHud = story
+    ? createStoryHud(document, { touch: view.touchUi !== null }, {
+        onPhone: () => !menusBlock() && story.togglePhone(),
+        onGoals: () => !menusBlock() && story.openGoals(),
+        onComplain: () => !menusBlock() && story.complain(),
+      })
+    : null;
+  storyHud?.setVenue(course.id === 'villa' ? 'villa' : 'outing');
   const markerPoint = new THREE.Vector3();
   const project = (point: Vec3) => markerPoint.set(point.x, point.y, point.z).project(camera);
   const cameraSpaceZ = (point: Vec3) => markerPoint.set(point.x, point.y, point.z).applyMatrix4(camera.matrixWorldInverse).z;
@@ -409,6 +437,16 @@ export function createGame(
       // Without this the T would be typed into the input that opening focuses.
       event.preventDefault();
       requestChat();
+      return;
+    }
+    if (story && isPhoneKey(event, event.target instanceof Element ? event.target.tagName : null)) {
+      event.preventDefault();
+      if (!menusBlock()) story.togglePhone();
+      return;
+    }
+    if (story && isComplainKey(event, event.target instanceof Element ? event.target.tagName : null)) {
+      event.preventDefault();
+      if (!menusBlock() && !anyOpen()) story.complain();
       return;
     }
     if (isEmoteKey(event, event.target instanceof Element ? event.target.tagName : null)) {
@@ -632,7 +670,24 @@ export function createGame(
       ...(local && onFoot ? { eye: eyeHeight } : {}),
     };
     overlay.textContent = overlayText(overlayData);
-    const hudModel = buildHudModel(overlayData, { checkpoints: course.checkpoints, finish: course.finish });
+    let hudModel = buildHudModel(overlayData, { checkpoints: course.checkpoints, finish: course.finish });
+    let spotAt: ReturnType<typeof usableSpot> = null;
+    if (story && storyHud) {
+      const feet = local ? local.pos : null;
+      const state = story.state();
+      story.setPlace(feet, course.spots ?? []);
+      villa?.update({ feet, absent: buffer.latestAbsent(), now: now / 1000, night: state?.night === true });
+      for (const text of story.takeToasts()) eventToast.showText(text, now / 1000);
+      const friend = story.friend();
+      storyHud.update(state ? storyHudModel(state, story.character()) : null, friend?.bank ?? 0, friend?.cash ?? 0, story.canComplain());
+      spotAt = local && onFoot && local.downed === null ? usableSpot(course.spots ?? [], feet) : null;
+      const line = spotAt ? spotPrompt(spotAt.kind, state?.night === true) : null;
+      if (line) {
+        const shown = view.touchUi ? touchWording(line) : line;
+        hudModel = { ...hudModel, prompt: hudModel.prompt ? `${hudModel.prompt}   ${shown}` : shown };
+      }
+      for (const entry of playerMeshes.values()) tickBubble(entry.mesh, now / 1000);
+    }
     const announced = seatAnnouncer.update(hudModel.ownSeat, now / 1000);
     placeSeatRing(seatRing, vehicleMesh, vehicleConfig, hudModel.ownSeat?.id ?? null, ownColour, announced.ringAge);
     camera.updateMatrixWorld();
@@ -642,8 +697,11 @@ export function createGame(
     });
     hud.update(hudModel, markers, announced.toast ?? eventToast.current(now / 1000));
     hud.setVisible(lobby.phase === 'playing' && !anyOpen());
+    storyHud?.setVisible(lobby.phase === 'playing' && !anyOpen());
     if (view.touchUi) {
-      view.touchUi.update(touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable }));
+      const touch = touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable });
+      // Near a spot the Use button is shown, since a use press is how a spot is worked.
+      view.touchUi.update(spotAt && spotPrompt(spotAt.kind, story?.state()?.night === true) !== null ? { ...touch, useVisible: true } : touch);
       view.touchUi.setJoystick(hasJoystick(input) ? input.joystick() : null);
     }
     audio.setListener(camera.position, camera.getWorldDirection(forward));
@@ -725,6 +783,10 @@ export function createGame(
     },
     requestChat,
     requestEmote,
+    onComplain(message) {
+      const entry = playerMeshes.get(message.playerId);
+      if (entry) showBubble(entry.mesh, complaintText(message.line), performance.now() / 1000);
+    },
     onEmote(message) {
       const entry = playerMeshes.get(message.playerId);
       if (entry) playEmote(entry.mesh, message.emote, performance.now() / 1000);
@@ -758,6 +820,8 @@ export function createGame(
       shopMenu.dispose();
       runMenu.dispose();
       hud.dispose();
+      storyHud?.dispose();
+      villa?.dispose();
       disposeSeatRing(seatRing);
       coinMeshes.dispose();
       animalMeshes.dispose();

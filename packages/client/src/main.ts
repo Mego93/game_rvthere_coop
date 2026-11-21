@@ -30,6 +30,7 @@ import { createStageBanner, stageBannerText } from './ui/stageBanner';
 import { WARM_BUDGET_DESKTOP_MS, WARM_BUDGET_TOUCH_MS, cancelWarm, warmCourse, warmTarget } from './render/warm';
 import { installTheme } from './ui/theme';
 import { createTouchUi } from './ui/touchUi';
+import { createStoryUi } from './ui/story/storyUi';
 import { createTutorial, shouldAutoShowTutorial } from './ui/tutorial';
 import { loadFirstPerson, saveFirstPerson } from './render/firstPersonCamera';
 
@@ -157,6 +158,10 @@ let adminId: string | null = null;
 let lastResults: ResultsMessage | null = null;
 // The newest lobby message, which a stage change builds its game from.
 let latestLobby: LobbyMessage | null = null;
+// The course a story run is in, from the stage messages; a story run starts in the villa.
+let stageCourse: string | null = null;
+// ?storytest offers the Race / Story toggle (the server has no gating yet); read at load, before a room's path replaces the address.
+const storyEnabled = new URLSearchParams(location.search).has('storytest');
 // Set only while a stage change builds its game.
 let firstSeq = 0;
 let phase: Phase | null = null;
@@ -170,7 +175,7 @@ const credits = createCredits(document);
 const tutorial = createTutorial(document, { touch: touchDevice, store: nameStore, onChange: () => game?.setControlsOpen(menuPanelOpen()) });
 
 const helpPanel = createControlsPanel(document, () => game?.setControlsOpen(menuPanelOpen()), () => credits.open());
-const menuPanelOpen = () => helpPanel.isOpen() || tutorial.isOpen();
+const menuPanelOpen = () => helpPanel.isOpen() || tutorial.isOpen() || storyUi.isOpen();
 // Shown on its own the first time the lobby appears on this page load, unless it was finished or skipped before.
 let tutorialOffered = false;
 window.addEventListener('keydown', (event) => {
@@ -210,6 +215,8 @@ const emoteWheel = createEmoteWheel(document, {
   onPick: (emote) => socket?.send({ type: 'emote', emote }),
   onOpenChange: (open) => game?.setEmoteOpen(open),
 });
+// The story menus and state live for the page; the game draws from them during a story run.
+const storyUi = createStoryUi(document, { send: (message) => socket?.send(message), onOpenChange: () => game?.setControlsOpen(menuPanelOpen()) });
 let renderedChat = -1;
 // Redraws the lines only when the log changed.
 function renderChat() {
@@ -238,6 +245,8 @@ function syncChatTimer() {
 }
 
 const lobby = createLobby(document, {
+  storyEnabled,
+  onResetWeek: () => socket?.send({ type: 'resetWeek' }),
   onReady: (ready) => socket?.send({ type: 'ready', ready }),
   onConfigure: (settings) => socket?.send({ type: 'configure', ...settings }),
   onStart: () => socket?.send({ type: 'start' }),
@@ -263,6 +272,8 @@ function stopGame() {
   emoteWheel.close();
   game?.stop();
   game = null;
+  storyUi.reset();
+  stageCourse = null;
   touchUi?.setVisible(false);
   overlay.textContent = '';
 }
@@ -270,6 +281,7 @@ function stopGame() {
 function onLobby(message: LobbyMessage) {
   phase = message.phase;
   latestLobby = message;
+  storyUi.setCharacter(message.players.find((entry) => entry.playerId === playerId)?.appearance.characterId ?? null);
   syncChatTimer();
   adminId = message.adminId;
   if (message.phase !== 'results') lastResults = null;
@@ -293,7 +305,7 @@ function onLobby(message: LobbyMessage) {
   if (message.phase === 'playing') {
     results.hide();
     if (game) game.setLobby(message);
-    else startGame(message);
+    else startGame(message.mode === 'story' ? { ...message, courseId: stageCourse ?? 'villa' } : message);
     return;
   }
   // Results: a running game stays drawn, frozen; a player who joined now has none and sees only the results.
@@ -306,6 +318,7 @@ function onLobby(message: LobbyMessage) {
 function onStage(message: StageMessage) {
   if (!latestLobby || latestLobby.phase !== 'playing') return;
   stageBanner.show(stageBannerText(message));
+  stageCourse = message.courseId;
   if (game && game.courseId === message.courseId) return;
   firstSeq = game?.lastSeq() ?? 0;
   game?.stop(true);
@@ -371,12 +384,28 @@ function onMessage(message: ServerMessage) {
       game?.pushSnapshot(message);
       return;
     case 'event':
+      if (message.kind === 'spot' && message.spotKind && message.playerId === playerId) storyUi.onSpot(message.spotKind);
       game?.onEvent(message);
+      return;
+    case 'storyState':
+      storyUi.onState(message);
+      return;
+    case 'toast':
+      storyUi.onToast(message.text);
+      return;
+    case 'complain':
+      game?.onComplain(message);
+      return;
+    case 'fakeRepublic':
+      storyUi.onFakeRepublic(message);
+      return;
+    case 'daySummary':
+      storyUi.onDaySummary(message);
       return;
     case 'error':
       // A refused purchase belongs to the shop menu; it never ends the game or reaches the home page.
       if (message.reason === 'cannot_buy') {
-        game?.showShopError();
+        if (!storyUi.showError()) game?.showShopError();
         return;
       }
       if (playerId !== '') {
@@ -438,7 +467,7 @@ function startGame(lobby: LobbyMessage) {
       ? createTouchSource({ surface: canvas, win: window, doc: document, width: () => window.innerWidth, controls })
       : createInputSource(createKeyboardSource(window), createMouseLook(canvas, document, pointerGate));
   touchUi?.setVisible(true);
-  game = createGame({ firstSeq, renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, firstPerson: loadFirstPerson(fpSearch, storageOrNull()), onViewChange: (on) => saveFirstPerson(on, storageOrNull()), onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen(), chatOpen: chatPanel.isOpen(), emoteOpen: emoteWheel.isOpen(), onChat: () => chatPanel.open(), onEmoteWheel: () => emoteWheel.open(), onEmoteWheelClose: () => emoteWheel.close() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
+  game = createGame({ firstSeq, renderer, overlay, crosshair, rapier: RAPIER, input, touchUi, pointerGate, audio, muted, softwareGl, firstPerson: loadFirstPerson(fpSearch, storageOrNull()), onViewChange: (on) => saveFirstPerson(on, storageOrNull()), onMute: toggleMute, onHelp: () => helpPanel.open(), onTutorial: () => tutorial.open(), controlsOpen: menuPanelOpen(), chatOpen: chatPanel.isOpen(), emoteOpen: emoteWheel.isOpen(), story: lobby.mode === 'story' ? storyUi : undefined, onChat: () => chatPanel.open(), onEmoteWheel: () => emoteWheel.open(), onEmoteWheelClose: () => emoteWheel.close() }, playerId, lobby, (outgoing) => socket?.send(outgoing));
   warmNextStage(lobby);
 }
 

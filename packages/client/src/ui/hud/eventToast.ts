@@ -22,16 +22,26 @@ export const eventToastText = (kind: EventMessage['kind'], item?: string): strin
 export const toastFor = (message: Pick<EventMessage, 'kind' | 'playerId'>, localId: string): boolean => (message.kind !== 'eat' && message.kind !== 'outOfBounds') || message.playerId === localId;
 
 // The newest event toast stays for EVENT_TOAST_SECONDS; a later one replaces it.
+export const STORY_TOAST_SECONDS = 3;
+
 export function createEventToast() {
   let text: string | null = null;
   let since = 0;
+  let seconds = EVENT_TOAST_SECONDS;
   return {
+    // A story toast from the server: its own text, a little longer than an event's.
+    showText(next: string, now: number): void {
+      text = next;
+      since = now;
+      seconds = STORY_TOAST_SECONDS;
+    },
     show(kind: EventMessage['kind'], now: number, item?: string): void {
       const next = eventToastText(kind, item);
       if (next === null) return;
       text = next;
       since = now;
+      seconds = EVENT_TOAST_SECONDS;
     },
-    current: (now: number): string | null => (text !== null && now - since < EVENT_TOAST_SECONDS ? text : null),
+    current: (now: number): string | null => (text !== null && now - since < seconds ? text : null),
   };
 }

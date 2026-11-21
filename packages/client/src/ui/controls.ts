@@ -7,8 +7,8 @@ export interface ControlEntry {
   action: string;
 }
 
-// Codes handled outside the keyboard source: F3, T, B, V and Escape in game.ts, M in audio/soundMap.ts, H in main.ts.
-export const EXTRA_CODES = ['F3', 'Escape', 'KeyM', 'KeyH', 'KeyT', 'KeyB', 'KeyV'];
+// Codes handled outside the keyboard source: F3, T, B, V, P, Z and Escape in game.ts, M in audio/soundMap.ts, H in main.ts.
+export const EXTRA_CODES = ['F3', 'Escape', 'KeyM', 'KeyH', 'KeyT', 'KeyB', 'KeyV', 'KeyP', 'KeyZ'];
 
 export const CONTROLS: readonly ControlEntry[] = [
   { group: 'On foot', keys: ['KeyW', 'KeyA', 'KeyS', 'KeyD'], action: 'Walk' },
@@ -32,6 +32,8 @@ export const CONTROLS: readonly ControlEntry[] = [
   { group: 'Game', keys: ['Escape'], action: 'Menu, or close this help, chat or emote wheel' },
   { group: 'Game', keys: ['KeyV'], action: 'Switch between first and third person view' },
   { group: 'Game', keys: ['KeyM'], action: 'Mute or unmute sound' },
+  { group: 'Story', keys: ['KeyP'], action: 'Phone: ATM, shop and Fake Republic' },
+  { group: 'Story', keys: ['KeyZ'], action: 'Complain (Luiz)' },
 ];
 
 export const keyLabel = (code: string): string => code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Shift(Left|Right)$/, 'Shift');

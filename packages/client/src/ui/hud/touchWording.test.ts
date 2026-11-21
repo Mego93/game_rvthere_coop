@@ -14,6 +14,10 @@ describe('touchWording (T8, K1)', () => {
   test('reset hint', () => {
     expect(touchWording('Hold X to reset (60 s penalty)')).toBe('Hold Reset to reset (60 s penalty)');
   });
+  test('step 41: a spot prompt reads Use on a phone', () => {
+    expect(touchWording('F to eat in the kitchen')).toBe('Use to eat in the kitchen');
+    expect(touchWording('Hold F to vibecode')).toBe('Hold Use to vibecode');
+  });
   test('other text is unchanged', () => {
     expect(touchWording('Press E to board')).toBe('Press E to board');
     expect(touchWording('')).toBe('');

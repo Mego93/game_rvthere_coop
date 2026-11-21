@@ -3,6 +3,7 @@ const REPLACEMENTS: [string, string][] = [
   ['Hold F to ', 'Hold Use to '],
   ['Hold X to ', 'Hold Reset to '],
   ['E to ', 'Act to '],
+  ['F to ', 'Use to '],
 ];
 
 export function touchWording(hint: string): string {
