@@ -44,6 +44,7 @@ const settings: Extract<ClientMessage, { type: 'configure' }> = {
   timeOfDay: 'night',
   weather: 'rain',
   chain: false,
+  mode: 'race',
 };
 
 // --- L5: phases ---
@@ -1083,7 +1084,7 @@ test('W3: a rain room builds its world with rain grip, at start and after restar
 
   client.send({ type: 'toLobby' });
   advance(WORLD_REBUILD_COOLDOWN + 0.1);
-  client.send({ type: 'configure', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'rain', chain: false });
+  client.send({ type: 'configure', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'rain', chain: false, mode: 'race' });
   startRun(client);
   advance(0.1);
   const wet = () => server.debugWorld(room)!.debug().wheelFrictionSlips;
@@ -1101,7 +1102,7 @@ test('W3: a rain room builds its world with rain grip, at start and after restar
 test('W4: a random room keeps the setting in the lobby and results messages, builds a world that follows the schedule, and restartCourse replays it', () => {
   const { host, advance, server } = setup();
   const { client, room } = host();
-  client.send({ type: 'configure', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'random', chain: false });
+  client.send({ type: 'configure', courseId: 'test', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'random', chain: false, mode: 'race' });
   expect(client.last('lobby').weather).toBe('random');
   startRun(client);
   advance(0.1);
@@ -1154,4 +1155,15 @@ test('C9: a two-course campaign passed explicitly starts on its first course and
   expect(client.last('results').campaignTotal).toBeUndefined();
   client.send({ type: 'next' });
   expect(client.last('lobby').courseId).toBe('test');
+});
+
+test('story mode: two players still cannot pick the same friend (character_taken), and the lobby keeps its mode', () => {
+  const { host, guest } = setup();
+  const { client, room } = host();
+  const badr = guest(room, 2);
+  client.send({ ...settings, mode: 'story' });
+  expect(client.last('lobby').mode).toBe('story');
+  badr.send({ type: 'appearance', ...defaultAppearance('sounile') });
+  expect(reasons(badr)).toEqual(['character_taken']);
+  expect(client.last('lobby').players[1]!.appearance.characterId).toBe('rafael');
 });

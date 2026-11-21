@@ -11,6 +11,7 @@ import { coinTouched } from './coins';
 import { DEFAULT_WEATHER, ENEMY_KNIFE_DAMAGE, ENEMY_SEED_SALT, ENEMY_VEHICLE_DAMAGE, GUN_DAMAGE, KOKE_MULTIPLIER, AMMO_BOX_ROUNDS, AMMO_MAX, GUN_COOLDOWN, GUN_RANGE, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, SHIELD_SECONDS, TAJINE_HEAL, WEATHER_SEED_SALT, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather, type WeatherSetting, type ShopItem } from './constants';
 import { weatherAt, weatherSchedule } from './weather';
 import type { BuiltCourse } from './course';
+import type { SpotKind } from './story/days';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
 import { holdTargetValid, isSelfItem, pressTarget, stepHold, stepOperateHold, type UseContext } from './holds';
@@ -53,6 +54,8 @@ export interface WorldOptions {
   enemySeed?: number;
   // Tests only: replaces the plan the enemy director follows.
   enemyPlan?: readonly EnemyEvent[];
+  // STUB (step 41a task 3): story mode; task 2 implements it (no race win, no fuel use, no coins, `spot` events).
+  story?: boolean;
 }
 
 export interface WorldEvent {
@@ -65,6 +68,9 @@ export interface WorldEvent {
   // 'shot': where the ray ended (`pos` is the eye it left from) and whether it hit an enemy.
   to?: Vec3;
   hit?: boolean;
+  // 'spot': the spot used and its kind (STUB, task 3: task 2 emits it).
+  spotId?: string;
+  spotKind?: SpotKind;
 }
 
 export interface WorldSnapshot {

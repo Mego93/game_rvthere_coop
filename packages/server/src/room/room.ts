@@ -1,6 +1,7 @@
 import {
   CAMPAIGN,
   CHAT_BURST,
+  CHAT_PHRASES,
   CHAT_HISTORY,
   CHAT_REFILL_SECONDS,
   EMOTE_COOLDOWN,
@@ -29,6 +30,7 @@ import {
   type ChatMessage,
   type Emote,
   type ErrorReason,
+  type PhoneAction,
   type InputFields,
   type ShopItem,
   type EventMessage,
@@ -42,11 +44,14 @@ import {
   type ServerMessage,
   type SnapshotMessage,
   type StageMessage,
+  type Week,
   type World,
   type WorldCarry,
 } from '@lodgy/shared';
 import { createInputQueue, type InputQueue } from './inputQueue';
-import type { Connection } from './types';
+import { createStoryDirector, VILLA_ID } from './story';
+import type { Connection, WeekStore } from './types';
+import { createMemoryWeekStore } from './weekStore';
 
 export interface RoomPlayer {
   readonly playerId: string;
@@ -103,6 +108,12 @@ export interface Room {
   restartCheckpoint(by: RoomPlayer): ErrorReason | null;
   restartCourse(by: RoomPlayer): ErrorReason | null;
   adminTool(by: RoomPlayer, tool: AdminTool): ErrorReason | null;
+  // Story mode, while playing: the phone and shop menu; a refused action answers cannot_buy.
+  phone(player: RoomPlayer, action: PhoneAction): ErrorReason | null;
+  // Story mode, while playing: Luiz's complaint; ignored silently when refused.
+  complain(player: RoomPlayer): void;
+  // Lobby only, admin only: starts the story week over.
+  resetWeek(by: RoomPlayer): ErrorReason | null;
   toLobby(by: RoomPlayer): ErrorReason | null;
   // Selects the next campaign course and enters the lobby; refused on the last course or one outside the campaign.
   next(by: RoomPlayer): ErrorReason | null;
@@ -121,6 +132,8 @@ export interface Room {
   everJoinedByOthers(): boolean;
   // Tests only.
   debugWorld(): World | null;
+  // Tests only: the story week, or null before it has loaded.
+  debugWeek(): Week | null;
   dispose(): void;
 }
 
@@ -130,6 +143,12 @@ export interface RoomConfig {
   courses?: Readonly<Record<string, BuiltCourse>>;
   // The courses in play order; defaults to CAMPAIGN.
   campaign?: readonly string[];
+  // Where story mode keeps the week; defaults to this room's own memory.
+  weekStore?: WeekStore;
+  // A number in [0, 1) for Fake Republic and the complaint line; defaults to Math.random.
+  random?: () => number;
+  // Failures that do not stop the room (a store that cannot load or save).
+  log?: (message: string, error?: unknown) => void;
 }
 
 const movedSince = (a: PropSnapshot, b: PropSnapshot) =>
@@ -146,7 +165,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   let phase: Phase = 'lobby';
   // Only exists while playing, and frozen while the results are shown.
   let world: World | null = null;
-  let settings: RoomSettings = { courseId: campaign[0]!, vehicleId: 'lodgy', timeOfDay: DEFAULT_TIME_OF_DAY, weather: DEFAULT_WEATHER, chain: false };
+  let settings: RoomSettings = { courseId: campaign[0]!, vehicleId: 'lodgy', timeOfDay: DEFAULT_TIME_OF_DAY, weather: DEFAULT_WEATHER, chain: false, mode: 'race' };
   let lastResults: ResultsMessage | null = null;
   // The latest final time of each course finished since the room was created.
   const finished = new Map<string, number>();
@@ -189,6 +208,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     for (const player of players) if (player.connected) player.connection.send(data);
   };
 
+  // The course the story's world is on (the villa or an outing's stage), or null outside a story run.
+  let storyCourse: string | null = null;
+
   const broadcastLobby = () => {
     broadcast({
       type: 'lobby',
@@ -198,6 +220,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       adminId,
       ...settings,
       courseId: chainIndex === null ? settings.courseId : campaign[chainIndex]!,
+      ...(settings.mode === 'story' && director.lobbyInfo() ? { story: director.lobbyInfo()! } : {}),
     } satisfies LobbyMessage);
   };
 
@@ -227,6 +250,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
         props: player.sentFull && !full ? moved : snapshot.props,
         ackSeq: player.queue.ackSeq(),
         full: !player.sentFull || full,
+        ...(storyCourse !== null ? { absent: director.absent() } : {}),
       };
       player.sentFull = true;
       player.connection.send(JSON.stringify(message));
@@ -234,9 +258,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   };
 
   // A world for the room's configuration, with every player in it and cp-0 recorded.
-  const createRunWorld = (run: number, courseId: string = settings.courseId): World => {
+  const createRunWorld = (run: number, courseId: string = settings.courseId, story = false): World => {
     const course = config.courses?.[courseId] ?? getCourse(courseId);
-    const next = createWorld(rapier, { courseId, vehicleId: settings.vehicleId, weather: settings.weather, ambient: course.ambient !== undefined, itemDrops: course.ambient !== undefined, enemies: true, itemSeed: mixSeed(hashSeed(course.id), run) }, course);
+    const next = createWorld(rapier, { courseId, vehicleId: settings.vehicleId, weather: settings.weather, ambient: course.ambient !== undefined, itemDrops: course.ambient !== undefined, enemies: !story, itemSeed: mixSeed(hashSeed(course.id), run), ...(story ? { story: true } : {}) }, course);
     try {
       // Held slots join the world when they rejoin.
       for (const player of players) if (player.connected) next.addPlayer(player.playerId);
@@ -249,7 +273,40 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     return next;
   };
 
-  const stageMessage = (): StageMessage => ({ type: 'stage', courseId: campaign[chainIndex!]!, index: chainIndex!, of: campaign.length });
+  const stageMessage = (): StageMessage =>
+    storyCourse !== null ? { type: 'stage', courseId: storyCourse, index: 0, of: 1 } : { type: 'stage', courseId: campaign[chainIndex!]!, index: chainIndex!, of: campaign.length };
+
+  const random = config.random ?? Math.random;
+  const weekStore = config.weekStore ?? createMemoryWeekStore();
+  const director = createStoryDirector({
+    noun: config.noun,
+    store: weekStore,
+    random,
+    log: (message, error) => config.log?.(message, error),
+    connected: () => players.filter((player) => player.connected).map((player) => ({ playerId: player.playerId, characterId: player.appearance.characterId })),
+    characterOf: (playerId) => players.find((player) => player.playerId === playerId)?.appearance.characterId,
+    world: () => world!,
+    buildWorld: (courseId, story) => createRunWorld(story ? runNumber + 1 : runNumber, courseId, story),
+    swapWorld(next, courseId) {
+      const current = world!;
+      world = next;
+      tickOffset += worldTicks;
+      worldTicks = 0;
+      lastSent.clear();
+      restarted = true;
+      storyCourse = courseId;
+      current.dispose();
+      broadcast(stageMessage());
+      broadcastSnapshot(next);
+    },
+    broadcast,
+    send(playerId, message) {
+      const player = players.find((entry) => entry.playerId === playerId);
+      if (player?.connected) player.connection.send(JSON.stringify(message));
+    },
+    toLobby: () => enterLobby(),
+    changed: broadcastLobby,
+  });
 
   const enterResults = (current: World) => {
     phase = 'results';
@@ -305,6 +362,13 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     for (const event of events) broadcast({ type: 'event', ...event, tick: event.tick + tickOffset } satisfies EventMessage);
     tick += 1;
     worldTicks += 1;
+    if (storyCourse !== null) {
+      // The director may swap the world or end the day; a day's end leaves the room in the lobby.
+      director.afterStep(current, events, inputs);
+      if (phase !== 'playing') return true;
+      if (world === current && tick % SNAPSHOT_EVERY_TICKS === 0) broadcastSnapshot(current);
+      return false;
+    }
     if (current.status().state === 'won') {
       if (chainIndex !== null && chainIndex < campaign.length - 1) {
         advanceStage(current);
@@ -323,6 +387,8 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
   };
 
   const enterLobby = () => {
+    if (director.active()) director.abandon();
+    storyCourse = null;
     world?.dispose();
     world = null;
     lastResults = null;
@@ -405,10 +471,14 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     },
     hold(player, now) {
       if (!player.connected || !players.includes(player)) return;
+      if (storyCourse !== null) director.leaving(player.playerId);
       player.connected = false;
       player.heldSince = now;
       world?.removePlayer(player.playerId, 'hold');
-      if (connectedCount() === 0) emptySince = now;
+      if (connectedCount() === 0) {
+        emptySince = now;
+        director.save();
+      }
       broadcastLobby();
     },
     expireHeld(now) {
@@ -426,6 +496,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       if (refused) return refused;
       const target = players.find((player) => player.playerId === playerId);
       if (!target || target === by) return 'bad_message';
+      if (storyCourse !== null) director.leaving(target.playerId);
       freeSlot(target);
       world?.removePlayer(target.playerId, 'leave');
       broadcastLobby();
@@ -433,7 +504,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     },
     announce: broadcastLobby,
     catchUp(player) {
-      if (phase === 'playing' && chainIndex !== null) player.connection.send(JSON.stringify(stageMessage()));
+      if (phase === 'playing' && (chainIndex !== null || storyCourse !== null)) player.connection.send(JSON.stringify(stageMessage()));
       if (phase === 'results' && lastResults) player.connection.send(JSON.stringify(lastResults));
       for (const line of chatHistory) player.connection.send(JSON.stringify({ ...line, replay: true }));
     },
@@ -458,10 +529,11 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       if (refused) return refused;
       // Rule R1: a chain only makes sense for a course of the campaign.
       const chain = next.chain && campaign.includes(next.courseId);
-      const changed = settings.courseId !== next.courseId || settings.vehicleId !== next.vehicleId || settings.timeOfDay !== next.timeOfDay || settings.weather !== next.weather || settings.chain !== chain;
+      const changed = settings.courseId !== next.courseId || settings.vehicleId !== next.vehicleId || settings.timeOfDay !== next.timeOfDay || settings.weather !== next.weather || settings.chain !== chain || settings.mode !== next.mode;
       if (!changed) return null;
-      settings = { courseId: next.courseId, vehicleId: next.vehicleId, timeOfDay: next.timeOfDay, weather: next.weather, chain };
+      settings = { courseId: next.courseId, vehicleId: next.vehicleId, timeOfDay: next.timeOfDay, weather: next.weather, chain, mode: next.mode };
       warm(settings.courseId);
+      if (settings.mode === 'story') director.ensureLoaded();
       broadcastLobby();
       return null;
     },
@@ -470,11 +542,18 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       if (refused) return refused;
       if (players.some((player) => player.playerId !== adminId && player.connected && !player.ready)) return 'not_ready';
       if (lastNow - lastBuild < WORLD_REBUILD_COOLDOWN) return 'bad_phase';
+      const story = settings.mode === 'story';
+      if (story) {
+        director.ensureLoaded();
+        // The week is still being read from the store.
+        if (!director.loaded()) return 'bad_phase';
+      }
       // Built first: if it throws, the room is still in the lobby, untouched.
       const first = settings.chain ? campaign[0]! : settings.courseId;
-      const fresh = createRunWorld(runNumber + 1, first);
+      const fresh = story ? director.buildWorld(VILLA_ID, true) : createRunWorld(runNumber + 1, first);
       runNumber += 1;
-      chainIndex = settings.chain ? 0 : null;
+      chainIndex = settings.chain && !story ? 0 : null;
+      storyCourse = story ? VILLA_ID : null;
       stageCarry = null;
       for (const player of players) {
         player.queue = createInputQueue();
@@ -489,13 +568,16 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       lastResults = null;
       world = fresh;
       phase = 'playing';
+      if (story) director.begin();
       broadcastLobby();
-      if (chainIndex !== null) broadcast(stageMessage());
+      if (chainIndex !== null || story) broadcast(stageMessage());
       return null;
     },
     restartCourse(by) {
       const refused = refusal(by, 'playing');
       if (refused) return refused;
+      // A story day restarts only by losing it.
+      if (storyCourse !== null) return 'bad_phase';
       if (lastNow - lastBuild < WORLD_REBUILD_COOLDOWN) return 'bad_phase';
       // The queues stay: the client's game keeps running and its seq keeps rising.
       const fresh = createRunWorld(runNumber, chainIndex === null ? settings.courseId : campaign[chainIndex]);
@@ -560,6 +642,21 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       chatHistory.push(line);
       if (chatHistory.length > CHAT_HISTORY) chatHistory.shift();
       broadcast(line);
+      // The quick phrase "Le mal est fait" is Huu's.
+      if (storyCourse !== null && phase === 'playing' && text === CHAT_PHRASES[CHAT_PHRASES.length - 1]) director.say(player.playerId);
+    },
+    phone(player, action) {
+      if (phase !== 'playing' || storyCourse === null) return 'bad_phase';
+      return director.phone(player.playerId, action) ? null : 'cannot_buy';
+    },
+    complain(player) {
+      if (phase === 'playing' && storyCourse !== null && player.connected) director.complain(player.playerId);
+    },
+    resetWeek(by) {
+      const refused = refusal(by, 'lobby');
+      if (refused) return refused;
+      director.reset();
+      return null;
     },
     emote(player, emote, now) {
       if (phase !== 'playing' || !world || !player.connected || !players.includes(player)) return;
@@ -594,6 +691,10 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     emptySince: () => emptySince,
     everJoinedByOthers: () => joinedByOthers,
     debugWorld: () => world,
-    dispose: () => world?.dispose(),
+    debugWeek: () => director.debugWeek(),
+    dispose() {
+      if (director.active()) director.abandon();
+      world?.dispose();
+    },
   };
 }

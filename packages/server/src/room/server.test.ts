@@ -104,6 +104,7 @@ test('create makes a room and welcomes its creator, then announces the lobby', (
     timeOfDay: 'midday',
     weather: 'clear',
     chain: false,
+    mode: 'race',
   });
 });
 

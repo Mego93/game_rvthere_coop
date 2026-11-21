@@ -24,6 +24,7 @@ const message = (players: LobbyPlayer[], changes: Partial<LobbyMessage> = {}): L
   timeOfDay: 'midday',
   weather: 'clear',
   chain: false,
+  mode: 'race',
   ...changes,
 });
 
@@ -79,7 +80,7 @@ test('L17: the status of the admin and of a ready player', () => {
 
 test('L17: the settings are carried over, and the vehicle labels are Lodgy and RV', () => {
   const view = lobbyView(message(trio, { courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'rain' }), 'p1');
-  expect(view.settings).toEqual({ courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'rain', chain: false });
+  expect(view.settings).toEqual({ courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'rain', chain: false, mode: 'race' });
   expect(VEHICLE_LABELS).toEqual({ lodgy: 'Lodgy', rv: 'RV' });
 });
 

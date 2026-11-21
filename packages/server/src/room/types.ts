@@ -7,6 +7,12 @@ export interface Connection {
   close(): void;
 }
 
+// Where story mode keeps a room's week, as the JSON that serialiseWeek makes. A room is named by its noun.
+export interface WeekStore {
+  load(noun: string): Promise<string | null>;
+  save(noun: string, json: string): Promise<void>;
+}
+
 // What the adapter calls when the connection receives a message or closes.
 export interface ConnectionHandle {
   message(data: string): void;
@@ -39,6 +45,8 @@ export interface RoomServerOptions {
   createPerMinute?: number;
   // The most rooms at once; defaults to MAX_ROOMS (an existing constant, now overridable).
   maxRooms?: number;
+  // Where story weeks are kept; defaults to memory, for as long as the server runs.
+  weekStore?: WeekStore;
   // When set, the server hosts at most this one room: `create` uses it as the noun and `join` of any other noun is unknown_room.
   fixedNoun?: string;
 }

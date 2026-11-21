@@ -1,5 +1,5 @@
 import { MAX_CONNECTIONS_PER_ADDRESS, MAX_CONNECTIONS_PER_ROOM, type Rapier } from '@lodgy/shared';
-import { createReporter, createRoomServer, isValidNoun, type RoomServer } from '@lodgy/server/room';
+import { createReporter, createRoomServer, isValidNoun, type RoomServer, type WeekStore } from '@lodgy/server/room';
 import { clientAddress } from './address';
 import { createAdmission, exceedsMessageLimit } from './admission';
 import { createClaim, type ClaimResult } from './claim';
@@ -22,6 +22,8 @@ export interface GameRoomDeps<Client> {
   // A WebSocketPair in the Worker; fakes in tests.
   createPair: () => { client: Client; server: ServerSocket };
   limits?: { perRoom?: number; perAddress?: number; createPerMinute?: number };
+  // Where story mode keeps the week; the Durable Object's storage in the Worker, memory when absent.
+  weekStore?: WeekStore;
 }
 
 export type UpgradeResult<Client> = { accepted: true; client: Client } | { accepted: false; status: 400 | 429 | 503 };
@@ -96,7 +98,7 @@ export function createGameRoom<Client>(deps: GameRoomDeps<Client>): GameRoom<Cli
         socket.accept();
         server ??= createRoomServer(
           { rapier: deps.rapier, clock: deps.clock, random: deps.random, timer, onError: (error, source) => report(source, error) },
-          { fixedNoun: noun, createPerMinute: deps.limits?.createPerMinute },
+          { fixedNoun: noun, createPerMinute: deps.limits?.createPerMinute, weekStore: deps.weekStore },
         );
         deps.timer.resume();
         handle = server.connect(

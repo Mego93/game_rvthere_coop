@@ -1,5 +1,6 @@
 import type { Surface } from './constants';
 import type { Pose, Quat, Vec3 } from './math';
+import type { SpotKind } from './story/days';
 
 export interface Box {
   center: Vec3;
@@ -41,6 +42,14 @@ export interface Checkpoint {
   figure?: true;
 }
 
+// STUB (step 41a task 3): the story spots; task 2 owns the real definition.
+export interface Spot {
+  id: string;
+  kind: SpotKind;
+  pos: Vec3;
+  radius: number;
+}
+
 export interface BuiltCourse {
   id: string;
   ground: GroundBox[];
@@ -64,5 +73,7 @@ export interface BuiltCourse {
   // Along-route spans (m) with no ambient animals, sorted and disjoint; only on courses that opt in.
   ambient?: { blocked: { from: number; to: number }[] };
   // Present on courses that opt in to the solid land beside the road: the along-route spans (m) of the obstacles that get a berm, sorted and disjoint, and the index in `walls` where the obstacle walls and caps start (they are not drawn).
+  // STUB (task 3): story spots, only on the villa.
+  spots?: Spot[];
   corridor?: { obstacles: { from: number; to: number }[]; wallsFrom: number };
 }

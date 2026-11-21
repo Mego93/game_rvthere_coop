@@ -65,7 +65,7 @@ export function lobbyView(message: LobbyMessage, localId: string): LobbyView {
     settingsEditable: isAdmin,
     showChain: chainShown(message.courseId),
     chainEditable: isAdmin,
-    settings: { courseId: message.courseId, vehicleId: message.vehicleId, timeOfDay: message.timeOfDay, weather: message.weather, chain: message.chain },
+    settings: { courseId: message.courseId, vehicleId: message.vehicleId, timeOfDay: message.timeOfDay, weather: message.weather, chain: message.chain, mode: message.mode },
     players,
     showReady: !isAdmin,
     localReady: message.players.find((entry) => entry.playerId === localId)?.ready ?? false,
