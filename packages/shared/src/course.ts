@@ -77,5 +77,7 @@ export interface BuiltCourse {
   // Present on courses that opt in to the solid land beside the road: the along-route spans (m) of the obstacles that get a berm, sorted and disjoint, and the index in `walls` where the obstacle walls and caps start (they are not drawn).
   // Story worlds only: where `use` emits a spot event.
   spots?: Spot[];
+  // Golf worlds: the tee, where the player on turn stands (the origin of field coordinates).
+  golf?: { tee: Vec3 };
   corridor?: { obstacles: { from: number; to: number }[]; wallsFrom: number };
 }

@@ -1,4 +1,7 @@
 import { castShot } from './shots';
+import { createGolf, type GolfShot } from './golf';
+import type { CharacterId } from './characters';
+import type { GolfSnapshot, GolfState } from './story/primegolf';
 import { createRouteIndex, type RouteIndex } from './routeAlong';
 import { routeFrame } from './corridor';
 import { groundHeightBelow } from './groundProbe';
@@ -76,6 +79,10 @@ export interface WorldEvent {
   // 'spot': the spot used.
   spotId?: string;
   spotKind?: SpotKind;
+  // 'golfLand': the ring hit (null for none) and the points scored; 'golfEnd': every friend's scores.
+  ring?: string | null;
+  points?: number;
+  scores?: GolfSnapshot['scores'];
 }
 
 export interface WorldSnapshot {
@@ -107,6 +114,8 @@ export interface WorldSnapshot {
   enemies?: EnemySnapshot[];
   // The weather in force; present only when the world's setting is random.
   weather?: Weather;
+  // Golf worlds once a game has started.
+  golf?: GolfSnapshot;
 }
 
 // What a chained run takes from one stage's world into the next; props, items, power-ups and drops stay behind.
@@ -189,6 +198,14 @@ export interface World {
   debugSeat(id: string, seatId: string): void;
   // Tests only: replaces the player's inventory.
   debugSetInventory(id: string, inventory: readonly (ItemKind | null)[]): void;
+  // Golf worlds: begins the game for the friends of the roster (player id to character) and puts the first on turn at the tee.
+  golfStart(roster: ReadonlyMap<string, CharacterId>): void;
+  // A shot from the player on turn, accepted only while no ball is in play; false when refused.
+  golfShot(playerId: string, shot: GolfShot): boolean;
+  // A friend who left: his remaining balls are dropped, and the turn moves on if it was his.
+  golfSkip(playerId: string): void;
+  // The golf game as it stands; null outside a golf world or before the start.
+  golfState(): GolfState | null;
   // Frees the physics world. The world must not be used afterwards.
   dispose(): void;
 }
@@ -225,6 +242,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const items = createItems(rapier, physics, course);
   const players = createPlayers(rapier, physics, vehicle, props, course);
   const winch = createWinch(rapier, physics, vehicle, props, course);
+  const golf = createGolf(rapier, physics, course, (id, pos) => players.teleport(id, pos));
   const bounded = course.corridor !== undefined;
   const routeIndex: RouteIndex | null = options.ambient === true || options.itemDrops === true || options.enemies === true || bounded ? createRouteIndex(course.route) : null;
   // Out-of-bounds checks: the last nearest segment of each player and of the vehicle, as hints.
@@ -330,20 +348,23 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         result.set(id, { fields: { ...NEUTRAL_INPUT, yaw, pitch, slot: held }, pressed: { jump: false, interact: false, drop: false, crouch: false } });
         continue;
       }
+      // Golf: the player on turn stands at the tee and only aims.
+      const locked = golf?.onTurn(id) === true;
       const fields: InputFields = {
         ...raw,
-        moveX: finite(raw.moveX),
-        moveY: finite(raw.moveY),
+        moveX: locked ? 0 : finite(raw.moveX),
+        moveY: locked ? 0 : finite(raw.moveY),
         yaw: finite(raw.yaw),
         pitch: finite(raw.pitch),
+        ...(locked ? { jump: false, sprint: false, crouch: false } : {}),
       };
       result.set(id, {
         fields,
         pressed: {
-          jump: raw.jump === true && before.jump !== true,
+          jump: !locked && raw.jump === true && before.jump !== true,
           interact: raw.interact === true && before.interact !== true,
           drop: raw.drop === true && before.drop !== true,
-          crouch: raw.crouch === true && before.crouch !== true,
+          crouch: !locked && raw.crouch === true && before.crouch !== true,
         },
       });
       if (raw.use === true && before.use !== true) usePressed.add(id);
@@ -419,6 +440,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         ...splitCandidates(found),
       });
       if (action?.kind === 'board') {
+        // No vehicle use in a golf world.
+        if (golf) continue;
         // No boarding mid-slide.
         if (player.slideTicks > 0) continue;
         // Unreachable with the hook in the hands (interact drops it first); kept so a seat never holds it.
@@ -984,6 +1007,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       const onFoot = stepInputsFor(inputs);
       for (const player of players.all()) player.slot = slotOf(onFoot.get(player.id)?.fields.slot ?? 0) ?? player.slot;
       const events: WorldEvent[] = queuedEvents.splice(0);
+      if (golf) events.push(...golf.take(tick + 1));
       resolveInteracts(onFoot, events);
       for (const player of players.all()) if (player.seat === null && onFoot.get(player.id)?.pressed.drop) dropSelected(player);
       stepHolds(onFoot, events);
@@ -1014,8 +1038,11 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         steer: controls?.moveX ?? 0,
         brake: controls?.jump ?? false,
       });
+      golf?.beforeStep();
       physics.step();
       tick += 1;
+      golf?.afterStep();
+      if (golf) events.push(...golf.take(tick));
       players.stepOnFoot(onFoot);
       const impactSpeed = vehicle.afterPhysics();
       if (impactSpeed > 0) events.push({ kind: 'impact', tick, pos: { ...vehicle.body.translation() } });
@@ -1109,6 +1136,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       ...animalField(),
       ...enemyField(),
       ...(schedule ? { weather } : {}),
+      ...(golf?.snapshot() ? { golf: golf.snapshot()! } : {}),
     }),
     restartCheckpoint() {
       if (!won) restartPending = true;
@@ -1263,6 +1291,10 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       queuedEvents.push({ kind: 'buy', tick: tick + 1, playerId, pos: { ...stop.shopCounter } });
       return 'ok';
     },
+    golfStart: (roster) => golf?.start(roster),
+    golfShot: (playerId, shot) => golf?.shot(playerId, shot) ?? false,
+    golfSkip: (playerId) => golf?.skip(playerId),
+    golfState: () => golf?.state() ?? null,
     debug: () => ({ forwardSpeed: vehicle.forwardSpeed(), wheelSurfaces: vehicle.wheelSurfaces(), cableTension, wheelFrictionSlips: vehicle.wheelFrictionSlips() }),
     debugBody: (id) => (id === 'vehicle' ? vehicle.body : props.get(id)?.body ?? items.get(id)?.body),
     debugWinch: () => winch,

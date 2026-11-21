@@ -1,5 +1,5 @@
 import { CHARACTER_IDS, type CharacterId } from '../characters';
-import { deepFreeze } from '../math';
+import { deepFreeze, type Vec3 } from '../math';
 import { STORY_PRICES } from './constants';
 import type { Week } from './week';
 
@@ -53,6 +53,13 @@ export interface GolfState {
   scores: Partial<Record<CharacterId, number[]>>;
   // Null once nobody has a ball left.
   turn: CharacterId | null;
+}
+
+// What the world's snapshot carries.
+export interface GolfSnapshot {
+  turn: CharacterId | null;
+  ball: Vec3 | null;
+  scores: Partial<Record<CharacterId, number[]>>;
 }
 
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;

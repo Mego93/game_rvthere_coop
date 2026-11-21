@@ -8,6 +8,7 @@ import { segmentDemo } from './demo';
 import { marrakech } from './marrakech';
 import { stageDefs } from './stages';
 import { testGround } from './testGround';
+import { primegolf } from './primegolf';
 import { villa } from './villa';
 
 const COURSES: Record<string, BuiltCourse> = {
@@ -15,10 +16,11 @@ const COURSES: Record<string, BuiltCourse> = {
   [segmentDemo.id]: buildCourse(segmentDemo),
   [airport.id]: buildCourse(airport),
   [villa.id]: villa,
+  [primegolf.id]: primegolf,
 };
 
 // Courses that exist for the story and are not offered as a race.
-const STORY_ONLY = new Set([villa.id]);
+const STORY_ONLY = new Set([villa.id, primegolf.id]);
 
 // Built on first use, so importing the package does not pay for the 22 km course.
 const LAZY: Record<string, () => CourseDef> = { ...stageDefs, [marrakech.id]: () => marrakech };
