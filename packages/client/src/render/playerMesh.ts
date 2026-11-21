@@ -53,6 +53,8 @@ interface EmoteRun {
   z: number;
   overlays: Map<PoseNode, NodeOverlay>;
 }
+// The driver in a character's hand, as a fraction of its real 1.12 m.
+const GOLF_CLUB_SCALE = 0.7;
 const POSE_NODES: readonly PoseNode[] = ['torso', 'arm-left', 'arm-right', 'head'];
 const EMOTE_CANCEL_DISTANCE = 1;
 
@@ -68,6 +70,8 @@ interface Animation {
   fresh: boolean;
   // The handgun in the right hand, shown while the player is on foot with a gun.
   gun: THREE.Object3D | null;
+  // The golf driver in the right hand, shown while it is the player's turn in PrimeGolf.
+  driver: THREE.Object3D | null;
   // The arm's rotation from before the gun raised it; the mixer writes a node only when its clip value changes, so it is put back by hand.
   aimBase: THREE.Quaternion | null;
 }
@@ -130,7 +134,18 @@ function createCharacter(colour: string, appearance?: Appearance): THREE.Group |
     gun = holdInRightHand(arm, shadowed(instantiate('prop.gun')!), 'gun');
     gun.visible = false;
   }
-  animations.set(group, { nodes, emote: null, mixer, idle, walk, x: 0, z: 0, speed: 0, fresh: true, gun, aimBase: null });
+  let driver: THREE.Object3D | null = null;
+  if (arm && hasModel('golf.driver')) {
+    // The file's head is at the top (+y); the hand grip wants it at +z, down the arm.
+    const club = new THREE.Group();
+    club.add(shadowed(instantiate('golf.driver')!));
+    club.rotation.x = Math.PI / 2;
+    // The characters are small (0.8 of a person), so the club is too.
+    club.scale.setScalar(GOLF_CLUB_SCALE);
+    driver = holdInRightHand(arm, club, 'driver');
+    driver.visible = false;
+  }
+  animations.set(group, { nodes, emote: null, mixer, idle, walk, x: 0, z: 0, speed: 0, fresh: true, gun, driver, aimBase: null });
   return group;
 }
 
@@ -257,6 +272,12 @@ export function placePlayerMesh(mesh: THREE.Group, player: PlayerSnapshot, secon
   mesh.rotation.order = 'YXZ';
   const tilt = applyStance(mesh, downed ? undefined : player.stance, seconds);
   mesh.rotation.set(downed ? Math.PI / 2 : tilt, player.yaw, 0);
+}
+
+// The golf driver in the figure's right hand: on during that player's turn in PrimeGolf.
+export function setGolfClub(mesh: THREE.Group, shown: boolean): void {
+  const driver = animations.get(mesh)?.driver;
+  if (driver) driver.visible = shown;
 }
 
 // Names show only for other players near the camera.

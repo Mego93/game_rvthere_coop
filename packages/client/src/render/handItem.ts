@@ -3,8 +3,8 @@ import * as THREE from 'three';
 // Where the hand is in an arm node's own frame (the arm hangs along -y, the right arm's hand a little outside the node).
 const HAND_RIGHT = new THREE.Vector3(-0.2, -0.85, 0.02);
 
-// The point of the model the hand holds, as fractions of its box (x is always the middle): the pistol's grip and the knife's handle.
-export const GRIPS = { gun: { y: 0.25, z: 0.18 }, knife: { y: 0.47, z: 0.11 } } as const;
+// The point of the model the hand holds, as fractions of its box (x is always the middle): the pistol's grip, the knife's handle and a hand's width up the driver's shaft.
+export const GRIPS = { gun: { y: 0.25, z: 0.18 }, knife: { y: 0.47, z: 0.11 }, driver: { y: 0.5, z: 0.11 } } as const;
 export type GripKind = keyof typeof GRIPS;
 
 // Puts a model in a character's right hand. The model's +z end (muzzle, blade) points down the arm, so it points forward when the arm is raised forward, and its +y is up.

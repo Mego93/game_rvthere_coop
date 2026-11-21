@@ -10,12 +10,14 @@ import {
   getCourseDef,
   getVehicleConfig,
   holdPoseAt,
+  TICK_DT,
   isCrouchedStance,
   predictedFrom,
   vec3,
   type ClientMessage,
   type Emote,
   type EventMessage,
+  type GolfSnapshot,
   type InputFields,
   type InteractAction,
   type ShopItem,
@@ -39,7 +41,7 @@ import { createSnapshotBuffer } from './net/snapshotBuffer';
 import { predictionActive } from './prediction/gate';
 import { createReconciler } from './prediction/reconciler';
 import { updateFollowCamera } from './render/followCamera';
-import { createPlayerMesh, disposePlayerMesh, LABEL_RANGE, placePlayerMesh, playEmote, setNameVisible } from './render/playerMesh';
+import { createPlayerMesh, disposePlayerMesh, LABEL_RANGE, placePlayerMesh, playEmote, setGolfClub, setNameVisible } from './render/playerMesh';
 import { createCoinMeshes } from './render/coinMesh';
 import { createAnimalMeshes } from './render/animalMeshes';
 import { createEnemyMeshes } from './render/enemyMeshes';
@@ -62,6 +64,13 @@ import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
 import { createSeatRing, createVehicleMesh, disposeSeatRing, placeSeatRing, placeVehicleMesh } from './render/vehicleMesh';
 import { createVillaScene, type VillaScene } from './render/villaScene';
+import { createArrivalScene } from './render/arrivalScene';
+import { createGolfScene, type GolfScene } from './render/golfScene';
+import { BALL_FOLLOW_AHEAD, ballFollowPose, blendFollow, headingFrom, type Heading } from './render/golfCamera';
+import { createGolfHud, type GolfHud } from './ui/golf/golfHud';
+import { canShoot, golfHudView } from './ui/golf/golfHudView';
+import { landText, type LandText } from './ui/golf/golfView';
+import { IDLE_SHOT, aimYaw, shotMessage, stepShot, type ShotState } from './ui/golf/shot';
 import { showBubble, tickBubble } from './render/speechBubble';
 import { complaintText } from './ui/story/complaints';
 import { storyHudModel } from './ui/story/needsView';
@@ -101,6 +110,9 @@ const BOB_RATE = 10;
 // The camera eye eases to a new stance's height in about this long.
 const EYE_EASE_SECONDS = 0.1;
 const LOOPS = ['engine', 'winch', 'rain'] as const;
+// How long the landing popup and the scoreboard stay; the server keeps the ball and the turn for 2.5 s.
+const GOLF_POP_SECONDS = 2.2;
+const GOLF_BOARD_SECONDS = 2.4;
 
 export interface Game {
   setLobby(lobby: LobbyMessage): void;
@@ -193,7 +205,11 @@ export function createGame(
   const course = getCourse(lobby.courseId);
   const cameraBoxes = [...course.ground, ...course.walls];
   const tint = tintFor(getCourseDef(course.id)?.theme);
-  const scene = createScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true, tint });
+  // PrimeGolf and the arrival draw their own ground and walls (the golf scene and the arrival scene below); the collision stays the shared course's.
+  const isGolf = course.golf !== undefined;
+  const isArrival = course.id === 'arrival';
+  const sceneCourse = isGolf ? { ...course, ground: [], walls: [] } : isArrival ? { ...course, walls: [] } : course;
+  const scene = createScene(sceneCourse, { lite: view.touchUi !== null, flat: view.softwareGl === true, tint });
   const decor = createDecorRenderer(decorFor(course.id), course.route, { touch: view.touchUi !== null, softwareGl: view.softwareGl === true });
   scene.add(decor.group);
   const decorLimits = view.softwareGl === true ? SOFTWARE_DECOR : view.touchUi !== null ? TOUCH_DECOR : DESKTOP_DECOR;
@@ -353,7 +369,24 @@ export function createGame(
         onComplain: () => !menusBlock() && story.complain(),
       })
     : null;
-  storyHud?.setVenue(course.id === 'villa' ? 'villa' : 'outing');
+  storyHud?.setVenue(course.id === 'villa' ? 'villa' : isArrival ? 'foot' : 'outing');
+  if (story && isArrival) scene.add(createArrivalScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true }).group);
+  // PrimeGolf: the range, the golf HUD, and the shot being made.
+  const golfScene: GolfScene | null = story && isGolf ? createGolfScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true }) : null;
+  if (golfScene) scene.add(golfScene.group);
+  const golfHud: GolfHud | null = golfScene ? createGolfHud(document, { touch: view.touchUi !== null }) : null;
+  view.touchUi?.setFireLabel(golfScene ? 'Shoot' : 'Fire');
+  let shot: ShotState = IDLE_SHOT;
+  // The newest snapshot's golf, kept as it arrives.
+  let golfNow: GolfSnapshot | null = null;
+  let golfPop: LandText | null = null;
+  let golfPopUntil = 0;
+  let golfBoardUntil = 0;
+  // The follow camera while a ball is out: how much of it shows, where the ball last was and which way it flew.
+  let followBlend = 0;
+  let followBall: Vec3 | null = null;
+  let followHeading: Heading = { x: 0, z: -1 };
+  const localCharacter = () => lobby.players.find((entry) => entry.playerId === playerId)?.appearance.characterId ?? null;
   const markerPoint = new THREE.Vector3();
   const project = (point: Vec3) => markerPoint.set(point.x, point.y, point.z).project(camera);
   const cameraSpaceZ = (point: Vec3) => markerPoint.set(point.x, point.y, point.z).applyMatrix4(camera.matrixWorldInverse).z;
@@ -480,7 +513,14 @@ export function createGame(
     const sampled = input.sample();
     const pressed = sampled.interact && !wasInteract;
     wasInteract = sampled.interact;
-    const fields = menuInput(frozen(), sampled, lastSent);
+    // On turn in PrimeGolf the player only aims: no walking, and the shoot button makes the shot instead of firing.
+    const golfAiming = golfNow !== null && canShoot(golfNow, localCharacter()) && !frozen();
+    if (golfScene) {
+      const step = stepShot(shot, TICK_DT, sampled.fire === true, golfAiming);
+      shot = step.state;
+      if (step.send) send(shotMessage(sampled.yaw, step.send));
+    }
+    const fields = menuInput(frozen() || golfAiming, sampled, lastSent);
     if (!frozen()) lastSent = fields;
     send({ type: 'input', ...fields, seq });
     reconciler.record(seq, fields);
@@ -524,6 +564,7 @@ export function createGame(
       }
       entry.mesh.visible = player.seat === null && !(firstPerson && player.playerId === playerId);
       placePlayerMesh(entry.mesh, player, seconds, clock);
+      if (golfScene) setGolfClub(entry.mesh, golfNow !== null && golfNow.turn !== null && info.appearance.characterId === golfNow.turn);
       setNameVisible(entry.mesh, player.playerId !== playerId && Math.hypot(player.pos.x - camera.position.x, player.pos.y - camera.position.y, player.pos.z - camera.position.z) <= LABEL_RANGE);
     }
     for (const [id, entry] of playerMeshes) {
@@ -623,7 +664,7 @@ export function createGame(
 
     const local = players.find((player) => player.playerId === playerId);
     const onFoot = local !== undefined && local.seat === null;
-    crosshair.hidden = !onFoot;
+    crosshair.hidden = !onFoot || golfScene !== null;
     if (viewGun) viewGun.visible = firstPerson && onFoot && local.gun === true && local.downed === null && (local.hands === null || local.hands === 'hook');
     if (local && onFoot) {
       const eyeTarget = isCrouchedStance(drawnStance) ? PLAYER_CROUCH_EYE_HEIGHT : PLAYER_EYE_HEIGHT;
@@ -646,6 +687,33 @@ export function createGame(
         camera.translateX(shake.x);
         camera.translateY(shake.y);
       }
+    }
+    // PrimeGolf: the follow camera takes over while a ball is out and hands back once it is gone.
+    let golfAimNow = false;
+    if (golfScene) {
+      const ball = buffer.golfBall(now / 1000);
+      const tee = course.golf?.tee ?? vec3(0, 0, 0);
+      if (ball) {
+        followHeading = headingFrom(followBall ?? tee, ball, followHeading);
+        followBall = ball;
+      } else if (followBlend <= 0.001) {
+        followBall = null;
+        followHeading = { x: 0, z: -1 };
+      }
+      followBlend = blendFollow(followBlend, ball !== null, frameSeconds);
+      if (followBall && followBlend > 0.001) {
+        const pose = ballFollowPose(followBall, followHeading);
+        const eased = followBlend * followBlend * (3 - 2 * followBlend);
+        const lookAt = camera.getWorldDirection(forward).multiplyScalar(BALL_FOLLOW_AHEAD).add(camera.position);
+        camera.position.lerp(markerPoint.set(pose.position.x, pose.position.y, pose.position.z), eased);
+        lookAt.lerp(markerPoint.set(pose.target.x, pose.target.y, pose.target.z), eased);
+        camera.lookAt(lookAt);
+      }
+      golfAimNow = golfNow !== null && canShoot(golfNow, localCharacter()) && !frozen();
+      golfScene.update({ aim: golfAimNow ? aimYaw(aim.yaw) : null, ball, golf: golfNow });
+      const boardShown = now / 1000 < golfBoardUntil;
+      const popShown = now / 1000 < golfPopUntil;
+      if (golfHud && golfNow) golfHud.update(golfHudView({ golf: golfNow, local: localCharacter(), shot, boardShown, pop: popShown ? golfPop : null, touch: view.touchUi !== null }), localCharacter());
     }
     const latestCable = buffer.latestCable();
     const overlayData: OverlayData = {
@@ -697,11 +765,16 @@ export function createGame(
     });
     hud.update(hudModel, markers, announced.toast ?? eventToast.current(now / 1000));
     hud.setVisible(lobby.phase === 'playing' && !anyOpen());
-    storyHud?.setVisible(lobby.phase === 'playing' && !anyOpen());
+    storyHud?.setVisible(lobby.phase === 'playing' && !anyOpen() && golfScene === null);
+    golfHud?.setVisible(lobby.phase === 'playing' && !anyOpen());
     if (view.touchUi) {
       const touch = touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable });
       // Near a spot the Use button is shown, since a use press is how a spot is worked.
-      view.touchUi.update(spotAt && spotPrompt(spotAt.kind, story?.state()?.night === true) !== null ? { ...touch, useVisible: true } : touch);
+      view.touchUi.update(
+        golfScene
+          ? { ...touch, useVisible: false, reelVisible: false, resetVisible: false, sprintVisible: false, fireVisible: golfAimNow, slots: [null, null, null] }
+          : spotAt && spotPrompt(spotAt.kind, story?.state()?.night === true) !== null ? { ...touch, useVisible: true } : touch,
+      );
       view.touchUi.setJoystick(hasJoystick(input) ? input.joystick() : null);
     }
     audio.setListener(camera.position, camera.getWorldDirection(forward));
@@ -763,12 +836,25 @@ export function createGame(
       predictor.setProps(buffer.latestProps().filter((prop) => !held.has(prop.id)));
       const entry = snapshot.players.find((player) => player.playerId === playerId);
       latestLocal = entry ?? null;
+      golfNow = buffer.latestGolf();
       if (emoteOpen && (!entry || entry.seat !== null || entry.downed !== null)) view.onEmoteWheelClose();
       refreshMenu(menuFeet(lastDrawn, latestLocal?.pos ?? null), null, false);
       if (entry && predictionActive(entry)) reconciler.correct(predictedFrom(entry), snapshot.ackSeq);
       else reconciler.suspend();
     },
     onEvent(message) {
+      if (message.kind === 'golfLand' && golfScene) {
+        const at = performance.now() / 1000;
+        golfPop = landText(message.ring ?? null, message.points ?? 0);
+        golfPopUntil = at + GOLF_POP_SECONDS;
+        golfBoardUntil = at + GOLF_BOARD_SECONDS;
+        audio.play((message.points ?? 0) > 0 ? 'coin' : 'impact');
+        return;
+      }
+      if (message.kind === 'golfEnd') {
+        audio.play('win');
+        return;
+      }
       // Every checkpoint saves; only Souleyman's greet.
       if (message.kind === 'checkpoint' && !isFigureCheckpointAt(course.checkpoints, message.pos)) return;
       const sound = soundFor(message, playerId);
@@ -821,6 +907,9 @@ export function createGame(
       runMenu.dispose();
       hud.dispose();
       storyHud?.dispose();
+      golfHud?.dispose();
+      golfScene?.dispose();
+      view.touchUi?.setFireLabel('Fire');
       villa?.dispose();
       disposeSeatRing(seatRing);
       coinMeshes.dispose();
