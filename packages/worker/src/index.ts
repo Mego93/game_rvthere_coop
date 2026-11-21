@@ -3,6 +3,7 @@ import { isValidNoun } from '@lodgy/server/room';
 import * as RAPIER from '../vendor/rapier3d/rapier.js';
 import { CLAIM_PATH, CREATE_HEADER, route } from './route';
 import { createGameRoom, type GameRoom as Room } from './room';
+import { createStorageWeekStore } from './storyStore';
 import { createWorkerTimer } from './workerTimer';
 
 export interface Env {
@@ -26,7 +27,7 @@ export class GameRoom {
   private limits: { perAddress: number; createPerMinute: number } | null = null;
   private limitsError: unknown = null;
 
-  constructor(_state: DurableObjectState, env: Env) {
+  constructor(private readonly state: DurableObjectState, env: Env) {
     try {
       this.limits = {
         perAddress: limit(env.MAX_CONNECTIONS_PER_ADDRESS, MAX_CONNECTIONS_PER_ADDRESS, 'MAX_CONNECTIONS_PER_ADDRESS'),
@@ -52,6 +53,7 @@ export class GameRoom {
         return { client: new Response(null, { status: 101, webSocket: client }), server: server as never };
       },
       limits: this.limits!,
+      weekStore: createStorageWeekStore({ get: (key) => this.state.storage.get(key), put: (key, value) => this.state.storage.put(key, value) }),
     }));
   }
 

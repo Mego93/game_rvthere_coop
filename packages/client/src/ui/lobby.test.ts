@@ -1,7 +1,7 @@
 import { defaultAppearance, type LobbyMessage, type LobbyPlayer } from '@lodgy/shared';
 import { expect, test } from 'vitest';
 import { WEATHER_SETTINGS } from '@lodgy/shared';
-import { CHAIN_LABEL, chainShown, courseLabel, courseOptions, lobbyView, OSM_ATTRIBUTION, VEHICLE_LABELS, WEATHER_LABELS, weatherOptions } from './lobby';
+import { CHAIN_LABEL, chainShown, courseLabel, courseOptions, lobbyView, modeOptions, nextResetStep, OSM_ATTRIBUTION, VEHICLE_LABELS, WEATHER_LABELS, weatherOptions } from './lobby';
 
 const player = (playerId: string, name: string, changes: Partial<LobbyPlayer> = {}): LobbyPlayer => ({
   playerId,
@@ -24,6 +24,7 @@ const message = (players: LobbyPlayer[], changes: Partial<LobbyMessage> = {}): L
   timeOfDay: 'midday',
   weather: 'clear',
   chain: false,
+  mode: 'race',
   ...changes,
 });
 
@@ -79,7 +80,7 @@ test('L17: the status of the admin and of a ready player', () => {
 
 test('L17: the settings are carried over, and the vehicle labels are Lodgy and RV', () => {
   const view = lobbyView(message(trio, { courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'rain' }), 'p1');
-  expect(view.settings).toEqual({ courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'rain', chain: false });
+  expect(view.settings).toEqual({ courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'rain', chain: false, mode: 'race' });
   expect(VEHICLE_LABELS).toEqual({ lodgy: 'Lodgy', rv: 'RV' });
 });
 
@@ -126,4 +127,41 @@ test('V1: the chain checkbox shows for a stage only, is admin-only and the setti
   expect([guest.showChain, guest.chainEditable, guest.settings.chain]).toEqual([true, false, true]);
   const full = lobbyView(message(trio, { courseId: 'marrakech' }), 'p1');
   expect([full.showChain, full.settings.chain]).toEqual([false, false]);
+});
+
+test('step 41: the mode toggle shows only with ?storytest (or when the room is already in story mode) and only the admin can change it', () => {
+  expect(lobbyView(message(trio), 'p1').showMode).toBe(false);
+  expect(lobbyView(message(trio), 'p1', { storyEnabled: true }).showMode).toBe(true);
+  expect(lobbyView(message(trio, { mode: 'story', story: { day: 0, finishedDays: [] } }), 'p2').showMode).toBe(true);
+  expect(lobbyView(message(trio), 'p1', { storyEnabled: true }).modeEditable).toBe(true);
+  expect(lobbyView(message(trio), 'p2', { storyEnabled: true }).modeEditable).toBe(false);
+  expect(modeOptions()).toEqual([{ value: 'race', text: 'Race' }, { value: 'story', text: 'Story' }]);
+});
+
+test('step 41: in story mode the lobby shows the day and the finished days, hides the course, and gives the admin Reset week', () => {
+  const story = message(trio, { mode: 'story', story: { day: 2, finishedDays: [0, 1] } });
+  const admin = lobbyView(story, 'p1');
+  expect(admin.story).toEqual({ dayText: 'Day 2', finishedText: 'Finished days: 0, 1' });
+  expect(admin.showCourse).toBe(false);
+  expect(admin.showChain).toBe(false);
+  expect(admin.showReset).toBe(true);
+  expect(lobbyView(story, 'p2').showReset).toBe(false);
+  const fresh = lobbyView(message(trio, { mode: 'story', story: { day: 1, finishedDays: [] } }), 'p1');
+  expect(fresh.story).toEqual({ dayText: 'Day 1', finishedText: 'No days finished yet' });
+  expect(lobbyView(message(trio, { mode: 'story', story: { day: 0, finishedDays: [] } }), 'p1').story?.dayText).toBe('Test day');
+});
+
+test('step 41: a race lobby shows no story section, no Reset week, and keeps the course and the chain', () => {
+  const race = lobbyView(message(trio, { courseId: 'stage-1' }), 'p1');
+  expect(race.story).toBeNull();
+  expect(race.showReset).toBe(false);
+  expect(race.showCourse).toBe(true);
+  expect(race.settings.mode).toBe('race');
+});
+
+test('step 41: Reset week asks to confirm; a second press sends it and Cancel backs out', () => {
+  expect(nextResetStep('idle', 'press')).toEqual({ step: 'confirm', send: false });
+  expect(nextResetStep('confirm', 'confirm')).toEqual({ step: 'idle', send: true });
+  expect(nextResetStep('confirm', 'cancel')).toEqual({ step: 'idle', send: false });
+  expect(nextResetStep('idle', 'confirm')).toEqual({ step: 'idle', send: false });
 });

@@ -35,6 +35,7 @@ const lobby: LobbyMessage = {
   timeOfDay: 'midday',
   weather: 'clear',
   chain: false,
+  mode: 'race',
 };
 
 const vehicle: VehicleState = {

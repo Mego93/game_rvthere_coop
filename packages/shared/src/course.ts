@@ -1,5 +1,6 @@
 import type { Surface } from './constants';
 import type { Pose, Quat, Vec3 } from './math';
+import type { SpotKind } from './story/days';
 
 export interface Box {
   center: Vec3;
@@ -41,8 +42,18 @@ export interface Checkpoint {
   figure?: true;
 }
 
+// A place where `use` does something in a story world; `pos` is on the ground.
+export interface Spot {
+  id: string;
+  kind: SpotKind;
+  pos: Vec3;
+  radius: number;
+}
+
 export interface BuiltCourse {
   id: string;
+  // The name the lobby shows, for a course with no def.
+  label?: string;
   ground: GroundBox[];
   walls: Box[];
   props: Placed[];
@@ -64,5 +75,7 @@ export interface BuiltCourse {
   // Along-route spans (m) with no ambient animals, sorted and disjoint; only on courses that opt in.
   ambient?: { blocked: { from: number; to: number }[] };
   // Present on courses that opt in to the solid land beside the road: the along-route spans (m) of the obstacles that get a berm, sorted and disjoint, and the index in `walls` where the obstacle walls and caps start (they are not drawn).
+  // Story worlds only: where `use` emits a spot event.
+  spots?: Spot[];
   corridor?: { obstacles: { from: number; to: number }[]; wallsFrom: number };
 }

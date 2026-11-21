@@ -1,4 +1,7 @@
-import type { ResultsMessage } from '@lodgy/shared';
+import type { ResultsMessage, StoryStateMessage } from '@lodgy/shared';
+import { createStoryHud } from './story/storyHud';
+import { storyHudModel } from './story/needsView';
+import { createStoryUi, type StoryUi } from './story/storyUi';
 import { type ChatLine, type ChatPanel } from './chat';
 import type { ControlsPanel } from './controls';
 import type { EmoteWheel } from './emoteWheel';
@@ -11,9 +14,9 @@ import type { Tutorial } from './tutorial';
 import { createTouchUi } from './touchUi';
 import type { TouchView } from './touchView';
 
-export type HudTestMode = 'hud' | 'drive' | 'menu' | 'shop' | 'results' | 'help' | 'chat' | 'emote' | 'tutorial';
+export type HudTestMode = 'hud' | 'drive' | 'menu' | 'shop' | 'results' | 'help' | 'chat' | 'emote' | 'tutorial' | 'story' | 'storydrive' | 'storyphone' | 'storykiosk' | 'storygoals' | 'storysummary';
 
-const MODES: readonly HudTestMode[] = ['hud', 'drive', 'menu', 'shop', 'results', 'help', 'chat', 'emote', 'tutorial'];
+const MODES: readonly HudTestMode[] = ['hud', 'drive', 'menu', 'shop', 'results', 'help', 'chat', 'emote', 'tutorial', 'story', 'storydrive', 'storyphone', 'storykiosk', 'storygoals', 'storysummary'];
 
 // ?hudtest shows the HUD on a fixed sample for the layout check and the screenshots; ?hudtest=menu (and the others) also opens that panel.
 export function hudTestMode(search: string): HudTestMode | null {
@@ -86,6 +89,24 @@ const SAMPLE_RESULTS: ResultsMessage = {
   assisted: false,
 };
 
+// The story HUD's sample: Luiz at 08:30 with caffeine running, two goals pending and one done.
+export const sampleStoryState = (poor = false): StoryStateMessage => ({
+  type: 'storyState',
+  day: 0,
+  clock: 40,
+  dayLength: 600,
+  night: false,
+  goals: [
+    { id: 'vibecode', label: 'Vibecode at a laptop', status: 'done' },
+    { id: 'eat', label: 'Eat together in the kitchen', status: 'pending' },
+    { id: 'outing', label: 'Take the Lodgy to the desert', status: 'pending' },
+  ],
+  friends: {
+    luiz: { health: 100, food: 22, happiness: 64, tiredness: 83, cash: poor ? 40 : 120, bank: poor ? 90 : 1880, items: ['tea', 'treedent'], caffeine: { fast: 38, slow: 0 } },
+    alexander: { health: 100, food: 60, happiness: 55, tiredness: 30, cash: poor ? 40 : 120, bank: poor ? 90 : 1880, items: [], caffeine: { fast: 0, slow: 0 } },
+  },
+});
+
 export interface HudTestParts {
   touch: boolean;
   chatPanel: ChatPanel;
@@ -114,6 +135,23 @@ export function startHudTest(mode: HudTestMode, parts: HudTestParts): void {
     const touchUi = createTouchUi(root);
     touchUi.setVisible(true);
     touchUi.update(sampleTouchView(mode === 'drive'));
+  }
+
+  if (mode === 'story' || mode === 'storydrive') {
+    const state = sampleStoryState();
+    const storyHud = createStoryHud(doc, { touch: parts.touch }, { onPhone() {}, onGoals() {}, onComplain() {} });
+    storyHud.setVenue(mode === 'story' ? 'villa' : 'outing');
+    storyHud.update(storyHudModel(state, 'luiz'), 1880, 120, true);
+  }
+  if (mode === 'storyphone' || mode === 'storykiosk' || mode === 'storygoals' || mode === 'storysummary') {
+    // A pick comes back as a win so the chart can be looked at.
+    const ui: StoryUi = createStoryUi(doc, { send: (message) => void (message.type === 'phone' && message.action.kind === 'fakeRepublic' && ui.onFakeRepublic({ pick: message.action.pick, outcome: 120 })), onOpenChange() {} });
+    ui.setCharacter('alexander');
+    ui.onState(sampleStoryState(true));
+    if (mode === 'storyphone') ui.togglePhone();
+    else if (mode === 'storykiosk') ui.onSpot('shop');
+    else if (mode === 'storygoals') ui.onSpot('board');
+    else ui.onDaySummary({ type: 'daySummary', day: 0, done: ['vibecode', 'eat'], missed: ['outing'], skipped: [] });
   }
 
   parts.chatPanel.setToastsAllowed(true);

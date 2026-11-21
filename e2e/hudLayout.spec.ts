@@ -115,6 +115,54 @@ test.describe('HUD layout (V8)', () => {
     }
   }
 
+  // Step 41: the story HUD beside the race HUD. At the villa the race gauges (compass, vehicle panel, dashboard) hide; on an outing the full race HUD shows with the compact story HUD.
+  const GAUGES = ['hud-compass', 'hud-vehicle', 'hud-dashboard'];
+  const storyCases = [
+    { name: '667x375 story (villa)', width: 667, height: 375, touch: true, mode: 'hudtest=story', ids: [...TOUCH.filter((id) => !GAUGES.includes(id)), 'story-needs', 'story-clock', 'story-goals-btn', 'story-phone-btn', 'story-complain-btn'] },
+    { name: '844x390 story (villa)', width: 844, height: 390, touch: true, mode: 'hudtest=story', ids: [...TOUCH.filter((id) => !GAUGES.includes(id)), 'story-needs', 'story-clock', 'story-goals-btn', 'story-phone-btn', 'story-complain-btn'] },
+    { name: '667x375 story (outing)', width: 667, height: 375, touch: true, mode: 'hudtest=storydrive', ids: [...TOUCH, 'story-needs'] },
+    { name: '1280x720 story (villa)', width: 1280, height: 720, touch: false, mode: 'hudtest=story', ids: [...DESKTOP.filter((id) => !GAUGES.includes(id)), 'story-needs', 'story-panel'] },
+    { name: '1280x720 story (outing)', width: 1280, height: 720, touch: false, mode: 'hudtest=storydrive', ids: [...DESKTOP, 'story-needs', 'story-panel'] },
+    { name: '1920x1080 story (outing)', width: 1920, height: 1080, touch: false, mode: 'hudtest=storydrive', ids: [...DESKTOP, 'story-needs', 'story-panel'] },
+  ];
+  for (const story of storyCases) {
+    test(`${story.name}: the story HUD fits and overlaps nothing`, async ({ browser }, info) => {
+      test.skip(info.project.name !== 'desktop', 'sizes and touch are set here, once');
+      const context = await browser.newContext({ viewport: { width: story.width, height: story.height }, hasTouch: story.touch, storageState: tutorialDone('http://localhost:3100') });
+      const page = await context.newPage();
+      await page.goto(`/?${story.mode}`);
+      if (story.touch) await page.addStyleTag({ content: `:root { --safe-left: ${INSETS.left}px; --safe-right: ${INSETS.right}px; --safe-bottom: ${INSETS.bottom}px; }` });
+      await expect(page.locator('#story-needs')).toBeVisible();
+      await expect(page.locator('#chat-toasts .chat-toast')).toHaveCount(3);
+      const boxes = await measure(page, story.ids);
+      const inset = story.touch ? INSETS : { left: 0, right: 0, bottom: 0 };
+      for (const box of boxes) {
+        expect(box.w, `${box.id} is shown`).toBeGreaterThan(0);
+        expect(box.x, `${box.id} inside the left inset`).toBeGreaterThanOrEqual(inset.left - 0.5);
+        expect(box.x + box.w, `${box.id} inside the right inset`).toBeLessThanOrEqual(story.width - inset.right + 0.5);
+        expect(box.y, `${box.id} below the top`).toBeGreaterThanOrEqual(0);
+        expect(box.y + box.h, `${box.id} above the bottom inset`).toBeLessThanOrEqual(story.height - inset.bottom + 0.5);
+      }
+      const clashes: string[] = [];
+      boxes.forEach((a, i) => boxes.slice(i + 1).forEach((b) => overlaps(a, b) && clashes.push(`${a.id} x ${b.id}`)));
+      expect(clashes).toEqual([]);
+      if (story.touch && story.mode === 'hudtest=story') {
+        for (const id of ['story-goals-btn', 'story-phone-btn', 'story-complain-btn']) {
+          const box = boxes.find((entry) => entry.id === id)!;
+          expect([box.w, box.h], id).toEqual([44, 44]);
+        }
+      }
+      if (!story.touch) {
+        // Beside the health bar, on the same line.
+        const needs = boxes.find((entry) => entry.id === 'story-needs')!;
+        const health = boxes.find((entry) => entry.id === 'hud-health')!;
+        expect(needs.x).toBeGreaterThanOrEqual(health.x + health.w);
+        expect(Math.abs(needs.y + needs.h - (health.y + health.h))).toBeLessThanOrEqual(1);
+      }
+      await context.close();
+    });
+  }
+
   test('the results actions are visible without scrolling at 667x375', async ({ browser }, info) => {
     test.skip(info.project.name !== 'desktop', 'sizes and touch are set here, once');
     const context = await browser.newContext({ viewport: { width: 667, height: 375 }, hasTouch: true, storageState: tutorialDone('http://localhost:3100') });

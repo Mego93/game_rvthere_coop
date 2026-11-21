@@ -218,6 +218,7 @@ const lobby = {
   timeOfDay: 'midday',
   weather: 'clear',
   chain: false,
+  mode: 'race',
 };
 
 test.each<ServerMessage>([
@@ -628,7 +629,7 @@ test('parseServerMessage keeps unknown fields on a prop entry and accepts an emp
 
 describe('L16: lobby messages', () => {
   const COURSE = 'segment-demo';
-  const configure = { type: 'configure', courseId: COURSE, vehicleId: 'rv', timeOfDay: 'night', weather: 'sandstorm', chain: false };
+  const configure = { type: 'configure', courseId: COURSE, vehicleId: 'rv', timeOfDay: 'night', weather: 'sandstorm', chain: false, mode: 'race' };
   const parse = (message: unknown) => parseClientMessage(JSON.stringify(message));
 
   test.each<unknown>([
@@ -865,13 +866,13 @@ describe('step 34: emotes, random weather, the tajine and the eat event', () => 
   });
 
   test('configure accepts random, and still refuses an unknown weather', () => {
-    const configure = { type: 'configure', courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'random', chain: false };
+    const configure = { type: 'configure', courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'random', chain: false, mode: 'race' };
     expect(parseClient(configure)).toEqual(configure);
     expect(parseClient({ ...configure, weather: 'fog' })).toBeNull();
   });
 
   test('configure carries chain, defaults it to false and refuses a non-boolean', () => {
-    const configure = { type: 'configure', courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'clear', chain: true };
+    const configure = { type: 'configure', courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'clear', chain: true, mode: 'race' };
     expect(parseClient(configure)).toEqual(configure);
     const { chain: _chain, ...without } = configure;
     expect(parseClient(without)).toEqual({ ...without, chain: false });
@@ -970,5 +971,94 @@ describe('step 39: gun, ammo and shot fields', () => {
     expect(parseServer({ ...snapshot, enemies: [{ ...enemy, x: null }] })).toBeNull();
     expect(parseServer({ ...snapshot, enemies: Array.from({ length: 33 }, () => enemy) })).toBeNull();
     expect(parseServer({ ...snapshot, enemies: 'none' })).toBeNull();
+  });
+});
+
+describe('story mode messages', () => {
+  const parseClient = (message: unknown) => parseClientMessage(JSON.stringify(message));
+  const parseServer = (message: unknown) => parseServerMessage(JSON.stringify(message));
+  const configure = { type: 'configure', courseId: 'segment-demo', vehicleId: 'rv', timeOfDay: 'night', weather: 'clear', chain: false, mode: 'story' };
+
+  test('configure carries the mode, defaults it to race and refuses an unknown one', () => {
+    expect(parseClient(configure)).toEqual(configure);
+    const { mode: _mode, ...without } = configure;
+    expect(parseClient(without)).toEqual({ ...without, mode: 'race' });
+    expect(parseClient({ ...configure, mode: 'campaign' })).toBeNull();
+    expect(parseClient({ ...configure, mode: 1 })).toBeNull();
+  });
+
+  test('the lobby message needs a mode, and a well-formed story field when it has one', () => {
+    const story = { day: 2, finishedDays: [1] };
+    expect(parseServer({ ...lobby, mode: 'story', story })).toEqual({ ...lobby, mode: 'story', story });
+    expect(parseServer({ ...lobby, mode: undefined })).toBeNull();
+    expect(parseServer({ ...lobby, mode: 'other' })).toBeNull();
+    expect(parseServer({ ...lobby, mode: 'story', story: { day: 'x', finishedDays: [] } })).toBeNull();
+    expect(parseServer({ ...lobby, mode: 'story', story: { day: 1, finishedDays: ['a'] } })).toBeNull();
+  });
+
+  test('resetWeek and complain are bare commands', () => {
+    expect(parseClient({ type: 'resetWeek' })).toEqual({ type: 'resetWeek' });
+    expect(parseClient({ type: 'complain' })).toEqual({ type: 'complain' });
+  });
+
+  test('phone accepts each action and refuses bad values', () => {
+    const phone = (action: unknown) => parseClient({ type: 'phone', action });
+    expect(phone({ kind: 'withdraw', amount: 500 })).toEqual({ type: 'phone', action: { kind: 'withdraw', amount: 500 } });
+    expect(phone({ kind: 'withdraw', amount: 0 })).toBeNull();
+    expect(phone({ kind: 'withdraw', amount: 1.5 })).toBeNull();
+    expect(phone({ kind: 'withdraw', amount: 1e9 })).toBeNull();
+    expect(phone({ kind: 'phoneBuy', item: 'shirt' })).toEqual({ type: 'phone', action: { kind: 'phoneBuy', item: 'shirt' } });
+    expect(phone({ kind: 'phoneBuy', item: 'yacht' })).toBeNull();
+    expect(phone({ kind: 'phoneBuy', item: 'toString' })).toBeNull();
+    expect(phone({ kind: 'fakeRepublic', pick: 2 })).toEqual({ type: 'phone', action: { kind: 'fakeRepublic', pick: 2 } });
+    expect(phone({ kind: 'fakeRepublic', pick: 3 })).toBeNull();
+    expect(phone({ kind: 'buy', item: 'water' })).toEqual({ type: 'phone', action: { kind: 'buy', item: 'water' } });
+    expect(phone({ kind: 'buy', item: 'pizza' })).toBeNull();
+    expect(phone({ kind: 'eat', item: 'pizza' })).toEqual({ type: 'phone', action: { kind: 'eat', item: 'pizza' } });
+    expect(phone({ kind: 'eat', item: 'rock' })).toBeNull();
+    expect(phone({ kind: 'sell' })).toBeNull();
+    expect(phone(null)).toBeNull();
+    expect(parseClient({ type: 'phone' })).toBeNull();
+  });
+
+  test('daySummary is validated', () => {
+    const summary = { type: 'daySummary', day: 1, done: ['vibecode'], missed: ['outing'], skipped: [] };
+    expect(parseServer(summary)).toEqual(summary);
+    expect(parseServer({ ...summary, day: 'one' })).toBeNull();
+    expect(parseServer({ ...summary, missed: 'outing' })).toBeNull();
+    expect(parseServer({ ...summary, skipped: [3] })).toBeNull();
+  });
+
+  test('the snapshot may carry absent friends, which must be characters', () => {
+    expect(parseServer({ ...snapshot, absent: ['luiz', 'huu'] })).toEqual({ ...snapshot, absent: ['luiz', 'huu'] });
+    expect(parseServer({ ...snapshot, absent: [] })).toEqual({ ...snapshot, absent: [] });
+    expect(parseServer({ ...snapshot, absent: ['bob'] })).toBeNull();
+    expect(parseServer({ ...snapshot, absent: 'luiz' })).toBeNull();
+  });
+
+  test('the spot event carries its spot and kind', () => {
+    const event = { type: 'event', kind: 'spot', tick: 3, playerId: 'p1', spotId: 'laptop-1', spotKind: 'laptop' };
+    expect(parseServer(event)).toEqual(event);
+    expect(parseServer({ ...event, spotKind: 'sofa' })).toBeNull();
+    expect(parseServer({ ...event, spotId: 4 })).toBeNull();
+  });
+
+  test('toast, complain and fakeRepublic are validated', () => {
+    expect(parseServer({ type: 'toast', text: 'Luiz is at the WC' })).toEqual({ type: 'toast', text: 'Luiz is at the WC' });
+    expect(parseServer({ type: 'toast', text: 4 })).toBeNull();
+    expect(parseServer({ type: 'complain', playerId: 'p2', line: 3 })).toEqual({ type: 'complain', playerId: 'p2', line: 3 });
+    expect(parseServer({ type: 'complain', playerId: 'p2', line: -1 })).toBeNull();
+    expect(parseServer({ type: 'fakeRepublic', pick: 1, outcome: 300 })).toEqual({ type: 'fakeRepublic', pick: 1, outcome: 300 });
+    expect(parseServer({ type: 'fakeRepublic', pick: 5, outcome: 300 })).toBeNull();
+  });
+
+  test('storyState is validated', () => {
+    const view = { health: 90, food: 50, happiness: 60, tiredness: 20, cash: 0, bank: 2000, items: ['water'], caffeine: { fast: 0, slow: 0 } };
+    const state = { type: 'storyState', day: 1, clock: 12.5, dayLength: 600, night: false, goals: [{ id: 'eat', label: 'Eat', status: 'pending' }], friends: { luiz: view, rafael: { ...view, angry: true } } };
+    expect(parseServer(state)).toEqual(state);
+    expect(parseServer({ ...state, friends: { bob: view } })).toBeNull();
+    expect(parseServer({ ...state, friends: { luiz: { ...view, cash: 'x' } } })).toBeNull();
+    expect(parseServer({ ...state, goals: [{ id: 'eat', label: 'Eat', status: 'someday' }] })).toBeNull();
+    expect(parseServer({ ...state, night: 'yes' })).toBeNull();
   });
 });

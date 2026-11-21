@@ -64,11 +64,8 @@ function rippleNormals(): THREE.DataTexture {
   return texture;
 }
 
-// The water: translucent, with a slowly scrolling normal. Phones (lite) get a flat colour with no sky reflection and no normal map.
-export function createWaterMeshes(course: BuiltCourse, { lite = false, flat = false }: SceneOptions = {}): THREE.Group {
-  const group = new THREE.Group();
-  const planes = waterPlanes(course);
-  if (planes.length === 0) return group;
+// The water's material: translucent, with a slowly scrolling normal. Phones (lite) get a flat colour with no sky reflection and no normal map.
+function waterMaterial({ lite = false, flat = false }: SceneOptions): { material: THREE.MeshStandardMaterial; normals: THREE.DataTexture | null } {
   const normals = lite || flat ? null : rippleNormals();
   const material = new THREE.MeshStandardMaterial({
     color: WATER_COLOUR,
@@ -80,22 +77,38 @@ export function createWaterMeshes(course: BuiltCourse, { lite = false, flat = fa
     depthWrite: false,
     normalMap: normals,
   });
-  for (const plane of planes) {
-    const geometry = new THREE.PlaneGeometry(plane.length, plane.width);
-    // The ripples repeat every 6 m on every plane.
-    const uv = geometry.getAttribute('uv');
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * plane.length) / 6, (uv.getY(i) * plane.width) / 6);
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.rotation.order = 'YXZ';
-    mesh.rotation.set(-Math.PI / 2, plane.yaw, 0);
-    mesh.position.set(plane.x, plane.y, plane.z);
-    mesh.renderOrder = 1;
-    if (normals) {
-      mesh.onBeforeRender = () => {
-        normals.offset.set((performance.now() * SCROLL_SPEED) % 1, (performance.now() * SCROLL_SPEED * 0.6) % 1);
-      };
-    }
-    group.add(mesh);
+  return { material, normals };
+}
+
+function waterPlane(material: THREE.Material, normals: THREE.DataTexture | null, length: number, width: number, yaw: number, at: { x: number; y: number; z: number }): THREE.Mesh {
+  const geometry = new THREE.PlaneGeometry(length, width);
+  // The ripples repeat every 6 m on every plane.
+  const uv = geometry.getAttribute('uv');
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * length) / 6, (uv.getY(i) * width) / 6);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.rotation.order = 'YXZ';
+  mesh.rotation.set(-Math.PI / 2, yaw, 0);
+  mesh.position.set(at.x, at.y, at.z);
+  mesh.renderOrder = 1;
+  if (normals) {
+    mesh.onBeforeRender = () => {
+      normals.offset.set((performance.now() * SCROLL_SPEED) % 1, (performance.now() * SCROLL_SPEED * 0.6) % 1);
+    };
   }
+  return mesh;
+}
+
+export function createWaterMeshes(course: BuiltCourse, options: SceneOptions = {}): THREE.Group {
+  const group = new THREE.Group();
+  const planes = waterPlanes(course);
+  if (planes.length === 0) return group;
+  const { material, normals } = waterMaterial(options);
+  for (const plane of planes) group.add(waterPlane(material, normals, plane.length, plane.width, plane.yaw, plane));
   return group;
+}
+
+// A pool's water: a plane `x0..x1` by `z0..z1` at height y, in the water's own look.
+export function createPoolWater(bounds: { x0: number; x1: number; z0: number; z1: number; y: number }, options: SceneOptions = {}): THREE.Mesh {
+  const { material, normals } = waterMaterial(options);
+  return waterPlane(material, normals, bounds.x1 - bounds.x0, bounds.z1 - bounds.z0, 0, { x: (bounds.x0 + bounds.x1) / 2, y: bounds.y, z: (bounds.z0 + bounds.z1) / 2 });
 }

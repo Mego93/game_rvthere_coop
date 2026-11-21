@@ -1,6 +1,6 @@
 import { EVENT_KINDS } from '@lodgy/shared';
 import { expect, test } from 'vitest';
-import { EVENT_TOAST_SECONDS, SOULEYMAN_GREETING, createEventToast, eventToastText, toastFor } from './eventToast';
+import { EVENT_TOAST_SECONDS, SOULEYMAN_GREETING, STORY_TOAST_SECONDS, createEventToast, eventToastText, toastFor } from './eventToast';
 
 test('T9, T14: the goat, scooter, checkpoint, out-of-bounds and eat events have a toast, the others none', () => {
   expect(eventToastText('checkpoint')).toBe(SOULEYMAN_GREETING);
@@ -46,4 +46,13 @@ test('step 39: the eat toast names the item and falls back to Power-up! for one 
   const toast = createEventToast();
   toast.show('eat', 5, 'kokeZero');
   expect(toast.current(5.5)).toBe('Koke Zero! Double damage for 20 s');
+});
+
+test('step 41: a story toast shows its own text for STORY_TOAST_SECONDS and an event toast after it takes the short time again', () => {
+  const toast = createEventToast();
+  toast.showText('Raph is at the WC', 5);
+  expect(toast.current(5 + STORY_TOAST_SECONDS - 0.01)).toBe('Raph is at the WC');
+  expect(toast.current(5 + STORY_TOAST_SECONDS + 0.01)).toBeNull();
+  toast.show('goatHit', 20);
+  expect(toast.current(20 + EVENT_TOAST_SECONDS + 0.01)).toBeNull();
 });

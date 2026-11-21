@@ -141,6 +141,18 @@ export const MODEL_MANIFEST = {
   'decor.cliff.top': model('nature', 'cliff_top_rock', 30),
   'decor.cliff.diagonal': model('nature', 'cliff_blockDiagonal_rock', 30),
   'decor.cliff.corner': model('nature', 'cliff_cornerLarge_rock', 40),
+  // Step 41 villa models (the longest side in metres; the villa fits each to its place).
+  'villa.couch': model('sketchfab', 'couch', 2.4),
+  'villa.kitchenIsland': model('sketchfab', 'kitchen-island', 4),
+  'villa.diningSet': model('sketchfab', 'dining-set', 3),
+  'villa.bed': model('sketchfab', 'bed', 2.1),
+  'villa.laptop': model('sketchfab', 'laptop', 0.34),
+  'villa.lounger': model('sketchfab', 'pool-lounger', 2),
+  'villa.parasol': model('sketchfab', 'parasol', 2.6),
+  'villa.atm': model('sketchfab', 'atm', 2),
+  'villa.kiosk': model('sketchfab', 'shop-kiosk', 3.5),
+  'villa.court': model('sketchfab', 'tennis-court-net', 20),
+  'villa.treadmill': model('sketchfab', 'treadmill', 1.8),
 } as const satisfies Record<string, ModelEntry>;
 
 export type ModelKey = keyof typeof MODEL_MANIFEST;

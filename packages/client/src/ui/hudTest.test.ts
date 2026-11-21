@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { hudTestMode, sampleModel, sampleTouchView } from './hudTest';
+import { hudTestMode, sampleModel, sampleStoryState, sampleTouchView } from './hudTest';
+import { fakeRepublicShown } from './story/needsView';
 
 describe('?hudtest', () => {
   it('is off unless the flag is present', () => {
@@ -32,5 +33,19 @@ describe('?hudtest', () => {
     const foot = sampleTouchView(false);
     expect([foot.useVisible, foot.reelVisible, foot.resetVisible, foot.sprintVisible, foot.fireVisible]).toEqual([true, true, true, true, true]);
     expect(sampleTouchView(true).seated).toBe(true);
+  });
+});
+
+describe('?hudtest story modes (step 41)', () => {
+  it('reads the story modes', () => {
+    for (const mode of ['story', 'storydrive', 'storyphone', 'storykiosk', 'storygoals', 'storysummary']) expect(hudTestMode(`?hudtest=${mode}`)).toBe(mode);
+  });
+
+  it('samples a story state with goals, Luiz with his caffeine and, when poor, a friend who sees Fake Republic', () => {
+    const state = sampleStoryState();
+    expect(state.goals.map((goal) => goal.status)).toContain('pending');
+    expect(state.friends.luiz?.caffeine.fast).toBeGreaterThan(0);
+    expect(fakeRepublicShown(sampleStoryState().friends.alexander!)).toBe(false);
+    expect(fakeRepublicShown(sampleStoryState(true).friends.alexander!)).toBe(true);
   });
 });

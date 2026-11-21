@@ -33,7 +33,7 @@ function setup(finishing: readonly string[], targets?: readonly number[]) {
       room.update(time);
     }
   };
-  const settings = (fields: Partial<RoomSettings> = {}): RoomSettings => ({ courseId: 'a', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'clear', chain: true, ...fields });
+  const settings = (fields: Partial<RoomSettings> = {}): RoomSettings => ({ courseId: 'a', vehicleId: 'lodgy', timeOfDay: 'midday', weather: 'clear', chain: true, mode: 'race', ...fields });
   const ofType = <T extends ServerMessage['type']>(type: T) => messages.filter((message): message is Extract<ServerMessage, { type: T }> => message.type === type);
   const lastLobby = () => ofType('lobby')[ofType('lobby').length - 1]!;
   run(2);

@@ -1,6 +1,7 @@
 import { CHAT_LIMIT, CHAT_FORM_STYLE, createChatForm, renderChatLines, type ChatLine, type SubmitResult } from './chat';
-import { CAMPAIGN, CHARACTER_IDS, CHARACTER_NAMES, TIMES_OF_DAY, VEHICLE_IDS, WEATHER_SETTINGS, courseIds, defaultAppearance, getCourseDef, type Appearance, type LobbyMessage, type RoomSettings, type WeatherSetting } from '@lodgy/shared';
+import { CAMPAIGN, CHARACTER_IDS, ROOM_MODES, CHARACTER_NAMES, TIMES_OF_DAY, VEHICLE_IDS, WEATHER_SETTINGS, courseIds, defaultAppearance, getCourseDef, type Appearance, type LobbyMessage, type RoomSettings, type WeatherSetting } from '@lodgy/shared';
 import { OPTION_ROWS, createPickerState, optionText, portraitModel } from './characterPicker';
+import { dayTitle } from './story/summaryView';
 
 export const VEHICLE_LABELS: Record<string, string> = { lodgy: 'Lodgy', rv: 'RV' };
 export const WEATHER_LABELS: Record<WeatherSetting, string> = { clear: 'Clear', rain: 'Rain', sandstorm: 'Sandstorm', random: 'Random' };
@@ -8,6 +9,8 @@ export const weatherOptions = () => WEATHER_SETTINGS.map((id) => ({ value: id, t
 // The name a course shows in the lobby: its label, or its id when it has none.
 export const courseLabel = (id: string): string => getCourseDef(id)?.label ?? id;
 export const courseOptions = () => courseIds().map((id) => ({ value: id, text: courseLabel(id) }));
+export const MODE_LABELS: Record<RoomSettings['mode'], string> = { race: 'Race', story: 'Story' };
+export const modeOptions = () => ROOM_MODES.map((id) => ({ value: id, text: MODE_LABELS[id] }));
 export const CHAIN_LABEL = 'Run all five stages';
 // The chain checkbox shows when the selected course is one of the stages.
 export const chainShown = (courseId: string): boolean => CAMPAIGN.includes(courseId);
@@ -35,6 +38,13 @@ export interface LobbyView {
   showChain: boolean;
   chainEditable: boolean;
   settings: RoomSettings;
+  // The Race / Story toggle: shown with ?storytest or once the room is in story mode; only the admin changes it.
+  showMode: boolean;
+  modeEditable: boolean;
+  // The course select and the chain box belong to the race.
+  showCourse: boolean;
+  story: { dayText: string; finishedText: string } | null;
+  showReset: boolean;
   players: LobbyPlayerView[];
   showReady: boolean;
   localReady: boolean;
@@ -43,7 +53,13 @@ export interface LobbyView {
   attribution: { text: string; href: string };
 }
 
-export function lobbyView(message: LobbyMessage, localId: string): LobbyView {
+// One press asks, the next sends; Cancel backs out.
+export function nextResetStep(step: 'idle' | 'confirm', event: 'press' | 'confirm' | 'cancel'): { step: 'idle' | 'confirm'; send: boolean } {
+  if (step === 'idle') return { step: event === 'press' ? 'confirm' : 'idle', send: false };
+  return { step: 'idle', send: event === 'confirm' };
+}
+
+export function lobbyView(message: LobbyMessage, localId: string, options: { storyEnabled?: boolean } = {}): LobbyView {
   const isAdmin = message.adminId !== null && message.adminId === localId;
   const players = message.players.map((entry): LobbyPlayerView => {
     const admin = entry.playerId === message.adminId;
@@ -60,12 +76,19 @@ export function lobbyView(message: LobbyMessage, localId: string): LobbyView {
     };
   });
   const others = message.players.filter((entry) => entry.playerId !== message.adminId && entry.connected);
+  const inStory = message.mode === 'story';
+  const finished = message.story?.finishedDays ?? [];
   return {
     isAdmin,
     settingsEditable: isAdmin,
-    showChain: chainShown(message.courseId),
+    showMode: options.storyEnabled === true || inStory,
+    modeEditable: isAdmin,
+    showCourse: !inStory,
+    story: inStory && message.story ? { dayText: dayTitle(message.story.day), finishedText: finished.length > 0 ? `Finished days: ${finished.join(', ')}` : 'No days finished yet' } : null,
+    showReset: isAdmin && inStory,
+    showChain: !inStory && chainShown(message.courseId),
     chainEditable: isAdmin,
-    settings: { courseId: message.courseId, vehicleId: message.vehicleId, timeOfDay: message.timeOfDay, weather: message.weather, chain: message.chain },
+    settings: { courseId: message.courseId, vehicleId: message.vehicleId, timeOfDay: message.timeOfDay, weather: message.weather, chain: message.chain, mode: message.mode },
     players,
     showReady: !isAdmin,
     localReady: message.players.find((entry) => entry.playerId === localId)?.ready ?? false,
@@ -120,6 +143,10 @@ export interface LobbyHandlers {
   onAppearance(appearance: Appearance): void;
   onCredits(): void;
   onTutorial(): void;
+  // The Race / Story toggle is offered without being asked for (the page was opened with ?storytest).
+  storyEnabled: boolean;
+  // The admin confirmed Reset week.
+  onResetWeek(): void;
   // Sends a line typed or picked in the lobby chat; says whether it went.
   onChat(text: string): SubmitResult;
 }
@@ -245,6 +272,11 @@ const STYLE = `${CHAT_FORM_STYLE}
 #lobby-credits, #lobby-osm { justify-self: center; display: inline-flex; align-items: center; min-height: 44px; }
 #lobby-credits { font-size: 14px; font-weight: 600; color: var(--info); }
 #lobby-osm { font-size: 12px; color: var(--ink-soft); text-align: center; }
+#lobby-story { display: grid; gap: 4px; padding: 8px 10px; border-radius: var(--radius-ctl); background: var(--paper); }
+#lobby-story[hidden] { display: none; }
+.lobby-story-line { margin: 0; font-weight: 600; }
+#lobby-reset-row[hidden], .lobby-row[hidden] { display: none; }
+#lobby-reset-row .ui-btn { flex: 1 1 0; }
 #lobby-error { margin: 0; min-height: 1.4em; color: var(--danger); font-size: 14px; font-weight: 600; }
 @keyframes lobby-drift-near { to { transform: translateX(-600px); } }
 @keyframes lobby-drift-far { to { transform: translateX(-800px); } }
@@ -265,6 +297,7 @@ const STYLE = `${CHAT_FORM_STYLE}
 `;
 
 const SETTINGS = [
+  { key: 'mode', id: 'lobby-mode', label: 'Mode', options: modeOptions },
   { key: 'courseId', id: 'lobby-course', label: 'Course', options: courseOptions },
   { key: 'vehicleId', id: 'lobby-vehicle', label: 'Vehicle', options: () => VEHICLE_IDS.map((id) => ({ value: id, text: vehicleLabel(id) })) },
   { key: 'timeOfDay', id: 'lobby-time', label: 'Time of day', options: () => TIMES_OF_DAY.map((id) => ({ value: id, text: id })) },
@@ -315,6 +348,27 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   linkRow.className = 'lobby-row';
   linkRow.append(link, copy);
   const settingsBox = el('div');
+  const storyBox = el('section', 'lobby-story');
+  storyBox.hidden = true;
+  const storyDay = el('p', 'lobby-story-day');
+  storyDay.className = 'lobby-story-line';
+  const storyFinished = el('p', 'lobby-story-finished');
+  storyFinished.className = 'lobby-story-line';
+  const resetRow = el('div', 'lobby-reset-row');
+  resetRow.className = 'lobby-row';
+  const reset = el('button', 'lobby-reset-week', 'Reset week');
+  reset.className = 'ui-btn';
+  reset.type = 'button';
+  const resetConfirm = el('button', 'lobby-reset-confirm', 'Yes, reset it');
+  resetConfirm.className = 'ui-btn ui-btn-primary';
+  resetConfirm.type = 'button';
+  const resetCancel = el('button', 'lobby-reset-cancel', 'Cancel');
+  resetCancel.className = 'ui-btn';
+  resetCancel.type = 'button';
+  resetConfirm.hidden = true;
+  resetCancel.hidden = true;
+  resetRow.append(reset, resetConfirm, resetCancel);
+  storyBox.append(storyDay, storyFinished, resetRow);
   const players = el('ul', 'lobby-players');
   const picker = el('section', 'lobby-picker');
   picker.hidden = true;
@@ -340,7 +394,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   const tutorial = el('button', 'lobby-tutorial', 'Tutorial');
   tutorial.className = 'ui-btn';
   tutorial.type = 'button';
-  panel.append(title, linkRow, settingsBox, players, picker, ready, start, error, tutorial, credits, osm);
+  panel.append(title, linkRow, settingsBox, storyBox, players, picker, ready, start, error, tutorial, credits, osm);
   const background = el('div', 'lobby-bg');
   background.setAttribute('aria-hidden', 'true');
   for (const id of ['lobby-dunes-far', 'lobby-dunes-near']) {
@@ -388,13 +442,24 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
       element.dataset.value = value;
     }
     applyChain(values, renderedEditable === true);
+    applyRows();
+  };
+  // The mode row shows with ?storytest or in a story room; the course belongs to the race.
+  const applyRows = () => {
+    if (!view) return;
+    const rowOf = (id: string) => doc.getElementById(id)?.parentElement;
+    const modeRow = rowOf('lobby-mode');
+    if (modeRow) modeRow.hidden = !view.showMode;
+    const courseRow = rowOf('lobby-course');
+    if (courseRow) courseRow.hidden = !view.showCourse;
+    if (chainRow && !view.showCourse) chainRow.hidden = true;
   };
   let room = '';
   let chainRow: HTMLElement | null = null;
   let chainBox: HTMLInputElement | null = null;
   const applyChain = (values: RoomSettings, editable: boolean) => {
     if (!chainRow || !chainBox) return;
-    chainRow.hidden = !chainShown(values.courseId);
+    chainRow.hidden = !chainShown(values.courseId) || values.mode === 'story';
     chainBox.checked = values.chain && chainShown(values.courseId);
     chainBox.disabled = !editable;
   };
@@ -596,6 +661,21 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     renderedEditable = editable;
   };
 
+  let resetStep: 'idle' | 'confirm' = 'idle';
+  function setResetStep(step: 'idle' | 'confirm') {
+    resetStep = step;
+    reset.hidden = step === 'confirm';
+    resetConfirm.hidden = step === 'idle';
+    resetCancel.hidden = step === 'idle';
+  }
+  for (const [button, event] of [[reset, 'press'], [resetConfirm, 'confirm'], [resetCancel, 'cancel']] as const) {
+    button.addEventListener('click', () => {
+      const next = nextResetStep(resetStep, event);
+      setResetStep(next.step);
+      if (next.send) handlers.onResetWeek();
+    });
+  }
+
   copy.addEventListener('click', () => {
     const text = `${location.origin}/${room}`;
     const done = () => {
@@ -627,7 +707,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   return {
     show(message, id) {
       root.className = '';
-      view = lobbyView(message, id);
+      view = lobbyView(message, id, { storyEnabled: handlers.storyEnabled });
       lastMessage = message;
       localId = id;
       renderPicker();
@@ -641,6 +721,13 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
         view.settings = merged.settings;
       }
       applySettings(view.settings, false);
+      storyBox.hidden = view.story === null;
+      if (view.story) {
+        storyDay.textContent = view.story.dayText;
+        storyFinished.textContent = view.story.finishedText;
+      }
+      resetRow.hidden = !view.showReset;
+      if (!view.showReset) setResetStep('idle');
       const fresh = new Set(newPlayerIds(previous?.players ?? null, view.players));
       const pulsed = new Set(readyChanged(previous?.players ?? null, view.players));
       const present = new Set(view.players.map((entry) => entry.playerId));

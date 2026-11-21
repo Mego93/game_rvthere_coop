@@ -8,9 +8,10 @@ const NAMES = [
   'jerrycan', 'toolbox', 'first-aid', 'tajine', 'coin', 'crate', 'barrier', 'cart', 'scooter', 'goat', 'rocks',
   'tyres', 'cone', 'agave', 'cliffs', 'kasbah', 'mosque', 'stall', 'mountains', 'headdress', 'treedent', 'fromage-blanc', 'koke-zero', 'ammo', 'gun', 'knife',
   'pine', 'broadleaf', 'adobe-house', 'kasbah-abh', 'car-hatchback', 'car-minicab',
+  'couch', 'kitchen-island', 'dining-set', 'bed', 'laptop', 'pool-lounger', 'parasol', 'atm', 'shop-kiosk', 'tennis-court-net', 'treadmill',
 ];
 
-test('T2: the 32 Sketchfab files exist, add at most 8 MB and none is over 1.5 MB', () => {
+test('T2: the 43 Sketchfab files exist, add at most 8 MB and none is over 1.5 MB', () => {
   const files = readdirSync(FOLDER).filter((name) => name.endsWith('.glb'));
   expect(files.sort()).toEqual(NAMES.map((name) => `${name}.glb`).sort());
   let total = 0;

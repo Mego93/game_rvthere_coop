@@ -10,7 +10,8 @@ import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } f
 import { coinTouched } from './coins';
 import { DEFAULT_WEATHER, ENEMY_KNIFE_DAMAGE, ENEMY_SEED_SALT, ENEMY_VEHICLE_DAMAGE, GUN_DAMAGE, KOKE_MULTIPLIER, AMMO_BOX_ROUNDS, AMMO_MAX, GUN_COOLDOWN, GUN_RANGE, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, SHIELD_SECONDS, TAJINE_HEAL, WEATHER_SEED_SALT, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather, type WeatherSetting, type ShopItem } from './constants';
 import { weatherAt, weatherSchedule } from './weather';
-import type { BuiltCourse } from './course';
+import type { BuiltCourse, Spot } from './course';
+import type { SpotKind } from './story/days';
 import { getCourse } from './courses/index';
 import { everyoneDowned, stepDowned } from './health';
 import { holdTargetValid, isSelfItem, pressTarget, stepHold, stepOperateHold, type UseContext } from './holds';
@@ -31,6 +32,9 @@ import { stopUsable } from './stops';
 import { createVehicle, type Vehicle, type VehicleState } from './vehicle';
 import { getVehicleConfig, type VehicleConfig } from './vehicles';
 import { canReel, createWinch, type CableSnapshot, type Winch } from './winch';
+
+// m, the most a player's feet may be above or below a spot and still use it.
+const SPOT_REACH_HEIGHT = 1.5;
 
 export interface WorldOptions {
   courseId: string;
@@ -53,6 +57,10 @@ export interface WorldOptions {
   enemySeed?: number;
   // Tests only: replaces the plan the enemy director follows.
   enemyPlan?: readonly EnemyEvent[];
+  // The story villa: no race win, no fuel use, no coins, and `use` at a course spot emits a spot event.
+  story?: boolean;
+  // A downed player is not auto-respawned: he stays down until revived (story worlds and outings).
+  holdDowned?: boolean;
 }
 
 export interface WorldEvent {
@@ -65,6 +73,9 @@ export interface WorldEvent {
   // 'shot': where the ray ended (`pos` is the eye it left from) and whether it hit an enemy.
   to?: Vec3;
   hit?: boolean;
+  // 'spot': the spot used.
+  spotId?: string;
+  spotKind?: SpotKind;
 }
 
 export interface WorldSnapshot {
@@ -202,7 +213,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const schedule = weatherSetting === 'random' ? weatherSchedule(mixSeed(options.itemSeed ?? mixSeed(hashSeed(course.id), 1), WEATHER_SEED_SALT), WEATHER_HORIZON_TICKS) : null;
   let weather: Weather = schedule ? weatherAt(schedule, 0) : (weatherSetting as Weather);
   const gripOf = (current: Weather): number => (current === 'rain' ? RAIN_GRIP : 1);
-  const vehicle = createVehicle(rapier, physics, vehicleConfig, start.spawn, statics.surfaceOf, { gripScale: gripOf(weather) });
+  const story = options.story === true;
+  const holdDowned = options.holdDowned === true || story;
+  const vehicle = createVehicle(rapier, physics, story ? { ...vehicleConfig, fuelBurn: 0 } : vehicleConfig, start.spawn, statics.surfaceOf, { gripScale: gripOf(weather) });
   // Queries see nothing until the broad phase has run once, and spawn rays are cast before the first tick.
   physics.timestep = 0;
   physics.step();
@@ -260,7 +273,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   let restarts = 0;
   let restartPending = false;
   let respawns = 0;
-  let coinsLeft = course.coins.map((coin) => coin.id);
+  let coinsLeft: string[] = story ? [] : course.coins.map((coin) => coin.id);
   let wallet = 0;
   let coinsCollected = 0;
   // Coins of earlier stages in a chained run.
@@ -715,6 +728,24 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     }
   };
 
+  // Story worlds: a `use` press within a spot's radius emits a spot event for the nearest one; the director decides what it does.
+  const stepSpots = (events: WorldEvent[]) => {
+    if (!story || !course.spots) return;
+    for (const player of players.all()) {
+      if (!usePressed.has(player.id) || player.seat !== null || player.downed !== null || player.respawnIn !== null) continue;
+      let best: Spot | null = null;
+      let bestDistance = Infinity;
+      for (const spot of course.spots) {
+        const distance = Math.hypot(spot.pos.x - player.pos.x, spot.pos.z - player.pos.z);
+        if (distance <= spot.radius && Math.abs(spot.pos.y - player.pos.y) <= SPOT_REACH_HEIGHT && distance < bestDistance) {
+          best = spot;
+          bestDistance = distance;
+        }
+      }
+      if (best) events.push({ kind: 'spot', tick: tick + 1, playerId: player.id, pos: { ...best.pos }, spotId: best.id, spotKind: best.kind });
+    }
+  };
+
   // Rules H2, H6 and H7, after the characters have moved and before the kill plane.
   const stepHealth = (events: WorldEvent[]) => {
     const justDowned = new Set<string>();
@@ -731,11 +762,12 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       if (player.downed === null || player.respawnIn !== null || justDowned.has(player.id)) continue;
       // Rule H6 and J7: a revive hold on this player pauses the timer.
       const paused = players.all().some((other) => other.hold?.action === 'revive' && other.hold.targetId === player.id);
+      if (holdDowned) continue;
       const left = stepDowned(player.downed, paused);
       if (left === 'respawn') respawnPlayer(player, events);
       else player.downed = left;
     }
-    if (everyoneDowned(players.all())) for (const player of players.all()) respawnPlayer(player, events);
+    if (!holdDowned && everyoneDowned(players.all())) for (const player of players.all()) respawnPlayer(player, events);
   };
 
   const killPlane = (events: WorldEvent[]) => {
@@ -955,6 +987,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       resolveInteracts(onFoot, events);
       for (const player of players.all()) if (player.seat === null && onFoot.get(player.id)?.pressed.drop) dropSelected(player);
       stepHolds(onFoot, events);
+      stepSpots(events);
       stepGuns(onFoot, events);
       const taut = winch.tautObstacle();
       applyPushes(taut);
@@ -1018,7 +1051,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         const restarting = vehicleLost(centre, vehicle.health(), course.killPlaneY) || belowWater(course, centre) || restartPending;
         restartPending = false;
         if (restarting) restart(events);
-        if (reachedFinish(centre, course.finish, restarting)) won = true;
+        if (!story && reachedFinish(centre, course.finish, restarting)) won = true;
       }
       return events;
     },
