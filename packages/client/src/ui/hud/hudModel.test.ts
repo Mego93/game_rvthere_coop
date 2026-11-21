@@ -19,6 +19,7 @@ const lobby: LobbyMessage = {
   timeOfDay: 'midday',
   weather: 'clear',
   chain: false,
+  mode: 'race',
 };
 const vehicle: VehicleState = { pos: vec3(0, 1, 0), rot: IDENTITY, linvel: vec3(0, 0, 0), throttle: 0, steer: 0, fuel: 0.5, health: 0.8 };
 const stowed: CableSnapshot = { state: 'stowed', holderId: null, anchorId: null, hookPos: vec3(0, 0, 0), length: 0, reel: 0 };

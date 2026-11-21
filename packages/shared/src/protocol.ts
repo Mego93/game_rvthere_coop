@@ -1,9 +1,11 @@
 import { CHAT_MAX_LENGTH, EMOTES, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, SHOP_ITEMS, AMMO_MAX, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, TIMES_OF_DAY, WEATHERS, WEATHER_SETTINGS, type Emote, type ItemKind, type ShopItem, type TimeOfDay, type Weather, type WeatherSetting } from './constants';
-import { isAppearance, type Appearance } from './characters';
+import { isAppearance, isCharacterId, type Appearance, type CharacterId } from './characters';
 import { courseIds } from './courses/index';
 import { SPOT_KINDS, type SpotKind } from './story/days';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
 import type { PropSnapshot } from './props';
+import { PHONE_SHOP_PRICES, STORY_FOODS, STORY_PRICES, type PhoneShopItem, type StoryItemKind, type StoryPriced } from './story/constants';
+import type { GoalStatus } from './story/days';
 import type { VehicleState } from './vehicle';
 import { VEHICLE_IDS } from './vehicles';
 import type { CableSnapshot } from './winch';
@@ -70,7 +72,20 @@ export type ClientMessage =
   | { type: 'toLobby' }
   | { type: 'next' }
   | { type: 'chat'; text: string }
-  | { type: 'emote'; emote: Emote };
+  | { type: 'emote'; emote: Emote }
+  | { type: 'phone'; action: PhoneAction }
+  | { type: 'complain' }
+  | { type: 'resetWeek' };
+
+// Story mode: what the phone and the shop menu can ask for; amounts are whole dirhams.
+export type PhoneAction =
+  | { kind: 'withdraw'; amount: number }
+  | { kind: 'phoneBuy'; item: PhoneShopItem }
+  | { kind: 'fakeRepublic'; pick: 0 | 1 | 2 }
+  | { kind: 'buy'; item: StoryPriced }
+  | { kind: 'eat'; item: StoryItemKind };
+
+export const WITHDRAW_MAX = 100_000;
 
 export const ADMIN_TOOLS = ['skipCheckpoint', 'refill', 'fly', 'infinite'] as const;
 export type AdminTool = (typeof ADMIN_TOOLS)[number];
@@ -82,7 +97,12 @@ export interface RoomSettings {
   weather: WeatherSetting;
   // Play the campaign's stages as one run; only honoured for a course in the campaign.
   chain: boolean;
+  // 'story' runs the week at the villa instead of a race.
+  mode: RoomMode;
 }
+
+export const ROOM_MODES = ['race', 'story'] as const;
+export type RoomMode = (typeof ROOM_MODES)[number];
 
 export type Phase = 'lobby' | 'playing' | 'results';
 
@@ -110,6 +130,9 @@ export interface LobbyMessage {
   timeOfDay: TimeOfDay;
   weather: WeatherSetting;
   chain: boolean;
+  mode: RoomMode;
+  // Present when mode is 'story'.
+  story?: { day: number; finishedDays: number[] };
 }
 
 export interface ResultsMessage {
@@ -200,6 +223,8 @@ export interface SnapshotMessage extends WorldSnapshot {
   // The last input sequence number the server consumed for the receiving client; 0 before any.
   ackSeq: number;
   full: boolean;
+  // Story mode only: the friends nobody plays, who sit on the couch at the villa (empty elsewhere).
+  absent?: CharacterId[];
 }
 
 export type ServerMessage =
@@ -212,7 +237,54 @@ export type ServerMessage =
   | { type: 'error'; reason: ErrorReason }
   | ChatMessage
   | { type: 'emote'; playerId: string; emote: Emote }
+  | DaySummaryMessage
+  | StoryStateMessage
+  | ToastMessage
+  | { type: 'complain'; playerId: string; line: number }
+  | { type: 'fakeRepublic'; pick: 0 | 1 | 2; outcome: number }
   | { type: 'ping' };
+
+// The day ended in bed: the goal ids by how they ended (`day` is the day just finished).
+export interface DaySummaryMessage {
+  type: 'daySummary';
+  day: number;
+  done: string[];
+  missed: string[];
+  skipped: string[];
+}
+
+export interface StoryFriendView {
+  health: number;
+  food: number;
+  happiness: number;
+  tiredness: number;
+  cash: number;
+  bank: number;
+  items: string[];
+  // Luiz's caffeine meter: seconds of the fast and the slow phase left.
+  caffeine: { fast: number; slow: number };
+  // Rafael's anger is 80 or more (the bar itself stays on the server).
+  angry?: true;
+  // Fake Republic was played today.
+  played?: true;
+}
+
+// The week as the clients show it, for the friends who are playing; sent about once a second and after every change.
+export interface StoryStateMessage {
+  type: 'storyState';
+  day: number;
+  // Seconds into the day.
+  clock: number;
+  dayLength: number;
+  night: boolean;
+  goals: { id: string; label: string; status: GoalStatus }[];
+  friends: Partial<Record<CharacterId, StoryFriendView>>;
+}
+
+export interface ToastMessage {
+  type: 'toast';
+  text: string;
+}
 
 // A chained run moved to another stage (index counts from 0, of is the stage count); also sent to a player who joins mid-chain.
 export interface StageMessage {
@@ -274,6 +346,7 @@ const isTimeOfDay = (value: unknown): value is TimeOfDay => (TIMES_OF_DAY as rea
 export const isWeather = (value: unknown): value is Weather => (WEATHERS as readonly unknown[]).includes(value);
 export const isWeatherSetting = (value: unknown): value is WeatherSetting => (WEATHER_SETTINGS as readonly unknown[]).includes(value);
 export const isEmote = (value: unknown): value is Emote => (EMOTES as readonly unknown[]).includes(value);
+const isRoomMode = (value: unknown): value is RoomMode => (ROOM_MODES as readonly unknown[]).includes(value);
 const isCourseId = (value: unknown): value is string => typeof value === 'string' && courseIds().includes(value);
 const isVehicleId = (value: unknown): value is string => (VEHICLE_IDS as readonly unknown[]).includes(value);
 
@@ -322,6 +395,26 @@ function parseInput(data: Record<string, unknown>): PlayerInput | null {
   };
 }
 
+function parsePhoneAction(value: unknown): PhoneAction | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const action = value as Record<string, unknown>;
+  const { item } = action;
+  switch (action.kind) {
+    case 'withdraw':
+      return Number.isSafeInteger(action.amount) && (action.amount as number) >= 1 && (action.amount as number) <= WITHDRAW_MAX ? { kind: 'withdraw', amount: action.amount as number } : null;
+    case 'phoneBuy':
+      return typeof item === 'string' && Object.hasOwn(PHONE_SHOP_PRICES, item) ? { kind: 'phoneBuy', item: item as PhoneShopItem } : null;
+    case 'fakeRepublic':
+      return action.pick === 0 || action.pick === 1 || action.pick === 2 ? { kind: 'fakeRepublic', pick: action.pick } : null;
+    case 'buy':
+      return typeof item === 'string' && Object.hasOwn(STORY_PRICES, item) ? { kind: 'buy', item: item as StoryPriced } : null;
+    case 'eat':
+      return typeof item === 'string' && Object.hasOwn(STORY_FOODS, item) ? { kind: 'eat', item: item as StoryItemKind } : null;
+    default:
+      return null;
+  }
+}
+
 // Validates one message from a client. Returns null for anything malformed.
 export function parseClientMessage(raw: string): ClientMessage | null {
   let data: unknown;
@@ -357,14 +450,16 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     case 'appearance':
       return isAppearance(fields) ? { type: 'appearance', characterId: fields.characterId, glasses: fields.glasses, top: fields.top, hat: fields.hat, skin: fields.skin, eyes: fields.eyes, smile: fields.smile } : null;
     case 'configure': {
-      const { courseId, vehicleId, timeOfDay, weather, chain = false } = fields;
-      return isCourseId(courseId) && isVehicleId(vehicleId) && isTimeOfDay(timeOfDay) && isWeatherSetting(weather) && typeof chain === 'boolean'
-        ? { type: 'configure', courseId, vehicleId, timeOfDay, weather, chain }
+      const { courseId, vehicleId, timeOfDay, weather, chain = false, mode = 'race' } = fields;
+      return isCourseId(courseId) && isVehicleId(vehicleId) && isTimeOfDay(timeOfDay) && isWeatherSetting(weather) && typeof chain === 'boolean' && isRoomMode(mode)
+        ? { type: 'configure', courseId, vehicleId, timeOfDay, weather, chain, mode }
         : null;
     }
     case 'kick':
       return typeof fields.playerId === 'string' && fields.playerId !== '' ? { type: 'kick', playerId: fields.playerId } : null;
     case 'start':
+    case 'complain':
+    case 'resetWeek':
     case 'restartCheckpoint':
     case 'restartCourse':
     case 'toLobby':
@@ -376,6 +471,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     }
     case 'emote':
       return isEmote(fields.emote) ? { type: 'emote', emote: fields.emote } : null;
+    case 'phone': {
+      const action = parsePhoneAction(fields.action);
+      return action ? { type: 'phone', action } : null;
+    }
     case 'adminTool':
       return typeof fields.tool === 'string' && (ADMIN_TOOLS as readonly string[]).includes(fields.tool)
         ? { type: 'adminTool', tool: fields.tool as AdminTool }
@@ -476,6 +575,27 @@ const isLobbyPlayer = (value: unknown): value is LobbyPlayer =>
   typeof value.connected === 'boolean' &&
   isAppearance(value.appearance);
 
+const GOAL_STATUSES = ['pending', 'done', 'missed', 'skipped'];
+const isFriendView = (value: unknown): boolean =>
+  isRecord(value) &&
+  ['health', 'food', 'happiness', 'tiredness', 'cash', 'bank'].every((key) => finite(value[key])) &&
+  Array.isArray(value.items) &&
+  value.items.every(isText) &&
+  isRecord(value.caffeine) &&
+  finite(value.caffeine.fast) &&
+  finite(value.caffeine.slow) &&
+  (value.angry === undefined || value.angry === true) &&
+  (value.played === undefined || value.played === true);
+const isStoryState = (data: Record<string, unknown>): boolean =>
+  Number.isSafeInteger(data.day) &&
+  finite(data.clock) &&
+  finite(data.dayLength) &&
+  typeof data.night === 'boolean' &&
+  Array.isArray(data.goals) &&
+  data.goals.every((goal) => isRecord(goal) && isText(goal.id) && isText(goal.label) && GOAL_STATUSES.includes(goal.status as string)) &&
+  isRecord(data.friends) &&
+  Object.entries(data.friends).every(([id, view]) => isCharacterId(id) && isFriendView(view));
+
 // Checks one message from the server. Returns null for anything the page cannot use.
 // The server is trusted, but the page may be older than it, and one snapshot without finite numbers would spoil the interpolation for good.
 // Fields this version does not know are kept, so a newer server can add to a message.
@@ -511,9 +631,21 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         isText(data.vehicleId) &&
         isTimeOfDay(data.timeOfDay) &&
         isWeatherSetting(data.weather) &&
-        typeof data.chain === 'boolean'
+        typeof data.chain === 'boolean' &&
+        isRoomMode(data.mode) &&
+        (data.story === undefined || (isRecord(data.story) && Number.isSafeInteger(data.story.day) && Array.isArray(data.story.finishedDays) && data.story.finishedDays.every((day) => Number.isSafeInteger(day))))
         ? message
         : null;
+    case 'daySummary':
+      return Number.isSafeInteger(data.day) && [data.done, data.missed, data.skipped].every((list) => Array.isArray(list) && list.every(isText)) ? message : null;
+    case 'toast':
+      return isText(data.text) ? message : null;
+    case 'complain':
+      return isText(data.playerId) && isCount(data.line) ? message : null;
+    case 'fakeRepublic':
+      return (data.pick === 0 || data.pick === 1 || data.pick === 2) && isCount(data.outcome) ? message : null;
+    case 'storyState':
+      return isStoryState(data) ? message : null;
     case 'stage':
       return isText(data.courseId) && isCount(data.index) && isCount(data.of) && data.of >= 1 && data.index < data.of ? message : null;
     case 'snapshot':
@@ -535,6 +667,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         typeof data.won === 'boolean' &&
         typeof data.assisted === 'boolean' &&
         typeof data.full === 'boolean' &&
+        (data.absent === undefined || (Array.isArray(data.absent) && data.absent.every(isCharacterId))) &&
         isVehicleState(data.vehicle) &&
         Array.isArray(data.players) &&
         data.players.every(isPlayerSnapshot) &&

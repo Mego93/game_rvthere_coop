@@ -31,6 +31,8 @@ export const HUU_PHRASE_WINDOW = 90;
 // Happiness lost per second outside a trait window (1 per 20 s).
 export const TRAIT_WINDOW_HAPPINESS_FALL = 1 / 20;
 export const LOUIS_COMPLAIN_COOLDOWN = 20;
+// The client's list of complaints is this long; the server picks the line shown.
+export const COMPLAINT_COUNT = 12;
 export const LOUIS_COMPLAIN_HAPPINESS = 2;
 export const COFFEE_FAST = deepFreeze({ factor: 1.25, seconds: 60, slowFactor: 0.85, slowSeconds: 30 });
 export const SUNIL_CODE_FALL_PER_SECOND = 1 / 6;

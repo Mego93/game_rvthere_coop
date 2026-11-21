@@ -16,6 +16,7 @@ import {
 import { pickNoun } from './nouns';
 import { createRateLimiter, type RateLimiter } from './rateLimit';
 import { createRoom, type Room, type RoomPlayer } from './room';
+import { createMemoryWeekStore } from './weekStore';
 import type { Connection, ConnectionHandle, RoomDeps, RoomServer, RoomServerOptions } from './types';
 
 // The window in which an address's creates are counted, in seconds.
@@ -40,6 +41,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
   const sessionOf = new Map<RoomPlayer, Session>();
   // When each address last created rooms, within CREATE_WINDOW; an address with none is not kept.
   const creates = new Map<string, number[]>();
+  const weekStore = options.weekStore ?? createMemoryWeekStore();
   const createPerMinute = options.createPerMinute ?? CREATE_PER_MINUTE;
   const maxRooms = options.maxRooms ?? MAX_ROOMS;
   let lastTick = deps.clock();
@@ -91,7 +93,7 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
     if (times.length >= createPerMinute) return refuse(session, 'server_full');
     const noun = options.fixedNoun ?? pickNoun(deps.random, (candidate) => rooms.has(candidate));
     if (rooms.has(noun)) return refuse(session, 'server_full');
-    const room = createRoom(deps.rapier, { noun, courses: options.courses, campaign: options.campaign }, now);
+    const room = createRoom(deps.rapier, { noun, courses: options.courses, campaign: options.campaign, weekStore, random: deps.random, log: (message, error) => report(error ?? new Error(message), `room:${noun}`) }, now);
     rooms.set(noun, room);
     creates.set(session.address, [...times, now]);
     const player = room.add(message.name, message.token, session.connection, now);
@@ -201,6 +203,15 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
         return command(session, (room, player) => room.restartCourse(player));
       case 'toLobby':
         return command(session, (room, player) => room.toLobby(player));
+      case 'phone':
+        return command(session, (room, player) => room.phone(player, message.action));
+      case 'complain':
+        return command(session, (room, player) => {
+          room.complain(player);
+          return null;
+        });
+      case 'resetWeek':
+        return command(session, (room, player) => room.resetWeek(player));
       case 'chat':
         // Unlike the commands, a chat before joining is ignored, not refused.
         if (!session.room || !session.player) return;
