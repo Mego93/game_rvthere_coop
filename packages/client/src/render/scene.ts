@@ -117,7 +117,9 @@ export function createScene(course: BuiltCourse, options: SceneOptions = {}): TH
   if (deck.size > 0 || rails.size > 0) scene.add(createBridgeMeshes(bridges));
   scene.add(createWaterMeshes(course, options));
   scene.add(createTerrainMesh(course, options));
-  scene.add(...createSouleymanMeshes(souleymanPlacements(course.checkpoints)));
+  // Three logs an error for an add() with nothing in it, which a course without a Souleyman would cause.
+  const figures = createSouleymanMeshes(souleymanPlacements(course.checkpoints));
+  if (figures.length > 0) scene.add(...figures);
   scene.add(boxMesh(course.finish, ghost(0x22c55e)));
 
   for (const water of course.decor) {

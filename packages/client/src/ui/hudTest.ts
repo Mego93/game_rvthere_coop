@@ -1,4 +1,7 @@
-import type { ResultsMessage, StoryStateMessage } from '@lodgy/shared';
+import type { GolfSnapshot, ResultsMessage, StoryStateMessage } from '@lodgy/shared';
+import { createGolfHud, createGolfResults } from './golf/golfHud';
+import { golfHudView } from './golf/golfHudView';
+import { IDLE_SHOT } from './golf/shot';
 import { createStoryHud } from './story/storyHud';
 import { storyHudModel } from './story/needsView';
 import { createStoryUi, type StoryUi } from './story/storyUi';
@@ -14,9 +17,9 @@ import type { Tutorial } from './tutorial';
 import { createTouchUi } from './touchUi';
 import type { TouchView } from './touchView';
 
-export type HudTestMode = 'hud' | 'drive' | 'menu' | 'shop' | 'results' | 'help' | 'chat' | 'emote' | 'tutorial' | 'story' | 'storydrive' | 'storyphone' | 'storykiosk' | 'storygoals' | 'storysummary';
+export type HudTestMode = 'hud' | 'drive' | 'menu' | 'shop' | 'results' | 'help' | 'chat' | 'emote' | 'tutorial' | 'story' | 'storydrive' | 'storyphone' | 'storykiosk' | 'storygoals' | 'storysummary' | 'golf' | 'golfboard' | 'golfresults';
 
-const MODES: readonly HudTestMode[] = ['hud', 'drive', 'menu', 'shop', 'results', 'help', 'chat', 'emote', 'tutorial', 'story', 'storydrive', 'storyphone', 'storykiosk', 'storygoals', 'storysummary'];
+const MODES: readonly HudTestMode[] = ['hud', 'drive', 'menu', 'shop', 'results', 'help', 'chat', 'emote', 'tutorial', 'story', 'storydrive', 'storyphone', 'storykiosk', 'storygoals', 'storysummary', 'golf', 'golfboard', 'golfresults'];
 
 // ?hudtest shows the HUD on a fixed sample for the layout check and the screenshots; ?hudtest=menu (and the others) also opens that panel.
 export function hudTestMode(search: string): HudTestMode | null {
@@ -107,6 +110,12 @@ export const sampleStoryState = (poor = false): StoryStateMessage => ({
   },
 });
 
+// PrimeGolf mid-game: Luiz (the local friend) is on turn with one ball hit, three friends play and one has played all six.
+export const sampleGolf = (): GolfSnapshot => ({ turn: 'luiz', ball: null, scores: { luiz: [20, 40], rafael: [10, 0, 15], alexander: [50, 25], huu: [0, 150, 30, 15, 20, 10] } });
+
+// The end of the game, for the results panel.
+export const sampleGolfEnd = (): GolfSnapshot['scores'] => ({ luiz: [20, 40, 25, 0, 50, 30], rafael: [10, 0, 15, 20, 0, 25], alexander: [50, 25, 15, 150, 0, 40], huu: [0, 20, 30, 15, 20, 10] });
+
 export interface HudTestParts {
   touch: boolean;
   chatPanel: ChatPanel;
@@ -134,7 +143,9 @@ export function startHudTest(mode: HudTestMode, parts: HudTestParts): void {
     doc.body.append(root);
     const touchUi = createTouchUi(root);
     touchUi.setVisible(true);
-    touchUi.update(sampleTouchView(mode === 'drive'));
+    const golfMode = mode === 'golf' || mode === 'golfboard';
+    touchUi.update(golfMode ? { ...sampleTouchView(false), useVisible: false, reelVisible: false, resetVisible: false, sprintVisible: false, fireVisible: mode === 'golf', slots: [null, null, null] } : sampleTouchView(mode === 'drive'));
+    if (golfMode) touchUi.setFireLabel('Shoot');
   }
 
   if (mode === 'story' || mode === 'storydrive') {
@@ -142,6 +153,19 @@ export function startHudTest(mode: HudTestMode, parts: HudTestParts): void {
     const storyHud = createStoryHud(doc, { touch: parts.touch }, { onPhone() {}, onGoals() {}, onComplain() {} });
     storyHud.setVenue(mode === 'story' ? 'villa' : 'outing');
     storyHud.update(storyHudModel(state, 'luiz'), 1880, 120, true);
+  }
+  if (mode === 'golf' || mode === 'golfboard') {
+    const golf = createGolfHud(doc, { touch: parts.touch });
+    const shot = { ...IDLE_SHOT, phase: 'curve' as const, power: 0.72, marker: 0.4, clock: 0.3 };
+    // The meter and the board are not shown together in play: the board shows once a ball has landed.
+    const sample = mode === 'golfboard' ? { ...sampleGolf(), turn: 'rafael' as const, ball: { x: -12, y: 0, z: -110 } } : sampleGolf();
+    golf.update(golfHudView({ golf: sample, local: 'luiz', shot, boardShown: mode === 'golfboard', pop: mode === 'golfboard' ? { text: 'Blue ring +25', tone: 'hit' } : null, touch: parts.touch }), 'luiz');
+    golf.setVisible(true);
+  }
+  if (mode === 'golfresults') {
+    // main.ts already built the live panel; the test one replaces it so the ids stay unique.
+    doc.getElementById('golf-results')?.remove();
+    createGolfResults(doc).show(sampleGolfEnd());
   }
   if (mode === 'storyphone' || mode === 'storykiosk' || mode === 'storygoals' || mode === 'storysummary') {
     // A pick comes back as a win so the chart can be looked at.

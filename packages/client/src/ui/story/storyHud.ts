@@ -46,13 +46,14 @@ const STYLE = `
 #story-hud.touch #story-needs svg.ico { width: 12px; height: 12px; }
 #story-hud.outing #story-clock, #story-hud.outing #story-buttons { display: none; }
 #hud.story-villa #hud-compass, #hud.story-villa #hud-vehicle, #hud.story-villa #hud-dashboard { display: none; }
+#hud.story-foot #hud-vehicle, #hud.story-foot #hud-dashboard { display: none; }
 `;
 
 export interface StoryHud {
   update(model: StoryHudModel | null, bank: number, cash: number, canComplain: boolean): void;
   setVisible(visible: boolean): void;
-  // The villa has no race gauges, so they hide and the clock takes the top; an outing keeps them.
-  setVenue(venue: 'villa' | 'outing'): void;
+  // The villa has no race gauges, so they hide and the clock takes the top; an outing keeps them; the arrival is on foot, so only the vehicle's gauges hide.
+  setVenue(venue: 'villa' | 'outing' | 'foot'): void;
   dispose(): void;
 }
 
@@ -197,11 +198,12 @@ export function createStoryHud(doc: Document, opts: { touch: boolean }, handlers
     setVisible: (visible) => void (root.hidden = !visible),
     setVenue(venue) {
       root.classList.toggle('villa', venue === 'villa');
-      root.classList.toggle('outing', venue === 'outing');
+      root.classList.toggle('outing', venue !== 'villa');
       doc.getElementById('hud')?.classList.toggle('story-villa', venue === 'villa');
+      doc.getElementById('hud')?.classList.toggle('story-foot', venue === 'foot');
     },
     dispose() {
-      doc.getElementById('hud')?.classList.remove('story-villa');
+      doc.getElementById('hud')?.classList.remove('story-villa', 'story-foot');
       root.remove();
     },
   };

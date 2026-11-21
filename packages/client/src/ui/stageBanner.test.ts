@@ -19,3 +19,11 @@ test('V2: a course with no label shows its id, and only a leading number is drop
 test('V2: the banner shows for 3 s', () => {
   expect(STAGE_BANNER_MS).toBe(3000);
 });
+
+test('story mode shows a title and never a stage count', () => {
+  expect(stageBannerText({ courseId: 'arrival', index: 0, of: 1 }, true)).toBe('Arrival in Marrakech');
+  expect(stageBannerText({ courseId: 'airport-home', index: 0, of: 1 }, true)).toBe('Drive home to the villa');
+  expect(stageBannerText({ courseId: 'primegolf', index: 0, of: 1 }, true)).toBe('PrimeGolf');
+  expect(stageBannerText({ courseId: 'desert', index: 0, of: 1 }, true)).toBe('Back to the desert');
+  expect(stageBannerText({ courseId: 'test', index: 0, of: 1 }, true)).not.toMatch(/Stage/);
+});

@@ -210,6 +210,11 @@ export function createRoomServer(deps: RoomDeps, options: RoomServerOptions = {}
           room.complain(player);
           return null;
         });
+      case 'golfShot':
+        return command(session, (room, player) => {
+          room.golfShot(player, { yaw: message.yaw, power: message.power, curve: message.curve });
+          return null;
+        });
       case 'resetWeek':
         return command(session, (room, player) => room.resetWeek(player));
       case 'chat':

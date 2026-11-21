@@ -27,6 +27,8 @@ test('E4: every row of the table maps to its sound', () => {
     shot: 'impact',
     stab: null,
     spot: null,
+    golfLand: null,
+    golfEnd: null,
   };
   for (const kind of EVENT_KINDS) expect(soundFor(event(kind, { pos: POS, playerId: 'other' }), 'me')?.kind ?? null, kind).toBe(expected[kind]);
 });

@@ -6,6 +6,7 @@ import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
 import type { PropSnapshot } from './props';
 import { PHONE_SHOP_PRICES, STORY_FOODS, STORY_PRICES, type PhoneShopItem, type StoryItemKind, type StoryPriced } from './story/constants';
 import type { GoalStatus } from './story/days';
+import type { GolfSnapshot } from './story/primegolf';
 import type { VehicleState } from './vehicle';
 import { VEHICLE_IDS } from './vehicles';
 import type { CableSnapshot } from './winch';
@@ -75,6 +76,8 @@ export type ClientMessage =
   | { type: 'emote'; emote: Emote }
   | { type: 'phone'; action: PhoneAction }
   | { type: 'complain' }
+  // PrimeGolf: yaw in radians, power in [0, 1] and curve in [-1, 1]; accepted from the player on turn only.
+  | { type: 'golfShot'; yaw: number; power: number; curve: number }
   | { type: 'resetWeek' };
 
 // Story mode: what the phone and the shop menu can ask for; amounts are whole dirhams.
@@ -197,7 +200,7 @@ export interface PlayerSnapshot {
   slide?: { ticks: number; cooldown: number; air: number; dirX: number; dirZ: number; launch?: number };
 }
 
-export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit', 'outOfBounds', 'eat', 'shot', 'stab', 'spot'] as const;
+export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit', 'outOfBounds', 'eat', 'shot', 'stab', 'spot', 'golfLand', 'golfEnd'] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
 export interface EventMessage {
@@ -214,6 +217,10 @@ export interface EventMessage {
   // 'spot': the spot used.
   spotId?: string;
   spotKind?: SpotKind;
+  // 'golfLand': the ring hit (null for none) and the points; 'golfEnd': every friend's scores.
+  ring?: string | null;
+  points?: number;
+  scores?: GolfSnapshot['scores'];
 }
 
 export interface SnapshotMessage extends WorldSnapshot {
@@ -475,6 +482,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const action = parsePhoneAction(fields.action);
       return action ? { type: 'phone', action } : null;
     }
+    case 'golfShot': {
+      const { yaw, power, curve } = fields;
+      return finite(yaw) && finite(power) && finite(curve) ? { type: 'golfShot', yaw: wrapAngle(yaw), power: clamp(power, 0, 1), curve: clamp(curve, -1, 1) } : null;
+    }
     case 'adminTool':
       return typeof fields.tool === 'string' && (ADMIN_TOOLS as readonly string[]).includes(fields.tool)
         ? { type: 'adminTool', tool: fields.tool as AdminTool }
@@ -557,6 +568,10 @@ const ENEMY_STATES = ['idle', 'run', 'attack', 'slip', 'down', 'dead'];
 const MAX_ENEMIES = 32;
 const isEnemySnapshot = (value: unknown): boolean =>
   isRecord(value) && isCount(value.id) && finite(value.x) && finite(value.y) && finite(value.z) && finite(value.yaw) && typeof value.state === 'string' && ENEMY_STATES.includes(value.state);
+const isScores = (value: unknown): boolean =>
+  isRecord(value) && Object.entries(value).every(([id, list]) => isCharacterId(id) && Array.isArray(list) && list.every(isCount));
+const isGolfSnapshot = (value: unknown): boolean =>
+  isRecord(value) && (value.turn === null || isCharacterId(value.turn)) && (value.ball === null || isVec3(value.ball)) && isScores(value.scores);
 const isCableSnapshot = (value: unknown): value is CableSnapshot =>
   isRecord(value) &&
   (value.state === 'stowed' || value.state === 'held' || value.state === 'ground' || value.state === 'attached') &&
@@ -675,6 +690,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         data.props.every(isPropSnapshot) &&
         (data.weather === undefined || isWeather(data.weather)) &&
         (data.animals === undefined || (Array.isArray(data.animals) && data.animals.length <= MAX_ANIMALS && data.animals.every(isAnimalSnapshot))) &&
+        (data.golf === undefined || isGolfSnapshot(data.golf)) &&
         (data.enemies === undefined || (Array.isArray(data.enemies) && data.enemies.length <= MAX_ENEMIES && data.enemies.every(isEnemySnapshot))) &&
         isCableSnapshot(data.cable)
         ? message
@@ -688,7 +704,10 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         (data.to === undefined || isVec3(data.to)) &&
         (data.hit === undefined || typeof data.hit === 'boolean') &&
         (data.spotId === undefined || isText(data.spotId)) &&
-        (data.spotKind === undefined || (SPOT_KINDS as readonly unknown[]).includes(data.spotKind))
+        (data.spotKind === undefined || (SPOT_KINDS as readonly unknown[]).includes(data.spotKind)) &&
+        (data.ring === undefined || data.ring === null || isText(data.ring)) &&
+        (data.points === undefined || isCount(data.points)) &&
+        (data.scores === undefined || isScores(data.scores))
         ? message
         : null;
     case 'results':

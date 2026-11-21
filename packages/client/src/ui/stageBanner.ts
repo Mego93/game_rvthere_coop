@@ -5,9 +5,18 @@ export const STAGE_BANNER_MS = 3000;
 // A stage label without its leading number: "2 Bridge and forest" becomes "Bridge and forest".
 export const labelWithoutNumber = (label: string): string => label.replace(/^\d+\s+/, '');
 
-// "Stage 2 of 5: Bridge and forest"; a course with no label shows its id.
-export function stageBannerText(message: Pick<StageMessage, 'courseId' | 'index' | 'of'>): string {
+const STORY_TITLES: Readonly<Record<string, string>> = Object.freeze({
+  arrival: 'Arrival in Marrakech',
+  'airport-home': 'Drive home to the villa',
+  primegolf: 'PrimeGolf',
+  desert: 'Back to the desert',
+  villa: 'Back at the villa',
+});
+
+// "Stage 2 of 5: Bridge and forest"; a course with no label shows its id. In story mode a title, never a stage count.
+export function stageBannerText(message: Pick<StageMessage, 'courseId' | 'index' | 'of'>, story = false): string {
   const label = getCourseDef(message.courseId)?.label ?? message.courseId;
+  if (story) return STORY_TITLES[message.courseId] ?? labelWithoutNumber(label);
   return `Stage ${message.index + 1} of ${message.of}: ${labelWithoutNumber(label)}`;
 }
 

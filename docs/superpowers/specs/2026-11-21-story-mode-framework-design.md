@@ -168,3 +168,12 @@ The day's goals are listed below in the owner's order. The arrival drive is firs
 ## Performance
 
 A separate roadmap step, used only if needed: measure each story world's load time and frame rate on a phone, and refactor where they miss the budgets the main game already uses.
+
+## PrimeGolf (owner, 2026-11-21)
+
+- **Getting there:** the gate fades straight to the PrimeGolf world, with no drive, and back to the villa afterwards. The day clock pauses there.
+- **A shot:** aim and power meter. Turn to aim, hold to fill the power bar, release, then one tap for curve. The server owns the ball's physics, so everyone sees the same ball. The client measures the power.
+- **The field:** Topgolf-like. Seven coloured rings from 20 to 200 m, plus a small jackpot ring. A farther, smaller ring scores more, a landing near the centre doubles it, and the jackpot is worth the most.
+- **Turns and scores:** six balls each, one at a time in rotation, with a scoreboard after each ball. Absent friends skip their turns, and a friend who leaves mid-game keeps his score.
+- **The result:** the best player gains happiness, and the worst pays coffee for everyone from his cash, never going below zero. The team total gives everyone a little happiness. Alone, only the team bonus applies.
+- **Numbers:** they are in `docs/superpowers/plans/step-41b-sunday.md`.

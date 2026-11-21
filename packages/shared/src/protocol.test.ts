@@ -1062,3 +1062,57 @@ describe('story mode messages', () => {
     expect(parseServer({ ...state, night: 'yes' })).toBeNull();
   });
 });
+
+describe('PrimeGolf messages', () => {
+  const parseClient = (message: unknown) => parseClientMessage(JSON.stringify(message));
+  const parseServer = (message: unknown) => parseServerMessage(JSON.stringify(message));
+
+  test('golfShot carries a yaw, a power and a curve', () => {
+    const shot = { type: 'golfShot', yaw: 1.2, power: 0.75, curve: -0.5 };
+    expect(parseClient(shot)).toEqual(shot);
+    expect(parseClient({ ...shot, power: 0 })).toEqual({ ...shot, power: 0 });
+    expect(parseClient({ ...shot, yaw: 0, power: 1, curve: 1 })).toEqual({ ...shot, yaw: 0, power: 1, curve: 1 });
+  });
+
+  test('golfShot wraps the yaw and clamps power to 0..1 and curve to -1..1', () => {
+    expect(parseClient({ type: 'golfShot', yaw: 2 * Math.PI + 0.5, power: 1.5, curve: -3 })).toEqual({ type: 'golfShot', yaw: expect.closeTo(0.5, 9), power: 1, curve: -1 });
+    expect(parseClient({ type: 'golfShot', yaw: 0, power: -0.2, curve: 0 })).toEqual({ type: 'golfShot', yaw: 0, power: 0, curve: 0 });
+  });
+
+  test('golfShot refuses a missing or non-finite number', () => {
+    const shot = { type: 'golfShot', yaw: 1, power: 0.5, curve: 0 };
+    for (const key of ['yaw', 'power', 'curve']) {
+      expect(parseClient({ ...shot, [key]: undefined })).toBeNull();
+      expect(parseClient({ ...shot, [key]: 'x' })).toBeNull();
+      expect(parseClient({ ...shot, [key]: null })).toBeNull();
+    }
+    expect(parseClientMessage('{"type":"golfShot","yaw":1e999,"power":0.5,"curve":0}')).toBeNull();
+  });
+
+  test('golfLand carries its position, ring and points', () => {
+    const land = { type: 'event', kind: 'golfLand', tick: 90, playerId: 'p1', pos: { x: 12, y: 0, z: -200 }, ring: 'white', points: 100 };
+    expect(parseServer(land)).toEqual(land);
+    expect(parseServer({ ...land, ring: null, points: 0 })).toEqual({ ...land, ring: null, points: 0 });
+    expect(parseServer({ ...land, ring: 4 })).toBeNull();
+    expect(parseServer({ ...land, points: 'x' })).toBeNull();
+    expect(parseServer({ ...land, points: -1 })).toBeNull();
+  });
+
+  test('golfEnd carries the scores by character', () => {
+    const end = { type: 'event', kind: 'golfEnd', tick: 900, scores: { sounile: [10, 0, 150], nandan: [] } };
+    expect(parseServer(end)).toEqual(end);
+    expect(parseServer({ ...end, scores: { bob: [1] } })).toBeNull();
+    expect(parseServer({ ...end, scores: { sounile: ['a'] } })).toBeNull();
+    expect(parseServer({ ...end, scores: [] })).toBeNull();
+  });
+
+  test('the snapshot may carry a golf field', () => {
+    const golf = { turn: 'sounile', ball: { x: 0, y: 3, z: -50 }, scores: { sounile: [20], nandan: [] } };
+    expect(parseServer({ ...snapshot, golf })).toEqual({ ...snapshot, golf });
+    expect(parseServer({ ...snapshot, golf: { ...golf, turn: null, ball: null } })).toEqual({ ...snapshot, golf: { ...golf, turn: null, ball: null } });
+    expect(parseServer({ ...snapshot, golf: { ...golf, turn: 'bob' } })).toBeNull();
+    expect(parseServer({ ...snapshot, golf: { ...golf, ball: { x: 1 } } })).toBeNull();
+    expect(parseServer({ ...snapshot, golf: { ...golf, scores: { sounile: 20 } } })).toBeNull();
+    expect(parseServer({ ...snapshot, golf: 'x' })).toBeNull();
+  });
+});

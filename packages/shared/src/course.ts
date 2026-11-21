@@ -67,6 +67,10 @@ export interface BuiltCourse {
   ravines: { from: number; to: number }[];
   route: [x: number, z: number][];
   finish: Box;
+  // 'players': the world is won when every alive present player stands in `finish`, not when the vehicle does (an on-foot course, whose vehicle is parked in the finish; no fuel is used).
+  finishBy?: 'players';
+  // Where players start and respawn, instead of beside the vehicle; `yaw` turns the vehicle's spawn slots (an on-foot course).
+  playerStart?: { pos: Vec3; yaw: number };
   killPlaneY: number;
   targetTime: number;
   // Enemy plan inputs carried from the course def: the event multiplier, and the last share of the route with double events.
@@ -77,5 +81,7 @@ export interface BuiltCourse {
   // Present on courses that opt in to the solid land beside the road: the along-route spans (m) of the obstacles that get a berm, sorted and disjoint, and the index in `walls` where the obstacle walls and caps start (they are not drawn).
   // Story worlds only: where `use` emits a spot event.
   spots?: Spot[];
+  // Golf worlds: the tee, where the player on turn stands (the origin of field coordinates).
+  golf?: { tee: Vec3 };
   corridor?: { obstacles: { from: number; to: number }[]; wallsFrom: number };
 }

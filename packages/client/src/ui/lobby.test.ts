@@ -129,19 +129,19 @@ test('V1: the chain checkbox shows for a stage only, is admin-only and the setti
   expect([full.showChain, full.settings.chain]).toEqual([false, false]);
 });
 
-test('step 41: the mode toggle shows only with ?storytest (or when the room is already in story mode) and only the admin can change it', () => {
-  expect(lobbyView(message(trio), 'p1').showMode).toBe(false);
-  expect(lobbyView(message(trio), 'p1', { storyEnabled: true }).showMode).toBe(true);
+test('step 41b: the mode toggle shows to everyone, with no ?storytest, and only the admin can change it', () => {
+  expect(lobbyView(message(trio), 'p1').showMode).toBe(true);
+  expect(lobbyView(message(trio), 'p2').showMode).toBe(true);
   expect(lobbyView(message(trio, { mode: 'story', story: { day: 0, finishedDays: [] } }), 'p2').showMode).toBe(true);
-  expect(lobbyView(message(trio), 'p1', { storyEnabled: true }).modeEditable).toBe(true);
-  expect(lobbyView(message(trio), 'p2', { storyEnabled: true }).modeEditable).toBe(false);
+  expect(lobbyView(message(trio), 'p1').modeEditable).toBe(true);
+  expect(lobbyView(message(trio), 'p2').modeEditable).toBe(false);
   expect(modeOptions()).toEqual([{ value: 'race', text: 'Race' }, { value: 'story', text: 'Story' }]);
 });
 
 test('step 41: in story mode the lobby shows the day and the finished days, hides the course, and gives the admin Reset week', () => {
   const story = message(trio, { mode: 'story', story: { day: 2, finishedDays: [0, 1] } });
   const admin = lobbyView(story, 'p1');
-  expect(admin.story).toEqual({ dayText: 'Day 2', finishedText: 'Finished days: 0, 1' });
+  expect(admin.story).toEqual({ dayText: 'Day 2: coming soon', finishedText: 'Finished days: 0, 1' });
   expect(admin.showCourse).toBe(false);
   expect(admin.showChain).toBe(false);
   expect(admin.showReset).toBe(true);
@@ -149,6 +149,12 @@ test('step 41: in story mode the lobby shows the day and the finished days, hide
   const fresh = lobbyView(message(trio, { mode: 'story', story: { day: 1, finishedDays: [] } }), 'p1');
   expect(fresh.story).toEqual({ dayText: 'Day 1', finishedText: 'No days finished yet' });
   expect(lobbyView(message(trio, { mode: 'story', story: { day: 0, finishedDays: [] } }), 'p1').story?.dayText).toBe('Test day');
+});
+
+test('step 41b: Sunday is "Day 1", and every day beyond the table reads "Day N: coming soon"', () => {
+  const day = (n: number) => lobbyView(message(trio, { mode: 'story', story: { day: n, finishedDays: [] } }), 'p1').story?.dayText;
+  expect(day(1)).toBe('Day 1');
+  for (const n of [2, 3, 7, 12]) expect(day(n)).toBe(`Day ${n}: coming soon`);
 });
 
 test('step 41: a race lobby shows no story section, no Reset week, and keeps the course and the chain', () => {

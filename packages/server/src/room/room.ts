@@ -1,4 +1,6 @@
 import {
+  STORY_DAYS,
+  type DayDef,
   CAMPAIGN,
   CHAT_BURST,
   CHAT_PHRASES,
@@ -112,6 +114,8 @@ export interface Room {
   phone(player: RoomPlayer, action: PhoneAction): ErrorReason | null;
   // Story mode, while playing: Luiz's complaint; ignored silently when refused.
   complain(player: RoomPlayer): void;
+  // Story mode, in PrimeGolf: a shot from the player on turn; ignored silently when refused.
+  golfShot(player: RoomPlayer, shot: { yaw: number; power: number; curve: number }): void;
   // Lobby only, admin only: starts the story week over.
   resetWeek(by: RoomPlayer): ErrorReason | null;
   toLobby(by: RoomPlayer): ErrorReason | null;
@@ -145,6 +149,8 @@ export interface RoomConfig {
   campaign?: readonly string[];
   // Where story mode keeps the week; defaults to this room's own memory.
   weekStore?: WeekStore;
+  // The story's days; defaults to STORY_DAYS (tests only).
+  days?: Readonly<Record<number, DayDef>>;
   // A number in [0, 1) for Fake Republic and the complaint line; defaults to Math.random.
   random?: () => number;
   // Failures that do not stop the room (a store that cannot load or save).
@@ -282,6 +288,7 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     noun: config.noun,
     store: weekStore,
     random,
+    days: { ...STORY_DAYS, ...config.days },
     log: (message, error) => config.log?.(message, error),
     connected: () => players.filter((player) => player.connected).map((player) => ({ playerId: player.playerId, characterId: player.appearance.characterId })),
     characterOf: (playerId) => players.find((player) => player.playerId === playerId)?.appearance.characterId,
@@ -550,10 +557,11 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
       }
       // Built first: if it throws, the room is still in the lobby, untouched.
       const first = settings.chain ? campaign[0]! : settings.courseId;
-      const fresh = story ? director.buildWorld(VILLA_ID, true) : createRunWorld(runNumber + 1, first);
+      const stage = story ? director.firstStage() : null;
+      const fresh = stage ? director.buildWorld(stage.courseId, stage.story) : createRunWorld(runNumber + 1, first);
       runNumber += 1;
       chainIndex = settings.chain && !story ? 0 : null;
-      storyCourse = story ? VILLA_ID : null;
+      storyCourse = stage ? stage.courseId : null;
       stageCarry = null;
       for (const player of players) {
         player.queue = createInputQueue();
@@ -648,6 +656,9 @@ export function createRoom(rapier: Rapier, config: RoomConfig, createdAt: number
     phone(player, action) {
       if (phase !== 'playing' || storyCourse === null) return 'bad_phase';
       return director.phone(player.playerId, action) ? null : 'cannot_buy';
+    },
+    golfShot(player, shot) {
+      if (phase === 'playing' && storyCourse !== null && player.connected) director.golfShot(player.playerId, shot);
     },
     complain(player) {
       if (phase === 'playing' && storyCourse !== null && player.connected) director.complain(player.playerId);

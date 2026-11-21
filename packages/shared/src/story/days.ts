@@ -1,6 +1,6 @@
 import type { CharacterId } from '../characters';
 import type { Vec3 } from '../math';
-import { TOGETHER_RADIUS } from './constants';
+import { TOGETHER_RADIUS, type StoryItemKind } from './constants';
 
 export const SPOT_KINDS = Object.freeze(['kitchen', 'chef', 'laptop', 'bed', 'couch', 'board', 'atm', 'shop', 'gate'] as const);
 export type SpotKind = (typeof SPOT_KINDS)[number];
@@ -8,9 +8,13 @@ export type SpotKind = (typeof SPOT_KINDS)[number];
 export interface GoalDef {
   id: string;
   label: string;
-  kind: 'spot' | 'outing';
+  // 'opening' goals are done by finishing their world in the day's opening, never at a spot.
+  kind: 'spot' | 'outing' | 'minigame' | 'opening';
   spot?: SpotKind;
   courseId?: string;
+  minigame?: 'primegolf';
+  // Completing a together goal gives every present friend this meal for free.
+  meal?: StoryItemKind;
   needs?: CharacterId[];
   together?: boolean;
   after?: string;
@@ -18,6 +22,8 @@ export interface GoalDef {
 
 export interface DayDef {
   goals: GoalDef[];
+  // Worlds played in order at the start of the day, before the villa; finishing one marks its goal done.
+  opening?: { goalId: string; courseId: string }[];
 }
 
 export type GoalStatus = 'pending' | 'done' | 'missed' | 'skipped';
@@ -26,13 +32,25 @@ export interface GoalState {
   status: GoalStatus;
 }
 
-// Day 0 is the test day; sleeping is implicit and not a goal.
+// Day 0 is the test day (tests and ?storytest); day 1 is Sunday; sleeping is implicit and not a goal.
 export const STORY_DAYS: Record<number, DayDef> = {
   0: {
     goals: [
       { id: 'vibecode', label: 'Vibecode at a laptop', kind: 'spot', spot: 'laptop' },
       { id: 'eat', label: 'Eat together in the kitchen', kind: 'spot', spot: 'kitchen', together: true },
       { id: 'outing', label: 'Take the Lodgy to the desert', kind: 'outing', spot: 'gate', courseId: 'desert', after: 'eat' },
+    ],
+  },
+  1: {
+    opening: [
+      { goalId: 'arrive', courseId: 'arrival' },
+      { goalId: 'driveHome', courseId: 'airport-home' },
+    ],
+    goals: [
+      { id: 'arrive', label: 'Reach the rental car', kind: 'opening' },
+      { id: 'driveHome', label: 'Drive home to the villa', kind: 'opening' },
+      { id: 'tajine', label: 'Eat the tajine together', kind: 'spot', spot: 'kitchen', together: true, meal: 'tajine' },
+      { id: 'primegolf', label: 'Play PrimeGolf', kind: 'minigame', spot: 'gate', minigame: 'primegolf', after: 'tajine' },
     ],
   },
 };
@@ -67,4 +85,9 @@ export function spotGoalsDone(day: DayDef, states: readonly GoalState[], spotKin
 // The outing goal the gate starts: pending, with its `after` goal done.
 export function outingAtGate(day: DayDef, states: readonly GoalState[]): GoalDef | null {
   return day.goals.find((goal) => goal.kind === 'outing' && goalReady(day, states, goal.id)) ?? null;
+}
+
+// The minigame goal the gate starts: pending, with its `after` goal done.
+export function minigameAtGate(day: DayDef, states: readonly GoalState[]): GoalDef | null {
+  return day.goals.find((goal) => goal.kind === 'minigame' && goalReady(day, states, goal.id)) ?? null;
 }
