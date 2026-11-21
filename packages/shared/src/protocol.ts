@@ -1,6 +1,7 @@
 import { CHAT_MAX_LENGTH, EMOTES, NAME_MAX_LENGTH, PLAYER_COLOUR_PATTERN, SHOP_ITEMS, AMMO_MAX, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, TIMES_OF_DAY, WEATHERS, WEATHER_SETTINGS, type Emote, type ItemKind, type ShopItem, type TimeOfDay, type Weather, type WeatherSetting } from './constants';
 import { isAppearance, type Appearance } from './characters';
 import { courseIds } from './courses/index';
+import { SPOT_KINDS, type SpotKind } from './story/days';
 import { clamp, deepFreeze, type Quat, type Vec3 } from './math';
 import type { PropSnapshot } from './props';
 import type { VehicleState } from './vehicle';
@@ -173,7 +174,7 @@ export interface PlayerSnapshot {
   slide?: { ticks: number; cooldown: number; air: number; dirX: number; dirZ: number; launch?: number };
 }
 
-export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit', 'outOfBounds', 'eat', 'shot', 'stab'] as const;
+export const EVENT_KINDS = ['impact', 'checkpoint', 'vehicleLost', 'pickup', 'use', 'hookAttach', 'hookDetach', 'coin', 'buy', 'hurt', 'downed', 'revive', 'respawn', 'goatHit', 'scooterHit', 'outOfBounds', 'eat', 'shot', 'stab', 'spot'] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
 export interface EventMessage {
@@ -187,6 +188,9 @@ export interface EventMessage {
   // 'shot': where the ray ended (`pos` is the eye it left from) and whether it hit an enemy.
   to?: Vec3;
   hit?: boolean;
+  // 'spot': the spot used.
+  spotId?: string;
+  spotKind?: SpotKind;
 }
 
 export interface SnapshotMessage extends WorldSnapshot {
@@ -549,7 +553,9 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         (data.pos === undefined || isVec3(data.pos)) &&
         (data.item === undefined || isText(data.item)) &&
         (data.to === undefined || isVec3(data.to)) &&
-        (data.hit === undefined || typeof data.hit === 'boolean')
+        (data.hit === undefined || typeof data.hit === 'boolean') &&
+        (data.spotId === undefined || isText(data.spotId)) &&
+        (data.spotKind === undefined || (SPOT_KINDS as readonly unknown[]).includes(data.spotKind))
         ? message
         : null;
     case 'results':

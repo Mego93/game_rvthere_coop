@@ -8,20 +8,25 @@ import { segmentDemo } from './demo';
 import { marrakech } from './marrakech';
 import { stageDefs } from './stages';
 import { testGround } from './testGround';
+import { villa } from './villa';
 
 const COURSES: Record<string, BuiltCourse> = {
   [testGround.id]: testGround,
   [segmentDemo.id]: buildCourse(segmentDemo),
   [airport.id]: buildCourse(airport),
+  [villa.id]: villa,
 };
+
+// Courses that exist for the story and are not offered as a race.
+const STORY_ONLY = new Set([villa.id]);
 
 // Built on first use, so importing the package does not pay for the 22 km course.
 const LAZY: Record<string, () => CourseDef> = { ...stageDefs, [marrakech.id]: () => marrakech };
 
-// The stages in play order, then marrakech, then the rest.
+// The stages in play order, then marrakech, then the rest; the story's own courses are left out.
 export function courseIds(): string[] {
   const stages = STAGE_IDS.filter((id) => Object.hasOwn(LAZY, id));
-  return [...new Set([...stages, marrakech.id, ...Object.keys(COURSES), ...Object.keys(LAZY)])];
+  return [...new Set([...stages, marrakech.id, ...Object.keys(COURSES), ...Object.keys(LAZY)])].filter((id) => !STORY_ONLY.has(id));
 }
 
 export function getCourse(courseId: string): BuiltCourse {
