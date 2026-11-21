@@ -116,6 +116,19 @@ export function eat(week: Week, id: CharacterId, item: StoryItemKind): Result {
   return { ok: true, week: next };
 }
 
+// A free meal for every present friend; Nandan eats only pizza, so he gets that instead.
+export function freeMeal(week: Week, present: readonly CharacterId[], item: StoryItemKind): Week {
+  let next = week;
+  for (const id of present) {
+    const meal = id === 'nandan' ? 'pizza' : item;
+    const carried = copy(next);
+    if (meal !== 'pizza') carried.friends[id].items.push(meal);
+    const ate = eat(carried, id, meal);
+    if (ate.ok) next = ate.week;
+  }
+  return next === week ? copy(week) : next;
+}
+
 export function buy(week: Week, id: CharacterId, item: StoryItemKind): Result {
   if (!Object.hasOwn(STORY_PRICES, item)) return { ok: false, reason: 'not_for_sale' };
   const price = STORY_PRICES[item as StoryPriced];

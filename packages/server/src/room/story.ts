@@ -2,6 +2,7 @@ import {
   CHARACTER_IDS,
   CHARACTER_NAMES,
   COMPLAINT_COUNT,
+  GOLF_SCOREBOARD_SECONDS,
   GUN_DAMAGE,
   KITCHEN_WITHDRAW,
   PLAYER_HEIGHT,
@@ -19,8 +20,11 @@ import {
   eat,
   endDay,
   fakeRepublic,
+  freeMeal,
   goalDone,
+  golfResults,
   loseDay,
+  minigameAtGate,
   newWeek,
   outingAtGate,
   parseWeek,
@@ -72,6 +76,8 @@ export interface StoryHost {
   log: (message: string, error?: unknown) => void;
   // The players with a live connection, who are the present friends.
   connected: () => StoryPlayer[];
+  // The days of the week; the room's config can replace them (tests).
+  days: Record<number, DayDef>;
   // The character of a player in the room, connected or held.
   characterOf: (playerId: string) => CharacterId | undefined;
   world: () => World;
@@ -87,16 +93,19 @@ export interface StoryHost {
   changed: () => void;
 }
 
-const dayOf = (week: Week): DayDef => STORY_DAYS[week.day] ?? STORY_DAYS[0]!;
 const cheapestFood = (): StoryPriced => (Object.entries(STORY_PRICES).sort((a, b) => a[1] - b[1])[0]![0]) as StoryPriced;
 
 export function createStoryDirector(host: StoryHost) {
+  const dayOf = (week: Week): DayDef => host.days[week.day] ?? STORY_DAYS[0]!;
   let week: Week | null = null;
   let loading: Promise<void> | null = null;
   // True once a day was played or the week was reset, so that an untouched room never overwrites the store.
   let touched = false;
   let running = false;
-  let outing: { goalId: string } | null = null;
+  // Where the group is when it is not at the villa: an outing's stage, an opening world or PrimeGolf.
+  let away: { kind: 'outing' | 'opening' | 'golf'; goalId: string; index: number } | null = null;
+  // Seconds of scoreboard left once the golf game is over, null while it is played.
+  let golfLeaveIn: number | null = null;
   let nightSince: number | null = null;
   const slept = new Set<string>();
   // Clock time each friend was downed, until revived or respawned.
@@ -151,7 +160,11 @@ export function createStoryDirector(host: StoryHost) {
 
   const completeGoals = (kind: SpotKind, spotPos: { x: number; y: number; z: number }) => {
     const ids = spotGoalsDone(dayOf(week!), week!.goals, kind, spotPos, positions(), present());
-    for (const id of ids) week = goalDone(week!, id, present());
+    for (const id of ids) {
+      week = goalDone(week!, id, present());
+      const def = dayOf(week).goals.find((goal) => goal.id === id);
+      if (def?.together && def.meal) week = freeMeal(week, present(), def.meal);
+    }
     if (ids.length > 0) dirty = true;
   };
 
@@ -171,7 +184,8 @@ export function createStoryDirector(host: StoryHost) {
 
   // Resets what belongs to one world.
   const newWorldState = () => {
-    outing = null;
+    away = null;
+    golfLeaveIn = null;
     nightSince = null;
     slept.clear();
     downedAt.clear();
@@ -225,21 +239,70 @@ export function createStoryDirector(host: StoryHost) {
     const next = buildStoryWorld(courseId, false);
     host.swapWorld(next, courseId);
     newWorldState();
-    outing = { goalId };
+    away = { kind: 'outing', goalId, index: 0 };
     for (const id of absent) host.broadcast({ type: 'toast', text: `${CHARACTER_NAMES[id]} is at the WC` });
     sendState();
   };
 
-  const returnToVilla = (finished: boolean, current: World) => {
-    // The stage's health comes home with the group.
+  // The stage's health comes home with the group.
+  const bringHealthHome = (current: World) => {
     for (const entry of current.carryOut().players) {
       const id = host.characterOf(entry.id);
       if (id && present().includes(id)) week!.friends[id].health = entry.health;
     }
-    if (finished && outing) week = goalDone(week!, outing.goalId, present());
+  };
+
+  const goToVilla = (current: World) => {
+    bringHealthHome(current);
     host.swapWorld(buildStoryWorld(VILLA_ID, true), VILLA_ID);
     newWorldState();
     sendState();
+  };
+
+  const returnToVilla = (finished: boolean, current: World) => {
+    const was = away;
+    if (finished && was) week = goalDone(week!, was.goalId, present());
+    goToVilla(current);
+  };
+
+  const enterOpening = (index: number) => {
+    away = { kind: 'opening', goalId: dayOf(week!).opening![index]!.goalId, index };
+  };
+
+  // An opening world is not a story world, so that the arrival's on-foot win and its enemies work.
+  const startOpening = (index: number) => {
+    host.swapWorld(buildStoryWorld(dayOf(week!).opening![index]!.courseId, false), dayOf(week!).opening![index]!.courseId);
+    newWorldState();
+    enterOpening(index);
+  };
+
+  const startGolf = (goalId: string) => {
+    const next = buildStoryWorld('primegolf', true);
+    host.swapWorld(next, 'primegolf');
+    newWorldState();
+    away = { kind: 'golf', goalId, index: 0 };
+    next.golfStart(new Map(host.connected().map((player) => [player.playerId, player.characterId])));
+    sendState();
+  };
+
+  // Finishing an opening world marks its goal done and moves on; the last one leads to the villa.
+  const openingDone = (current: World) => {
+    const finished = away!;
+    week = goalDone(week!, finished.goalId, present());
+    const opening = dayOf(week).opening!;
+    if (finished.index + 1 >= opening.length) return goToVilla(current);
+    bringHealthHome(current);
+    startOpening(finished.index + 1);
+    sendState();
+  };
+
+  // The game is over: the week takes the results and the goal is done; the group leaves after the scoreboard.
+  const golfOver = (world: World) => {
+    const state = world.golfState();
+    if (state) week = golfResults(state, week!);
+    week = goalDone(week!, away!.goalId, present());
+    golfLeaveIn = GOLF_SCOREBOARD_SECONDS;
+    dirty = true;
   };
 
   const endOfDay = () => {
@@ -259,8 +322,11 @@ export function createStoryDirector(host: StoryHost) {
     week = loseDay(week!);
     setGoals();
     save();
-    host.swapWorld(buildStoryWorld(VILLA_ID, true), VILLA_ID);
-    newWorldState();
+    if (dayOf(week).opening) startOpening(0);
+    else {
+      host.swapWorld(buildStoryWorld(VILLA_ID, true), VILLA_ID);
+      newWorldState();
+    }
     host.broadcast({ type: 'toast', text: 'Day lost' });
     sendState();
   };
@@ -294,7 +360,7 @@ export function createStoryDirector(host: StoryHost) {
   };
 
   const onSpot = (world: World, event: WorldEvent) => {
-    if (outing || !event.playerId || !event.spotId || !event.spotKind) return;
+    if (away || !event.playerId || !event.spotId || !event.spotKind) return;
     const id = character(event.playerId);
     if (!id) return;
     const spot = world.course.spots?.find((entry) => entry.id === event.spotId);
@@ -339,8 +405,10 @@ export function createStoryDirector(host: StoryHost) {
         return;
       }
       case 'gate': {
-        const goal = outingAtGate(dayOf(week!), week!.goals);
-        if (goal?.courseId) startOuting(goal.id, goal.courseId);
+        const outingGoal = outingAtGate(dayOf(week!), week!.goals);
+        if (outingGoal?.courseId) return startOuting(outingGoal.id, outingGoal.courseId);
+        const minigame = minigameAtGate(dayOf(week!), week!.goals);
+        if (minigame?.minigame === 'primegolf') startGolf(minigame.id);
         return;
       }
       case 'bed':
@@ -404,13 +472,20 @@ export function createStoryDirector(host: StoryHost) {
       touched = true;
       setGoals();
       newWorldState();
+      if (dayOf(week!).opening) enterOpening(0);
       sendState();
+    },
+
+    // The world the day starts in: the first of its opening, or the villa.
+    firstStage: (): { courseId: string; story: boolean } => {
+      const first = dayOf(week!).opening?.[0];
+      return first ? { courseId: first.courseId, story: false } : { courseId: VILLA_ID, story: true };
     },
 
     buildWorld: (courseId: string, story: boolean) => buildStoryWorld(courseId, story),
 
     // The friends nobody plays sit on the couch while the group is at the villa.
-    absent: (): CharacterId[] => (outing ? [] : CHARACTER_IDS.filter((id) => !present().includes(id))),
+    absent: (): CharacterId[] => (away ? [] : CHARACTER_IDS.filter((id) => !present().includes(id))),
 
     // The room is leaving the run (admin back to lobby, or the room is freed): the morning is kept.
     abandon() {
@@ -430,6 +505,7 @@ export function createStoryDirector(host: StoryHost) {
       } catch {
         // The player was not in the world; the week keeps what it has.
       }
+      if (away?.kind === 'golf') host.world().golfSkip(playerId);
       mirrored.delete(playerId);
       downedAt.delete(playerId);
       laptops.delete(playerId);
@@ -488,15 +564,23 @@ export function createStoryDirector(host: StoryHost) {
       return true;
     },
 
+    // PrimeGolf: a shot from the player on turn; false when refused.
+    golfShot(playerId: string, shot: { yaw: number; power: number; curve: number }): boolean {
+      if (!running || away?.kind !== 'golf' || golfLeaveIn !== null) return false;
+      return host.world().golfShot(playerId, shot);
+    },
+
     // After the world stepped; `events` are its events and `inputs` the ones it ran on.
     afterStep(world: World, events: readonly WorldEvent[], inputs: ReadonlyMap<string, InputFields>) {
       const w = week!;
-      w.clock += TICK_DT;
+      // The clock is paused in PrimeGolf.
+      if (away?.kind !== 'golf') w.clock += TICK_DT;
       ticks += 1;
       if (ticks % VIEW_EVERY_TICKS === 0) refreshView(world);
       for (const event of events) {
         if (event.kind === 'downed' && event.playerId) downedAt.set(event.playerId, week!.clock);
         else if ((event.kind === 'revive' || event.kind === 'respawn') && event.playerId) downedAt.delete(event.playerId);
+        else if (event.kind === 'golfEnd' && away?.kind === 'golf' && golfLeaveIn === null) golfOver(world);
         else if (event.kind === 'spot') {
           onSpot(world, event);
           // A goal done or a change of world: the rest of this tick's events belong to the old world.
@@ -516,7 +600,7 @@ export function createStoryDirector(host: StoryHost) {
           dirty = true;
         }
       }
-      if (ticks % NEEDS_EVERY_TICKS === 0) {
+      if (ticks % NEEDS_EVERY_TICKS === 0 && away?.kind !== 'golf') {
         stepNeedsNow(world, inputs);
         // A laptop session ends when the friend walks away.
         for (const [playerId, session] of laptops) {
@@ -528,8 +612,17 @@ export function createStoryDirector(host: StoryHost) {
       for (const [playerId, since] of downedAt) {
         if (week!.clock - since >= STORY_DOWN_LOSE_SECONDS && character(playerId)) return dayLost();
       }
-      if (outing) {
-        // One return per tick: a win and night at once is a single trip home.
+      if (away?.kind === 'golf') {
+        if (golfLeaveIn !== null) {
+          golfLeaveIn -= TICK_DT;
+          if (golfLeaveIn <= 1e-9) return goToVilla(world);
+        }
+      } else if (away?.kind === 'opening') {
+        // One move per tick: a win and night at once is a single step.
+        if (world.status().state === 'won') return openingDone(world);
+        // Night: the group goes to the villa and the rest of the opening counts as missed.
+        if (week!.clock >= STORY_DAY_SECONDS) return returnToVilla(false, world);
+      } else if (away) {
         if (world.status().state === 'won') return returnToVilla(true, world);
         if (week!.clock >= STORY_DAY_SECONDS) return returnToVilla(false, world);
       } else {

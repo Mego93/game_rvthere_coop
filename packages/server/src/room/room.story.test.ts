@@ -2,11 +2,16 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import {
   CHARACTER_IDS,
   GUN_DAMAGE,
+  GOLF_SCOREBOARD_SECONDS,
   NEUTRAL_INPUT,
+  STORY_DAYS,
   STORY_DAY_SECONDS,
+  STORY_DOWN_LOSE_SECONDS,
   TICK_DT,
   defaultAppearance,
   getCourse,
+  golfResults,
+  goalDone,
   newWeek,
   parseWeek,
   serialiseWeek,
@@ -47,11 +52,13 @@ const SPOTS: Spot[] = [
 ];
 
 // Small stand-ins: the villa has spots and no finish near the players; the desert is won on its first tick when `finishing`.
-function courses(finishing: boolean): Record<string, BuiltCourse> {
+function courses(finishing: boolean, realArrival = false): Record<string, BuiltCourse> {
   const finish = finishing ? { center: base.checkpoints[0]!.spawn.pos, halfExtents: vec3(20, 20, 20), rot: IDENTITY } : base.finish;
   return {
     villa: { ...base, id: 'villa', pickups: [], spots: SPOTS },
     desert: { ...base, id: 'desert', pickups: [], finish },
+    'airport-home': { ...base, id: 'airport-home', pickups: [] },
+    ...(realArrival ? {} : { arrival: { ...base, id: 'arrival', pickups: [] } }),
   };
 }
 
@@ -64,6 +71,9 @@ interface Options {
   noun?: string;
   random?: () => number;
   failLoad?: boolean;
+  // Plays the real day 1 (Sunday); otherwise day 1 is the test day.
+  sunday?: boolean;
+  realArrival?: boolean;
 }
 
 async function setup(options: Options = {}) {
@@ -73,7 +83,7 @@ async function setup(options: Options = {}) {
   if (options.raw !== undefined) await store.save(noun, options.raw);
   const logs: string[] = [];
   const loading: WeekStore = options.failLoad ? { load: () => Promise.reject(new Error('disk')), save: (n, j) => store.save(n, j) } : store;
-  const room = createRoom(RAPIER, { noun, courses: courses(options.outingFinishes ?? false), weekStore: loading, random: options.random ?? (() => 0), log: (message) => logs.push(message) }, 0);
+  const room = createRoom(RAPIER, { noun, courses: courses(options.outingFinishes ?? false, options.realArrival), ...(options.sunday ? {} : { days: { 1: STORY_DAYS[0]! } }), weekStore: loading, random: options.random ?? (() => 0), log: (message) => logs.push(message) }, 0);
   let time = 0;
   const messages: ServerMessage[] = [];
   const characters = options.characters ?? ['sounile'];
@@ -109,6 +119,12 @@ async function setup(options: Options = {}) {
   };
   const ofType = <T extends ServerMessage['type']>(type: T) => messages.filter((message): message is Extract<ServerMessage, { type: T }> => message.type === type);
   const lastOf = <T extends ServerMessage['type']>(type: T) => ofType(type)[ofType(type).length - 1]!;
+  // The current world reports its stage as won from now on.
+  const win = () => {
+    const current = room.debugWorld()!;
+    const status = current.status.bind(current);
+    current.status = () => ({ ...status(), state: 'won' });
+  };
   const emit = (player: RoomPlayer, spotId: string) => {
     const kind = SPOTS.find((entry) => entry.id === spotId)!.kind;
     pending.push({ kind: 'spot', tick: 0, playerId: player.playerId, spotId, spotKind: kind });
@@ -125,7 +141,7 @@ async function setup(options: Options = {}) {
   };
   room.announce();
   run(2);
-  return { room, store, noun, logs, players, admin, messages, run, ofType, lastOf, emit, at, week, friend, enterStory, holding, pending, time: () => time };
+  return { room, store, noun, logs, players, admin, messages, run, ofType, lastOf, win, emit, at, week, friend, enterStory, holding, pending, time: () => time };
 }
 
 const seeded = (change: (w: Week) => void): Week => {
@@ -767,5 +783,305 @@ test('story: restartCourse is refused, toLobby keeps the morning, and a joiner m
   expect(ctx.room.debugWorld()!.debugPlayerHealth(luiz.playerId)).toBeCloseTo(60, 0);
   expect(ctx.friend('luiz').food).toBeCloseTo(33, 0);
   expect(CHARACTER_IDS.includes('luiz')).toBe(true);
+  ctx.room.dispose();
+});
+
+// --- S8: Sunday (step 41b) ---
+
+const stages = (ctx: Awaited<ReturnType<typeof setup>>) => ctx.ofType('stage').map((message) => message.courseId);
+const statusOf = (ctx: Awaited<ReturnType<typeof setup>>, goalId: string) => ctx.week().goals.find((goal) => goal.id === goalId)!.status;
+
+async function toSundayVilla(options: Options = {}) {
+  const ctx = await setup({ sunday: true, ...options });
+  await ctx.enterStory();
+  ctx.win();
+  ctx.run(2);
+  ctx.win();
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  return ctx;
+}
+
+test('S8: Sunday opens on foot, then by road, then at the villa, marking each goal done', async () => {
+  const ctx = await setup({ sunday: true });
+  await ctx.enterStory();
+  expect(ctx.room.debugWorld()!.course.id).toBe('arrival');
+  expect(ctx.week().goals.map((goal) => [goal.id, goal.status])).toEqual([['arrive', 'pending'], ['driveHome', 'pending'], ['tajine', 'pending'], ['primegolf', 'pending']]);
+  ctx.run(30);
+  expect(ctx.room.debugWorld()!.course.id).toBe('arrival');
+  ctx.win();
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('airport-home');
+  expect(statusOf(ctx, 'arrive')).toBe('done');
+  expect(statusOf(ctx, 'driveHome')).toBe('pending');
+  ctx.run(30);
+  expect(ctx.room.debugWorld()!.course.id).toBe('airport-home');
+  ctx.win();
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  expect(statusOf(ctx, 'driveHome')).toBe('done');
+  expect(stages(ctx)).toEqual(['arrival', 'airport-home', 'villa']);
+  expect(ctx.lastOf('storyState').goals.map((goal) => [goal.id, goal.status])).toEqual([['arrive', 'done'], ['driveHome', 'done'], ['tajine', 'pending'], ['primegolf', 'pending']]);
+  ctx.room.dispose();
+});
+
+test('S8: the real arrival is built with enemies and its on-foot finish ends the opening when the friend walks in', async () => {
+  const ctx = await setup({ sunday: true, realArrival: true });
+  await ctx.enterStory();
+  const world = ctx.room.debugWorld()!;
+  expect(world.course.id).toBe('arrival');
+  expect(world.course.finishBy).toBe('players');
+  ctx.run(30);
+  expect(world.status().state).toBe('running');
+  world.teleportPlayer(ctx.players[0]!.playerId, world.course.finish.center);
+  ctx.run(10);
+  expect(ctx.room.debugWorld()!.course.id).toBe('airport-home');
+  expect(statusOf(ctx, 'arrive')).toBe('done');
+  ctx.room.dispose();
+});
+
+test('S8: losing the day in an opening restarts it at the arrival with the morning week', async () => {
+  const ctx = await setup({ sunday: true, characters: ['sounile', 'luiz'] });
+  await ctx.enterStory();
+  ctx.win();
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('airport-home');
+  expect(statusOf(ctx, 'arrive')).toBe('done');
+  ctx.pending.push({ kind: 'downed', tick: 0, playerId: ctx.players[1]!.playerId });
+  ctx.run((STORY_DOWN_LOSE_SECONDS + 2) * 60);
+  expect(ctx.ofType('toast').map((message) => message.text)).toContain('Day lost');
+  expect(ctx.room.debugWorld()!.course.id).toBe('arrival');
+  expect(stages(ctx)).toEqual(['arrival', 'airport-home', 'arrival']);
+  expect(ctx.week().goals.map((goal) => goal.status)).toEqual(['pending', 'pending', 'pending', 'pending']);
+  expect(ctx.week().clock).toBeLessThan(2);
+  // The new arrival opens the day again.
+  ctx.win();
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('airport-home');
+  ctx.room.dispose();
+});
+
+test('S8: night falling in the first opening world sends the group to the villa with both opening goals missed', async () => {
+  const ctx = await setup({ sunday: true, week: seeded((w) => { w.clock = STORY_DAY_SECONDS - 0.001; }) });
+  await ctx.enterStory();
+  expect(ctx.room.debugWorld()!.course.id).toBe('arrival');
+  ctx.run(3);
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  expect(stages(ctx)).toEqual(['arrival', 'villa']);
+  expect(statusOf(ctx, 'arrive')).toBe('pending');
+  expect(statusOf(ctx, 'driveHome')).toBe('pending');
+  ctx.run(3);
+  expect(ctx.ofType('toast').filter((message) => message.text === 'Go to bed')).toHaveLength(1);
+  // The opening does not restart: the group stays at the villa and sleeps.
+  expect(stages(ctx)).toEqual(['arrival', 'villa']);
+  ctx.emit(ctx.players[0]!, 'bed-1');
+  ctx.run(2);
+  expect(ctx.room.phase()).toBe('lobby');
+  expect(ctx.lastOf('daySummary')).toEqual({ type: 'daySummary', day: 1, done: [], missed: ['arrive', 'driveHome', 'tajine', 'primegolf'], skipped: [] });
+  ctx.room.dispose();
+});
+
+test('S8: night falling on the drive home keeps the arrival done and counts the drive as missed', async () => {
+  const ctx = await setup({ sunday: true, week: seeded((w) => { w.clock = STORY_DAY_SECONDS - 5; }) });
+  await ctx.enterStory();
+  ctx.win();
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('airport-home');
+  ctx.run(6 * 60);
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  expect(stages(ctx)).toEqual(['arrival', 'airport-home', 'villa']);
+  expect(statusOf(ctx, 'arrive')).toBe('done');
+  expect(statusOf(ctx, 'driveHome')).toBe('pending');
+  ctx.emit(ctx.players[0]!, 'bed-1');
+  ctx.run(5);
+  expect(ctx.lastOf('daySummary')).toMatchObject({ done: ['arrive'], missed: ['driveHome', 'tajine', 'primegolf'] });
+  ctx.room.dispose();
+});
+
+test('S8: the tajine is a free meal for every present friend when they eat together', async () => {
+  const ctx = await toSundayVilla({ characters: ['sounile', 'luiz'] });
+  const [p1, p2] = ctx.players;
+  ctx.week().friends.sounile.cash = 50;
+  ctx.week().friends.luiz.cash = 9;
+  ctx.week().friends.luiz.food = 10;
+  ctx.week().friends.luiz.happiness = 40;
+  const happinessBefore = ctx.friend('luiz').happiness;
+  // Luiz is away from the kitchen: the tajine is not eaten together.
+  ctx.at(p1!, 'kitchen-1');
+  ctx.at(p2!, 'gate-1');
+  ctx.emit(p1!, 'kitchen-1');
+  ctx.run(2);
+  expect(statusOf(ctx, 'tajine')).toBe('pending');
+  expect(ctx.friend('luiz').food).toBeLessThan(12);
+  ctx.at(p2!, 'kitchen-1');
+  ctx.week().friends.sounile.cash = 50;
+  ctx.emit(p1!, 'kitchen-1');
+  ctx.run(2);
+  expect(statusOf(ctx, 'tajine')).toBe('done');
+  expect(ctx.friend('luiz').food).toBeGreaterThan(55);
+  expect(ctx.friend('luiz').happiness).toBeGreaterThan(happinessBefore + 9);
+  expect(ctx.friend('luiz').cash).toBe(9);
+  expect(ctx.friend('luiz').items).toEqual([]);
+  ctx.room.dispose();
+});
+
+async function toGolf(characters: CharacterId[] = ['sounile', 'luiz']) {
+  const ctx = await toSundayVilla({ characters });
+  const [p1] = ctx.players;
+  // The gate does nothing before the tajine.
+  ctx.at(p1!, 'gate-1');
+  ctx.emit(p1!, 'gate-1');
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  ctx.week().friends.sounile.cash = 50;
+  for (const player of ctx.players) ctx.at(player, 'kitchen-1');
+  ctx.emit(p1!, 'kitchen-1');
+  ctx.run(2);
+  expect(statusOf(ctx, 'tajine')).toBe('done');
+  ctx.emit(p1!, 'gate-1');
+  ctx.run(2);
+  return ctx;
+}
+
+const playerOf = (ctx: Awaited<ReturnType<typeof setup>>, id: CharacterId) => ctx.players.find((player) => player.appearance.characterId === id)!;
+const golfOf = (ctx: Awaited<ReturnType<typeof setup>>) => ctx.room.debugWorld()!.golfState()!;
+
+test('S8: the gate starts PrimeGolf only after the tajine, with no drive, and starts the game for the present friends', async () => {
+  const ctx = await toGolf();
+  expect(ctx.room.debugWorld()!.course.id).toBe('primegolf');
+  expect(stages(ctx)).toEqual(['arrival', 'airport-home', 'villa', 'primegolf']);
+  const state = golfOf(ctx);
+  expect(state.order).toEqual(CHARACTER_IDS.filter((id) => id === 'sounile' || id === 'luiz'));
+  expect(Object.values(state.left)).toEqual([6, 6]);
+  expect(ctx.room.debugWorld()!.snapshot().golf?.turn).toBe(state.order[0]);
+  expect(statusOf(ctx, 'primegolf')).toBe('pending');
+  ctx.room.dispose();
+});
+
+test('S8: the clock is paused in PrimeGolf and runs again at the villa', async () => {
+  const ctx = await toGolf();
+  const clock = ctx.week().clock;
+  ctx.run(300);
+  expect(ctx.week().clock).toBe(clock);
+  ctx.room.dispose();
+});
+
+test('S8: a shot from a friend not on turn, or outside golf, is ignored; the friend on turn can shoot', async () => {
+  const ctx = await toSundayVilla({ characters: ['sounile', 'luiz'] });
+  const [p1] = ctx.players;
+  // No golf at the villa: nothing happens, nothing throws.
+  ctx.room.golfShot(p1!, { yaw: 0, power: 1, curve: 0 });
+  ctx.run(2);
+  const golf = await toGolf();
+  const state = golfOf(golf);
+  const other = playerOf(golf, state.order[1]!);
+  const onTurn = playerOf(golf, state.order[0]!);
+  golf.room.golfShot(other, { yaw: 0, power: 1, curve: 0 });
+  golf.run(3);
+  expect(golf.room.debugWorld()!.snapshot().golf?.ball).toBeNull();
+  expect(golfOf(golf).turn).toBe(state.order[0]);
+  golf.room.golfShot(onTurn, { yaw: 0, power: 0.3, curve: 0 });
+  golf.run(3);
+  expect(golf.room.debugWorld()!.snapshot().golf?.ball).not.toBeNull();
+  // The ball is in play: a second shot is refused too.
+  golf.room.golfShot(onTurn, { yaw: 0, power: 0.3, curve: 0 });
+  golf.run(400);
+  expect(golfOf(golf).scores[state.order[0]!]).toHaveLength(1);
+  expect(golfOf(golf).turn).toBe(state.order[1]);
+  ctx.room.dispose();
+  golf.room.dispose();
+});
+
+// The ring 'red' lies 20 m ahead and 12 m to the right: this shot lands in it.
+const RED_SHOT = { yaw: -Math.atan2(12, 20), power: 0.36, curve: 0 };
+
+// Plays the game to its end: the first friend aims at the red ring, the others drop the ball at the tee.
+async function playGolf(ctx: Awaited<ReturnType<typeof setup>>) {
+  const first = golfOf(ctx).order[0]!;
+  for (let balls = 0; balls < 40; balls += 1) {
+    const turn = golfOf(ctx).turn;
+    if (turn === null) break;
+    // The last ball stays on the scoreboard before the next can be hit.
+    for (let t = 0; t < 400 && ctx.room.debugWorld()!.snapshot().golf?.ball !== null; t += 1) ctx.run(1);
+    ctx.room.golfShot(playerOf(ctx, turn), turn === first ? RED_SHOT : { yaw: 0, power: 0, curve: 0 });
+    for (let t = 0; t < 600 && golfOf(ctx).turn === turn; t += 1) ctx.run(1);
+  }
+  return golfOf(ctx);
+}
+
+test('S8: a full two-player golf game applies the results, completes the goal and returns the group to the villa', async () => {
+  const ctx = await toGolf();
+  for (const player of ctx.players) ctx.week().friends[player.appearance.characterId].happiness = 20;
+  const before = JSON.parse(JSON.stringify(ctx.week())) as Week;
+  const first = golfOf(ctx).order[0]!;
+  const second = golfOf(ctx).order[1]!;
+  const ended = await playGolf(ctx);
+  expect(ended.turn).toBeNull();
+  expect(ended.scores[first]).toHaveLength(6);
+  expect(ended.scores[second]).toEqual([0, 0, 0, 0, 0, 0]);
+  expect(ended.scores[first]!.every((points) => points >= 10)).toBe(true);
+  // The scoreboard shows before the group leaves.
+  expect(ctx.room.debugWorld()!.course.id).toBe('primegolf');
+  ctx.run(Math.ceil((GOLF_SCOREBOARD_SECONDS + 1) * 60));
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  expect(stages(ctx).slice(-2)).toEqual(['primegolf', 'villa']);
+  expect(statusOf(ctx, 'primegolf')).toBe('done');
+  const expected = goalDone(golfResults(ended, before), 'primegolf', [first, second]);
+  for (const id of [first, second]) {
+    expect(ctx.friend(id).happiness).toBeCloseTo(expected.friends[id].happiness, 3);
+    expect(ctx.friend(id).cash).toBe(expected.friends[id].cash);
+  }
+  // The best player gained happiness, the worst paid from his cash.
+  expect(ctx.friend(first).happiness).toBeGreaterThanOrEqual(before.friends[first].happiness + 15);
+  expect(ctx.friend(second).cash).toBe(Math.max(0, before.friends[second].cash - 30));
+  // The clock runs again.
+  const clock = ctx.week().clock;
+  ctx.run(60);
+  expect(ctx.week().clock).toBeGreaterThan(clock);
+  // The game is over: the gate does not start it again.
+  ctx.emit(ctx.players[0]!, 'gate-1');
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  ctx.room.dispose();
+});
+
+test('S8: a friend who disconnects mid-golf has his remaining balls skipped and keeps his score', async () => {
+  const ctx = await toGolf();
+  const state = golfOf(ctx);
+  const [a, b] = state.order as [CharacterId, CharacterId];
+  ctx.room.golfShot(playerOf(ctx, a), { yaw: 0, power: 0, curve: 0 });
+  ctx.run(240);
+  expect(golfOf(ctx).scores[a]).toHaveLength(1);
+  expect(golfOf(ctx).turn).toBe(b);
+  // The friend on turn leaves: his balls go, the turn passes.
+  ctx.room.hold(playerOf(ctx, b), ctx.time());
+  expect(golfOf(ctx).left[b]).toBe(0);
+  expect(golfOf(ctx).turn).toBe(a);
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('primegolf');
+  // The one left plays on alone and the game ends after his balls.
+  for (let i = 0; i < 6 && ctx.room.debugWorld()!.course.id === 'primegolf'; i += 1) {
+    ctx.room.golfShot(playerOf(ctx, a), { yaw: 0, power: 0, curve: 0 });
+    ctx.run(240);
+  }
+  ctx.run(Math.ceil((GOLF_SCOREBOARD_SECONDS + 1) * 60));
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  expect(statusOf(ctx, 'primegolf')).toBe('done');
+  ctx.room.dispose();
+});
+
+test('S8: when everyone leaves mid-golf the game is over, the room waits, and a returning friend finds the group back at the villa', async () => {
+  const ctx = await toGolf();
+  const [p1, p2] = ctx.players;
+  ctx.room.hold(p1!, ctx.time());
+  ctx.room.hold(p2!, ctx.time());
+  expect(golfOf(ctx).turn).toBeNull();
+  ctx.run(120);
+  expect(ctx.room.debugWorld()!.course.id).toBe('primegolf');
+  expect(ctx.room.phase()).toBe('playing');
+  ctx.room.rejoin(p1!, { send: () => {}, close: () => {} }, ctx.time());
+  ctx.run(Math.ceil((GOLF_SCOREBOARD_SECONDS + 1) * 60));
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  expect(statusOf(ctx, 'primegolf')).toBe('done');
   ctx.room.dispose();
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CHARACTER_IDS, type CharacterId } from '../characters';
 import { TAJINE_HEAL } from '../constants';
 import { COFFEE_FAST, FAKE_REPUBLIC_OUTCOMES, STORY_BANK_START, STORY_PRICES } from './constants';
-import { buy, complain, eat, endDay, fakeRepublic, goalDone, loseDay, newWeek, parseWeek, phoneBuy, sayPhrase, serialiseWeek, speedFactor, stepNeeds, vibecodeTick, withdraw, type Week } from './week';
+import { buy, complain, eat, endDay, fakeRepublic, freeMeal, goalDone, loseDay, newWeek, parseWeek, phoneBuy, sayPhrase, serialiseWeek, speedFactor, stepNeeds, vibecodeTick, withdraw, type Week } from './week';
 
 const ALL = CHARACTER_IDS;
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -244,6 +244,20 @@ describe('W5 interactions', () => {
     expect(done.friends.luiz.happiness).toBe(75);
     expect(done.friends.huu.happiness).toBe(70);
     expect(goalDone(done, 'eat', ['luiz']).friends.luiz.happiness).toBe(75);
+  });
+
+  it('freeMeal feeds the present friends for nothing, pizza for Nandan, and leaves the absent and the cash alone', () => {
+    const w = clone(newWeek());
+    for (const id of ALL) w.friends[id].food = 10;
+    w.friends.luiz.cash = 7;
+    const fed = freeMeal(w, ['luiz', 'nandan'], 'tajine');
+    expect(fed.friends.luiz.food).toBe(10 + 50);
+    expect(fed.friends.luiz.happiness).toBe(w.friends.luiz.happiness + 10);
+    expect(fed.friends.luiz.cash).toBe(7);
+    expect(fed.friends.luiz.items).toEqual([]);
+    expect(fed.friends.nandan.food).toBe(10 + 45);
+    expect(fed.friends.huu.food).toBe(10);
+    expect(w.friends.luiz.food).toBe(10);
   });
 });
 
