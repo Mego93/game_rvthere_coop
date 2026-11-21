@@ -74,6 +74,18 @@ describe('Sketchfab credits (step 33)', () => {
     expect(read('../../public/models/sketchfab/License.txt')).toContain('Minicab 2005 (modified) by own.guest');
   });
 
+  it('step 41: the laptop is credited as "Laptop (modified)", recoloured with the logo painted out, and the villa models are credited', () => {
+    for (const path of ['../../../../CREDITS.md', '../../public/CREDITS.md']) {
+      const lines = read(path).split('\n');
+      const laptop = lines.find((line) => line.includes('`laptop.glb`'))!;
+      expect(laptop).toContain('"Laptop (modified)" by senthil123 (https://sketchfab.com/senthil123)');
+      expect(laptop).toContain('recoloured');
+      expect(laptop).toContain('logo');
+      for (const file of ['couch.glb', 'kitchen-island.glb', 'dining-set.glb', 'bed.glb', 'pool-lounger.glb', 'parasol.glb', 'atm.glb', 'shop-kiosk.glb', 'tennis-court-net.glb', 'treadmill.glb']) expect(lines.find((line) => line.includes(`\`${file}\``)), file).toContain('CC BY 4.0');
+    }
+    expect(read('../../public/models/sketchfab/License.txt')).toContain('Laptop (modified) by senthil123');
+  });
+
   it('every Sketchfab model is in the folder License.txt, and the served credits list the two new skies', () => {
     const licence = read('../../public/models/sketchfab/License.txt');
     for (const file of files) expect(licence, file).toContain(`File: ${file}`);

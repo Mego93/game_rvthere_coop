@@ -61,6 +61,17 @@ describe('step 40 models', () => {
   });
 });
 
+describe('step 41 models', () => {
+  it('the villa furniture and outdoor models are manifest keys in the sketchfab pack', () => {
+    const files = { 'villa.couch': 'couch', 'villa.kitchenIsland': 'kitchen-island', 'villa.diningSet': 'dining-set', 'villa.bed': 'bed', 'villa.laptop': 'laptop', 'villa.lounger': 'pool-lounger', 'villa.parasol': 'parasol', 'villa.atm': 'atm', 'villa.kiosk': 'shop-kiosk', 'villa.court': 'tennis-court-net', 'villa.treadmill': 'treadmill' } as const;
+    for (const [key, name] of Object.entries(files)) {
+      const entry = MODEL_MANIFEST[key as keyof typeof files];
+      expect(entry.file, key).toBe(`sketchfab/${name}.glb`);
+      expect(entry.pack, key).toBe('sketchfab');
+    }
+  });
+});
+
 describe('character fit', () => {
   it('T9: the character is fitted to the player height, not a literal', () => {
     expect(MODEL_MANIFEST['character.player'].targetSize).toBe(PLAYER_HEIGHT);
