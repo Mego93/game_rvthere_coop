@@ -86,8 +86,10 @@ export interface SegmentExtras {
 }
 
 export type Hazard =
-  | { kind: 'gates'; along: number; count: number }
-  | { kind: 'crateWall'; along: number }
+  // `first` is the side of the first barrier (default -1, left); the rest alternate.
+  | { kind: 'gates'; along: number; count: number; first?: -1 | 1 }
+  // The crates fill the right of the road, or the left with `side` -1.
+  | { kind: 'crateWall'; along: number; side?: -1 | 1 }
   | { kind: 'roadblock'; along: number }
   // A ground patch covering the road and both shoulders that slows vehicles; static, never in a snapshot.
   | { kind: 'mud'; along: number; length: number }
@@ -97,15 +99,18 @@ export type Hazard =
 export type SegmentDef =
   | ({ type: 'road'; length: number; curve?: number; slope?: number; debris?: number; hazards?: Hazard[]; surface?: 'road' | 'dirt'; bumps?: number } & SegmentExtras)
   | ({ type: 'alley'; length: number; clutter: number } & SegmentExtras)
-  | ({ type: 'sand'; length: number; palms: number } & SegmentExtras)
+  // `reversed` puts the sand first and the apron last, for a road driven the other way.
+  | ({ type: 'sand'; length: number; palms: number; reversed?: true } & SegmentExtras)
   | ({ type: 'ford'; width: number; rocks: number } & SegmentExtras)
   // A bank's own `anchors` count takes the place of the extras' anchor list.
-  | ({ type: 'bank'; height: number; gradient: number; anchors: number } & Omit<SegmentExtras, 'anchors'>)
+  // `reversed` is the bank driven down: the top first, then the descent, then the flat approach.
+  | ({ type: 'bank'; height: number; gradient: number; anchors: number; reversed?: true } & Omit<SegmentExtras, 'anchors'>)
   // A pit descends `depth` at `gradient`, runs flat for `floor`, climbs out at `gradientOut` (default `gradient`); its `anchors` count replaces the extras' list.
   | ({ type: 'pit'; depth: number; gradient: number; gradientOut?: number; floor: number; anchors: number } & Omit<SegmentExtras, 'anchors'>)
   | ({ type: 'roadworks'; length: number; obstacles: number } & SegmentExtras)
   // A flat deck with railings over a ravine; `broken` puts the deep pit's profile in the middle, so a vehicle needs the winch.
-  | ({ type: 'bridge'; length: number; broken?: true } & SegmentExtras);
+  // `reversed` (broken only) swaps the two gradients of the broken profile.
+  | ({ type: 'bridge'; length: number; broken?: true; reversed?: true } & SegmentExtras);
 
 export interface SurfacePoint {
   pos: Vec3;
@@ -370,7 +375,8 @@ function placeHazard(h: Hazard, surfaceAt: (along: number) => SurfacePoint, id: 
     pose: { pos: offsetFrom(s, lateral), rot: yawPitchQuat(s.yaw, s.pitch) },
   });
   if (h.kind === 'gates') {
-    for (let i = 0; i < h.count; i++) props.push(barrier(surfaceAt(h.along + i * GATES_SPACING), (i % 2 === 0 ? -1 : 1) * GATES_OFFSET));
+    const first = h.first ?? -1;
+    for (let i = 0; i < h.count; i++) props.push(barrier(surfaceAt(h.along + i * GATES_SPACING), (i % 2 === 0 ? first : -first) * GATES_OFFSET));
   } else if (h.kind === 'mud') {
     const s = surfaceAt(h.along + h.length / 2);
     ground.push({
@@ -390,7 +396,7 @@ function placeHazard(h: Hazard, surfaceAt: (along: number) => SurfacePoint, id: 
     const s = surfaceAt(h.along);
     for (const height of [0, 2 * PROP_KINDS.crate.halfExtents.y]) {
       for (const lateral of CRATE_WALL_LATERALS) {
-        props.push({ id: id('crate'), kind: 'crate', pose: { pos: offsetFrom(s, lateral, height), rot: yawPitchQuat(s.yaw, s.pitch) } });
+        props.push({ id: id('crate'), kind: 'crate', pose: { pos: offsetFrom(s, lateral * (h.side ?? 1), height), rot: yawPitchQuat(s.yaw, s.pitch) } });
       }
     }
   } else {
@@ -564,11 +570,15 @@ function buildAlley(def: Extract<SegmentDef, { type: 'alley' }>): LocalSegment {
 function buildSand(def: Extract<SegmentDef, { type: 'sand' }>): LocalSegment {
   checkLength(def.length, 'A sand segment');
   checkCount(def.palms, 'Palms');
-  const apron = roadPieces(SAND_APRON, 0, 0);
-  const last = apron[apron.length - 1]!;
-  const start = endOf(last);
-  const sand: Piece = { start, yaw: 0, pitch: 0, length: def.length, alongStart: routeLengthOf(apron), horizontal: def.length, surface: 'sand' };
-  const pieces = [...apron, sand];
+  let pieces: Piece[];
+  if (def.reversed) {
+    const sand: Piece = { start: vec3(0, 0, 0), yaw: 0, pitch: 0, length: def.length, alongStart: 0, horizontal: def.length, surface: 'sand' };
+    pieces = [sand, ...roadPieces(SAND_APRON, 0, 0, 'road', sand)];
+  } else {
+    const apron = roadPieces(SAND_APRON, 0, 0);
+    const start = endOf(apron[apron.length - 1]!);
+    pieces = [...apron, { start, yaw: 0, pitch: 0, length: def.length, alongStart: routeLengthOf(apron), horizontal: def.length, surface: 'sand' }];
+  }
   const routeLength = routeLengthOf(pieces);
   const surfaceAt = surfaceOnPieces(pieces);
   const id = idCounter();
@@ -579,7 +589,8 @@ function buildSand(def: Extract<SegmentDef, { type: 'sand' }>): LocalSegment {
       pose: { pos: offsetFrom(surfaceAt(slot.along), slot.side * (ROAD_WIDTH / 2 + PALM_OFFSET)), rot: yawQuat(0) },
     }),
   );
-  return finish(pieces, { ground: [...roadBoxes(pieces, false), ...shoulderBoxes(pieces, 0)], walls: [], props: [], anchors, decor: [], width: ROAD_WIDTH }, def, id);
+  const { reversed: _reversed, ...extras } = def;
+  return finish(pieces, { ground: [...roadBoxes(pieces, false), ...shoulderBoxes(pieces, 0)], walls: [], props: [], anchors, decor: [], width: ROAD_WIDTH }, extras, id);
 }
 
 function buildFord(def: Extract<SegmentDef, { type: 'ford' }>): LocalSegment {
@@ -611,21 +622,32 @@ function buildBank(def: Extract<SegmentDef, { type: 'bank' }>): LocalSegment {
   if (!(def.height > 0)) throw new Error('A bank needs a positive height');
   checkCount(def.anchors, 'Bank anchors');
   if (!(def.gradient > 0 && def.gradient < 90)) throw new Error('A bank needs a gradient between 0 and 90 degrees');
-  const approach = roadPieces(BANK_APPROACH, 0, 0);
-  const ramp = roadPieces(def.height / Math.sin(degToRad(def.gradient)), 0, def.gradient, 'gravel', approach[approach.length - 1]);
-  const top = roadPieces(BANK_TOP, 0, 0, 'road', ramp[ramp.length - 1]);
-  const pieces = [...approach, ...ramp, ...top];
+  let pieces: Piece[];
+  let topStart: number;
+  if (def.reversed) {
+    const top = roadPieces(BANK_TOP, 0, 0);
+    const ramp = roadPieces(def.height / Math.sin(degToRad(def.gradient)), 0, -def.gradient, 'gravel', top[top.length - 1]);
+    pieces = [...top, ...ramp, ...roadPieces(BANK_APPROACH, 0, 0, 'road', ramp[ramp.length - 1])];
+    topStart = 0;
+  } else {
+    const approach = roadPieces(BANK_APPROACH, 0, 0);
+    const ramp = roadPieces(def.height / Math.sin(degToRad(def.gradient)), 0, def.gradient, 'gravel', approach[approach.length - 1]);
+    const top = roadPieces(BANK_TOP, 0, 0, 'road', ramp[ramp.length - 1]);
+    pieces = [...approach, ...ramp, ...top];
+    topStart = top[0]!.alongStart;
+  }
   const surfaceAt = surfaceOnPieces(pieces);
-  const topStart = top[0]!.alongStart;
   const id = idCounter();
-  // Boulders alternate sides; each further pair sits further on.
+  // Boulders alternate sides; each further pair sits further on (counted from the far end of the top when the bank is driven down).
   const anchors = Array.from({ length: def.anchors }, (_, i): Placed => {
     const side = i % 2 === 0 ? -1 : 1;
-    const along = topStart + BOULDER_FIRST_ALONG + BOULDER_PAIR_SPACING * Math.floor(i / 2);
-    if (along > topStart + BANK_TOP) throw new Error('Too many boulders for the top of the bank');
-    return { id: id('boulder'), kind: 'boulder', pose: { pos: offsetFrom(surfaceAt(along), side * (ROAD_WIDTH / 2 - BOULDER_EDGE_INSET)), rot: yawQuat(0) } };
+    const run = BOULDER_FIRST_ALONG + BOULDER_PAIR_SPACING * Math.floor(i / 2);
+    if (run > BANK_TOP) throw new Error('Too many boulders for the top of the bank');
+    const along = def.reversed ? topStart + BANK_TOP - run : topStart + run;
+    const lateral = (def.reversed ? -side : side) * (ROAD_WIDTH / 2 - BOULDER_EDGE_INSET);
+    return { id: id('boulder'), kind: 'boulder', pose: { pos: offsetFrom(surfaceAt(along), lateral), rot: yawQuat(0) } };
   });
-  const { anchors: _count, ...extras } = def;
+  const { anchors: _count, reversed: _reversed, ...extras } = def;
   return finish(pieces, { ground: [...roadBoxes(pieces, false), ...shoulderBoxes(pieces, 0)], walls: [], props: [], anchors, decor: [], width: ROAD_WIDTH }, extras, id);
 }
 
@@ -703,8 +725,9 @@ function buildBridge(def: Extract<SegmentDef, { type: 'bridge' }>): LocalSegment
   let pieces: Piece[];
   const anchors: Placed[] = [];
   if (def.broken) {
-    const { depth, gradient, floor: floorLength, anchors: count } = DEEP_PIT;
-    const gradientOut = DEEP_PIT.gradientOut ?? gradient;
+    const { depth, floor: floorLength, anchors: count } = DEEP_PIT;
+    const deepOut = DEEP_PIT.gradientOut ?? DEEP_PIT.gradient;
+    const [gradient, gradientOut] = def.reversed ? [deepOut, DEEP_PIT.gradient] : [DEEP_PIT.gradient, deepOut];
     const core = depth / Math.tan(degToRad(gradient)) + floorLength + depth / Math.tan(degToRad(gradientOut));
     const approachLength = def.length - core - PIT_EXIT;
     if (approachLength < PIT_APPROACH) throw new Error(`A broken bridge must be at least ${PIT_APPROACH + core + PIT_EXIT} m`);
@@ -724,8 +747,29 @@ function buildBridge(def: Extract<SegmentDef, { type: 'bridge' }>): LocalSegment
   } else {
     pieces = roadPieces(def.length, 0, 0);
   }
-  const { broken: _broken, ...extras } = def;
+  const { broken: _broken, reversed: _reversed, ...extras } = def;
   return finish(pieces, { ground: roadBoxes(pieces, false), walls: railBoxes(pieces), props: [], anchors, decor: [], width: ROAD_WIDTH }, extras, id);
+}
+
+// The along range (m, horizontal) that the extras of a segment are placed in: the same as the surfaceAt domain of its built segment.
+export function segmentAlongLength(def: SegmentDef): number {
+  const run = (depth: number, gradient: number): number => depth / Math.tan(degToRad(gradient));
+  switch (def.type) {
+    case 'road':
+      return def.length * Math.cos(degToRad(def.slope ?? 0));
+    case 'alley':
+    case 'roadworks':
+    case 'bridge':
+      return def.length;
+    case 'sand':
+      return SAND_APRON + def.length;
+    case 'ford':
+      return def.width;
+    case 'bank':
+      return BANK_APPROACH + run(def.height, def.gradient) + BANK_TOP;
+    case 'pit':
+      return PIT_APPROACH + run(def.depth, def.gradient) + def.floor + run(def.depth, def.gradientOut ?? def.gradient) + PIT_EXIT;
+  }
 }
 
 export function buildSegment(def: SegmentDef): LocalSegment {
