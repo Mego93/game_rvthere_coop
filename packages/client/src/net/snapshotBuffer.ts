@@ -12,6 +12,7 @@ import {
   type PropSnapshot,
   type SnapshotMessage,
   type VehicleState,
+  type CharacterId,
   type WorldSnapshot,
 } from '@lodgy/shared';
 
@@ -30,6 +31,8 @@ export interface SnapshotBuffer {
   latestStatus(): RunStatus | null;
   // The ids of the coins still on the course as of the newest snapshot; empty before any.
   latestCoinsLeft(): string[];
+  // The friends nobody plays as of the newest snapshot (story mode); empty before any and outside the villa.
+  latestAbsent(): CharacterId[];
 }
 
 export interface RunStatus {
@@ -161,7 +164,7 @@ function blendPlayer(a: PlayerSnapshot | undefined, b: PlayerSnapshot, t: number
 
 export function createSnapshotBuffer(): SnapshotBuffer {
   // Oldest first. `time` is the server's clock at the snapshot's tick.
-  const entries: { time: number; snapshot: WorldSnapshot }[] = [];
+  const entries: { time: number; snapshot: WorldSnapshot & { absent?: CharacterId[] } }[] = [];
   // Server clock minus local clock, as estimated from arrival times.
   let offset: number | null = null;
   // Every prop as last told: a full snapshot replaces it, a partial one updates the props it lists.
@@ -216,6 +219,7 @@ export function createSnapshotBuffer(): SnapshotBuffer {
       return { elapsed, checkpoint, checkpointCount, restarts, respawns, won, wallet, coinsCollected, coinsTotal, assisted };
     },
     latestCoinsLeft: () => [...(entries[entries.length - 1]?.snapshot.coinsLeft ?? [])],
+    latestAbsent: () => [...(entries[entries.length - 1]?.snapshot.absent ?? [])],
     latestProps: () => (entries[entries.length - 1]?.snapshot.props ?? []).map(copyProp),
   };
 }

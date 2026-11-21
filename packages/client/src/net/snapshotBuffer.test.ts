@@ -486,3 +486,17 @@ test('step 39: enemies blend position and yaw by id, take the state of the newer
   buffer.push(withEnemies(12, undefined), 12 * TICK_DT);
   expect(buffer.sample(100)!.enemies).toEqual([]);
 });
+
+test('step 41: latestAbsent is empty before any snapshot and when none lists any, then the newest snapshot\'s friends as a copy', () => {
+  const buffer = createSnapshotBuffer();
+  expect(buffer.latestAbsent()).toEqual([]);
+  buffer.push(snapshot(1), 0);
+  expect(buffer.latestAbsent()).toEqual([]);
+  buffer.push({ ...snapshot(2), absent: ['rafael', 'huu'] }, 0.05);
+  const absent = buffer.latestAbsent();
+  expect(absent).toEqual(['rafael', 'huu']);
+  absent.push('luiz');
+  expect(buffer.latestAbsent()).toEqual(['rafael', 'huu']);
+  buffer.push({ ...snapshot(3), absent: [] }, 0.1);
+  expect(buffer.latestAbsent()).toEqual([]);
+});
