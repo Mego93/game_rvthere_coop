@@ -6,7 +6,7 @@ import { createItemDirector, markDropped, mixSeed, planItemDrops, rearmItems, st
 import { createAnimals, type Animals } from './animals';
 import { createEnemies, planEnemies, type Enemies, type EnemyEvent, type EnemySnapshot } from './enemies';
 import { hashSeed, planAmbient, type AmbientEvent, type AnimalSnapshot } from './ambient';
-import { boxesOverlap, enteredCheckpoint, recordState, type CheckpointRecord } from './checkpoints';
+import { boxesOverlap, enteredCheckpoint, insideBox, recordState, type CheckpointRecord } from './checkpoints';
 import { coinTouched } from './coins';
 import { DEFAULT_WEATHER, ENEMY_KNIFE_DAMAGE, ENEMY_SEED_SALT, ENEMY_VEHICLE_DAMAGE, GUN_DAMAGE, KOKE_MULTIPLIER, AMMO_BOX_ROUNDS, AMMO_MAX, GUN_COOLDOWN, GUN_RANGE, TREEDENT_SECONDS, KOKE_SECONDS, SHIELD_HP, SHIELD_SECONDS, TAJINE_HEAL, WEATHER_SEED_SALT, ANIMAL_HEALTH_FLOOR, ITEM_DROP_LIFT, ITEM_DROP_PROBE_LENGTH, ITEM_DROP_PROBE_UP, ANIMAL_HIT_DAMAGE, CORRIDOR_OOB_LANDING_OFFSET, CORRIDOR_OOB_STOP_CLEAR, CORRIDOR_OOB_PROBE_UP, OUT_OF_BOUNDS, DROP_HEIGHT, RAIN_GRIP, GRAVITY, SHOP_PRICES, STOP_OPERATE_RANGE, HEALTH_KIT_HEAL, ITEM_REFUEL, ITEM_REPAIR, PLAYER_KILL_RESPAWN_DELAY, PLAYER_MAX_HEALTH, PLAYER_RESTART_FLOOR, PLAYER_REVIVE_HEALTH, PUSH_MAX_PUSHERS_VEHICLE, RESET_HOLD, RESET_MAX_SPEED, RESET_TIPPED_UP_Y, RESTART_FLOOR, STUCK_DISTANCE, STUCK_WINDOW, TICK_DT, TICK_RATE, type Surface, type Weather, type WeatherSetting, type ShopItem } from './constants';
 import { weatherAt, weatherSchedule } from './weather';
@@ -215,7 +215,8 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const gripOf = (current: Weather): number => (current === 'rain' ? RAIN_GRIP : 1);
   const story = options.story === true;
   const holdDowned = options.holdDowned === true || story;
-  const vehicle = createVehicle(rapier, physics, story ? { ...vehicleConfig, fuelBurn: 0 } : vehicleConfig, start.spawn, statics.surfaceOf, { gripScale: gripOf(weather) });
+  const finishByPlayers = course.finishBy === 'players';
+  const vehicle = createVehicle(rapier, physics, story || finishByPlayers ? { ...vehicleConfig, fuelBurn: 0 } : vehicleConfig, start.spawn, statics.surfaceOf, { gripScale: gripOf(weather) });
   // Queries see nothing until the broad phase has run once, and spawn rays are cast before the first tick.
   physics.timestep = 0;
   physics.step();
@@ -243,6 +244,22 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const enemyField = (): { enemies?: EnemySnapshot[] } => {
     const list = enemies?.snapshot();
     return list ? { enemies: list } : {};
+  };
+  // Enemies follow the vehicle along the route; on an on-foot course the vehicle stays parked at the end, so they follow the alive player furthest back.
+  let lastFocus: Vec3 | null = null;
+  const enemyFocus = (): Vec3 => {
+    const parked = vehicle.body.translation();
+    if (!finishByPlayers || !routeIndex) return parked;
+    let back = Infinity;
+    for (const player of players.all()) {
+      if (player.seat !== null || player.downed !== null || player.respawnIn !== null || player.flying) continue;
+      const along = routeIndex.project(player.pos.x, player.pos.z).along;
+      if (along < back) {
+        back = along;
+        lastFocus = vec3(player.pos.x, player.pos.y, player.pos.z);
+      }
+    }
+    return lastFocus ?? parked;
   };
   // Knife damage found by the enemies, applied with the other damage of the tick.
   let knifeDamage: PendingDamage[] = [];
@@ -315,6 +332,12 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
     players.setFallbackSpawn(checkpoint.spawn.pos);
   };
   recordCheckpoint(0);
+
+  // An on-foot course is won when every alive present player stands in the finish box; with nobody alive it is not.
+  const playersInFinish = (): boolean => {
+    const alive = players.all().filter((player) => player.downed === null && player.respawnIn === null);
+    return alive.length > 0 && alive.every((player) => insideBox(player.pos, course.finish));
+  };
 
   const stepInputsFor = (inputs: ReadonlyMap<string, InputFields>): Map<string, StepInputs> => {
     const result = new Map<string, StepInputs>();
@@ -910,7 +933,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       }
     }
     animals?.rearm(vehicle.body.translation());
-    enemies?.rearm(vehicle.body.translation());
+    enemies?.rearm(enemyFocus());
     knifeDamage = [];
     rearmDrops();
     restarts += 1;
@@ -1002,7 +1025,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
           .all()
           .filter((player) => player.seat === null && player.downed === null && player.respawnIn === null && !player.flying)
           .map((player) => ({ id: player.id, feet: player.pos }));
-        for (const stab of enemies.step(vehicle.body.translation(), targets)) {
+        for (const stab of enemies.step(enemyFocus(), targets)) {
           knifeDamage.push({ playerId: stab.playerId, source: 'knife', amount: ENEMY_KNIFE_DAMAGE });
           events.push({ kind: 'stab', tick: tick + 1, playerId: stab.playerId, pos: stab.pos });
         }
@@ -1051,7 +1074,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         const restarting = vehicleLost(centre, vehicle.health(), course.killPlaneY) || belowWater(course, centre) || restartPending;
         restartPending = false;
         if (restarting) restart(events);
-        if (!story && reachedFinish(centre, course.finish, restarting)) won = true;
+        if (finishByPlayers ? !restarting && playersInFinish() : !story && reachedFinish(centre, course.finish, restarting)) won = true;
       }
       return events;
     },
@@ -1227,7 +1250,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
         }
       });
       animals?.rearm(vehicle.body.translation());
-      enemies?.rearm(vehicle.body.translation());
+      enemies?.rearm(enemyFocus());
       knifeDamage = [];
       rearmDrops();
       recordCheckpoint(next);

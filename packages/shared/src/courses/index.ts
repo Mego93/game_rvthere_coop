@@ -3,6 +3,7 @@ import type { BuiltCourse } from '../course';
 import { deepFreeze } from '../math';
 import { buildSegment, type SegmentDef } from '../segments';
 import { airport } from './airport';
+import { arrival } from './arrival';
 import { buildCourse, type CourseDef } from './build';
 import { segmentDemo } from './demo';
 import { marrakech } from './marrakech';
@@ -16,10 +17,11 @@ const COURSES: Record<string, BuiltCourse> = {
   [segmentDemo.id]: buildCourse(segmentDemo),
   [airport.id]: buildCourse(airport),
   [villa.id]: villa,
+  [arrival.id]: arrival,
 };
 
 // Courses that exist for the story and are not offered as a race.
-const STORY_ONLY = new Set([villa.id, 'airport-home']);
+const STORY_ONLY = new Set([villa.id, arrival.id, 'airport-home']);
 
 // Built on first use, so importing the package does not pay for the 22 km course.
 const LAZY: Record<string, () => CourseDef> = { ...stageDefs, [marrakech.id]: () => marrakech, 'airport-home': airportHomeDef };

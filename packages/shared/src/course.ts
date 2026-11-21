@@ -67,6 +67,10 @@ export interface BuiltCourse {
   ravines: { from: number; to: number }[];
   route: [x: number, z: number][];
   finish: Box;
+  // 'players': the world is won when every alive present player stands in `finish`, not when the vehicle does (an on-foot course, whose vehicle is parked in the finish; no fuel is used).
+  finishBy?: 'players';
+  // Where players start and respawn, instead of beside the vehicle; `yaw` turns the vehicle's spawn slots (an on-foot course).
+  playerStart?: { pos: Vec3; yaw: number };
   killPlaneY: number;
   targetTime: number;
   // Enemy plan inputs carried from the course def: the event multiplier, and the last share of the route with double events.

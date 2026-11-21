@@ -283,8 +283,8 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
   };
 
   // The feet for a spot on the ground under (x, z): found as in rule S1, or null if there is none, the capsule would overlap, or a wall lies between `from` and the spot.
-  const standingSpot = (x: number, z: number, from: Vec3): Vec3 | null => {
-    const groundY = groundBelow(x, z, vehicle.body.translation().y + SPAWN_RAY_HEIGHT);
+  const standingSpot = (x: number, z: number, from: Vec3, rayFromY = vehicle.body.translation().y): Vec3 | null => {
+    const groundY = groundBelow(x, z, rayFromY + SPAWN_RAY_HEIGHT);
     if (groundY === null) return null;
     const feet = vec3(x, groundY + PLAYER_CONTROLLER_OFFSET, z);
     if (overlapsAnything(feet)) return null;
@@ -294,17 +294,20 @@ export function createPlayers(rapier: Rapier, physics: RapierWorld, vehicle: Veh
   let fallbackSpawn = course.checkpoints[0]?.spawn.pos ?? vec3(0, 0, 0);
 
   const findSpawn = (forId: string | null): Vec3 => {
-    const body = vehicle.body.translation();
-    const turn = quatFromAxisAngle(AXIS_Y, yawOf(vehicle.body.rotation()));
+    // An on-foot course starts its players at its own start, the slots turned by its yaw, not beside the vehicle.
+    const start = course.playerStart;
+    const body = start?.pos ?? vehicle.body.translation();
+    const turn = quatFromAxisAngle(AXIS_Y, start ? start.yaw : yawOf(vehicle.body.rotation()));
     const others = [...entries.values()].filter(({ state }) => state.id !== forId && state.seat === null);
     for (const slot of vehicle.config.spawnSlots) {
       const at = add(body, rotate(turn, vec3(slot.x, 0, slot.z)));
-      const feet = standingSpot(at.x, at.z, body);
+      const feet = standingSpot(at.x, at.z, body, body.y);
       if (feet === null) continue;
       if (others.some(({ state }) => Math.hypot(state.pos.x - feet.x, state.pos.z - feet.z) < 2 * PLAYER_RADIUS)) continue;
       return feet;
     }
-    return vec3(fallbackSpawn.x, fallbackSpawn.y, fallbackSpawn.z);
+    const fallback = start?.pos ?? fallbackSpawn;
+    return vec3(fallback.x, fallback.y, fallback.z);
   };
 
   const findExit = (seat: SeatConfig): Vec3 | null => {
