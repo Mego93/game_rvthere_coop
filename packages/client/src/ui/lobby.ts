@@ -1,7 +1,7 @@
 import { CHAT_LIMIT, CHAT_FORM_STYLE, createChatForm, renderChatLines, type ChatLine, type SubmitResult } from './chat';
 import { CAMPAIGN, CHARACTER_IDS, ROOM_MODES, CHARACTER_NAMES, TIMES_OF_DAY, VEHICLE_IDS, WEATHER_SETTINGS, courseIds, defaultAppearance, getCourseDef, type Appearance, type LobbyMessage, type RoomSettings, type WeatherSetting } from '@lodgy/shared';
 import { OPTION_ROWS, createPickerState, optionText, portraitModel } from './characterPicker';
-import { dayTitle } from './story/summaryView';
+import { lobbyDayText } from './story/summaryView';
 
 export const VEHICLE_LABELS: Record<string, string> = { lodgy: 'Lodgy', rv: 'RV' };
 export const WEATHER_LABELS: Record<WeatherSetting, string> = { clear: 'Clear', rain: 'Rain', sandstorm: 'Sandstorm', random: 'Random' };
@@ -38,7 +38,7 @@ export interface LobbyView {
   showChain: boolean;
   chainEditable: boolean;
   settings: RoomSettings;
-  // The Race / Story toggle: shown with ?storytest or once the room is in story mode; only the admin changes it.
+  // The Race / Story toggle: shown to everyone; only the admin changes it.
   showMode: boolean;
   modeEditable: boolean;
   // The course select and the chain box belong to the race.
@@ -59,7 +59,7 @@ export function nextResetStep(step: 'idle' | 'confirm', event: 'press' | 'confir
   return { step: 'idle', send: event === 'confirm' };
 }
 
-export function lobbyView(message: LobbyMessage, localId: string, options: { storyEnabled?: boolean } = {}): LobbyView {
+export function lobbyView(message: LobbyMessage, localId: string): LobbyView {
   const isAdmin = message.adminId !== null && message.adminId === localId;
   const players = message.players.map((entry): LobbyPlayerView => {
     const admin = entry.playerId === message.adminId;
@@ -81,10 +81,10 @@ export function lobbyView(message: LobbyMessage, localId: string, options: { sto
   return {
     isAdmin,
     settingsEditable: isAdmin,
-    showMode: options.storyEnabled === true || inStory,
+    showMode: true,
     modeEditable: isAdmin,
     showCourse: !inStory,
-    story: inStory && message.story ? { dayText: dayTitle(message.story.day), finishedText: finished.length > 0 ? `Finished days: ${finished.join(', ')}` : 'No days finished yet' } : null,
+    story: inStory && message.story ? { dayText: lobbyDayText(message.story.day), finishedText: finished.length > 0 ? `Finished days: ${finished.join(', ')}` : 'No days finished yet' } : null,
     showReset: isAdmin && inStory,
     showChain: !inStory && chainShown(message.courseId),
     chainEditable: isAdmin,
@@ -143,8 +143,6 @@ export interface LobbyHandlers {
   onAppearance(appearance: Appearance): void;
   onCredits(): void;
   onTutorial(): void;
-  // The Race / Story toggle is offered without being asked for (the page was opened with ?storytest).
-  storyEnabled: boolean;
   // The admin confirmed Reset week.
   onResetWeek(): void;
   // Sends a line typed or picked in the lobby chat; says whether it went.
@@ -444,7 +442,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
     applyChain(values, renderedEditable === true);
     applyRows();
   };
-  // The mode row shows with ?storytest or in a story room; the course belongs to the race.
+  // The mode row shows to everyone; the course belongs to the race.
   const applyRows = () => {
     if (!view) return;
     const rowOf = (id: string) => doc.getElementById(id)?.parentElement;
@@ -707,7 +705,7 @@ export function createLobby(doc: Document, handlers: LobbyHandlers): LobbyScreen
   return {
     show(message, id) {
       root.className = '';
-      view = lobbyView(message, id, { storyEnabled: handlers.storyEnabled });
+      view = lobbyView(message, id);
       lastMessage = message;
       localId = id;
       renderPicker();

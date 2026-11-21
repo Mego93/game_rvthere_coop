@@ -8,6 +8,9 @@ export interface SummarySection {
 
 export const dayTitle = (day: number): string => (day === 0 ? 'Test day' : `Day ${day}`);
 
+// The lobby's line for the room's day: a day beyond the table has no content yet, though the server plays the test day's goals on it.
+export const lobbyDayText = (day: number): string => (STORY_DAYS[day] === undefined ? `Day ${day}: coming soon` : dayTitle(day));
+
 // A day the table does not have yet plays the test day's goals, as the server does.
 const labelOf = (day: number, id: string): string => (STORY_DAYS[day] ?? STORY_DAYS[0])?.goals.find((goal) => goal.id === id)?.label ?? id;
 
