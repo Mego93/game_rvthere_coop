@@ -242,7 +242,7 @@ A spot that completes a goal marks it done and gives `GOAL_DONE_HAPPINESS`.
 **C5. New buttons and prompts.**
 - **Complain button** (Luiz, key C): shows a speech bubble with a random complaint from a list of 12 in English.
 - **"Le mal est fait":** reuses the existing step 34 quick phrase. Saying it updates `lastPhrase`.
-- **Absent friends:** their figures sit on the couch seats.
+- **Absent friends:** their figures sit on the couch seats, vibecoding on a silver laptop on their knees (owner). The laptop is the new laptop model, with no logo, in a seated typing pose.
 
 ### Assets (task 5, in parallel)
 

@@ -33,7 +33,7 @@ The owner wants the group's real week in Marrakech (Sunday to Saturday) retold a
 1. **Open villa (A).** The villa is a 3D place you walk around. Each day has a list of goals (for example "eat the tajine", "go to PrimeGolf") done in any order. Driving stages and minigames start from the villa: you get in the Lodgy, a stage loads, and you come back to the villa afterwards.
 2. **On the clock.** A day runs on an in-game clock of about 10 real minutes from morning to night. At night everyone must be back at the villa to sleep. Goals not done are missed: they cost happiness and that moment is gone from the story.
 3. **Needs carry over the whole week**, with a money safety net: when money runs dangerously low, a secret stock-picking minigame on the phone ("Fake Republic" in game) can win an emergency top-up.
-4. **Absent friends.** A friend nobody is playing is "chilling at the villa": while the group is at the villa, his figure sits on the living-room couch; while the group is out, he is "at the WC" (no figure). Goals that need him are skipped that night.
+4. **Absent friends.** A friend nobody is playing is "chilling at the villa": while the group is at the villa, his figure sits on the living-room couch vibecoding on his laptop (owner); while the group is out, he is "at the WC" (no figure). Goals that need him are skipped that night.
 5. **Saving.** The week is stored on the server under the room's name; opening that room again continues the week.
 6. **Story director (approach 2).** See Approaches.
 7. **A performance step**, used only if the story worlds turn out heavy on phones.
