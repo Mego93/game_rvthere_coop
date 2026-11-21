@@ -6,6 +6,7 @@ import { airport } from './airport';
 import { buildCourse, type CourseDef } from './build';
 import { segmentDemo } from './demo';
 import { marrakech } from './marrakech';
+import { airportHomeDef } from './reverse';
 import { stageDefs } from './stages';
 import { testGround } from './testGround';
 import { villa } from './villa';
@@ -18,10 +19,10 @@ const COURSES: Record<string, BuiltCourse> = {
 };
 
 // Courses that exist for the story and are not offered as a race.
-const STORY_ONLY = new Set([villa.id]);
+const STORY_ONLY = new Set([villa.id, 'airport-home']);
 
 // Built on first use, so importing the package does not pay for the 22 km course.
-const LAZY: Record<string, () => CourseDef> = { ...stageDefs, [marrakech.id]: () => marrakech };
+const LAZY: Record<string, () => CourseDef> = { ...stageDefs, [marrakech.id]: () => marrakech, 'airport-home': airportHomeDef };
 
 // The stages in play order, then marrakech, then the rest; the story's own courses are left out.
 export function courseIds(): string[] {
