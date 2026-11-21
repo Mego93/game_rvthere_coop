@@ -86,6 +86,22 @@ describe('Sketchfab credits (step 33)', () => {
     expect(read('../../public/models/sketchfab/License.txt')).toContain('Laptop (modified) by senthil123');
   });
 
+  it('step 41b: the driver is credited as "Golf driver (modified)" with no brand name, and the golf and arrival models are credited', () => {
+    for (const path of ['../../../../CREDITS.md', '../../public/CREDITS.md', '../../public/models/sketchfab/License.txt']) {
+      const text = read(path);
+      expect(text, path).toContain('Golf driver (modified)');
+      expect(text, path).toContain('paulekins2007');
+      for (const brand of ['Callaway', 'Maverik', 'MAVRIK']) expect(text, `${path} ${brand}`).not.toContain(brand);
+    }
+    for (const path of ['../../../../CREDITS.md', '../../public/CREDITS.md']) {
+      const lines = read(path).split('\n');
+      const driver = lines.find((line) => line.includes('`golf-driver.glb`'))!;
+      expect(driver).toContain('"Golf driver (modified)" by paulekins2007 (https://sketchfab.com/paulekins2007)');
+      expect(driver).toContain('painted out');
+      for (const file of ['golf-ball.glb', 'range-flag.glb', 'range-screen.glb', 'rental-booth.glb', 'terminal.glb']) expect(lines.find((line) => line.includes(`\`${file}\``)), file).toContain('CC BY 4.0');
+    }
+  });
+
   it('every Sketchfab model is in the folder License.txt, and the served credits list the two new skies', () => {
     const licence = read('../../public/models/sketchfab/License.txt');
     for (const file of files) expect(licence, file).toContain(`File: ${file}`);

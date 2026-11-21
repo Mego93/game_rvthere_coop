@@ -255,3 +255,39 @@ https://sketchfab.com/3d-models/cdb3a9f5c21f40d8bb4bd938edbac826
 Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
 File: treadmill.glb
 Modified: textures resized to at most 256 px and re-encoded; unused data removed.
+
+Golf Ball by germydan
+https://sketchfab.com/3d-models/5f158949c1084575abf02437f6b43028
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: golf-ball.glb
+Modified: textures resized to at most 96 KB and re-encoded; unused data removed.
+
+Golf driver (modified) by paulekins2007
+https://sketchfab.com/3d-models/805c5f9ed00b4f30a84ee272f156fddb
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: golf-driver.glb
+Modified: textures resized to at most 256 px and re-encoded; one club of the bundle kept (head and shaft), the other three removed; the brand marks painted out of the head texture.
+
+Low poly Golf Flag Animated by prorookie123
+https://sketchfab.com/3d-models/a6ebddcfff9a4c8a912551530ebfdb45
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: range-flag.glb
+Modified: textures resized; the animation and morph targets removed, so the flag stands in its base pose.
+
+Projector Screen_7MB by ahmagh2e
+https://sketchfab.com/3d-models/cac0e255058348558715109b97697e07
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: range-screen.glb
+Modified: textures resized to at most 512 px and re-encoded; unused data removed.
+
+Ticket Booth by daedalJS
+https://sketchfab.com/3d-models/7e12559eed534b5699c4262e7e1a6bb1
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: rental-booth.glb
+Modified: textures resized to at most 512 px and re-encoded; unused data removed.
+
+Airport Building by Gerhald
+https://sketchfab.com/3d-models/31f007ca421840509221c3c7a1db8622
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: terminal.glb
+Modified: textures resized to at most 512 px and re-encoded; welded and quantised (KHR_mesh_quantization) to cut its size.

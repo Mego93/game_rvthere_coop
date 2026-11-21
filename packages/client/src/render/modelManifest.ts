@@ -153,6 +153,13 @@ export const MODEL_MANIFEST = {
   'villa.kiosk': model('sketchfab', 'shop-kiosk', 3.5),
   'villa.court': model('sketchfab', 'tennis-court-net', 20),
   'villa.treadmill': model('sketchfab', 'treadmill', 1.8),
+  // Step 41b: PrimeGolf and the arrival (the longest side in metres; the ball is its real 42.7 mm and the scene draws it larger).
+  'golf.ball': model('sketchfab', 'golf-ball', 0.0427),
+  'golf.driver': model('sketchfab', 'golf-driver', 1.12),
+  'golf.flag': model('sketchfab', 'range-flag', 2.2),
+  'golf.screen': model('sketchfab', 'range-screen', 8.06),
+  'arrival.booth': model('sketchfab', 'rental-booth', 4.07),
+  'arrival.terminal': model('sketchfab', 'terminal', 23.8),
 } as const satisfies Record<string, ModelEntry>;
 
 export type ModelKey = keyof typeof MODEL_MANIFEST;
