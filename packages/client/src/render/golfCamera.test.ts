@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BALL_FOLLOW_BEHIND, BALL_FOLLOW_HEIGHT, BALL_TRAIL_LENGTH, ballFollowPose, blendFollow, headingFrom, pushTrail } from './golfCamera';
+import { GOLF_AIM_BEHIND, GOLF_AIM_HEIGHT, golfAimPose, BALL_FOLLOW_BEHIND, BALL_FOLLOW_HEIGHT, BALL_TRAIL_LENGTH, ballFollowPose, blendFollow, headingFrom, pushTrail } from './golfCamera';
 
 describe('ballFollowPose', () => {
   it('sits behind the ball along its heading, above it, and looks ahead of it', () => {
@@ -60,5 +60,22 @@ describe('pushTrail', () => {
     const trail = pushTrail([], { x: 1, y: 1, z: 1 });
     expect(pushTrail(trail, { x: 1, y: 1, z: 1 })).toEqual(trail);
     expect(pushTrail(trail, null)).toEqual([]);
+  });
+});
+
+describe('golfAimPose', () => {
+  it('sits behind and above the tee and looks down the field, below the camera', () => {
+    const pose = golfAimPose({ x: 0, y: 1, z: 0 }, 0);
+    expect(pose.position.x).toBeCloseTo(0, 9);
+    expect(pose.position.z).toBeCloseTo(GOLF_AIM_BEHIND, 9);
+    expect(pose.position.y).toBeCloseTo(1 + GOLF_AIM_HEIGHT, 9);
+    expect(pose.target.z).toBeLessThan(-20);
+    expect(pose.target.y).toBeLessThan(pose.position.y);
+  });
+
+  it('turns with the aim: a left turn (positive yaw) looks toward -x', () => {
+    const pose = golfAimPose({ x: 0, y: 1, z: 0 }, 0.3);
+    expect(pose.target.x).toBeLessThan(0);
+    expect(pose.position.x).toBeGreaterThan(0);
   });
 });

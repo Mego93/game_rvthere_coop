@@ -66,7 +66,7 @@ import { createSeatRing, createVehicleMesh, disposeSeatRing, placeSeatRing, plac
 import { createVillaScene, type VillaScene } from './render/villaScene';
 import { createArrivalScene } from './render/arrivalScene';
 import { createGolfScene, type GolfScene } from './render/golfScene';
-import { BALL_FOLLOW_AHEAD, ballFollowPose, blendFollow, headingFrom, type Heading } from './render/golfCamera';
+import { BALL_FOLLOW_AHEAD, ballFollowPose, golfAimPose, blendFollow, headingFrom, type Heading } from './render/golfCamera';
 import { createGolfHud, type GolfHud } from './ui/golf/golfHud';
 import { canShoot, golfHudView } from './ui/golf/golfHudView';
 import { landText, type LandText } from './ui/golf/golfView';
@@ -693,6 +693,13 @@ export function createGame(
     if (golfScene) {
       const ball = buffer.golfBall(now / 1000);
       const tee = course.golf?.tee ?? vec3(0, 0, 0);
+      golfAimNow = golfNow !== null && canShoot(golfNow, localCharacter()) && !frozen();
+      // Lining up a shot: behind and above the tee, looking down the field at the rings.
+      if (golfAimNow) {
+        const aimPose = golfAimPose(tee, aimYaw(aim.yaw));
+        camera.position.set(aimPose.position.x, aimPose.position.y, aimPose.position.z);
+        camera.lookAt(aimPose.target.x, aimPose.target.y, aimPose.target.z);
+      }
       if (ball) {
         followHeading = headingFrom(followBall ?? tee, ball, followHeading);
         followBall = ball;
@@ -709,7 +716,6 @@ export function createGame(
         lookAt.lerp(markerPoint.set(pose.target.x, pose.target.y, pose.target.z), eased);
         camera.lookAt(lookAt);
       }
-      golfAimNow = golfNow !== null && canShoot(golfNow, localCharacter()) && !frozen();
       golfScene.update({ aim: golfAimNow ? aimYaw(aim.yaw) : null, ball, golf: golfNow });
       const boardShown = now / 1000 < golfBoardUntil;
       const popShown = now / 1000 < golfPopUntil;

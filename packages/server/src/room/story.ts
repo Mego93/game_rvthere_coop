@@ -370,6 +370,9 @@ export function createStoryDirector(host: StoryHost) {
       case 'kitchen': {
         // Nandan eats only pizza, so the kitchen has nothing for him.
         if (id === 'nandan') return;
+        // A pending free-meal goal needs no purchase: the group's meal is the goal's.
+        const freeGoal = dayOf(week!).goals.some((goal) => goal.spot === 'kitchen' && goal.meal && week!.goals.some((entry) => entry.id === goal.id && entry.status === 'pending'));
+        if (freeGoal) return completeGoals('kitchen', spot.pos);
         const item = cheapestFood();
         const bought = buy(week!, id, item);
         if (!bought.ok) return;

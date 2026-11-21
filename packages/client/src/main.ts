@@ -319,7 +319,8 @@ function onLobby(message: LobbyMessage) {
 // A chained run moved to another stage: the course scene is rebuilt the way a Start builds it. The server keeps the players' state and the page keeps the pointer lock; the HUD is drawn again from the next snapshot.
 function onStage(message: StageMessage) {
   if (!latestLobby || latestLobby.phase !== 'playing') return;
-  stageBanner.show(stageBannerText(message));
+  stageBanner.show(stageBannerText(message, latestLobby.mode === 'story'));
+  golfResults.hide();
   stageCourse = message.courseId;
   if (game && game.courseId === message.courseId) return;
   firstSeq = game?.lastSeq() ?? 0;

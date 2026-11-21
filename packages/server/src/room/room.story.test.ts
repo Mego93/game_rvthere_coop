@@ -925,6 +925,22 @@ test('S8: the tajine is a free meal for every present friend when they eat toget
   ctx.room.dispose();
 });
 
+test('S8: the free tajine completes with 0 cash', async () => {
+  const ctx = await toSundayVilla({ characters: ['sounile', 'luiz'] });
+  const [p1, p2] = ctx.players;
+  ctx.week().friends.sounile.cash = 0;
+  ctx.week().friends.luiz.cash = 0;
+  ctx.week().friends.luiz.food = 10;
+  ctx.at(p1!, 'kitchen-1');
+  ctx.at(p2!, 'kitchen-1');
+  ctx.emit(p1!, 'kitchen-1');
+  ctx.run(2);
+  expect(statusOf(ctx, 'tajine')).toBe('done');
+  expect(ctx.friend('luiz').food).toBeGreaterThan(55);
+  expect(ctx.friend('luiz').cash).toBe(0);
+  ctx.room.dispose();
+});
+
 async function toGolf(characters: CharacterId[] = ['sounile', 'luiz']) {
   const ctx = await toSundayVilla({ characters });
   const [p1] = ctx.players;

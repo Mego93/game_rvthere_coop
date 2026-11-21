@@ -187,7 +187,7 @@ const RESULTS_STYLE = `
 `;
 
 // How long the results stay over the villa when nobody closes them.
-export const GOLF_RESULTS_SECONDS = 14;
+export const GOLF_RESULTS_SECONDS = 8;
 
 export interface GolfResultsPanel {
   show(scores: GolfSnapshot['scores']): void;

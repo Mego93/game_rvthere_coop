@@ -46,3 +46,18 @@ export function pushTrail(trail: readonly Vec3[], ball: Vec3 | null): Vec3[] {
   if (last && last.x === ball.x && last.y === ball.y && last.z === ball.z) return [...trail];
   return [...trail, { x: ball.x, y: ball.y, z: ball.z }].slice(-BALL_TRAIL_LENGTH);
 }
+
+// m behind the tee, above it, and ahead along the aim the camera looks while a friend lines up a shot.
+export const GOLF_AIM_BEHIND = 9;
+export const GOLF_AIM_HEIGHT = 4.5;
+export const GOLF_AIM_LOOK = 60;
+
+// Behind and above the tee, looking down the field along the aim (yaw 0 is straight down it, positive turns left).
+export function golfAimPose(tee: Vec3, yaw: number): { position: Vec3; target: Vec3 } {
+  const dx = -Math.sin(yaw);
+  const dz = -Math.cos(yaw);
+  return {
+    position: { x: tee.x - dx * GOLF_AIM_BEHIND, y: tee.y + GOLF_AIM_HEIGHT, z: tee.z - dz * GOLF_AIM_BEHIND },
+    target: { x: tee.x + dx * GOLF_AIM_LOOK, y: tee.y, z: tee.z + dz * GOLF_AIM_LOOK },
+  };
+}
