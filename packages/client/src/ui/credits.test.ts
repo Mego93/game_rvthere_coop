@@ -49,7 +49,7 @@ describe('Sketchfab credits (step 33)', () => {
         expect(entry, file).toBeDefined();
         expect(entry, file).toContain('https://sketchfab.com/3d-models/');
         expect(entry, file).toMatch(/Licence: (CC BY 4\.0|CC0 1\.0)/);
-        expect(entry, file).toContain('Modified: textures resized');
+        expect(entry, file).toMatch(/Modified: (textures resized|simplified)/);
       }
     });
   }
@@ -99,6 +99,32 @@ describe('Sketchfab credits (step 33)', () => {
       expect(driver).toContain('"Golf driver (modified)" by paulekins2007 (https://sketchfab.com/paulekins2007)');
       expect(driver).toContain('painted out');
       for (const file of ['golf-ball.glb', 'range-flag.glb', 'range-screen.glb', 'rental-booth.glb', 'terminal.glb']) expect(lines.find((line) => line.includes(`\`${file}\``)), file).toContain('CC BY 4.0');
+    }
+  });
+
+  it('step 41c: the buggy, the tent, the camel, the table and the cushion are credited with author, source and licence', () => {
+    const models = {
+      'dune-buggy.glb': ['XP_Frost', 'c9838cac69904010923d5024168b0893'],
+      'desert-tent.glb': ['omarme37', 'f3bb254a2fbe449e9450fe999a538d0a'],
+      'camel.glb': ['omarme37', '44ef2ea4b50a49e395e5e3ebbdc99f98'],
+      'low-table.glb': ['Oussama Laabidate', 'aada3f7586db4cf5a86c19148bfbcf02'],
+      'floor-cushion.glb': ['Geraldo Pratama Wahyu Teddy', '016627cce41a42cfb48db34becd7cbd8'],
+    } as const;
+    for (const path of ['../../../../CREDITS.md', '../../public/CREDITS.md']) {
+      const lines = read(path).split('\n');
+      for (const [file, [author, uid]] of Object.entries(models)) {
+        const line = lines.find((entry) => entry.includes(`\`${file}\``));
+        expect(line, `${path} ${file}`).toBeDefined();
+        expect(line, `${path} ${file}`).toContain(author);
+        expect(line, `${path} ${file}`).toContain(`https://sketchfab.com/3d-models/${uid}`);
+        expect(line, `${path} ${file}`).toContain('CC BY 4.0');
+        expect(line, `${path} ${file}`).toContain('Modified:');
+      }
+    }
+    const licence = read('../../public/models/sketchfab/License.txt');
+    for (const [file, [author]] of Object.entries(models)) {
+      expect(licence, file).toContain(`File: ${file}`);
+      expect(licence, file).toContain(` by ${author}`);
     }
   });
 

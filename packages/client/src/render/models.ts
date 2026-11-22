@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MODEL_KEYS, MODEL_MANIFEST, MODELS_BASE_URL, type ModelKey, type ModelTarget } from './modelManifest';
+import { dressTent } from './tentLook';
 
 interface Vec3Like {
   x: number;
@@ -206,7 +207,10 @@ async function load(onProgress?: (done: number, total: number) => void): Promise
     if (!scene) continue;
     try {
       // Keys that share a file each normalise their own copy of the node tree; geometry and materials stay shared.
-      templates.set(key, prepareModel(scene.clone(), entry.targetSize, entry.pack));
+      const prepared = prepareModel(scene.clone(), entry.targetSize, entry.pack);
+      // The tent file is plain white; its canopy and stripes are dressed in code.
+      if (key === 'decor.tent') dressTent(prepared);
+      templates.set(key, prepared);
       clips.set(key, animations.get(entry.file) ?? []);
     } catch (error) {
       console.warn(`model ${key} could not be prepared`, error);

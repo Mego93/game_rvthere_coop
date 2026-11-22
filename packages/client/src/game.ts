@@ -40,7 +40,7 @@ import { createFixedStepper, createFrameClock } from './loop';
 import { createSnapshotBuffer } from './net/snapshotBuffer';
 import { predictionActive } from './prediction/gate';
 import { createReconciler } from './prediction/reconciler';
-import { updateFollowCamera } from './render/followCamera';
+import { BUGGY_OFFSET, updateFollowCamera } from './render/followCamera';
 import { createPlayerMesh, disposePlayerMesh, LABEL_RANGE, placePlayerMesh, playEmote, setGolfClub, setNameVisible } from './render/playerMesh';
 import { createCoinMeshes } from './render/coinMesh';
 import { createAnimalMeshes } from './render/animalMeshes';
@@ -62,12 +62,18 @@ import { disposeScene } from './render/disposeScene';
 import { FIRST_PERSON_FOV, onFootPose, seatedPose } from './render/firstPersonCamera';
 import { cameraPlacement } from './render/shoulderCamera';
 import { createWinchMesh, disposeWinchMesh, placeWinchMesh } from './render/winchMesh';
-import { createSeatRing, createVehicleMesh, disposeSeatRing, placeSeatRing, placeVehicleMesh } from './render/vehicleMesh';
+import { createSeatRing, createVehicleMesh, disposeSeatRing, placeSeatRing, placeVehicleMesh, seatedFigureAt, seatsShown } from './render/vehicleMesh';
+import { applySeatedPose } from './render/seatedPose';
+import { worldVehicleId } from './render/worldVehicle';
+import { createAgafayScene } from './render/agafayScene';
+import { createCampScene, type CampScene } from './render/campScene';
 import { createVillaScene, type VillaScene } from './render/villaScene';
 import { createArrivalScene } from './render/arrivalScene';
 import { createGolfScene, type GolfScene } from './render/golfScene';
 import { BALL_FOLLOW_AHEAD, ballFollowPose, golfAimPose, blendFollow, headingFrom, type Heading } from './render/golfCamera';
 import { createGolfHud, type GolfHud } from './ui/golf/golfHud';
+import { createRaceHud, type RaceHud } from './ui/race/raceHud';
+import { raceHudView } from './ui/race/raceView';
 import { canShoot, golfHudView } from './ui/golf/golfHudView';
 import { landText, type LandText } from './ui/golf/golfView';
 import { IDLE_SHOT, aimYaw, shotMessage, stepShot, type ShotState } from './ui/golf/shot';
@@ -208,7 +214,10 @@ export function createGame(
   // PrimeGolf and the arrival draw their own ground and walls (the golf scene and the arrival scene below); the collision stays the shared course's.
   const isGolf = course.golf !== undefined;
   const isArrival = course.id === 'arrival';
-  const sceneCourse = isGolf ? { ...course, ground: [], walls: [] } : isArrival ? { ...course, walls: [] } : course;
+  // The camp draws its own walls (the fence and the tent); the collision stays the shared course's.
+  const isCamp = course.id === 'camp';
+  const isRace = course.id === 'agafay';
+  const sceneCourse = isGolf ? { ...course, ground: [], walls: [] } : isArrival || isCamp ? { ...course, walls: [] } : course;
   const scene = createScene(sceneCourse, { lite: view.touchUi !== null, flat: view.softwareGl === true, tint });
   const decor = createDecorRenderer(decorFor(course.id), course.route, { touch: view.touchUi !== null, softwareGl: view.softwareGl === true });
   scene.add(decor.group);
@@ -219,7 +228,8 @@ export function createGame(
     const start = course.route[0]!;
     corridorTerrain.update({ x: start[0], z: start[1] }, 0, true);
   }
-  const vehicleConfig = getVehicleConfig(lobby.vehicleId);
+  // The story's race and camp are the buggy's, whatever vehicle the lobby holds.
+  const vehicleConfig = getVehicleConfig(worldVehicleId(course.id, lobby.vehicleId, lobby.mode === 'story'));
   // Random weather starts clear and snaps to the first snapshot's weather; a fixed weather never changes.
   const startWeather: Weather = firstLobby.weather === 'random' ? 'clear' : firstLobby.weather;
   const looks = new Map<Weather, Look>();
@@ -286,7 +296,7 @@ export function createGame(
 
   const buffer = createSnapshotBuffer();
   const input = view.input();
-  const playerMeshes = new Map<string, { mesh: THREE.Group; name: string; colour: string; look: string }>();
+  const playerMeshes = new Map<string, { mesh: THREE.Group; name: string; colour: string; look: string; seated: boolean }>();
   const propMeshes = new Map<string, { mesh: THREE.Object3D; kind: string }>();
   // The local player's entry in the newest snapshot, not interpolated.
   let latestLocal: PlayerSnapshot | null = null;
@@ -369,8 +379,14 @@ export function createGame(
         onComplain: () => !menusBlock() && story.complain(),
       })
     : null;
-  storyHud?.setVenue(course.id === 'villa' ? 'villa' : isArrival ? 'foot' : 'outing');
+  // The camp is walked like the villa (its clock and goals, no race gauges); the buggy race has its own timer.
+  storyHud?.setVenue(course.id === 'villa' || isCamp ? 'villa' : isArrival ? 'foot' : isRace ? 'race' : 'outing');
   if (story && isArrival) scene.add(createArrivalScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true }).group);
+  // The buggy race: arches at the start and the finish, and the big timer; the desert camp: the tent, the table and the camels.
+  if (story && isRace) scene.add(createAgafayScene(course).group);
+  const raceHud: RaceHud | null = story && isRace ? createRaceHud(document, { touch: view.touchUi !== null }) : null;
+  const camp: CampScene | null = story && isCamp ? createCampScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true }) : null;
+  if (camp) scene.add(camp.group);
   // PrimeGolf: the range, the golf HUD, and the shot being made.
   const golfScene: GolfScene | null = story && isGolf ? createGolfScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true }) : null;
   if (golfScene) scene.add(golfScene.group);
@@ -542,7 +558,7 @@ export function createGame(
     }
   });
 
-  // Seated players are hidden, not removed; meshes are remade when a player's name, colour or look changes, and dropped when they leave.
+  // Seated players are hidden, not removed (in the open buggy they are drawn sitting in it); meshes are remade when a player's name, colour or look changes or when they sit down in or get out of the buggy, and dropped when they leave.
   const syncPlayerMeshes = (players: PlayerSnapshot[], seconds: number, clock: number) => {
     const present = new Set<string>();
     for (const player of players) {
@@ -551,25 +567,36 @@ export function createGame(
       present.add(player.playerId);
       const { characterId, glasses, top, hat, skin, eyes, smile } = info.appearance;
       const look = `${characterId}|${glasses}|${top}|${hat}|${skin}|${eyes}|${smile}`;
+      const sitting = seatsShown(vehicleConfig) && player.seat !== null ? seatedFigureAt(vehicleConfig, player.seat) : null;
       let entry = playerMeshes.get(player.playerId);
-      if (entry && (entry.name !== info.name || entry.colour !== info.colour || entry.look !== look)) {
-        scene.remove(entry.mesh);
+      if (entry && (entry.name !== info.name || entry.colour !== info.colour || entry.look !== look || entry.seated !== (sitting !== null))) {
+        entry.mesh.removeFromParent();
         disposePlayerMesh(entry.mesh);
         entry = undefined;
       }
       if (!entry) {
-        entry = { mesh: createPlayerMesh(info.name, info.colour, info.appearance), name: info.name, colour: info.colour, look };
+        entry = { mesh: createPlayerMesh(info.name, info.colour, info.appearance), name: info.name, colour: info.colour, look, seated: sitting !== null };
         playerMeshes.set(player.playerId, entry);
-        scene.add(entry.mesh);
+        // A seated figure rides in the buggy's frame, so it follows the body's bounce.
+        if (sitting) {
+          applySeatedPose(entry.mesh);
+          vehicleMesh.add(entry.mesh);
+        } else scene.add(entry.mesh);
       }
-      entry.mesh.visible = player.seat === null && !(firstPerson && player.playerId === playerId);
-      placePlayerMesh(entry.mesh, player, seconds, clock);
+      if (sitting) {
+        entry.mesh.position.set(sitting.x, sitting.y, sitting.z);
+        entry.mesh.rotation.set(0, 0, 0);
+        entry.mesh.visible = !(firstPerson && player.playerId === playerId);
+      } else {
+        entry.mesh.visible = player.seat === null && !(firstPerson && player.playerId === playerId);
+        placePlayerMesh(entry.mesh, player, seconds, clock);
+      }
       if (golfScene) setGolfClub(entry.mesh, golfNow !== null && golfNow.turn !== null && info.appearance.characterId === golfNow.turn);
       setNameVisible(entry.mesh, player.playerId !== playerId && Math.hypot(player.pos.x - camera.position.x, player.pos.y - camera.position.y, player.pos.z - camera.position.z) <= LABEL_RANGE);
     }
     for (const [id, entry] of playerMeshes) {
       if (present.has(id)) continue;
-      scene.remove(entry.mesh);
+      entry.mesh.removeFromParent();
       disposePlayerMesh(entry.mesh);
       playerMeshes.delete(id);
     }
@@ -680,7 +707,7 @@ export function createGame(
         camera.position.set(seatedEye.position.x, seatedEye.position.y, seatedEye.position.z);
         camera.lookAt(seatedEye.target.x, seatedEye.target.y, seatedEye.target.z);
       } else {
-        updateFollowCamera(camera, vehicle, frameSeconds);
+        updateFollowCamera(camera, vehicle, frameSeconds, vehicleConfig.id === 'buggy' ? BUGGY_OFFSET : undefined);
       }
       if (local?.seat) {
         const shake = cameraShake(now / 1000, forwardSpeedOf(vehicle));
@@ -751,6 +778,7 @@ export function createGame(
       const state = story.state();
       story.setPlace(feet, course.spots ?? []);
       villa?.update({ feet, absent: buffer.latestAbsent(), now: now / 1000, night: state?.night === true });
+      camp?.update({ feet, now: now / 1000 });
       for (const text of story.takeToasts()) eventToast.showText(text, now / 1000);
       const friend = story.friend();
       storyHud.update(state ? storyHudModel(state, story.character()) : null, friend?.bank ?? 0, friend?.cash ?? 0, story.canComplain());
@@ -772,6 +800,10 @@ export function createGame(
     hud.update(hudModel, markers, announced.toast ?? eventToast.current(now / 1000));
     hud.setVisible(lobby.phase === 'playing' && !anyOpen());
     storyHud?.setVisible(lobby.phase === 'playing' && !anyOpen() && golfScene === null);
+    if (raceHud) {
+      raceHud.update(raceHudView(buffer.latestStatus()?.elapsed ?? 0, course.targetTime));
+      raceHud.setVisible(lobby.phase === 'playing' && !anyOpen());
+    }
     golfHud?.setVisible(lobby.phase === 'playing' && !anyOpen());
     if (view.touchUi) {
       const touch = touchView({ config: vehicleConfig, vehicle, players, localId: playerId, aim, cable: latestCable });
@@ -915,6 +947,8 @@ export function createGame(
       storyHud?.dispose();
       golfHud?.dispose();
       golfScene?.dispose();
+      raceHud?.dispose();
+      camp?.dispose();
       view.touchUi?.setFireLabel('Fire');
       villa?.dispose();
       disposeSeatRing(seatRing);

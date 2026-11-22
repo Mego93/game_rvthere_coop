@@ -11,6 +11,8 @@ const STORY_TITLES: Readonly<Record<string, string>> = Object.freeze({
   primegolf: 'PrimeGolf',
   desert: 'Back to the desert',
   villa: 'Back at the villa',
+  agafay: 'Buggy race in Agafay',
+  camp: 'Lunch at the desert camp',
 });
 
 // "Stage 2 of 5: Bridge and forest"; a course with no label shows its id. In story mode a title, never a stage count.

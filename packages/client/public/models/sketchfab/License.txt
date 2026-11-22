@@ -291,3 +291,33 @@ https://sketchfab.com/3d-models/31f007ca421840509221c3c7a1db8622
 Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
 File: terminal.glb
 Modified: textures resized to at most 512 px and re-encoded; welded and quantised (KHR_mesh_quantization) to cut its size.
+
+Dune Buggy “jump” by XP_Frost
+https://sketchfab.com/3d-models/c9838cac69904010923d5024168b0893
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: dune-buggy.glb
+Modified: simplified to about 8,800 triangles and textures resized to at most 256 px; the wheels split off as separate nodes so they can turn; the body narrowed to the buggy's track and its cockpit stretched to three rows; scaled to metres and turned to face -Z.
+
+Tent Arab by omarme37
+https://sketchfab.com/3d-models/f3bb254a2fbe449e9450fe999a538d0a
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: desert-tent.glb
+Modified: simplified to about 18,000 triangles, untextured; the game tints the canopy sand and adds a red stripe in code.
+
+camel by omarme37
+https://sketchfab.com/3d-models/44ef2ea4b50a49e395e5e3ebbdc99f98
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: camel.glb
+Modified: simplified to about 9,000 triangles, texture resized to 512 px; no animation.
+
+Ṭawla by Oussama Laabidate
+https://sketchfab.com/3d-models/aada3f7586db4cf5a86c19148bfbcf02
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: low-table.glb
+Modified: simplified to about 4,400 triangles, texture resized to 512 px.
+
+Japanese Zabuton by Geraldo Pratama Wahyu Teddy
+https://sketchfab.com/3d-models/016627cce41a42cfb48db34becd7cbd8
+Licence: CC BY 4.0, http://creativecommons.org/licenses/by/4.0/
+File: floor-cushion.glb
+Modified: simplified to about 4,200 triangles, textures resized to 512 px; the game scales it to a floor cushion.

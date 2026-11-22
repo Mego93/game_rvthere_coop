@@ -27,3 +27,9 @@ test('story mode shows a title and never a stage count', () => {
   expect(stageBannerText({ courseId: 'desert', index: 0, of: 1 }, true)).toBe('Back to the desert');
   expect(stageBannerText({ courseId: 'test', index: 0, of: 1 }, true)).not.toMatch(/Stage/);
 });
+
+test('step 41c: the race and the camp have story titles', () => {
+  expect(stageBannerText({ courseId: 'agafay', index: 0, of: 1 }, true)).toBe('Buggy race in Agafay');
+  expect(stageBannerText({ courseId: 'camp', index: 0, of: 1 }, true)).toBe('Lunch at the desert camp');
+  expect(stageBannerText({ courseId: 'agafay', index: 0, of: 1 })).toMatch(/^Stage 1 of 1:/);
+});

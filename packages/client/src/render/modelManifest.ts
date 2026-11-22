@@ -160,6 +160,12 @@ export const MODEL_MANIFEST = {
   'golf.screen': model('sketchfab', 'range-screen', 8.06),
   'arrival.booth': model('sketchfab', 'rental-booth', 4.07),
   'arrival.terminal': model('sketchfab', 'terminal', 23.8),
+  // Step 41c: the buggy is built at its own size in metres (ground at y 0, wheels at the config's track and wheelbase, so the size is the file's real 4.016 m); the tent, camel, table and cushion are fitted by the scenes.
+  'vehicle.buggy': model('sketchfab', 'dune-buggy', 4.016),
+  'decor.tent': model('sketchfab', 'desert-tent', 7.4),
+  'decor.camel': model('sketchfab', 'camel', 2.9),
+  'camp.table': model('sketchfab', 'low-table', 1.05),
+  'camp.cushion': model('sketchfab', 'floor-cushion', 1.98),
 } as const satisfies Record<string, ModelEntry>;
 
 export type ModelKey = keyof typeof MODEL_MANIFEST;

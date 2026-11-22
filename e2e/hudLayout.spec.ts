@@ -216,6 +216,62 @@ test.describe('HUD layout (V8)', () => {
     });
   }
 
+  // Step 41c: the race HUD (timer and target) in the Agafay world; it shows with the race gauges and overlaps nothing.
+  const raceCases = [
+    { name: '667x375 race', width: 667, height: 375, touch: true, ids: [...TOUCH, 'race-timer', 'race-target'] },
+    { name: '844x390 race', width: 844, height: 390, touch: true, ids: [...TOUCH, 'race-timer', 'race-target'] },
+    { name: '1280x720 race', width: 1280, height: 720, touch: false, ids: [...DESKTOP, 'race-timer', 'race-target', 'story-panel'] },
+    { name: '1920x1080 race', width: 1920, height: 1080, touch: false, ids: [...DESKTOP, 'race-timer', 'race-target', 'story-panel'] },
+  ];
+  for (const race of raceCases) {
+    test(`${race.name}: the race HUD fits, overlaps nothing and shows the timer and the target`, async ({ browser }, info) => {
+      test.skip(info.project.name !== 'desktop', 'sizes and touch are set here, once');
+      const context = await browser.newContext({ viewport: { width: race.width, height: race.height }, hasTouch: race.touch, storageState: tutorialDone('http://localhost:3100') });
+      const page = await context.newPage();
+      await page.goto('/?hudtest=race');
+      if (race.touch) await page.addStyleTag({ content: `:root { --safe-left: ${INSETS.left}px; --safe-right: ${INSETS.right}px; --safe-bottom: ${INSETS.bottom}px; }` });
+      await expect(page.locator('#race-timer')).toBeVisible();
+      await expect(page.locator('#chat-toasts .chat-toast')).toHaveCount(3);
+      await expect(page.locator('#race-timer')).toHaveText('1:23.4');
+      await expect(page.locator('#race-target')).toHaveText('Gold under 2:40');
+      const boxes = await measure(page, race.ids);
+      const inset = race.touch ? INSETS : { left: 0, right: 0, bottom: 0 };
+      for (const box of boxes) {
+        expect(box.w, `${box.id} is shown`).toBeGreaterThan(0);
+        expect(box.x, `${box.id} inside the left inset`).toBeGreaterThanOrEqual(inset.left - 0.5);
+        expect(box.x + box.w, `${box.id} inside the right inset`).toBeLessThanOrEqual(race.width - inset.right + 0.5);
+        expect(box.y, `${box.id} below the top`).toBeGreaterThanOrEqual(0);
+        expect(box.y + box.h, `${box.id} above the bottom inset`).toBeLessThanOrEqual(race.height - inset.bottom + 0.5);
+      }
+      const clashes: string[] = [];
+      boxes.forEach((a, i) => boxes.slice(i + 1).forEach((b) => overlaps(a, b) && clashes.push(`${a.id} x ${b.id}`)));
+      expect(clashes).toEqual([]);
+      await context.close();
+    });
+  }
+
+  for (const size of [{ name: '667x375', width: 667, height: 375, touch: true }, { name: '1280x720', width: 1280, height: 720, touch: false }]) {
+    test(`${size.name}: the race result panel fits and shows the time, the medal and the happiness`, async ({ browser }, info) => {
+      test.skip(info.project.name !== 'desktop', 'sizes and touch are set here, once');
+      const context = await browser.newContext({ viewport: { width: size.width, height: size.height }, hasTouch: size.touch, storageState: tutorialDone('http://localhost:3100') });
+      const page = await context.newPage();
+      await page.goto('/?hudtest=raceresult');
+      if (size.touch) await page.addStyleTag({ content: `:root { --safe-left: ${INSETS.left}px; --safe-right: ${INSETS.right}px; --safe-bottom: ${INSETS.bottom}px; }` });
+      await expect(page.locator('#race-results')).toBeVisible();
+      const box = (await page.locator('#race-results').boundingBox())!;
+      const inset = size.touch ? INSETS : { left: 0, right: 0, bottom: 0 };
+      expect(box.x).toBeGreaterThanOrEqual(inset.left - 0.5);
+      expect(box.x + box.width).toBeLessThanOrEqual(size.width - inset.right + 0.5);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height).toBeLessThanOrEqual(size.height - inset.bottom + 0.5);
+      await expect(page.locator('#race-results')).toContainText('Your time');
+      await expect(page.locator('#race-results')).toContainText('Gold');
+      await expect(page.locator('#race-results')).toContainText('Happiness +10');
+      await expect(page.locator('#race-results-close')).toBeVisible();
+      await context.close();
+    });
+  }
+
   for (const size of [{ name: '667x375', width: 667, height: 375, touch: true }, { name: '1280x720', width: 1280, height: 720, touch: false }]) {
     test(`${size.name}: the golf results fit and show the best, the worst and the team bonus`, async ({ browser }, info) => {
       test.skip(info.project.name !== 'desktop', 'sizes and touch are set here, once');

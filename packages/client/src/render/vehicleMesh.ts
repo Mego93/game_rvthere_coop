@@ -1,4 +1,4 @@
-import { CHARACTER_SCALE, type VehicleConfig, type VehicleState } from '@lodgy/shared';
+import { CHARACTER_SCALE, type Vec3, type VehicleConfig, type VehicleState } from '@lodgy/shared';
 import * as THREE from 'three';
 import { SEAT_RING_SECONDS } from '../ui/hud/seatToast';
 import { fitToTarget, hasModel, instantiate, shadowed } from './models';
@@ -134,6 +134,92 @@ export function createRealMesh(config: VehicleConfig): THREE.Group | null {
   return group;
 }
 
+// The buggy has no roof and no doors, so its players are drawn sitting in it, six of them: three rows of two seats.
+export const seatsShown = (config: VehicleConfig): boolean => config.id === 'buggy';
+
+// m, how far the cushion's top is below the seat position, and how high a seated figure's hips are above its feet origin.
+const CUSHION_DROP = 0.2;
+const SEATED_HIPS = 0.52;
+const SEAT_STEEL = 0xaab1b8;
+const SEAT_LEATHER = 0x3b2f25;
+const SEAT_WIDTH = 0.5;
+const BENCH_WIDTH = 1.5;
+
+// Where a seated figure's feet origin is, in the vehicle's frame; null for a seat the vehicle does not have.
+export function seatedFigureAt(config: VehicleConfig, seatId: string): Vec3 | null {
+  const seat = config.seats.find((candidate) => candidate.id === seatId);
+  return seat ? { x: seat.pos.x, y: seat.pos.y - CUSHION_DROP - SEATED_HIPS, z: seat.pos.z } : null;
+}
+
+const tube = (name: string, from: THREE.Vector3, to: THREE.Vector3, radius: number, colour: number): THREE.Mesh => {
+  const length = from.distanceTo(to);
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 8), new THREE.MeshStandardMaterial({ color: colour, flatShading: true, roughness: 0.6, metalness: 0.2 }));
+  mesh.name = name;
+  mesh.castShadow = true;
+  mesh.position.copy(from).add(to).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+  return mesh;
+};
+
+// A bucket seat for each front place, a bench for each of the two rear rows, and a roll bar behind the last row; the model has two seats of its own, which these cover.
+function createSeating(config: VehicleConfig): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'seating';
+  const rows = new Map<number, typeof config.seats>();
+  for (const seat of config.seats) rows.set(seat.pos.z, [...(rows.get(seat.pos.z) ?? []), seat]);
+  const ordered = [...rows.entries()].sort((a, b) => a[0] - b[0]);
+  ordered.forEach(([z, seats], row) => {
+    const y = seats[0]!.pos.y - CUSHION_DROP;
+    const bench = row > 0;
+    if (bench) {
+      group.add(part(`bench-${row}`, BENCH_WIDTH, 0.1, SEAT_WIDTH + 0.06, SEAT_STEEL, 0, y - 0.12, z));
+      group.add(part(`back-${row}`, BENCH_WIDTH, 0.55, 0.1, SEAT_LEATHER, 0, y + 0.3, z + 0.3));
+    }
+    for (const seat of seats) {
+      group.add(part(`seat-${seat.id}`, SEAT_WIDTH, 0.14, SEAT_WIDTH, SEAT_LEATHER, seat.pos.x, y - 0.07, z));
+      if (!bench) group.add(part(`back-${seat.id}`, SEAT_WIDTH, 0.6, 0.1, SEAT_LEATHER, seat.pos.x, y + 0.3, z + 0.3));
+    }
+  });
+  const last = ordered[ordered.length - 1]!;
+  const floor = last[1][0]!.pos.y - CUSHION_DROP - 0.15;
+  const back = last[0] + 0.62;
+  const top = last[1][0]!.pos.y + 0.85;
+  const bar = new THREE.Group();
+  bar.name = 'roll-bar';
+  const reach = BENCH_WIDTH / 2 + 0.08;
+  for (const side of [-1, 1]) {
+    bar.add(tube('roll-bar-upright', new THREE.Vector3(side * reach, floor, back), new THREE.Vector3(side * reach, top, back), 0.04, SEAT_STEEL));
+    // The side rails run forward over the rear rows to the cage the model already has.
+    bar.add(tube('roll-bar-rail', new THREE.Vector3(side * reach, top, back), new THREE.Vector3(side * reach, top - 0.1, ordered[1]![0]), 0.035, SEAT_STEEL));
+  }
+  bar.add(tube('roll-bar-top', new THREE.Vector3(-reach, top, back), new THREE.Vector3(reach, top, back), 0.04, SEAT_STEEL));
+  group.add(bar);
+  return group;
+}
+
+// The buggy's model fitted to its physics: built at its own size, so it only needs putting on the ground under the collision box and the wheels set where the wheels are (round, able to roll); then the seats.
+export function createBuggyMesh(config: VehicleConfig): THREE.Group | null {
+  const model = instantiate(MODEL_KEY[config.id]);
+  const node = model?.children[0];
+  if (!model || !node) return null;
+  const bottom = config.wheelY - config.suspensionRest - config.wheelRadius;
+  node.scale.set(1, 1, 1);
+  node.position.set(0, bottom, 0);
+  const wheels = node.children.filter((child) => child.name.startsWith('wheel'));
+  // The wheels' own radius in the file; the config's is the physics'.
+  const radius = wheels[0] ? new THREE.Box3().setFromObject(wheels[0]).getSize(new THREE.Vector3()).y / 2 : config.wheelRadius;
+  for (const wheel of wheels) {
+    wheel.position.set(Math.sign(wheel.position.x) * config.wheelX, config.wheelY - config.suspensionRest - bottom, Math.sign(wheel.position.z) * config.wheelZ);
+    wheel.scale.multiplyScalar(config.wheelRadius / radius);
+  }
+  const group = new THREE.Group();
+  group.add(model);
+  group.add(createSeating(config));
+  shadowed(group);
+  spins.set(group, { wheels, radius: config.wheelRadius, angle: 0, last: null, sign: -1 });
+  return group;
+}
+
 function createRvMesh(config: VehicleConfig): THREE.Group {
   const group = new THREE.Group();
   group.add(part('body', 2.3, 2.4, 4.42, CREAM, 0, 0, 1.19));
@@ -157,6 +243,7 @@ function createRvMesh(config: VehicleConfig): THREE.Group {
 // The real model when it is loaded, else the Car Kit one (the Lodgy always; the RV unless boxes are chosen), else boxes: the Lodgy a body, a dark windscreen strip marking the front (-Z) and four wheels; the RV a motorhome.
 // Software GL is bound by triangle count, so it keeps the light Car Kit models (the e2e frame rate depends on it).
 export function createVehicleMesh(config: VehicleConfig, light = false): THREE.Group {
+  if (config.id === 'buggy') return (hasModel(MODEL_KEY.buggy) ? createBuggyMesh(config) : null) ?? createBoxMesh(config);
   const real = !light && (config.id === 'lodgy' || RV_MODEL === 'camper');
   const kit = config.id === 'lodgy' || RV_MODEL !== 'boxes';
   if (real && hasModel(REAL_KEY[config.id])) {
@@ -177,6 +264,7 @@ export function createBoxMesh(config: VehicleConfig): THREE.Group {
   group.add(part('body', h.x * 2, h.y * 2, h.z * 2, BODY_COLOURS[config.id]));
   group.add(part('windscreen', h.x * 1.8, h.y * 0.6, 0.1, GLASS, 0, h.y * 0.5, -h.z - 0.03));
   addWheels(group, config);
+  if (seatsShown(config)) group.add(createSeating(config));
   return group;
 }
 
