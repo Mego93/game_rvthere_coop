@@ -5,6 +5,7 @@ import {
   GOLF_SCOREBOARD_SECONDS,
   GUN_DAMAGE,
   KITCHEN_WITHDRAW,
+  LUNCH_RETURN_SECONDS,
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
   RAPH_ANGER_MAX,
@@ -28,6 +29,7 @@ import {
   newWeek,
   outingAtGate,
   parseWeek,
+  raceResult,
   phoneBuy,
   sayPhrase,
   serialiseWeek,
@@ -55,6 +57,11 @@ import {
 import type { WeekStore } from './types';
 
 export const VILLA_ID = 'villa';
+export const CAMP_ID = 'camp';
+export const AGAFAY_ID = 'agafay';
+export const BUGGY_ID = 'buggy';
+// The buggy's seats in join order, driver first.
+const BUGGY_SEATS = ['driver', 'seat1', 'seat2', 'seat3', 'seat4', 'seat5'];
 // Needs are stepped this often (6 ticks = 0.1 s); the clock still moves every tick.
 const NEEDS_EVERY_TICKS = 6;
 const VIEW_EVERY_TICKS = 30;
@@ -81,8 +88,8 @@ export interface StoryHost {
   // The character of a player in the room, connected or held.
   characterOf: (playerId: string) => CharacterId | undefined;
   world: () => World;
-  // A new world with every connected player in it; `story` is the villa's world option.
-  buildWorld: (courseId: string, story: boolean) => World;
+  // A new world with every connected player in it; `story` is the villa's world option. `race` builds the buggy race: that vehicle, no enemies and no fuel burn.
+  buildWorld: (courseId: string, story: boolean, vehicleId?: string, race?: boolean) => World;
   // Replaces the room's world: stage message, full snapshot, old world freed.
   swapWorld: (next: World, courseId: string) => void;
   broadcast: (message: ServerMessage) => void;
@@ -103,9 +110,11 @@ export function createStoryDirector(host: StoryHost) {
   let touched = false;
   let running = false;
   // Where the group is when it is not at the villa: an outing's stage, an opening world or PrimeGolf.
-  let away: { kind: 'outing' | 'opening' | 'golf'; goalId: string; index: number } | null = null;
+  let away: { kind: 'outing' | 'opening' | 'golf' | 'race' | 'camp'; goalId: string; index: number } | null = null;
   // Seconds of scoreboard left once the golf game is over, null while it is played.
   let golfLeaveIn: number | null = null;
+  // Seconds until the group leaves the camp once lunch is done, null before.
+  let campLeaveIn: number | null = null;
   let nightSince: number | null = null;
   const slept = new Set<string>();
   // Clock time each friend was downed, until revived or respawned.
@@ -158,8 +167,11 @@ export function createStoryDirector(host: StoryHost) {
     return result;
   };
 
+  // The venue of the world the group is in: spot goals are done only there.
+  const venue = () => (away?.kind === 'camp' ? CAMP_ID : VILLA_ID);
+
   const completeGoals = (kind: SpotKind, spotPos: { x: number; y: number; z: number }) => {
-    const ids = spotGoalsDone(dayOf(week!), week!.goals, kind, spotPos, positions(), present());
+    const ids = spotGoalsDone(dayOf(week!), week!.goals, kind, spotPos, positions(), present(), venue());
     for (const id of ids) {
       week = goalDone(week!, id, present());
       const def = dayOf(week).goals.find((goal) => goal.id === id);
@@ -168,15 +180,16 @@ export function createStoryDirector(host: StoryHost) {
     if (ids.length > 0) dirty = true;
   };
 
-  const buildStoryWorld = (courseId: string, story: boolean): World => {
-    const next = host.buildWorld(courseId, story);
+  const buildStoryWorld = (courseId: string, story: boolean, vehicleId?: string, seated = false, race = false): World => {
+    const next = host.buildWorld(courseId, story, vehicleId, race);
     // Each present friend takes his health in; the rest of the needs live in the week.
     const base = next.carryOut();
     next.applyCarry({
       ...base,
-      players: base.players.map((entry) => {
+      players: base.players.map((entry, index) => {
         const id = host.characterOf(entry.id);
-        return id ? { ...entry, health: Math.max(1, Math.round(week!.friends[id].health)) } : entry;
+        const seat = seated ? (BUGGY_SEATS[index] ?? null) : entry.seat;
+        return id ? { ...entry, seat, health: Math.max(1, Math.round(week!.friends[id].health)) } : { ...entry, seat };
       }),
     });
     return next;
@@ -186,6 +199,7 @@ export function createStoryDirector(host: StoryHost) {
   const newWorldState = () => {
     away = null;
     golfLeaveIn = null;
+    campLeaveIn = null;
     nightSince = null;
     slept.clear();
     downedAt.clear();
@@ -285,6 +299,32 @@ export function createStoryDirector(host: StoryHost) {
     sendState();
   };
 
+  // The race: the buggy on Agafay with everyone seated, the driver first in join order; the clock and needs pause.
+  const startRace = (goalId: string) => {
+    const next = buildStoryWorld(AGAFAY_ID, false, BUGGY_ID, true, true);
+    host.swapWorld(next, AGAFAY_ID);
+    newWorldState();
+    away = { kind: 'race', goalId, index: 0 };
+    for (const id of CHARACTER_IDS.filter((entry) => !present().includes(entry))) host.broadcast({ type: 'toast', text: `${CHARACTER_NAMES[id]} is at the WC` });
+    sendState();
+  };
+
+  // The race was won: the medal's happiness goes to the present friends and the group goes on to the camp.
+  const raceWon = (current: World) => {
+    const finished = away!;
+    const time = current.status().elapsed;
+    const target = current.course.targetTime;
+    const result = raceResult(time, target);
+    for (const id of present()) week!.friends[id].happiness = Math.max(0, Math.min(100, week!.friends[id].happiness + result.happiness));
+    week = goalDone(week!, finished.goalId, present());
+    bringHealthHome(current);
+    host.broadcast({ type: 'raceResult', time, target, medal: result.medal });
+    host.swapWorld(buildStoryWorld(CAMP_ID, true, BUGGY_ID), CAMP_ID);
+    newWorldState();
+    away = { kind: 'camp', goalId: finished.goalId, index: 0 };
+    sendState();
+  };
+
   // Finishing an opening world marks its goal done and moves on; the last one leads to the villa.
   const openingDone = (current: World) => {
     const finished = away!;
@@ -359,7 +399,20 @@ export function createStoryDirector(host: StoryHost) {
     }
   };
 
+  // At the camp only the table works: it completes the camp's pending goals, and the group leaves once none is left.
+  const onCampSpot = (world: World, event: WorldEvent) => {
+    if (!event.playerId || !event.spotId || event.spotKind !== 'kitchen' || !character(event.playerId)) return;
+    const spot = world.course.spots?.find((entry) => entry.id === event.spotId);
+    if (!spot) return;
+    refreshView(world);
+    completeGoals('kitchen', spot.pos);
+    const day = dayOf(week!);
+    const waiting = day.goals.some((goal) => goal.venue === CAMP_ID && week!.goals.some((entry) => entry.id === goal.id && entry.status === 'pending'));
+    if (!waiting && campLeaveIn === null) campLeaveIn = LUNCH_RETURN_SECONDS;
+  };
+
   const onSpot = (world: World, event: WorldEvent) => {
+    if (away?.kind === 'camp') return onCampSpot(world, event);
     if (away || !event.playerId || !event.spotId || !event.spotKind) return;
     const id = character(event.playerId);
     if (!id) return;
@@ -412,6 +465,7 @@ export function createStoryDirector(host: StoryHost) {
         if (outingGoal?.courseId) return startOuting(outingGoal.id, outingGoal.courseId);
         const minigame = minigameAtGate(dayOf(week!), week!.goals);
         if (minigame?.minigame === 'primegolf') startGolf(minigame.id);
+        else if (minigame?.minigame === 'buggyRace') startRace(minigame.id);
         return;
       }
       case 'bed':
@@ -576,8 +630,8 @@ export function createStoryDirector(host: StoryHost) {
     // After the world stepped; `events` are its events and `inputs` the ones it ran on.
     afterStep(world: World, events: readonly WorldEvent[], inputs: ReadonlyMap<string, InputFields>) {
       const w = week!;
-      // The clock is paused in PrimeGolf.
-      if (away?.kind !== 'golf') w.clock += TICK_DT;
+      // The clock is paused in PrimeGolf and in the race.
+      if (away?.kind !== 'golf' && away?.kind !== 'race') w.clock += TICK_DT;
       ticks += 1;
       if (ticks % VIEW_EVERY_TICKS === 0) refreshView(world);
       for (const event of events) {
@@ -603,7 +657,7 @@ export function createStoryDirector(host: StoryHost) {
           dirty = true;
         }
       }
-      if (ticks % NEEDS_EVERY_TICKS === 0 && away?.kind !== 'golf') {
+      if (ticks % NEEDS_EVERY_TICKS === 0 && away?.kind !== 'golf' && away?.kind !== 'race') {
         stepNeedsNow(world, inputs);
         // A laptop session ends when the friend walks away.
         for (const [playerId, session] of laptops) {
@@ -619,6 +673,15 @@ export function createStoryDirector(host: StoryHost) {
         if (golfLeaveIn !== null) {
           golfLeaveIn -= TICK_DT;
           if (golfLeaveIn <= 1e-9) return goToVilla(world);
+        }
+      } else if (away?.kind === 'race') {
+        if (world.status().state === 'won') return raceWon(world);
+      } else if (away?.kind === 'camp') {
+        // Night: the group goes to the villa and an undone lunch counts as missed.
+        if (week!.clock >= STORY_DAY_SECONDS) return goToVilla(world);
+        if (campLeaveIn !== null) {
+          campLeaveIn -= TICK_DT;
+          if (campLeaveIn <= 1e-9) return goToVilla(world);
         }
       } else if (away?.kind === 'opening') {
         // One move per tick: a win and night at once is a single step.

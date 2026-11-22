@@ -12,7 +12,9 @@ export interface GoalDef {
   kind: 'spot' | 'outing' | 'minigame' | 'opening';
   spot?: SpotKind;
   courseId?: string;
-  minigame?: 'primegolf';
+  minigame?: 'primegolf' | 'buggyRace';
+  // The course id of the world where a spot goal is done; the villa when absent.
+  venue?: string;
   // Completing a together goal gives every present friend this meal for free.
   meal?: StoryItemKind;
   needs?: CharacterId[];
@@ -53,7 +55,15 @@ export const STORY_DAYS: Record<number, DayDef> = {
       { id: 'primegolf', label: 'Play PrimeGolf', kind: 'minigame', spot: 'gate', minigame: 'primegolf', after: 'tajine' },
     ],
   },
+  2: {
+    goals: [
+      { id: 'buggy', label: 'Buggy race in Agafay', kind: 'minigame', spot: 'gate', minigame: 'buggyRace' },
+      { id: 'lunch', label: 'Lunch at the desert camp', kind: 'spot', spot: 'kitchen', venue: 'camp', together: true, meal: 'tajine', after: 'buggy' },
+    ],
+  },
 };
+
+export const VILLA_VENUE = 'villa';
 
 // Goals needing a friend who is absent are skipped.
 export function startGoals(day: DayDef, present: readonly CharacterId[]): GoalState[] {
@@ -76,9 +86,9 @@ export function togetherNear(spot: Vec3, positions: Partial<Record<CharacterId, 
 }
 
 // Ids of the spot goals that this use of `spotKind` completes. Outing goals are never completed by a spot.
-export function spotGoalsDone(day: DayDef, states: readonly GoalState[], spotKind: SpotKind, spot: Vec3, positions: Partial<Record<CharacterId, Vec3>>, present: readonly CharacterId[]): string[] {
+export function spotGoalsDone(day: DayDef, states: readonly GoalState[], spotKind: SpotKind, spot: Vec3, positions: Partial<Record<CharacterId, Vec3>>, present: readonly CharacterId[], venue: string = VILLA_VENUE): string[] {
   return day.goals
-    .filter((goal) => goal.kind === 'spot' && goal.spot === spotKind && goalReady(day, states, goal.id) && (!goal.together || togetherNear(spot, positions, present)))
+    .filter((goal) => goal.kind === 'spot' && goal.spot === spotKind && (goal.venue ?? VILLA_VENUE) === venue && goalReady(day, states, goal.id) && (!goal.together || togetherNear(spot, positions, present)))
     .map((goal) => goal.id);
 }
 

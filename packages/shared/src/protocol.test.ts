@@ -1021,6 +1021,16 @@ describe('story mode messages', () => {
     expect(parseClient({ type: 'phone' })).toBeNull();
   });
 
+  test('raceResult is validated', () => {
+    const result = { type: 'raceResult', time: 142.5, target: 160, medal: 'gold' };
+    expect(parseServer(result)).toEqual(result);
+    expect(parseServer({ ...result, medal: 'platinum' })).toBeNull();
+    expect(parseServer({ ...result, time: -1 })).toBeNull();
+    expect(parseServer({ ...result, time: 'fast' })).toBeNull();
+    expect(parseServer({ ...result, target: 0 })).toBeNull();
+    expect(parseServer({ type: 'raceResult', time: 1, target: 2 })).toBeNull();
+  });
+
   test('daySummary is validated', () => {
     const summary = { type: 'daySummary', day: 1, done: ['vibecode'], missed: ['outing'], skipped: [] };
     expect(parseServer(summary)).toEqual(summary);

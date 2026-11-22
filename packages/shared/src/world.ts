@@ -64,6 +64,8 @@ export interface WorldOptions {
   story?: boolean;
   // A downed player is not auto-respawned: he stays down until revived (story worlds and outings).
   holdDowned?: boolean;
+  // The vehicle burns no fuel without the world being a story world (the story's buggy race).
+  freeFuel?: boolean;
 }
 
 export interface WorldEvent {
@@ -233,7 +235,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const story = options.story === true;
   const holdDowned = options.holdDowned === true || story;
   const finishByPlayers = course.finishBy === 'players';
-  const vehicle = createVehicle(rapier, physics, story || finishByPlayers ? { ...vehicleConfig, fuelBurn: 0 } : vehicleConfig, start.spawn, statics.surfaceOf, { gripScale: gripOf(weather) });
+  const vehicle = createVehicle(rapier, physics, story || finishByPlayers || options.freeFuel === true ? { ...vehicleConfig, fuelBurn: 0 } : vehicleConfig, start.spawn, statics.surfaceOf, { gripScale: gripOf(weather) });
   // Queries see nothing until the broad phase has run once, and spawn rays are cast before the first tick.
   physics.timestep = 0;
   physics.step();

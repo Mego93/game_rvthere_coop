@@ -249,7 +249,16 @@ export type ServerMessage =
   | ToastMessage
   | { type: 'complain'; playerId: string; line: number }
   | { type: 'fakeRepublic'; pick: 0 | 1 | 2; outcome: number }
+  | RaceResultMessage
   | { type: 'ping' };
+
+// The buggy race was won: its time, the target and the medal.
+export interface RaceResultMessage {
+  type: 'raceResult';
+  time: number;
+  target: number;
+  medal: 'gold' | 'silver' | 'bronze';
+}
 
 // The day ended in bed: the goal ids by how they ended (`day` is the day just finished).
 export interface DaySummaryMessage {
@@ -659,6 +668,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       return isText(data.playerId) && isCount(data.line) ? message : null;
     case 'fakeRepublic':
       return (data.pick === 0 || data.pick === 1 || data.pick === 2) && isCount(data.outcome) ? message : null;
+    case 'raceResult':
+      return finite(data.time) && data.time >= 0 && finite(data.target) && data.target > 0 && (data.medal === 'gold' || data.medal === 'silver' || data.medal === 'bronze') ? message : null;
     case 'storyState':
       return isStoryState(data) ? message : null;
     case 'stage':

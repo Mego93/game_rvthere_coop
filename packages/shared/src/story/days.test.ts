@@ -77,4 +77,37 @@ describe('days', () => {
     expect(spotGoalsDone(sunday, states, 'kitchen', spot, near, present)).toEqual(['tajine']);
     expect(spotGoalsDone(sunday, states, 'gate', spot, near, present)).toEqual([]);
   });
+
+  it('day 2 is Monday: the buggy race at the gate, then lunch at the camp after it', () => {
+    const monday = STORY_DAYS[2]!;
+    expect(monday.opening).toBeUndefined();
+    expect(monday.goals.map((g) => g.id)).toEqual(['buggy', 'lunch']);
+    expect(monday.goals[0]).toMatchObject({ kind: 'minigame', spot: 'gate', minigame: 'buggyRace', label: 'Buggy race in Agafay' });
+    expect(monday.goals[1]).toMatchObject({ kind: 'spot', spot: 'kitchen', venue: 'camp', after: 'buggy', together: true, meal: 'tajine', label: 'Lunch at the desert camp' });
+    expect(STORY_DAYS[1]!.goals.some((g) => g.venue !== undefined)).toBe(false);
+  });
+
+  it('the gate offers the race at the start, and lunch waits for it', () => {
+    const monday = STORY_DAYS[2]!;
+    const states = startGoals(monday, CHARACTER_IDS);
+    expect(minigameAtGate(monday, states)?.id).toBe('buggy');
+    expect(goalReady(monday, states, 'lunch')).toBe(false);
+    states.find((s) => s.id === 'buggy')!.status = 'done';
+    expect(minigameAtGate(monday, states)).toBeNull();
+    expect(goalReady(monday, states, 'lunch')).toBe(true);
+  });
+
+  it('a spot goal is done only at its venue', () => {
+    const monday = STORY_DAYS[2]!;
+    const present = ['luiz'] as const;
+    const states = startGoals(monday, present);
+    states.find((s) => s.id === 'buggy')!.status = 'done';
+    const near = { luiz: { x: 1, y: 0, z: 0 } };
+    expect(spotGoalsDone(monday, states, 'kitchen', spot, near, present)).toEqual([]);
+    expect(spotGoalsDone(monday, states, 'kitchen', spot, near, present, 'villa')).toEqual([]);
+    expect(spotGoalsDone(monday, states, 'kitchen', spot, near, present, 'camp')).toEqual(['lunch']);
+    const sunday = STORY_DAYS[1]!;
+    const sundayStates = startGoals(sunday, present);
+    expect(spotGoalsDone(sunday, sundayStates, 'kitchen', spot, near, present, 'camp')).toEqual([]);
+  });
 });

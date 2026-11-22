@@ -139,9 +139,9 @@ test('step 41b: the mode toggle shows to everyone, with no ?storytest, and only 
 });
 
 test('step 41: in story mode the lobby shows the day and the finished days, hides the course, and gives the admin Reset week', () => {
-  const story = message(trio, { mode: 'story', story: { day: 2, finishedDays: [0, 1] } });
+  const story = message(trio, { mode: 'story', story: { day: 3, finishedDays: [0, 1] } });
   const admin = lobbyView(story, 'p1');
-  expect(admin.story).toEqual({ dayText: 'Day 2: coming soon', finishedText: 'Finished days: 0, 1' });
+  expect(admin.story).toEqual({ dayText: 'Day 3: coming soon', finishedText: 'Finished days: 0, 1' });
   expect(admin.showCourse).toBe(false);
   expect(admin.showChain).toBe(false);
   expect(admin.showReset).toBe(true);
@@ -151,10 +151,11 @@ test('step 41: in story mode the lobby shows the day and the finished days, hide
   expect(lobbyView(message(trio, { mode: 'story', story: { day: 0, finishedDays: [] } }), 'p1').story?.dayText).toBe('Test day');
 });
 
-test('step 41b: Sunday is "Day 1", and every day beyond the table reads "Day N: coming soon"', () => {
+test('step 41b: Sunday is "Day 1", Monday is "Day 2", and every day beyond the table reads "Day N: coming soon"', () => {
   const day = (n: number) => lobbyView(message(trio, { mode: 'story', story: { day: n, finishedDays: [] } }), 'p1').story?.dayText;
   expect(day(1)).toBe('Day 1');
-  for (const n of [2, 3, 7, 12]) expect(day(n)).toBe(`Day ${n}: coming soon`);
+  expect(day(2)).toBe('Day 2');
+  for (const n of [3, 7, 12]) expect(day(n)).toBe(`Day ${n}: coming soon`);
 });
 
 test('step 41: a race lobby shows no story section, no Reset week, and keeps the course and the chain', () => {
