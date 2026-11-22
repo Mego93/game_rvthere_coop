@@ -2,7 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { FORD_ROCK, PROP_KINDS } from '../constants';
 import { rotate, vec3, type Vec3 } from '../math';
-import { VEHICLES } from '../vehicles';
+import { VEHICLES, VEHICLE_IDS } from '../vehicles';
 import { airport } from './airport';
 import { driveSegment, segmentRouteLength, timeLimit } from './driveRig';
 import { getCourse } from './index';
@@ -18,7 +18,7 @@ const SEGMENTS = airport.segments.map((s, i) => ({ i, type: s.type })).filter((s
 // Spec: the RV fails a medium slope unaided; the bank has anchors for the winch.
 const RV_NEEDS_WINCH = new Set([airport.segments.findIndex((s) => s.type === 'bank')]);
 
-describe.each(Object.keys(VEHICLES))('T3 drive the %s through course 1', (vehicleId) => {
+describe.each(VEHICLE_IDS)('T3 drive the %s through course 1', (vehicleId) => {
   test.each(SEGMENTS.filter((s) => vehicleId !== 'rv' || !RV_NEEDS_WINCH.has(s.i)))('segment $i ($type) is driven within the time limit', ({ i, type }) => {
     const config = VEHICLES[vehicleId as keyof typeof VEHICLES];
     const limit = timeLimit(segmentRouteLength(course, i), config.maxSpeed);

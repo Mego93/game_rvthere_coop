@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { SEAT_RING_SECONDS } from '../ui/hud/seatToast';
 import { fitToTarget, hasModel, instantiate, shadowed } from './models';
 
-const BODY_COLOURS: Record<VehicleConfig['id'], number> = { lodgy: 0x4a6fa5, rv: 0xefe6d2 };
+const BODY_COLOURS: Record<VehicleConfig['id'], number> = { lodgy: 0x4a6fa5, rv: 0xefe6d2, buggy: 0xd9822b };
 
 const part = (name: string, width: number, height: number, depth: number, colour: number, x = 0, y = 0, z = 0) => {
   const mesh = new THREE.Mesh(
@@ -34,8 +34,8 @@ function addWheels(group: THREE.Group, config: VehicleConfig): void {
 
 // Which RV is drawn: the real camper (the Car Kit van, then boxes, if it fails to load), the Car Kit delivery van, or the step-17 boxes.
 const RV_MODEL = 'camper' as 'boxes' | 'delivery' | 'camper';
-const MODEL_KEY: Record<VehicleConfig['id'], string> = { lodgy: 'vehicle.lodgy', rv: 'vehicle.rv' };
-const REAL_KEY: Record<VehicleConfig['id'], string> = { lodgy: 'vehicle.lodgy.real', rv: 'vehicle.rv.real' };
+const MODEL_KEY: Record<VehicleConfig['id'], string> = { lodgy: 'vehicle.lodgy', rv: 'vehicle.rv', buggy: 'vehicle.buggy' };
+const REAL_KEY: Record<VehicleConfig['id'], string> = { lodgy: 'vehicle.lodgy.real', rv: 'vehicle.rv.real', buggy: 'vehicle.buggy.real' };
 // The most the real model's length is stretched to reach the collision box; height and width are never distorted.
 const MAX_STRETCH = 1.3;
 // The Car Kit's wheel radius in its own units.

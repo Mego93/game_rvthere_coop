@@ -1,6 +1,6 @@
 import { deepFreeze, vec3, type Vec3 } from './math';
 
-export type VehicleId = 'lodgy' | 'rv';
+export type VehicleId = 'lodgy' | 'rv' | 'buggy';
 
 export interface SeatConfig {
   id: string;
@@ -135,6 +135,50 @@ export const VEHICLES: Record<VehicleId, VehicleConfig> = deepFreeze({
       vec3(2.35, 0, 1.8),
     ],
   },
+  // Story-only (Monday's race): low and wide, long suspension, grip enough to keep the Lodgy's road grip on sand.
+  buggy: {
+    id: 'buggy',
+    halfExtents: vec3(1, 0.4, 2),
+    mass: 900,
+    comY: -0.25,
+    wheelX: 0.95,
+    wheelY: -0.3,
+    wheelZ: 1.3,
+    wheelRadius: 0.38,
+    suspensionRest: 0.45,
+    suspensionTravel: 0.4,
+    suspensionStiffness: 22,
+    suspensionCompression: 2.5,
+    suspensionRelaxation: 2.2,
+    rideHeight: 1.05,
+    grip: 2.7,
+    sideGrip: 1,
+    engineForce: 5000,
+    enginePower: 95000,
+    fadeKnee: 0.93,
+    maxSpeed: 33,
+    reverseSpeed: 8,
+    brakeForce: 9000,
+    maxSteer: 0.5,
+    fuelBurn: 1 / 240,
+    winchMount: vec3(0, -0.2, -2),
+    seats: [
+      { id: 'driver', pos: vec3(-0.45, 0.1, -0.8), side: -1 },
+      { id: 'seat1', pos: vec3(0.45, 0.1, -0.8), side: 1 },
+      { id: 'seat2', pos: vec3(-0.45, 0.1, 0.3), side: -1 },
+      { id: 'seat3', pos: vec3(0.45, 0.1, 0.3), side: 1 },
+      { id: 'seat4', pos: vec3(-0.45, 0.1, 1.4), side: -1 },
+      { id: 'seat5', pos: vec3(0.45, 0.1, 1.4), side: 1 },
+    ],
+    spawnSlots: [
+      vec3(-2.2, 0, -0.8),
+      vec3(2.2, 0, -0.8),
+      vec3(-2.2, 0, 0.3),
+      vec3(2.2, 0, 0.3),
+      vec3(-2.2, 0, 1.4),
+      vec3(2.2, 0, 1.4),
+    ],
+  },
 });
 
 export function getVehicleConfig(id: string): VehicleConfig {
@@ -143,4 +187,5 @@ export function getVehicleConfig(id: string): VehicleConfig {
   return config;
 }
 
-export const VEHICLE_IDS = Object.keys(VEHICLES) as VehicleId[];
+// The vehicles the lobby offers; the buggy is the story's own.
+export const VEHICLE_IDS = (Object.keys(VEHICLES) as VehicleId[]).filter((id) => id !== 'buggy');

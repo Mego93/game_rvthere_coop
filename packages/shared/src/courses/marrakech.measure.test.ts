@@ -2,7 +2,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { BIG_HILL_SLOPE } from '../constants';
-import { getVehicleConfig, VEHICLES, type VehicleId } from '../vehicles';
+import { getVehicleConfig, VEHICLE_IDS, type VehicleId } from '../vehicles';
 import { createWorld } from '../world';
 import { buildCourse } from './build';
 import { driveRun } from './driveRig';
@@ -88,7 +88,7 @@ const sampled = new Set<number>();
   if (holding >= 0) sampled.add(holding);
 }
 
-describe.each(Object.keys(VEHICLES))('T7 fuel gaps, %s', (vehicleId) => {
+describe.each(VEHICLE_IDS)('T7 fuel gaps, %s', (vehicleId) => {
   const picks = pairs.map((p, n) => ({ n, p })).filter(({ n }) => FULL || sampled.has(n));
   test.each(picks)('gap $n leaves at least 20 % from a full tank', ({ n, p }) => {
     const left = gapLeft(vehicleId, p[0], p[1]);
