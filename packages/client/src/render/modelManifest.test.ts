@@ -144,10 +144,13 @@ describe('model triangle budgets', () => {
     return total;
   };
 
-  it('A5: palms stay at most 1000 triangles, everything else at most 2500, the Sketchfab models at most 6500 (the mosque has 6110; the arrival terminal, drawn once, has 9948 and may have 10500), the real vehicles at most 20000', () => {
+  // The models drawn once or a few times in the story's own worlds: the arrival terminal (9948), the buggy (8782), the tent (18190) and the camel (9262).
+  const STORY_LIMITS: Record<string, number> = { 'arrival.terminal': 10_500, 'vehicle.buggy': 9_000, 'decor.tent': 18_500, 'decor.camel': 9_500 };
+
+  it('A5: palms stay at most 1000 triangles, everything else at most 2500, the Sketchfab models at most 6500 (the mosque has 6110; a few story models have their own limit), the real vehicles at most 20000', () => {
     for (const key of MODEL_KEYS) {
       const pack = MODEL_MANIFEST[key].pack;
-      const limit = key === 'arrival.terminal' ? 10_500 : pack === 'real' ? 20_000 : pack === 'sketchfab' ? 6500 : key.includes('palm') ? 1000 : 2500;
+      const limit = STORY_LIMITS[key] ?? (pack === 'real' ? 20_000 : pack === 'sketchfab' ? 6500 : key.includes('palm') ? 1000 : 2500);
       expect(triangles(MODEL_MANIFEST[key].file), key).toBeLessThanOrEqual(limit);
     }
   });
@@ -194,6 +197,17 @@ describe('credits', () => {
       for (const file of readdirSync(join(PUBLIC, 'textures', name))) {
         expect(statSync(join(PUBLIC, 'textures', name, file)).size, `${name}/${file}`).toBeLessThan(600 * 1024);
       }
+    }
+  });
+});
+
+describe('step 41c models', () => {
+  it('the buggy, the tent, the camel, the table and the cushion are manifest keys in the sketchfab pack', () => {
+    const files = { 'vehicle.buggy': 'dune-buggy', 'decor.tent': 'desert-tent', 'decor.camel': 'camel', 'camp.table': 'low-table', 'camp.cushion': 'floor-cushion' } as const;
+    for (const [key, name] of Object.entries(files)) {
+      const entry = MODEL_MANIFEST[key as keyof typeof files];
+      expect(entry.file, key).toBe(`sketchfab/${name}.glb`);
+      expect(entry.pack, key).toBe('sketchfab');
     }
   });
 });

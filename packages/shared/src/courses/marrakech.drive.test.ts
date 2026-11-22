@@ -5,7 +5,7 @@ import { NEUTRAL_INPUT } from '../protocol';
 import { rotate, vec3 } from '../math';
 import type { SegmentDef } from '../segments';
 import { exitPoints } from '../seats';
-import { VEHICLES } from '../vehicles';
+import { VEHICLE_IDS } from '../vehicles';
 import { createWorld, type World } from '../world';
 import { alongOf, alongOfPoint, driveWorld, segmentRouteLength, segmentStarts } from './driveRig';
 import { getCourse, getCourseDef } from './index';
@@ -257,7 +257,7 @@ describe('the failure classes fire', () => {
 
 const picked = FULL ? Array.from({ length: segmentCount }, (_, i) => i) : sampleSegments();
 
-describe.each(Object.keys(VEHICLES))('A9 the %s drives marrakech per segment from a full tank', (vehicleId) => {
+describe.each(VEHICLE_IDS)('A9 the %s drives marrakech per segment from a full tank', (vehicleId) => {
   const segments = picked.filter((i) => !skipsFor(vehicleId).has(i));
   test.each(segments)('segment %i is driven within the allowed time', (i) => {
     const outcome = driveOne(vehicleId, i);

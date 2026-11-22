@@ -11,8 +11,8 @@ describe('summaryView', () => {
   });
 
   it('labels the goals of a day the table lacks with the test day\'s, as the server plays it', () => {
-    expect(summaryView({ day: 2, done: [], missed: [], skipped: [] }).title).toBe('Day 2 is over');
-    expect(summaryView({ day: 2, done: ['vibecode'], missed: [], skipped: [] }).sections[0]!.labels).toEqual(['Vibecode at a laptop']);
+    expect(summaryView({ day: 3, done: [], missed: [], skipped: [] }).title).toBe('Day 3 is over');
+    expect(summaryView({ day: 3, done: ['vibecode'], missed: [], skipped: [] }).sections[0]!.labels).toEqual(['Vibecode at a laptop']);
   });
 
   it('labels Sunday\'s goals on day 1', () => {

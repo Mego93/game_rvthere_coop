@@ -389,6 +389,7 @@ export function createHud(root: HTMLElement, opts: { touch: boolean; route: read
         flag(dashRev, 'red', model.dashboard.rpm >= 6500);
       }
       text(timer, model.timer);
+      toggle(timer, model.timerHidden === true);
       text(walletText, `$${model.wallet}`);
 
       const own = ownHealthFraction(model.ownHealth);

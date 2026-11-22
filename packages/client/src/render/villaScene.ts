@@ -83,7 +83,7 @@ function oliveTinted(root: THREE.Object3D): void {
 }
 
 const markerTextures = new Map<string, THREE.CanvasTexture>();
-function markerTexture(label: string): THREE.CanvasTexture {
+export function markerTexture(label: string): THREE.CanvasTexture {
   let texture = markerTextures.get(label);
   if (texture) return texture;
   const canvas = document.createElement('canvas');

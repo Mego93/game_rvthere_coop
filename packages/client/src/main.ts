@@ -32,6 +32,8 @@ import { installTheme } from './ui/theme';
 import { createTouchUi } from './ui/touchUi';
 import { createStoryUi } from './ui/story/storyUi';
 import { createGolfResults } from './ui/golf/golfHud';
+import { createRaceResults } from './ui/race/raceHud';
+import { raceResultView } from './ui/race/raceView';
 import { createTutorial, shouldAutoShowTutorial } from './ui/tutorial';
 import { loadFirstPerson, saveFirstPerson } from './render/firstPersonCamera';
 
@@ -265,6 +267,9 @@ const stageBanner = createStageBanner(document);
 // PrimeGolf's final results live on the page: the group is taken back to the villa a moment after the last ball, and they stay over it until closed.
 const golfResults = createGolfResults(document);
 
+// The buggy race's medal: shown when the race is won, it stays over the camp and goes with the next world after that, or after 8 s.
+const raceResults = createRaceResults(document);
+
 const SOMETHING_WRONG = 'Something went wrong.';
 
 // Stops the run's drawing and input; the lobby and the home page take over the screen.
@@ -274,6 +279,7 @@ function stopGame() {
   game?.stop();
   game = null;
   golfResults.hide();
+  raceResults.hide();
   storyUi.reset();
   stageCourse = null;
   touchUi?.setVisible(false);
@@ -321,6 +327,8 @@ function onStage(message: StageMessage) {
   if (!latestLobby || latestLobby.phase !== 'playing') return;
   stageBanner.show(stageBannerText(message, latestLobby.mode === 'story'));
   golfResults.hide();
+  // The result arrives just before the stage change to the camp, which is where it is read.
+  if (message.courseId !== 'camp') raceResults.hide();
   stageCourse = message.courseId;
   if (game && game.courseId === message.courseId) return;
   firstSeq = game?.lastSeq() ?? 0;
@@ -405,6 +413,10 @@ function onMessage(message: ServerMessage) {
       return;
     case 'daySummary':
       storyUi.onDaySummary(message);
+      return;
+    case 'raceResult':
+      raceResults.show(raceResultView(message));
+      audio.play('win');
       return;
     case 'error':
       // A refused purchase belongs to the shop menu; it never ends the game or reaches the home page.

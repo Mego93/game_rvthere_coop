@@ -2,6 +2,8 @@ import type { GolfSnapshot, ResultsMessage, StoryStateMessage } from '@lodgy/sha
 import { createGolfHud, createGolfResults } from './golf/golfHud';
 import { golfHudView } from './golf/golfHudView';
 import { IDLE_SHOT } from './golf/shot';
+import { createRaceHud, createRaceResults } from './race/raceHud';
+import { raceHudView, raceResultView } from './race/raceView';
 import { createStoryHud } from './story/storyHud';
 import { storyHudModel } from './story/needsView';
 import { createStoryUi, type StoryUi } from './story/storyUi';
@@ -17,9 +19,9 @@ import type { Tutorial } from './tutorial';
 import { createTouchUi } from './touchUi';
 import type { TouchView } from './touchView';
 
-export type HudTestMode = 'hud' | 'drive' | 'menu' | 'shop' | 'results' | 'help' | 'chat' | 'emote' | 'tutorial' | 'story' | 'storydrive' | 'storyphone' | 'storykiosk' | 'storygoals' | 'storysummary' | 'golf' | 'golfboard' | 'golfresults';
+export type HudTestMode = 'hud' | 'drive' | 'menu' | 'shop' | 'results' | 'help' | 'chat' | 'emote' | 'tutorial' | 'story' | 'storydrive' | 'storyphone' | 'storykiosk' | 'storygoals' | 'storysummary' | 'golf' | 'golfboard' | 'golfresults' | 'race' | 'raceresult';
 
-const MODES: readonly HudTestMode[] = ['hud', 'drive', 'menu', 'shop', 'results', 'help', 'chat', 'emote', 'tutorial', 'story', 'storydrive', 'storyphone', 'storykiosk', 'storygoals', 'storysummary', 'golf', 'golfboard', 'golfresults'];
+const MODES: readonly HudTestMode[] = ['hud', 'drive', 'menu', 'shop', 'results', 'help', 'chat', 'emote', 'tutorial', 'story', 'storydrive', 'storyphone', 'storykiosk', 'storygoals', 'storysummary', 'golf', 'golfboard', 'golfresults', 'race', 'raceresult'];
 
 // ?hudtest shows the HUD on a fixed sample for the layout check and the screenshots; ?hudtest=menu (and the others) also opens that panel.
 export function hudTestMode(search: string): HudTestMode | null {
@@ -116,6 +118,10 @@ export const sampleGolf = (): GolfSnapshot => ({ turn: 'luiz', ball: null, score
 // The end of the game, for the results panel.
 export const sampleGolfEnd = (): GolfSnapshot['scores'] => ({ luiz: [20, 40, 25, 0, 50, 30], rafael: [10, 0, 15, 20, 0, 25], alexander: [50, 25, 15, 150, 0, 40], huu: [0, 20, 30, 15, 20, 10] });
 
+// The buggy race mid-run: 1:23.4 on a 2:40 gold target.
+const SAMPLE_RACE_ELAPSED = 83.4;
+const SAMPLE_RACE_TARGET = 160;
+
 export interface HudTestParts {
   touch: boolean;
   chatPanel: ChatPanel;
@@ -144,15 +150,25 @@ export function startHudTest(mode: HudTestMode, parts: HudTestParts): void {
     const touchUi = createTouchUi(root);
     touchUi.setVisible(true);
     const golfMode = mode === 'golf' || mode === 'golfboard';
-    touchUi.update(golfMode ? { ...sampleTouchView(false), useVisible: false, reelVisible: false, resetVisible: false, sprintVisible: false, fireVisible: mode === 'golf', slots: [null, null, null] } : sampleTouchView(mode === 'drive'));
+    touchUi.update(golfMode ? { ...sampleTouchView(false), useVisible: false, reelVisible: false, resetVisible: false, sprintVisible: false, fireVisible: mode === 'golf', slots: [null, null, null] } : sampleTouchView(mode === 'drive' || mode === 'race'));
     if (golfMode) touchUi.setFireLabel('Shoot');
   }
 
-  if (mode === 'story' || mode === 'storydrive') {
+  if (mode === 'story' || mode === 'storydrive' || mode === 'race') {
     const state = sampleStoryState();
     const storyHud = createStoryHud(doc, { touch: parts.touch }, { onPhone() {}, onGoals() {}, onComplain() {} });
-    storyHud.setVenue(mode === 'story' ? 'villa' : 'outing');
+    storyHud.setVenue(mode === 'story' ? 'villa' : mode === 'race' ? 'race' : 'outing');
     storyHud.update(storyHudModel(state, 'luiz'), 1880, 120, true);
+  }
+  if (mode === 'race') {
+    const race = createRaceHud(doc, { touch: parts.touch });
+    race.update(raceHudView(SAMPLE_RACE_ELAPSED, SAMPLE_RACE_TARGET));
+    race.setVisible(true);
+  }
+  if (mode === 'raceresult') {
+    // main.ts already built the live panel; the test one replaces it so the ids stay unique.
+    doc.getElementById('race-results')?.remove();
+    createRaceResults(doc).show(raceResultView({ time: 151.4, target: SAMPLE_RACE_TARGET, medal: 'gold' }));
   }
   if (mode === 'golf' || mode === 'golfboard') {
     const golf = createGolfHud(doc, { touch: parts.touch });

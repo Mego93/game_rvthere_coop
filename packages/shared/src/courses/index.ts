@@ -2,6 +2,7 @@ import { STAGE_IDS } from '../constants';
 import type { BuiltCourse } from '../course';
 import { deepFreeze } from '../math';
 import { buildSegment, type SegmentDef } from '../segments';
+import { agafayDef } from './agafay';
 import { airport } from './airport';
 import { arrival } from './arrival';
 import { buildCourse, type CourseDef } from './build';
@@ -11,6 +12,7 @@ import { airportHomeDef } from './reverse';
 import { stageDefs } from './stages';
 import { testGround } from './testGround';
 import { primegolf } from './primegolf';
+import { camp } from './camp';
 import { villa } from './villa';
 
 const COURSES: Record<string, BuiltCourse> = {
@@ -18,15 +20,16 @@ const COURSES: Record<string, BuiltCourse> = {
   [segmentDemo.id]: buildCourse(segmentDemo),
   [airport.id]: buildCourse(airport),
   [villa.id]: villa,
+  [camp.id]: camp,
   [primegolf.id]: primegolf,
   [arrival.id]: arrival,
 };
 
 // Courses that exist for the story and are not offered as a race.
-const STORY_ONLY = new Set([villa.id, primegolf.id, arrival.id, 'airport-home']);
+const STORY_ONLY = new Set([villa.id, camp.id, 'agafay', primegolf.id, arrival.id, 'airport-home']);
 
 // Built on first use, so importing the package does not pay for the 22 km course.
-const LAZY: Record<string, () => CourseDef> = { ...stageDefs, [marrakech.id]: () => marrakech, 'airport-home': airportHomeDef };
+const LAZY: Record<string, () => CourseDef> = { ...stageDefs, agafay: agafayDef, [marrakech.id]: () => marrakech, 'airport-home': airportHomeDef };
 
 // The stages in play order, then marrakech, then the rest; the story's own courses are left out.
 export function courseIds(): string[] {

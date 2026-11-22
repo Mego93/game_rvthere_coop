@@ -5,7 +5,7 @@ import { PROP_KINDS, SHOULDER_WIDTH, TICK_RATE } from '../constants';
 import { add, rotate, vec3, type Vec3 } from '../math';
 import { NEUTRAL_INPUT } from '../protocol';
 import { exitPoints } from '../seats';
-import { VEHICLES } from '../vehicles';
+import { VEHICLE_IDS } from '../vehicles';
 import { createWorld, type World, type WorldEvent } from '../world';
 import { airport } from './airport';
 import { STEER_GAIN, STEER_MAX, alongOfPoint, driveWorld } from './driveRig';
@@ -127,7 +127,7 @@ function openRows(world: World, rows: string[][]): void {
   expect(boardVehicle(world, PLAYER), 'the driver boards again').toBe(true);
 }
 
-describe.each(Object.keys(VEHICLES))('A8 the %s alone passes the hazards', (vehicleId) => {
+describe.each(VEHICLE_IDS)('A8 the %s alone passes the hazards', (vehicleId) => {
   test('gates: the vehicle never touches a barrier, loses no health and causes no impact', () => {
     const world = soloAt(vehicleId, GATES);
     const watch = watchGates(world, gateBarriers);

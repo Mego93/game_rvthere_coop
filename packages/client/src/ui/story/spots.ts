@@ -1,4 +1,4 @@
-import type { Spot, SpotKind, Vec3 } from '@lodgy/shared';
+import { minigameAtGate, outingAtGate, STORY_DAYS, type GoalState, type Spot, type SpotKind, type Vec3 } from '@lodgy/shared';
 
 // Metres within which a spot's marker and prompt show.
 export const SPOT_MARKER_RANGE = 6;
@@ -12,15 +12,24 @@ const PROMPTS: Record<SpotKind, string> = {
   board: 'F to read the goals',
   atm: 'F to withdraw 500 dh',
   shop: 'F to shop at the kiosk',
-  gate: 'F to take the Lodgy out',
+  gate: 'F to go out',
 };
+
+// The goal the gate would start today, by its label; null when it starts nothing.
+export function gateGoalLabel(day: number, goals: readonly GoalState[]): string | null {
+  const def = STORY_DAYS[day];
+  if (!def) return null;
+  const goal = outingAtGate(def, goals) ?? minigameAtGate(def, goals);
+  return goal?.label ?? null;
+}
 
 // The marker's short label above a spot.
 export const SPOT_LABELS: Record<SpotKind, string> = { kitchen: 'EAT', chef: 'PIZZA', laptop: 'CODE', bed: 'BED', couch: 'SOFA', board: 'GOALS', atm: 'ATM', shop: 'SHOP', gate: 'GO' };
 
 // What the use key does at a spot; a bed does nothing before night and a couch nothing at all, so they have no key.
-export function spotPrompt(kind: SpotKind, night: boolean): string | null {
+export function spotPrompt(kind: SpotKind, night: boolean, gateLabel: string | null = null): string | null {
   if (kind === 'couch') return null;
+  if (kind === 'gate') return gateLabel === null ? PROMPTS.gate : `F: ${gateLabel}`;
   if (kind === 'bed' && !night) return null;
   return PROMPTS[kind];
 }

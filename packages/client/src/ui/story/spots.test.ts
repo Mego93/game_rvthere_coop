@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getCourse } from '@lodgy/shared';
-import { SPOT_LABELS, markerShown, nearAtm, spotPrompt, usableSpot } from './spots';
+import { gateGoalLabel, SPOT_LABELS, markerShown, nearAtm, spotPrompt, usableSpot } from './spots';
 
 const spots = getCourse('villa').spots!;
 const at = (id: string) => spots.find((spot) => spot.id === id)!;
@@ -38,5 +38,14 @@ describe('spots', () => {
     expect(nearAtm(spots, { x: atm.pos.x + 1, y: 0, z: atm.pos.z })).toBe(true);
     expect(nearAtm(spots, { x: atm.pos.x + 10, y: 0, z: atm.pos.z })).toBe(false);
     expect(nearAtm(spots, null)).toBe(false);
+  });
+
+  it('names the goal the gate would start, from the goal label', () => {
+    expect(gateGoalLabel(2, [{ id: 'buggy', status: 'pending' }, { id: 'lunch', status: 'pending' }])).toBe('Buggy race in Agafay');
+    expect(gateGoalLabel(2, [{ id: 'buggy', status: 'done' }, { id: 'lunch', status: 'pending' }])).toBeNull();
+    expect(gateGoalLabel(1, [{ id: 'tajine', status: 'done' }, { id: 'primegolf', status: 'pending' }])).toBe('Play PrimeGolf');
+    expect(gateGoalLabel(99, [])).toBeNull();
+    expect(spotPrompt('gate', false, 'Buggy race in Agafay')).toBe('F: Buggy race in Agafay');
+    expect(spotPrompt('gate', false)).not.toContain('Lodgy');
   });
 });

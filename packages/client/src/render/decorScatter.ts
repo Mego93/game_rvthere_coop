@@ -55,6 +55,11 @@ export const MOUNTAINS_ZONE: readonly [number, number] = [450, 800];
 // Rocks on the berms around obstacles: lateral band and how far past the berm they continue.
 export const BERM_ROCK_ZONE: readonly [number, number] = [33.5, 38.5];
 export const BERM_ROCK_REACH = CORRIDOR_BERM_MARGIN + CORRIDOR_BERM_FADE;
+// Agafay's camps (step 41c): a Bedouin tent with camels around it, a camp every CAMP_SPACING m of road, at this distance from the centre line; decor only, no colliders.
+export const CAMP_SPACING: readonly [number, number] = [330, 520];
+export const CAMP_FIRST: readonly [number, number] = [160, 320];
+export const CAMP_ZONE: readonly [number, number] = [40, 66];
+export const CAMP_CAMELS: readonly [number, number] = [2, 3];
 
 // Per 100 m of route per side; lights and poles alternate, 2 each = one structure per 25 m.
 export const DECOR_DENSITY = {
@@ -443,8 +448,35 @@ export function* scatterDecorSteps(course: BuiltCourse, def: CourseDef | null, s
     }
   }
   if (corridor) yield* scatterCorridor();
+  if (corridor && def.id === 'agafay') yield* scatterCamps();
   if (theme === 'city') yield* scatterParkedCars();
   return out;
+
+  // Tents and camels beside Agafay's road, from their own random stream so the rest of the scatter is unchanged.
+  function* scatterCamps(): Generator<void> {
+    const rk = prng((seed ^ 0x1f123bb5) >>> 0);
+    const betweenK = (a: number, b: number) => a + (b - a) * rk();
+    const spot = (along: number, lateral: number, s: number) => {
+      const f = frameAt(Math.min(total, Math.max(0, along)));
+      return { x: f.x - f.tz * lateral * s, z: f.z + f.tx * lateral * s, f };
+    };
+    for (let along = betweenK(CAMP_FIRST[0], CAMP_FIRST[1]); along < total - 120; along += betweenK(CAMP_SPACING[0], CAMP_SPACING[1])) {
+      yield;
+      const s = rk() < 0.5 ? -1 : 1;
+      const lateral = betweenK(CAMP_ZONE[0], CAMP_ZONE[1]);
+      const tent = spot(along, lateral, s);
+      // The tent's long side lies along the road.
+      if (!place('decor.tent', tent.x, tent.z, yawFor('along', tent.f) + (rk() < 0.5 ? 0 : Math.PI), betweenK(1, 1.3), [FAR_MIN, Infinity], 6)) continue;
+      const camels = CAMP_CAMELS[0] + Math.floor(rk() * (CAMP_CAMELS[1] - CAMP_CAMELS[0] + 1));
+      for (let k = 0; k < camels; k++) {
+        const p = spot(along + betweenK(-9, 9), lateral - betweenK(6, 10), s);
+        place('decor.camel', p.x, p.z, rk() * Math.PI * 2, betweenK(0.9, 1.15), [FAR_MIN, Infinity], 1.6);
+      }
+    }
+    function yawFor(_facing: 'along', f: Frame): number {
+      return Math.atan2(-f.tz, f.tx);
+    }
+  }
 
   // The step 32 and 33 decor of a corridor course, from its own random stream so the rest of the scatter is unchanged.
   function* scatterCorridor(): Generator<void> {

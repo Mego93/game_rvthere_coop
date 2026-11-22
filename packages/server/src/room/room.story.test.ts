@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import {
   CHARACTER_IDS,
+  GOAL_DONE_HAPPINESS,
   GUN_DAMAGE,
   GOLF_SCOREBOARD_SECONDS,
   NEUTRAL_INPUT,
@@ -19,6 +20,7 @@ import {
   IDENTITY,
   type BuiltCourse,
   type CharacterId,
+  type DayDef,
   type ServerMessage,
   type Spot,
   type Week,
@@ -51,6 +53,9 @@ const SPOTS: Spot[] = [
   spot('board-1', 'board', 5, 5),
 ];
 
+const CAMP_SPOTS: Spot[] = [spot('camp-table', 'kitchen', 0, 5)];
+const ALL_SPOTS = [...SPOTS, ...CAMP_SPOTS];
+
 // Small stand-ins: the villa has spots and no finish near the players; the desert is won on its first tick when `finishing`.
 function courses(finishing: boolean, realArrival = false): Record<string, BuiltCourse> {
   const finish = finishing ? { center: base.checkpoints[0]!.spawn.pos, halfExtents: vec3(20, 20, 20), rot: IDENTITY } : base.finish;
@@ -58,6 +63,8 @@ function courses(finishing: boolean, realArrival = false): Record<string, BuiltC
     villa: { ...base, id: 'villa', pickups: [], spots: SPOTS },
     desert: { ...base, id: 'desert', pickups: [], finish },
     'airport-home': { ...base, id: 'airport-home', pickups: [] },
+    agafay: { ...base, id: 'agafay', pickups: [], targetTime: 160 },
+    camp: { ...base, id: 'camp', pickups: [], spots: CAMP_SPOTS },
     ...(realArrival ? {} : { arrival: { ...base, id: 'arrival', pickups: [] } }),
   };
 }
@@ -74,16 +81,20 @@ interface Options {
   // Plays the real day 1 (Sunday); otherwise day 1 is the test day.
   sunday?: boolean;
   realArrival?: boolean;
+  // Plays the real day 2 (Monday).
+  monday?: boolean;
+  days?: Record<number, DayDef>;
 }
 
 async function setup(options: Options = {}) {
   const store = options.store ?? createMemoryWeekStore();
   const noun = options.noun ?? 'villa';
+  if (options.monday && !options.week) options = { ...options, week: seeded((w) => { w.day = 2; }) };
   if (options.week) await store.save(noun, serialiseWeek(options.week));
   if (options.raw !== undefined) await store.save(noun, options.raw);
   const logs: string[] = [];
   const loading: WeekStore = options.failLoad ? { load: () => Promise.reject(new Error('disk')), save: (n, j) => store.save(n, j) } : store;
-  const room = createRoom(RAPIER, { noun, courses: courses(options.outingFinishes ?? false, options.realArrival), ...(options.sunday ? {} : { days: { 1: STORY_DAYS[0]! } }), weekStore: loading, random: options.random ?? (() => 0), log: (message) => logs.push(message) }, 0);
+  const room = createRoom(RAPIER, { noun, courses: courses(options.outingFinishes ?? false, options.realArrival), ...(options.days ? { days: options.days } : options.sunday || options.monday ? {} : { days: { 1: STORY_DAYS[0]! } }), weekStore: loading, random: options.random ?? (() => 0), log: (message) => logs.push(message) }, 0);
   let time = 0;
   const messages: ServerMessage[] = [];
   const characters = options.characters ?? ['sounile'];
@@ -120,16 +131,21 @@ async function setup(options: Options = {}) {
   const ofType = <T extends ServerMessage['type']>(type: T) => messages.filter((message): message is Extract<ServerMessage, { type: T }> => message.type === type);
   const lastOf = <T extends ServerMessage['type']>(type: T) => ofType(type)[ofType(type).length - 1]!;
   // The current world reports its stage as won from now on.
+  const winAt = (elapsed: number) => {
+    const current = room.debugWorld()!;
+    const status = current.status.bind(current);
+    current.status = () => ({ ...status(), state: 'won', elapsed });
+  };
   const win = () => {
     const current = room.debugWorld()!;
     const status = current.status.bind(current);
     current.status = () => ({ ...status(), state: 'won' });
   };
   const emit = (player: RoomPlayer, spotId: string) => {
-    const kind = SPOTS.find((entry) => entry.id === spotId)!.kind;
+    const kind = ALL_SPOTS.find((entry) => entry.id === spotId)!.kind;
     pending.push({ kind: 'spot', tick: 0, playerId: player.playerId, spotId, spotKind: kind });
   };
-  const at = (player: RoomPlayer, spotId: string) => room.debugWorld()!.teleportPlayer(player.playerId, SPOTS.find((entry) => entry.id === spotId)!.pos);
+  const at = (player: RoomPlayer, spotId: string) => room.debugWorld()!.teleportPlayer(player.playerId, ALL_SPOTS.find((entry) => entry.id === spotId)!.pos);
   const week = () => room.debugWeek()!;
   const friend = (id: CharacterId) => week().friends[id];
   const enterStory = async () => {
@@ -141,7 +157,7 @@ async function setup(options: Options = {}) {
   };
   room.announce();
   run(2);
-  return { room, store, noun, logs, players, admin, messages, run, ofType, lastOf, win, emit, at, week, friend, enterStory, holding, pending, time: () => time };
+  return { room, store, noun, logs, players, admin, messages, run, ofType, lastOf, win, winAt, emit, at, week, friend, enterStory, holding, pending, time: () => time };
 }
 
 const seeded = (change: (w: Week) => void): Week => {
@@ -1099,5 +1115,225 @@ test('S8: when everyone leaves mid-golf the game is over, the room waits, and a 
   ctx.run(Math.ceil((GOLF_SCOREBOARD_SECONDS + 1) * 60));
   expect(ctx.room.debugWorld()!.course.id).toBe('villa');
   expect(statusOf(ctx, 'primegolf')).toBe('done');
+  ctx.room.dispose();
+});
+
+// --- S11: Monday (step 41c) ---
+
+async function toRace(characters: CharacterId[] = ['sounile', 'luiz']) {
+  const ctx = await setup({ monday: true, characters });
+  await ctx.enterStory();
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  ctx.at(ctx.players[0]!, 'gate-1');
+  ctx.emit(ctx.players[0]!, 'gate-1');
+  ctx.run(2);
+  return ctx;
+}
+
+async function toCamp(characters: CharacterId[] = ['sounile', 'luiz'], elapsed = 100) {
+  const ctx = await toRace(characters);
+  ctx.winAt(elapsed);
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('camp');
+  return ctx;
+}
+
+test('S11: the gate starts the race on Monday with everyone seated in the buggy, driver first in join order', async () => {
+  const ctx = await toRace(['sounile', 'luiz', 'huu']);
+  const world = ctx.room.debugWorld()!;
+  expect(world.course.id).toBe('agafay');
+  expect(world.vehicleConfig.id).toBe('buggy');
+  expect(ctx.ofType('stage').map((message) => message.courseId)).toEqual(['villa', 'agafay']);
+  const seats = world.snapshot().players.map((snap) => [snap.playerId, snap.seat]);
+  expect(seats).toEqual([[ctx.players[0]!.playerId, 'driver'], [ctx.players[1]!.playerId, 'seat1'], [ctx.players[2]!.playerId, 'seat2']]);
+  expect(statusOf(ctx, 'buggy')).toBe('pending');
+  ctx.room.dispose();
+});
+
+test('S11: idle time before the buggy first moves is not counted in the race time', async () => {
+  const ctx = await toRace();
+  ctx.run(300);
+  expect(ctx.room.debugWorld()!.status().elapsed).toBe(0);
+  ctx.room.dispose();
+});
+
+test('S11: the gate does not start the race on another day', async () => {
+  const ctx = await setup({ sunday: true });
+  await ctx.enterStory();
+  ctx.win();
+  ctx.run(2);
+  ctx.win();
+  ctx.run(2);
+  ctx.at(ctx.players[0]!, 'gate-1');
+  ctx.emit(ctx.players[0]!, 'gate-1');
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  ctx.room.dispose();
+});
+
+test('S11: the clock and needs are paused during the race', async () => {
+  const ctx = await toRace();
+  const clock = ctx.week().clock;
+  const food = ctx.friend('sounile').food;
+  ctx.run(300);
+  expect(ctx.week().clock).toBe(clock);
+  expect(ctx.friend('sounile').food).toBe(food);
+  ctx.room.dispose();
+});
+
+test('S11: the win applies the medal happiness, sends raceResult, marks the buggy done and switches to the camp', async () => {
+  const ctx = await toRace();
+  const before = ctx.friend('sounile').happiness;
+  const luizBefore = ctx.friend('luiz').happiness;
+  const huuBefore = ctx.friend('huu').happiness;
+  ctx.winAt(120);
+  ctx.run(2);
+  expect(ctx.lastOf('raceResult')).toEqual({ type: 'raceResult', time: 120, target: 160, medal: 'gold' });
+  expect(statusOf(ctx, 'buggy')).toBe('done');
+  expect(ctx.room.debugWorld()!.course.id).toBe('camp');
+  expect(ctx.ofType('stage').map((message) => message.courseId)).toEqual(['villa', 'agafay', 'camp']);
+  // Medal 10 plus the goal's own happiness; the absent friend is untouched.
+  expect(ctx.friend('sounile').happiness).toBeGreaterThan(before + 9);
+  expect(ctx.friend('luiz').happiness).toBeGreaterThan(luizBefore + 9);
+  expect(ctx.friend('huu').happiness).toBe(huuBefore);
+  ctx.room.dispose();
+});
+
+test('S11: a slow time costs happiness and bronze is flat', async () => {
+  const slow = await toRace(['sounile']);
+  const base = slow.friend('sounile').happiness;
+  slow.winAt(330);
+  slow.run(2);
+  expect(slow.lastOf('raceResult').medal).toBe('bronze');
+  // The goal's own happiness, minus the slow penalty of 5.
+  expect(slow.friend('sounile').happiness).toBe(base + GOAL_DONE_HAPPINESS - 5);
+  slow.room.dispose();
+  const bronze = await toRace(['sounile']);
+  bronze.winAt(250);
+  bronze.run(2);
+  expect(bronze.lastOf('raceResult')).toEqual({ type: 'raceResult', time: 250, target: 160, medal: 'bronze' });
+  bronze.room.dispose();
+});
+
+test('S11 (review): a race finished with one friend present seats him as driver and rewards only him', async () => {
+  const ctx = await toRace(['luiz']);
+  expect(ctx.room.debugWorld()!.snapshot().players.map((snap) => snap.seat)).toEqual(['driver']);
+  const sounile = ctx.friend('sounile').happiness;
+  ctx.winAt(150);
+  ctx.run(2);
+  expect(ctx.lastOf('raceResult').medal).toBe('gold');
+  expect(ctx.room.debugWorld()!.course.id).toBe('camp');
+  expect(ctx.friend('sounile').happiness).toBe(sounile);
+  ctx.room.dispose();
+});
+
+test('S11: a disconnect mid-race keeps the race going', async () => {
+  const ctx = await toRace();
+  ctx.run(60);
+  ctx.room.hold(ctx.players[1]!, ctx.time());
+  ctx.run(120);
+  expect(ctx.room.debugWorld()!.course.id).toBe('agafay');
+  ctx.winAt(120);
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('camp');
+  expect(ctx.lastOf('raceResult').medal).toBe('gold');
+  ctx.room.dispose();
+});
+
+test('S11 (review): everyone leaving mid-race and rejoining resumes the race with the timer continuing', async () => {
+  const ctx = await toRace();
+  const world = ctx.room.debugWorld()!;
+  const body = world.debugVehicle().body;
+  const at = body.translation();
+  body.setTranslation({ x: at.x + 5, y: at.y, z: at.z }, true);
+  ctx.run(120);
+  const elapsed = world.status().elapsed;
+  expect(elapsed).toBeGreaterThan(1);
+  for (const player of ctx.players) ctx.room.hold(player, ctx.time());
+  ctx.run(300);
+  expect(ctx.room.debugWorld()).toBe(world);
+  expect(world.status().elapsed).toBe(elapsed);
+  ctx.players.forEach((player, i) => ctx.room.rejoin(player, { send: (data) => { if (i === 0) ctx.messages.push(JSON.parse(data) as ServerMessage); }, close: () => {} }, ctx.time()));
+  ctx.run(60);
+  expect(ctx.room.debugWorld()).toBe(world);
+  expect(ctx.room.debugWorld()!.course.id).toBe('agafay');
+  expect(world.status().elapsed).toBeGreaterThan(elapsed);
+  ctx.winAt(world.status().elapsed);
+  ctx.run(2);
+  expect(ctx.lastOf('raceResult').time).toBeCloseTo(elapsed + 1, 0);
+  expect(ctx.room.debugWorld()!.course.id).toBe('camp');
+  ctx.room.dispose();
+});
+
+test('S11: lunch together at the camp table is free with 0 cash, and the group returns to the villa after 5 s', async () => {
+  const ctx = await toCamp();
+  ctx.week().friends.sounile.cash = 0;
+  ctx.week().friends.luiz.cash = 0;
+  ctx.week().friends.luiz.food = 10;
+  expect(statusOf(ctx, 'lunch')).toBe('pending');
+  for (const player of ctx.players) ctx.at(player, 'camp-table');
+  ctx.emit(ctx.players[0]!, 'camp-table');
+  ctx.run(2);
+  expect(statusOf(ctx, 'lunch')).toBe('done');
+  expect(ctx.friend('luiz').food).toBeGreaterThan(55);
+  expect(ctx.friend('luiz').cash).toBe(0);
+  expect(ctx.friend('sounile').cash).toBe(0);
+  expect(ctx.room.debugWorld()!.course.id).toBe('camp');
+  ctx.run(4 * 60);
+  expect(ctx.room.debugWorld()!.course.id).toBe('camp');
+  ctx.run(1.2 * 60);
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  expect(ctx.ofType('stage').map((message) => message.courseId)).toEqual(['villa', 'agafay', 'camp', 'villa']);
+  ctx.room.dispose();
+});
+
+test('S11: lunch is not done unless everyone is at the table', async () => {
+  const ctx = await toCamp();
+  ctx.at(ctx.players[0]!, 'camp-table');
+  ctx.emit(ctx.players[0]!, 'camp-table');
+  ctx.run(2);
+  expect(statusOf(ctx, 'lunch')).toBe('pending');
+  ctx.room.dispose();
+});
+
+test('S11: a camp spot event never completes a villa goal', async () => {
+  const days = { 2: { goals: [...STORY_DAYS[2]!.goals, { id: 'villaGoal', label: 'Villa kitchen', kind: 'spot' as const, spot: 'kitchen' as const }] } };
+  const ctx = await setup({ monday: true, characters: ['sounile'], days });
+  await ctx.enterStory();
+  ctx.at(ctx.players[0]!, 'gate-1');
+  ctx.emit(ctx.players[0]!, 'gate-1');
+  ctx.run(2);
+  ctx.winAt(100);
+  ctx.run(2);
+  expect(ctx.room.debugWorld()!.course.id).toBe('camp');
+  ctx.at(ctx.players[0]!, 'camp-table');
+  ctx.emit(ctx.players[0]!, 'camp-table');
+  ctx.run(2);
+  expect(statusOf(ctx, 'lunch')).toBe('done');
+  expect(statusOf(ctx, 'villaGoal')).toBe('pending');
+  ctx.room.dispose();
+});
+
+test('S11: at the villa a kitchen use does not complete lunch', async () => {
+  const ctx = await setup({ monday: true, characters: ['sounile'], week: seeded((w) => { w.day = 2; }) });
+  await ctx.enterStory();
+  ctx.week().goals.find((goal) => goal.id === 'buggy')!.status = 'done';
+  ctx.week().friends.sounile.cash = 50;
+  ctx.at(ctx.players[0]!, 'kitchen-1');
+  ctx.emit(ctx.players[0]!, 'kitchen-1');
+  ctx.run(2);
+  expect(statusOf(ctx, 'lunch')).toBe('pending');
+  ctx.room.dispose();
+});
+
+test('S11 (review): night falling at the camp takes the group to the villa and lunch counts as missed', async () => {
+  const ctx = await toCamp();
+  ctx.week().clock = STORY_DAY_SECONDS - TICK_DT;
+  ctx.run(3);
+  expect(ctx.room.debugWorld()!.course.id).toBe('villa');
+  expect(statusOf(ctx, 'lunch')).toBe('pending');
+  expect(statusOf(ctx, 'buggy')).toBe('done');
+  ctx.run(60 * 61);
+  expect(ctx.lastOf('daySummary')).toMatchObject({ day: 2, done: ['buggy'], missed: ['lunch'] });
   ctx.room.dispose();
 });

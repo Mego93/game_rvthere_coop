@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, test } from 'vitest';
 import type { SnapshotMessage } from '../protocol';
-import { getVehicleConfig, VEHICLES, type VehicleId } from '../vehicles';
+import { getVehicleConfig, VEHICLE_IDS, type VehicleId } from '../vehicles';
 import { createWorld } from '../world';
 import { airport } from './airport';
 import { driveRun } from './driveRig';
@@ -41,7 +41,7 @@ function legsFor(vehicleId: string, finish: 'toStop' | 'toFinish'): Leg[] {
     : [[FUEL_SEGMENT, ROADWORKS], [ROADWORKS + 1, 'finish']];
 }
 
-describe.each(Object.keys(VEHICLES))('C5 fuel margins, %s', (vehicleId) => {
+describe.each(VEHICLE_IDS)('C5 fuel margins, %s', (vehicleId) => {
   test('start to the checkpoint trigger of the fuel segment leaves more than 20%', () => {
     const legs = legsFor(vehicleId, 'toStop');
     const burns = legs.map((leg) => burn(vehicleId, leg));
