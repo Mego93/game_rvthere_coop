@@ -66,6 +66,8 @@ export interface WorldOptions {
   holdDowned?: boolean;
   // The vehicle burns no fuel without the world being a story world (the story's buggy race).
   freeFuel?: boolean;
+  // The run time starts when the vehicle first moves more than START_MOVE_METRES from its spawn (the buggy race).
+  startOnMove?: boolean;
 }
 
 export interface WorldEvent {
@@ -219,6 +221,8 @@ const WEATHER_HORIZON_TICKS = 2 * 3600 * TICK_RATE;
 const finite = (value: number | undefined): number => (value !== undefined && Number.isFinite(value) ? value : 0);
 
 // A course passed in is used instead of the id's course; tests add walls and ledges this way.
+const START_MOVE_METRES = 2;
+
 export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?: BuiltCourse): World {
   const course = builtCourse ?? getCourse(options.courseId);
   const vehicleConfig = getVehicleConfig(options.vehicleId);
@@ -306,6 +310,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   const queuedEvents: WorldEvent[] = [];
   let tick = 0;
   let runTicks = 0;
+  let timerStarted = options.startOnMove !== true;
   let won = false;
   let restarts = 0;
   let restartPending = false;
@@ -1091,8 +1096,9 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
       items.killPlane(course.killPlaneY);
       for (const id of resetLastTick) winch.onPropReset(id);
       if (!won) {
-        runTicks += 1;
         const centre = vehicle.body.translation();
+        if (!timerStarted && Math.hypot(centre.x - start.spawn.pos.x, centre.z - start.spawn.pos.z) > START_MOVE_METRES) timerStarted = true;
+        if (timerStarted) runTicks += 1;
         const entered = enteredCheckpoint(course, centre, record.index);
         if (entered !== null) {
           recordCheckpoint(entered);

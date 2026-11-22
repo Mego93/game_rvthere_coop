@@ -82,7 +82,7 @@ import { complaintText } from './ui/story/complaints';
 import { storyHudModel } from './ui/story/needsView';
 import { createStoryHud } from './ui/story/storyHud';
 import { isComplainKey, isPhoneKey, type StoryUi } from './ui/story/storyUi';
-import { spotPrompt, usableSpot } from './ui/story/spots';
+import { gateGoalLabel, spotPrompt, usableSpot } from './ui/story/spots';
 import { touchWording } from './ui/hud/touchWording';
 import { createEventToast, toastFor } from './ui/hud/eventToast';
 import { createSeatAnnouncer } from './ui/hud/seatToast';
@@ -772,7 +772,9 @@ export function createGame(
     };
     overlay.textContent = overlayText(overlayData);
     let hudModel = buildHudModel(overlayData, { checkpoints: course.checkpoints, finish: course.finish });
+    if (raceHud) hudModel = { ...hudModel, timerHidden: true };
     let spotAt: ReturnType<typeof usableSpot> = null;
+    let gateLabel: string | null = null;
     if (story && storyHud) {
       const feet = local ? local.pos : null;
       const state = story.state();
@@ -783,7 +785,8 @@ export function createGame(
       const friend = story.friend();
       storyHud.update(state ? storyHudModel(state, story.character()) : null, friend?.bank ?? 0, friend?.cash ?? 0, story.canComplain());
       spotAt = local && onFoot && local.downed === null ? usableSpot(course.spots ?? [], feet) : null;
-      const line = spotAt ? spotPrompt(spotAt.kind, state?.night === true) : null;
+      gateLabel = state ? gateGoalLabel(state.day, state.goals) : null;
+      const line = spotAt ? spotPrompt(spotAt.kind, state?.night === true, gateLabel) : null;
       if (line) {
         const shown = view.touchUi ? touchWording(line) : line;
         hudModel = { ...hudModel, prompt: hudModel.prompt ? `${hudModel.prompt}   ${shown}` : shown };
@@ -811,7 +814,7 @@ export function createGame(
       view.touchUi.update(
         golfScene
           ? { ...touch, useVisible: false, reelVisible: false, resetVisible: false, sprintVisible: false, fireVisible: golfAimNow, slots: [null, null, null] }
-          : spotAt && spotPrompt(spotAt.kind, story?.state()?.night === true) !== null ? { ...touch, useVisible: true } : touch,
+          : spotAt && spotPrompt(spotAt.kind, story?.state()?.night === true, gateLabel) !== null ? { ...touch, useVisible: true } : touch,
       );
       view.touchUi.setJoystick(hasJoystick(input) ? input.joystick() : null);
     }

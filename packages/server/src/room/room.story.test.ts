@@ -1150,6 +1150,13 @@ test('S11: the gate starts the race on Monday with everyone seated in the buggy,
   ctx.room.dispose();
 });
 
+test('S11: idle time before the buggy first moves is not counted in the race time', async () => {
+  const ctx = await toRace();
+  ctx.run(300);
+  expect(ctx.room.debugWorld()!.status().elapsed).toBe(0);
+  ctx.room.dispose();
+});
+
 test('S11: the gate does not start the race on another day', async () => {
   const ctx = await setup({ sunday: true });
   await ctx.enterStory();
@@ -1235,8 +1242,11 @@ test('S11: a disconnect mid-race keeps the race going', async () => {
 
 test('S11 (review): everyone leaving mid-race and rejoining resumes the race with the timer continuing', async () => {
   const ctx = await toRace();
-  ctx.run(120);
   const world = ctx.room.debugWorld()!;
+  const body = world.debugVehicle().body;
+  const at = body.translation();
+  body.setTranslation({ x: at.x + 5, y: at.y, z: at.z }, true);
+  ctx.run(120);
   const elapsed = world.status().elapsed;
   expect(elapsed).toBeGreaterThan(1);
   for (const player of ctx.players) ctx.room.hold(player, ctx.time());

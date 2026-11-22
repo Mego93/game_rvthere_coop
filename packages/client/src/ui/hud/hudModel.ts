@@ -13,6 +13,8 @@ export interface HudModel {
   compass: { marker: number | null; label: string; side: -1 | 0 | 1 };
   vehicle: { fuel: number; health: number; fuelLow: boolean; healthLow: boolean } | null;
   timer: string;
+  // The race HUD shows the big timer, so the vehicle panel's small one is hidden.
+  timerHidden?: boolean;
   wallet: number;
   ownHealth: number;
   ownSeat: { id: string; label: string } | null;
