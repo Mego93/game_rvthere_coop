@@ -696,3 +696,8 @@ export const SOULEYMAN_SPACING = 2000;
 export const DIRT_SHARE = 0.35;
 export const DIRT_RUN_MIN = 150;
 export const DIRT_RUN_MAX = 600;
+
+// m, the widest cell of a ground patch heightfield.
+export const GROUND_PATCH_MAX_CELL = 2;
+// Degrees: the steepest slope a ground patch may have; steeper ground is built from boxes.
+export const GROUND_PATCH_MAX_SLOPE_DEG = 25;

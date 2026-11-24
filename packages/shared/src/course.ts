@@ -16,6 +16,18 @@ export interface GroundBox extends Box {
   surface: Surface;
 }
 
+// A walkable heightfield. Heights are row-major vertices, (rows + 1) x (cols + 1) values at index `zi * (cols + 1) + xi`, over the square from (x0, z0) to (x0 + cols * cell, z0 + rows * cell). Patches never overlap.
+export interface GroundPatch {
+  id: string;
+  x0: number;
+  z0: number;
+  cell: number;
+  cols: number;
+  rows: number;
+  heights: number[];
+  surface: Surface;
+}
+
 // Anything placed in the course. `kind` tells the client what to draw.
 export interface Placed {
   id: string;
@@ -55,6 +67,8 @@ export interface BuiltCourse {
   // The name the lobby shows, for a course with no def.
   label?: string;
   ground: GroundBox[];
+  // Uneven walkable ground, validated by withTerrain (terrain.ts).
+  terrain?: GroundPatch[];
   walls: Box[];
   props: Placed[];
   pickups: Placed[];
