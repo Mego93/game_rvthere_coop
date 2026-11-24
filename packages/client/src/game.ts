@@ -381,7 +381,10 @@ export function createGame(
     : null;
   // The camp is walked like the villa (its clock and goals, no race gauges); the buggy race has its own timer.
   storyHud?.setVenue(course.id === 'villa' || isCamp ? 'villa' : isArrival ? 'foot' : isRace ? 'race' : 'outing');
-  if (story && isArrival) scene.add(createArrivalScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true }).group);
+  // The terminal's exits and the car park's cut are clipping planes on the models.
+  if (story && isArrival) renderer.localClippingEnabled = true;
+  const arrivalScene = story && isArrival ? createArrivalScene(course, { lite: view.touchUi !== null, flat: view.softwareGl === true }) : null;
+  if (arrivalScene) scene.add(arrivalScene.group);
   // The buggy race: arches at the start and the finish, and the big timer; the desert camp: the tent, the table and the camels.
   if (story && isRace) scene.add(createAgafayScene(course).group);
   const raceHud: RaceHud | null = story && isRace ? createRaceHud(document, { touch: view.touchUi !== null }) : null;
@@ -829,6 +832,7 @@ export function createGame(
     else audio.setLoop('winch', false);
     audio.setLoop('rain', rainOn(weatherTracker.weather()), { volume: 0.3 });
     decor.update(camera.position, now / 1000);
+    arrivalScene?.update(camera.position);
     const shownLook = conditions.setLook(lookFor(weatherTracker.weather()), weatherTracker.blend(now / 1000));
     renderer.toneMappingExposure = shownLook.exposure;
     const newSky = weatherTracker.takeSky(now / 1000);
@@ -972,6 +976,7 @@ export function createGame(
       conditions.dispose();
       decor.dispose();
       corridorTerrain?.dispose();
+      arrivalScene?.props?.dispose();
       disposeScene(scene);
     },
   };

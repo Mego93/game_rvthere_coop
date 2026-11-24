@@ -12,6 +12,7 @@ export type { EnemySnapshot, EnemyState } from './enemies';
 export * from './course';
 export * from './courses/build';
 export * from './courses/index';
+export { ARRIVAL_BUILDINGS, ARRIVAL_ROUTES } from './courses/arrival';
 export * from './groups';
 export * from './health';
 export * from './holds';

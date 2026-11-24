@@ -25,11 +25,11 @@ describe('model manifest', () => {
     }
   });
 
-  it('T2: target sizes are above 0 and at most 30 m, except distant cliffs and the kasbah landmark up to 40 m', () => {
+  it('T2: target sizes are above 0 and at most 30 m, except distant cliffs and the kasbah landmark up to 40 m, the car park 40 m and the concourse 60 m', () => {
     for (const key of MODEL_KEYS) {
       const { targetSize } = MODEL_MANIFEST[key];
       const sides = typeof targetSize === 'number' ? [targetSize] : [targetSize.x, targetSize.y, targetSize.z];
-      const limit = key.startsWith('decor.cliff.') || key === 'decor.kasbah.landmark' ? 40 : 30;
+      const limit = key === 'airport.concourse' ? 60 : key.startsWith('decor.cliff.') || key === 'decor.kasbah.landmark' || key === 'airport.garage' ? 40 : 30;
       for (const side of sides) {
         expect(side, key).toBeGreaterThan(0);
         expect(side, key).toBeLessThanOrEqual(limit);
@@ -48,7 +48,7 @@ describe('model manifest', () => {
         if (image.uri) expect(existsSync(join(path, '..', image.uri)), `${key} ${image.uri}`).toBe(true);
       }
     }
-    expect(total).toBeLessThan(12 * 1024 * 1024);
+    expect(total).toBeLessThan(16 * 1024 * 1024);
   });
 });
 
@@ -209,5 +209,19 @@ describe('step 41c models', () => {
       expect(entry.file, key).toBe(`sketchfab/${name}.glb`);
       expect(entry.pack, key).toBe('sketchfab');
     }
+  });
+});
+
+describe('step 43a models', () => {
+  it('the airport theme\'s models are manifest keys in the sketchfab pack, fitted to their real size in metres', () => {
+    const airport = MODEL_KEYS.filter((key) => key.startsWith('airport.'));
+    expect(airport.length).toBe(38);
+    for (const key of airport) {
+      expect(MODEL_MANIFEST[key].pack, key).toBe('sketchfab');
+      expect(typeof MODEL_MANIFEST[key].targetSize, key).toBe('number');
+    }
+    expect(MODEL_MANIFEST['airport.garage'].file).toBe('sketchfab/building-garage.glb');
+    expect(MODEL_MANIFEST['airport.palmTall'].targetSize).toBe(7);
+    expect(MODEL_MANIFEST['airport.taxi'].targetSize).toBe(4.6);
   });
 });

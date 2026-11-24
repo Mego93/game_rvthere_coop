@@ -1,6 +1,7 @@
 import { ANCHOR_HEIGHT, ROAD_WIDTH, ROCK_HALF, SHOP_COUNTER_HALF, STOP_POST_HEIGHT, type Box, type BuiltCourse, type ServiceStop, type Surface } from '@lodgy/shared';
 import * as THREE from 'three';
 import { fitted, hasModel, instantiate, shadowed, type FitSize } from './models';
+import { createGroundPatchMeshes } from './groundPatchMesh';
 import { groupBySurface, mergeBoxes, toGeometry } from './groundMerge';
 import { groundTexture, SURFACE_TEXTURE, tinted, type SceneOptions } from './groundTextures';
 import { createSouleymanMeshes, souleymanPlacements } from './souleyman';
@@ -36,7 +37,7 @@ const ghost = (colour: number) =>
   new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.25, depthWrite: false });
 
 // A surface with its texture, or its flat colour when the texture did not load.
-function groundMaterial(surface: Surface, { lite = false, flat = false, tint }: SceneOptions): THREE.MeshStandardMaterial {
+export function groundMaterial(surface: Surface, { lite = false, flat = false, tint }: SceneOptions): THREE.MeshStandardMaterial {
   const set = SURFACE_TEXTURE[surface];
   const map = flat ? null : groundTexture(set, 'diffuse');
   // Mud lies 1 cm above the road: the offset keeps it from z-fighting with the road far away.
@@ -112,6 +113,7 @@ export function createScene(course: BuiltCourse, options: SceneOptions = {}): TH
     const mesh = mergedMesh(groups[surface]!, groundMaterial(surface, options), false);
     if (mesh) scene.add(mesh);
   }
+  for (const mesh of createGroundPatchMeshes(course, (surface) => groundMaterial(surface, options))) scene.add(mesh);
   const walls = mergedMesh(rails.size > 0 ? drawn.filter((box) => !rails.has(box)) : drawn, solid(0xc98a5a), true);
   if (walls) scene.add(walls);
   if (deck.size > 0 || rails.size > 0) scene.add(createBridgeMeshes(bridges));

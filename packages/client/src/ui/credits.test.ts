@@ -128,6 +128,25 @@ describe('Sketchfab credits (step 33)', () => {
     }
   });
 
+  it('step 43a: the airport models are credited with author, source and licence, and no title names a car maker, a brand or a game', () => {
+    const models = { 'taxi.glb': ['TSB3DMODELS'], 'minibus.glb': ['aeroux'], 'luggage-trolley.glb': ['iDamian'], 'building-garage.glb': ['tikoavp'], 'person-suit.glb': ['jetsu'] } as const;
+    for (const path of ['../../../../CREDITS.md', '../../public/CREDITS.md', '../../public/models/sketchfab/License.txt']) {
+      const text = read(path);
+      for (const word of ['Carbon Motors', 'CARBON MOTORS', 'Cities Skylines', 'Toyota', 'Fallout']) expect(text, `${path} ${word}`).not.toContain(word);
+    }
+    for (const path of ['../../../../CREDITS.md', '../../public/CREDITS.md']) {
+      const lines = read(path).split('\n');
+      for (const [file, [author]] of Object.entries(models)) {
+        const line = lines.find((entry) => entry.includes(`\`${file}\``));
+        expect(line, `${path} ${file}`).toContain(`by ${author} (https://sketchfab.com/${author})`);
+        expect(line, `${path} ${file}`).toContain('Modified:');
+      }
+      expect(lines.find((entry) => entry.includes('`taxi.glb`'))).toContain('"E7 Taxi (modified)"');
+    }
+    expect(files).not.toContain('person-woman.glb');
+    expect(files).not.toContain('person-girl.glb');
+  });
+
   it('every Sketchfab model is in the folder License.txt, and the served credits list the two new skies', () => {
     const licence = read('../../public/models/sketchfab/License.txt');
     for (const file of files) expect(licence, file).toContain(`File: ${file}`);
