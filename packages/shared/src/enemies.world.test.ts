@@ -101,6 +101,27 @@ describe('planEnemies', () => {
   });
 });
 
+describe('step 43a: events with a spawn point', () => {
+  test('an event with `at` spawns there, not beside the route, and a course with enemySpawns uses them as its plan', () => {
+    const world = make([{ id: 0, along: 60, side: 1, at: { x: 30, z: -75 } }]);
+    place(world, 0, 0);
+    run(world, 5);
+    const [e] = enemyList(world);
+    expect(e).toBeDefined();
+    expect(Math.abs(e!.x - 30)).toBeLessThan(0.1);
+    expect(Math.abs(e!.z + 75)).toBeLessThan(0.1);
+    const course = { ...straight, enemySpawns: [{ id: 0, along: 60, side: 1 as const, at: { x: -25, z: -70 } }] };
+    const driven = createWorld(RAPIER, { courseId: course.id, vehicleId: 'lodgy', enemies: true }, course);
+    worlds.push(driven);
+    const body = driven.debugBody('vehicle')!;
+    body.setTranslation({ x: 0, y: RIDE, z: 0 }, true);
+    for (let i = 0; i < 5; i++) driven.step(new Map());
+    const [f] = enemyList(driven);
+    expect(f).toBeDefined();
+    expect(Math.abs(f!.x + 25)).toBeLessThan(0.1);
+  });
+});
+
 describe('step 40: enemy density and city share come from the course', () => {
   const road = (n: number) => Array.from({ length: n }, () => ({ type: 'road' as const, length: 400 }));
   const length = (course: ReturnType<typeof buildCourse>) => createRouteIndex(course.route).length;

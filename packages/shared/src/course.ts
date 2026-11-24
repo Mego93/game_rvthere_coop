@@ -1,5 +1,6 @@
 import type { Surface } from './constants';
 import type { Pose, Quat, Vec3 } from './math';
+import type { EnemyEvent } from './enemies';
 import type { SpotKind } from './story/days';
 
 export interface Box {
@@ -90,6 +91,8 @@ export interface BuiltCourse {
   // Enemy plan inputs carried from the course def: the event multiplier, and the last share of the route with double events.
   enemyDensity?: number;
   enemyCityShare?: number;
+  // Fixed enemy events, sorted by `along` (m of `route`), each with its spawn point `at`; they replace the plan drawn from the route.
+  enemySpawns?: EnemyEvent[];
   // Along-route spans (m) with no ambient animals, sorted and disjoint; only on courses that opt in.
   ambient?: { blocked: { from: number; to: number }[] };
   // Present on courses that opt in to the solid land beside the road: the along-route spans (m) of the obstacles that get a berm, sorted and disjoint, and the index in `walls` where the obstacle walls and caps start (they are not drawn).

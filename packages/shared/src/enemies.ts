@@ -36,6 +36,8 @@ export interface EnemyEvent {
   id: number;
   along: number;
   side: -1 | 1;
+  // Where it spawns, instead of beside the route.
+  at?: { x: number; z: number };
 }
 
 export interface EnemySnapshot {
@@ -158,8 +160,8 @@ export function createEnemies(
     const at = index.pointAt(event.along);
     // The right of the travel direction is (-tz, tx).
     const lateral = event.side * (ROAD_WIDTH / 2 + ENEMY_EDGE_OFFSET);
-    const x = at.x - at.tz * lateral;
-    const z = at.z + at.tx * lateral;
+    const x = event.at?.x ?? at.x - at.tz * lateral;
+    const z = event.at?.z ?? at.z + at.tx * lateral;
     const y = groundAt(x, z, vehicleY, vehicleY - 1).y + ENEMY_HALF.y;
     const body = physics.createRigidBody(rapier.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y, z));
     const collider = physics.createCollider(rapier.ColliderDesc.cuboid(ENEMY_HALF.x, ENEMY_HALF.y, ENEMY_HALF.z).setCollisionGroups(groups(GROUP_ENEMY, GROUP_WORLD)), body);

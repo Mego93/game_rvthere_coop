@@ -263,7 +263,7 @@ export function createWorld(rapier: Rapier, options: WorldOptions, builtCourse?:
   };
   const enemySeed = mixSeed(options.enemySeed ?? options.itemSeed ?? mixSeed(hashSeed(course.id), 1), ENEMY_SEED_SALT);
   const enemyPlan: readonly EnemyEvent[] | undefined =
-    options.enemies === true ? (options.enemyPlan ?? planEnemies(enemySeed, routeIndex!.length, course.enemyCityShare !== undefined ? routeIndex!.length * (1 - course.enemyCityShare) : null, course.enemyDensity)) : undefined;
+    options.enemies === true ? (options.enemyPlan ?? course.enemySpawns ?? planEnemies(enemySeed, routeIndex!.length, course.enemyCityShare !== undefined ? routeIndex!.length * (1 - course.enemyCityShare) : null, course.enemyDensity)) : undefined;
   const enemies: Enemies | null = enemyPlan ? createEnemies(rapier, physics, course.route, enemyPlan, enemySeed, statics.surfaceOf) : null;
   const enemyField = (): { enemies?: EnemySnapshot[] } => {
     const list = enemies?.snapshot();
