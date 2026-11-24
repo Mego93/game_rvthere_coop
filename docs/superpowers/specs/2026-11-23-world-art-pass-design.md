@@ -1,6 +1,6 @@
 # World art pass: nothing blocky, every map rich
 
-Status: owner's answers from the 2026-11-23 conversation. This design comes before the souk and tailor step (41d), so that those maps are built rich from the start.
+Status: approved by the owner (2026-11-24). This design comes before the souk and tailor step (41d), so that those maps are built rich from the start.
 
 ## Intent
 
@@ -88,7 +88,7 @@ The characters become non-blocky as well, with real animations. A final refactor
 
 - **Models:** non-blocky human models with real animations, from Sketchfab (CC0 or CC BY), or one shared rigged base with an animation set if no single source covers them all.
 - **Animations needed:** idle, walk, run, jump, crouch, sit, drive, carry, the hold for items, aim and shoot with the handgun, a downed pose, revive, the four emotes, the golf swing, the knife attack, slip and fall, and death.
-- **Recognising each friend:** each friend stays recognisable through the step 26 customisation, adapted to the new models: skin, hair and beard, glasses, top, hat, eyes and smile, wherever the model allows. The plan says which options carry over and which become textures or attachments.
+- **Recognising each friend (owner: B):** the new models keep skin colour, hair and beard (several hair and beard models per friend), glasses, top or clothes and their colours, and hat. Eyes and smile stop being options: each friend gets a fixed face texture instead.
 - **Enemies and NPCs:** enemies, sellers and other NPCs use the same base with different clothes.
 - **Fallback:** if no usable model or animation source covers what the game needs, the builder reports what is missing before replacing anything. The blocky figures stay until a replacement is complete.
 
