@@ -194,7 +194,7 @@ export const MODEL_MANIFEST = {
   'airport.guardBooth': model('sketchfab', 'guard-booth', 3),
   'airport.signGate': model('sketchfab', 'sign-gate', 2.4),
   'airport.arrivalsBoard': model('sketchfab', 'arrivals-board', 2),
-  'airport.signWc': model('sketchfab', 'sign-wc', 2.94),
+  'airport.signWc': model('sketchfab', 'sign-wc', 2),
   'airport.taxi': model('sketchfab', 'taxi', 4.6),
   'airport.minibus': model('sketchfab', 'minibus', 5.3),
   'airport.carSedan': model('sketchfab', 'car-sedan', 4.5),
